@@ -22,8 +22,7 @@ static const char* BLE_TX_UUID      = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
  * Deverá ser extendida via padrão decorator para implementação de autenticação/encriptação. 
  *  SecureBleConnectivity encapsulará esta classe. 
  */
-class 
-BleConnectivity : public IConnectivity,
+class BleConnectivity : public IConnectivity,
                         private NimBLECharacteristicCallbacks,
                         private NimBLEServerCallbacks {
 public:

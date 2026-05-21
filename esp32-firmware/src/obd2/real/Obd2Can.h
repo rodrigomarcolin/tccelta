@@ -1,4 +1,5 @@
 #pragma once
+#include <Arduino.h>
 #include "obd2/IObd2.h"
 #include "can/ICanBus.h"
 

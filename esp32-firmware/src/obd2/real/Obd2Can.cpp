@@ -1,5 +1,5 @@
-#include "Obd2Can.h"
 #include <Arduino.h>
+#include "Obd2Can.h"
 #include <cstring>
 
 // TODO: Rever implementação. Este arquivo foi gerado com IA
