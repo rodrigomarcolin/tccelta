@@ -6,7 +6,7 @@ Repositório para o Trabalho de Conclusão de Curso do Bacharelado em Engenharia
 
 1. [Introdução](#introdução)
 1. [Arquitetura](#arquitetura)
-1. [Funcionamento Típico]
+1. [Funcionamento Típico](#funcionamento-típico)
 1. [Segurança](#segurança)
 
 # Introdução [↩](#sumário)
