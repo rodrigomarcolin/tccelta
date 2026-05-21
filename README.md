@@ -34,11 +34,11 @@ Abaixo, é possível observar mais detalhes sobre as responsabilidades de cada c
 # Funcionamento Típico [↩](#sumário)
 O funcionamento típico é o seguinte: 
 
-1. No Setup, as características OBD-II são configuradas; as implementações de cada camada, escolhidas via variáveis de ambientes no perfil PlatformIO escolhido, são instanciadas; os métodos de inicialização relevantes são executados; e o dispositivo começa a se anunciar.
+1. No Setup, as características BLE são configuradas; as implementações de cada camada, escolhidas via variáveis de ambientes no perfil PlatformIO escolhido, são instanciadas; os métodos de inicialização relevantes são executados; e o dispositivo começa a se anunciar.
 2. Um cliente BLE conecta-se ao dispositivo.
 3. Um cliente BLE escreve um comando ELM327 na característica RX do BLE.
 4. O callback `onWrite` da classe `BLEConnectivity` executa, e como consequência o comando ELM327 recebido é colocado na fila à qual a tarefa `ELM327Task` escuta.
-5. A tarefa `ELM327Task` reage à entrada do comando na fila, e inicia o processamento do mesmo, chamando o método `process` da classe ELM327.
+5. A tarefa `ELM327Task` reage à entrada do comando na fila, e inicia o seu processamento chamando o método `process` da classe ELM327.
 6. Consequentemente, pode ser gerada uma requisição à camada OBD-II. Se a implementação escolhida for a mockada, alguma lógica executará no sentido de gerar uma resposta coerente. Se a implementação escolhida for a real, será construída uma requisição OBD-II (que, conforme a [documentação CAN e OBD-II](docs/can-e-obd2.md), viverá no campo DATA da mensagem CAN). Então, será repassada para a camada CAN, que interagirá com o componente CAN relevante para colocar a requisição no barramento, esperar uma resposta, e retornar seu conteúdo.
 7. A resposta OBD-II será processada e colocada no TX do BLE.
 8. O cliente será notificado e poderá fazer o que bem entender com a resposta do DONGLE ao seu comando ELM-327 =)
