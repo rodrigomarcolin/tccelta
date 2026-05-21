@@ -49,7 +49,7 @@ Uma consequência interessante da organização em camadas é que, para implemen
 
 Neste projeto, a abordagem escolhida foi a implementação do Padrão Decorator, na qual uma nova classe, `SecureBLEConnectivity`, encapsulará a classe `BLEConnectivity`, interceptando chamadas à mesma, executando operações antes de chamar a classe interna, com o intuito de fornecer serviços de segurança. Um esquema simplificado é apresentado abaixo:
 
-![Esquema simplificado da segurança do Firmware, no qual a classe SecureBLEConnectivity intercepta o comando cifrado recebido via RX, decifrando-o antes de repassar para a camada abaixo. Além disso, esta classe também intercepta a resposta devolvida, cifrando-a antes de colocá-la no TX.](image.png)
+![Esquema simplificado da segurança do Firmware, no qual a classe SecureBLEConnectivity intercepta o comando cifrado recebido via RX, decifrando-o antes de repassar para a camada abaixo. Além disso, esta classe também intercepta a resposta devolvida, cifrando-a antes de colocá-la no TX.](docs/images/firmware-security-simplified.png)
 
 Fica claro que as capacidades BLE implementadas pela `BLEConnectivity`, como configuração das características, transmissão da resposta via TX e recebimento de comandos via RX, são preservadas. A classe `SecureBLEConnectivity` é transparente para as outras camadas.
 
