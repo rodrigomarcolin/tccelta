@@ -18,7 +18,7 @@ Este repositório contém um firmware para um Dongle OBD-II baseado em ESP-32 na
 Com o PlatformIO devidamente instalado e configurado em seu VSCode, conecte o ESP32 ao seu computador e abra a pasta esp32-firmware com o VSCode. Após isto, é possível abrir a interface da extensão e escolher qual dos perfis, configurados no arquivo `esp32-firmware/platformio.ini`, deve ser utilizado para Build e Upload. Cada perfil irá definir variáveis de ambiente, que são utilizadas em macros no código, as quais decidem quais implementações instanciar.
 
 
-# Arquitetura
+# Arquitetura [↩](#sumário)
 
 O firmware está estruturado em camadas, conforme a seguinte imagem:
 
@@ -31,7 +31,7 @@ Abaixo, é possível observar mais detalhes sobre as responsabilidades de cada c
 ![Responsabilidades das Camadas](docs/images/firmware-layer-responsibilities.png)
 
 
-# Funcionamento Típico
+# Funcionamento Típico [↩](#sumário)
 O funcionamento típico é o seguinte: 
 
 1. No Setup, as características OBD-II são configuradas; as implementações de cada camada, escolhidas via variáveis de ambientes no perfil PlatformIO escolhido, são instanciadas; os métodos de inicialização relevantes são executados; e o dispositivo começa a se anunciar.
@@ -43,7 +43,7 @@ O funcionamento típico é o seguinte:
 7. A resposta OBD-II será processada e colocada no TX do BLE.
 8. O cliente será notificado e poderá fazer o que bem entender com a resposta do DONGLE ao seu comando ELM-327 =)
 
-# Segurança
+# Segurança [↩](#sumário)
 
 Uma consequência interessante da organização em camadas é que, para implementação da segurança na comunicação ESP32 - App, só é necessário intervir na camada BLE. 
 
