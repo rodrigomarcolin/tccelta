@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/ui/core/widgets/app_card.dart';
 
 /// Tratamento interno de um [StatCard]. Selecionado pelo construtor nomeado,
 /// nunca exposto à API pública.
@@ -107,20 +108,12 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCard,
-        borderRadius: AppRadii.brLg,
-        border: Border.all(color: AppColors.borderHairline),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.s5),
-        child: switch (_variant) {
-          _Variant.info => _info(),
-          _Variant.gauge => _gauge(),
-          _Variant.value || _Variant.progress => _valueOrProgress(),
-        },
-      ),
+    return AppCard(
+      child: switch (_variant) {
+        _Variant.info => _info(),
+        _Variant.gauge => _gauge(),
+        _Variant.value || _Variant.progress => _valueOrProgress(),
+      },
     );
   }
 

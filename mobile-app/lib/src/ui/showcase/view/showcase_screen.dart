@@ -607,25 +607,27 @@ class _SensorsDemo extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Column(
       children: [
-        SensorRow(
-          name: 'Rotação do motor',
-          pid: '01 0C',
+        CardButton(
+          icon: AppIconData.estrela,
+          title: 'Rotação do motor',
+          subtitle: '01 0C',
           value: 5200,
           unit: 'rpm',
-          promoted: true,
+          iconColor: AppColors.cyan500,
         ),
         SizedBox(height: AppSpacing.s2),
-        SensorRow(
-          name: 'Temperatura do líquido',
-          pid: '01 05',
+        CardButton(
+          icon: AppIconData.estrela,
+          title: 'Temperatura do líquido',
+          subtitle: '01 05',
           value: 89,
           unit: '°C',
         ),
         SizedBox(height: AppSpacing.s2),
-        SensorRow(
-          name: 'Pressão do coletor',
-          pid: '01 0B',
-          available: false,
+        CardButton(
+          icon: AppIconData.estrela,
+          title: 'Pressão do coletor',
+          subtitle: '01 0B',
         ),
       ],
     );

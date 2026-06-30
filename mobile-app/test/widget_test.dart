@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/main.dart';
+import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
 void main() {
@@ -32,12 +33,13 @@ void main() {
                 unit: '%',
                 pct: 34,
               ),
-              const SensorRow(
-                name: 'Rotação do motor',
-                pid: '01 0C',
+              const CardButton(
+                icon: AppIconData.estrela,
+                title: 'Rotação do motor',
+                subtitle: '01 0C',
                 value: 5200,
                 unit: 'rpm',
-                promoted: true,
+                iconColor: AppColors.cyan500,
               ),
               const AppTabBar(),
             ],
@@ -49,13 +51,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byType(Gauge), findsNWidgets(2));
-    expect(find.byType(SensorRow), findsOneWidget);
+    expect(find.byType(CardButton), findsOneWidget);
     expect(find.byType(AppTabBar), findsOneWidget);
   });
 
   testWidgets('StatCard.gauge não estoura em largura apertada', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
           body: Center(
             child: SizedBox(
@@ -64,7 +66,7 @@ void main() {
                 label: 'Temperatura de arrefecimento do motor',
                 value: 999999,
                 unit: 'km/h',
-                gauge: const Gauge(value: 86, max: 130, label: '', size: 64),
+                gauge: Gauge(value: 86, max: 130, label: '', size: 64),
               ),
             ),
           ),
