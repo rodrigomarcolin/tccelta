@@ -7,9 +7,11 @@ import 'package:tccelta_mobile/src/core/theme/theme.dart';
 ///
 /// Os defaults reproduzem o card de dashboard (fundo [AppColors.surfaceCard],
 /// raio [AppRadii.brLg], padding [AppSpacing.s5]); listas e botões sobrescrevem
-/// `color`/`borderRadius`/`padding`/`constraints`. Sem sombra por padrão
-/// ([boxShadow] nulo); informe-a quando quiser elevar o card. Com [onTap], a
-/// superfície vira tocável (mesmo `HitTestBehavior.opaque` da lista).
+/// `color`/`borderRadius`/`padding`/`constraints`. A borda é o hairline padrão;
+/// informe [border] para destacar a superfície (ex.: seleção em ciano). Sem
+/// sombra por padrão ([boxShadow] nulo); informe-a quando quiser elevar o card.
+/// Com [onTap], a superfície vira tocável (mesmo `HitTestBehavior.opaque` da
+/// lista).
 class AppCard extends StatelessWidget {
   /// Cria a superfície de card que envolve [child].
   const AppCard({
@@ -17,6 +19,7 @@ class AppCard extends StatelessWidget {
     this.color = AppColors.surfaceCard,
     this.borderRadius = AppRadii.brLg,
     this.padding = const EdgeInsets.all(AppSpacing.s5),
+    this.border,
     this.boxShadow,
     this.constraints,
     this.onTap,
@@ -35,6 +38,9 @@ class AppCard extends StatelessWidget {
   /// Espaçamento interno. @default `EdgeInsets.all(AppSpacing.s5)`
   final EdgeInsetsGeometry padding;
 
+  /// Borda da superfície. @default hairline (`Border.all(borderHairline)`)
+  final BoxBorder? border;
+
   /// Sombra opcional. @default `null` (sem sombra)
   final List<BoxShadow>? boxShadow;
 
@@ -52,7 +58,7 @@ class AppCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         borderRadius: borderRadius,
-        border: Border.all(color: AppColors.borderHairline),
+        border: border ?? Border.all(color: AppColors.borderHairline),
         boxShadow: boxShadow,
       ),
       child: child,

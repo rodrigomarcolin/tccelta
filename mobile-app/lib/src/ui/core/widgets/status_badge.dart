@@ -19,19 +19,34 @@ enum StatusTone {
   alert,
 }
 
-extension on StatusTone {
+/// Mapeia um [StatusTone] para os tokens de cor do design system.
+///
+/// Fonte única do significado-para-cor: [StatusBadge] e os átomos tonalizados
+/// (`IconBadge`, `IconTile`, `Callout`) consultam estes acessores em vez de
+/// repetir o `switch` de tom.
+extension StatusToneX on StatusTone {
+  /// Cor sólida do tom (acento/ícone/texto).
   Color get color => switch (this) {
         StatusTone.live || StatusTone.ok => AppColors.cyan500,
         StatusTone.warning => AppColors.amber500,
         StatusTone.alert => AppColors.red500,
       };
 
+  /// Preenchimento translúcido do tom (fundo de pílula/badge/tile).
   Color get wash => switch (this) {
         StatusTone.live || StatusTone.ok => AppColors.cyan10,
         StatusTone.warning => AppColors.amber08,
         StatusTone.alert => AppColors.red20,
       };
 
+  /// Borda translúcida do tom (anel de badge/tile/callout).
+  Color get border => switch (this) {
+        StatusTone.live || StatusTone.ok => AppColors.cyan28,
+        StatusTone.warning => AppColors.amber20,
+        StatusTone.alert => AppColors.red32,
+      };
+
+  /// `true` quando o dot do tom deve brilhar (feed ao vivo / ok).
   bool get glows => this == StatusTone.live || this == StatusTone.ok;
 }
 

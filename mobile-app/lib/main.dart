@@ -1,27 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
-import 'package:tccelta_mobile/src/ui/showcase/view/showcase_screen.dart';
+import 'package:tccelta_mobile/src/router/app_router.dart';
 
 void main() {
-  runApp(const TcceltaApp());
+  runApp(const ProviderScope(child: TcceltaApp()));
 }
 
-/// Raiz do app. Aplica o tema do OBD2 Cockpit design system e abre a galeria
-/// do design system.
+/// Raiz do app. Aplica o tema do OBD2 Cockpit design system e entra pelo fluxo
+/// de conexão (`01 FLUXO DE CONEXÃO`) via [appRouter].
 ///
-/// O wiring de `ProviderScope`/`go_router` e as features (camadas
-/// `data`/`domain`/`services`) ficam para o plano de bootstrap.
+/// O `ProviderScope` já está montado para quando as features (camadas
+/// `data`/`domain`/`services`) chegarem; providers ainda não são usados.
 class TcceltaApp extends StatelessWidget {
   /// Cria a raiz do app.
   const TcceltaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'OBD2 Cockpit',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const ShowcaseScreen(),
+      routerConfig: appRouter,
     );
   }
 }

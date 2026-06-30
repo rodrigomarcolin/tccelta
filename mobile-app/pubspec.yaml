@@ -28,6 +28,8 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  # Abre telas de ajustes do sistema (ex.: Bluetooth) a partir do app.
+  app_settings: ^7.0.0
   # Use a CupertinoIcons class para ícones estilo iOS.
   cupertino_icons: ^1.0.8
   dio: ^5.10.0

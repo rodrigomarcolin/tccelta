@@ -3,10 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/main.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
+import 'package:tccelta_mobile/src/ui/showcase/view/showcase_screen.dart';
 
 void main() {
-  testWidgets('app builds the design system showcase', (tester) async {
+  testWidgets('app entra pelo fluxo de conexão (permissões)', (tester) async {
     await tester.pumpWidget(const TcceltaApp());
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Permitir Bluetooth'), findsOneWidget);
+  });
+
+  testWidgets('showcase builds the design system gallery', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.dark, home: const ShowcaseScreen()),
+    );
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Design System'), findsOneWidget);
   });
