@@ -2,7 +2,13 @@
 
 > Brief para um agente de código (Claude Code) levantar o projeto do zero.
 > Execute as fases em ordem. Ao fim de cada fase, rode `flutter analyze` e garanta que está limpo antes de seguir.
-> **Regra de ouro:** dependências só apontam "pra dentro" → `ui` depende de `domain`; `data`/`services` dependem de `domain`; `domain` não depende de ninguém. A `view` NUNCA contém regra de negócio nem acessa `data` diretamente — só fala com o `view_model`.
+> **Regra de ouro (direção das dependências):** tudo aponta "pra dentro", terminando nos models puros:
+> `ui → application → data → domain`.
+> - `domain/` (só models) NÃO depende de ninguém — nem de `flutter`, `dio`, DTOs ou qualquer infra. É importável por todas as camadas justamente por ser puro.
+> - `application/` (use cases) pode depender de `data` (repositories concretos) e de `domain`.
+> - `data/` depende de `domain`; `services/` (side-effects) é transversal.
+> - A `view` NUNCA contém regra de negócio nem acessa `data`/`application` de fora do seu `view_model` — só fala com o `view_model`.
+> - O `view_model` chama um **use case** (`application/`) quando há regra de negócio/orquestração, ou o **repository** (`data/`) direto quando é acesso simples a dados.
 
 ---
 
@@ -88,19 +94,24 @@ lib/
       router/                # app_router.dart (go_router)
       theme/                 # ThemeData + design tokens
       utils/ extensions/
-    domain/                  # MODELOS DE DOMÍNIO compartilhados (entities) — sem deps externas
-      models/
+    domain/                  # CAMADA DOMAIN — só models/entities. PURA: zero deps externas.
+      models/                #   importável por data, application e ui. Nada de dio/flutter/DTO aqui.
+    application/             # CAMADA APPLICATION — use cases (regra de negócio / orquestração)
+      <modulo>/              #   ex: checkout/place_order_use_case.dart
+                             #   PODE depender de repositories (data) e de models (domain).
+                             #   Criar SÓ quando necessário (ver §5.1) — nada de use case passthrough.
     data/                    # CAMADA DATA — obtenção de dados (reutilizável entre módulos)
       datasources/           # wrap de endpoints/plugins  (o guia oficial chama isto de "services")
       dtos/                  # modelos de transporte (freezed + json_serializable)
       repositories/          # SOURCE OF TRUTH; mapeiam DTO -> domain model; cache/erros/retry
-    services/                # CAMADA SERVICES — side-effects / integrações externas
-      analytics_service.dart #   (analytics, notificações, storage, etc.)
+                             #   único que fala com datasource. NÃO conhece outros repositories.
+    services/                # CAMADA SERVICES — side-effects / integrações externas (transversal)
+      analytics_service.dart #   (analytics, notificações, storage, etc.) — NÃO confundir com use case
       notification_service.dart
     ui/                      # CAMADA UI — organizada por MÓDULO (feature-first)
       <modulo>/
         view/                # <modulo>_screen.dart  -> View "burra" (só observa + renderiza)
-        view_model/          # <modulo>_view_model.dart -> ViewModel (lógica isolada = ex-"hook")
+        view_model/          # <modulo>_view_model.dart -> ViewModel (chama use case OU repository)
         widgets/             # componentes ESPECÍFICOS do módulo
       core/
         widgets/             # COMPONENTES GENÉRICOS (a "página de genéricos" do time)
@@ -113,6 +124,8 @@ test/                        # espelha lib/src/ (mesma árvore)
 |---|---|
 | camada `data` (obtenção de dados) | `src/data/` (datasources + dtos + repositories) |
 | camada `services` (side-effects/integrações) | `src/services/` |
+| regra de negócio reutilizável / que cruza fontes | `src/application/` (use cases) |
+| tipos/models compartilhados | `src/domain/models/` (puro) |
 | custom hooks (lógica fora da tela) | `view_model/` (Riverpod `AsyncNotifier`) |
 | componentes genéricos (página única) | `src/ui/core/widgets/` |
 | componentes específicos do módulo | `src/ui/<modulo>/widgets/` |
@@ -134,10 +147,53 @@ Requisitos da slice:
 - Providers conectando datasource → repository → view_model (DI via Riverpod).
 - Rota `/products` registrada no `go_router`.
 
+> Nota: a slice `products` é CRUD simples e o `view_model` chama o `repository` **direto** — de propósito, NÃO tem use case. Use cases só entram quando a regra justifica (ver §5.1).
+
+## 5.1 Camada `application` (use cases) — quando e como
+
+Regra prática: comece com `view_model → repository`. Extraia um use case em `application/` **apenas** quando ocorrer um destes:
+- a lógica combina dados de **mais de um repository** (repositories não se conhecem, então a orquestração precisa subir);
+- a mesma operação de negócio é **reusada por múltiplos view_models**;
+- o `view_model` está inchando de orquestração.
+
+Não criar use case "passthrough" (uma linha que só repassa pro repository) — isso é boilerplate sem ganho.
+
+Segunda slice de validação (feature `checkout`) para exercitar a camada:
+- `application/checkout/place_order_use_case.dart` — classe *callable* (`call()`) que depende de `CartRepository` + `PaymentRepository`, aplica a regra (ex.: carrinho vazio → `Failure`, aplica desconto) e retorna um domain model `Order`. **Depende de repositories concretos, NUNCA de datasource.**
+- `ui/checkout/view_model/checkout_view_model.dart` — chama `placeOrderUseCase()`; não conhece carrinho, pagamento nem datasource.
+- Provider do use case injetando os dois repositories.
+
+Esqueleto de referência:
+
+```dart
+// application/checkout/place_order_use_case.dart
+class PlaceOrderUseCase {
+  PlaceOrderUseCase(this._cart, this._payments);
+  final CartRepository _cart;         // orquestra repositories,
+  final PaymentRepository _payments;  // nunca datasources
+
+  Future<Order> call() async {
+    final cart = await _cart.current();
+    if (cart.isEmpty) throw const EmptyCartFailure();
+    final total = cart.applyDiscounts();   // regra de negócio vive aqui
+    return _payments.charge(total);        // combina dois repositories
+  }
+}
+
+// provider (DI via Riverpod)
+final placeOrderUseCaseProvider = Provider(
+  (ref) => PlaceOrderUseCase(
+    ref.read(cartRepositoryProvider),
+    ref.read(paymentRepositoryProvider),
+  ),
+);
+```
+
 ## 6. Testes (definição mínima)
 
 - Teste unitário do `ProductsRepository` com `dio` mockado (`mocktail`), cobrindo sucesso e mapeamento de erro → `Failure`.
 - Teste do `ProductsViewModel` com repository mockado, validando transição loading → data e o caso de erro (usar `ProviderContainer` para overrides).
+- Teste unitário do `PlaceOrderUseCase` com os dois repositories mockados (`mocktail`): caminho feliz, carrinho vazio → `Failure`, e desconto aplicado corretamente.
 - 1 widget test da `ProductsScreen` renderizando os 3 estados.
 
 ## 7. Definition of Done
@@ -146,15 +202,19 @@ Requisitos da slice:
 - [ ] `dart run build_runner build --delete-conflicting-outputs` gera sem conflito.
 - [ ] `flutter test` verde.
 - [ ] App roda em iOS e Android mostrando a lista de produtos com loading/erro/refresh.
-- [ ] `view/` sem nenhuma chamada a `data/` ou regra de negócio (revisar imports).
-- [ ] `domain/` sem imports de `dio`, `flutter`, ou pacotes de infra.
+- [ ] `view/` sem nenhuma chamada a `data/`/`application/` ou regra de negócio (revisar imports).
+- [ ] `domain/` sem imports de `dio`, `flutter`, DTOs ou qualquer pacote de infra (camada pura).
+- [ ] `application/` (se existir) depende só de `data` (repositories) e `domain` — nunca de datasource nem de `flutter`/`ui`.
+- [ ] Nenhum use case "passthrough" (que só repassa pro repository).
 - [ ] README com o diagrama de camadas + a tabela de mapeamento RN→Flutter + comando de code-gen.
 
 ## Convenções (enforce em review)
-- Sufixos de arquivo: `_screen.dart`, `_view_model.dart`, `_repository.dart`, `_datasource.dart`, `_dto.dart`.
+- Sufixos de arquivo: `_screen.dart`, `_view_model.dart`, `_use_case.dart`, `_repository.dart`, `_datasource.dart`, `_dto.dart`.
 - Um módulo de UI = exatamente uma `view` + um `view_model`.
-- `data/` e `services/` são reutilizáveis entre módulos (organizados por tipo); `ui/` é organizada por módulo.
-- Nada de `BuildContext` dentro de `view_model`.
+- `domain/` é puro (só models, zero deps); `data/` e `services/` são reutilizáveis entre módulos (por tipo); `application/` e `ui/` são organizados por módulo.
+- `view_model` chama use case (`application/`) OU repository (`data/`) — nunca datasource.
+- Use case só nasce quando cruza repositories ou é reusado; caso contrário, `view_model → repository` direto.
+- Nada de `BuildContext` dentro de `view_model` nem de use case.
 - Segredos só via `--dart-define` / `envied`; nunca hardcoded nem commitados.
 
 ## Fora de escopo deste bootstrap

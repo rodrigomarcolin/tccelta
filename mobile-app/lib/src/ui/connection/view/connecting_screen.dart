@@ -2,86 +2,102 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
+import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
+import 'package:tccelta_mobile/src/ui/connection/view_model/connecting_view_model.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
-/// Flag mock: na 1ª tentativa do tour a conexão "cai" (leva ao estado de
-/// Conexão perdida); nas seguintes conecta. Torna o ramo de erro alcançável
-/// sem a camada BLE. Trivial de remover quando o estado vier do dongle real.
-bool _firstConnectDropped = false;
-
-/// Rótulos dos passos honestos do handshake, em ordem.
-const List<(String, String?)> _stepLabels = [
-  ('Conectando', null),
-  ('Otimizando conexão', '· MTU'),
-  ('Preparando adaptador', '· init ELM327'),
-  ('Lendo capacidades do veículo', null),
-];
+/// Mapeia a fase BLE nos 4 passos honestos do handshake.
+///
+/// Decisão de escopo (Fase 1): só "Conectando" e "Otimizando · MTU" são
+/// dirigidos pelo BLE real; os passos de init do ELM327 e leitura de
+/// capacidades são Fase 2 e permanecem pendentes por ora.
+List<ConnectStep> connectingStepsFor(BleConnectionPhase phase) {
+  final ConnectStepState connectState;
+  final ConnectStepState optimizeState;
+  switch (phase) {
+    case BleConnectionPhase.idle:
+    case BleConnectionPhase.connecting:
+    case BleConnectionPhase.reconnecting:
+      connectState = ConnectStepState.active;
+      optimizeState = ConnectStepState.pending;
+    case BleConnectionPhase.optimizingLink:
+    case BleConnectionPhase.discovering:
+    case BleConnectionPhase.enablingNotify:
+      connectState = ConnectStepState.done;
+      optimizeState = ConnectStepState.active;
+    case BleConnectionPhase.ready:
+      connectState = ConnectStepState.done;
+      optimizeState = ConnectStepState.done;
+    case BleConnectionPhase.disconnected:
+    case BleConnectionPhase.failed:
+      connectState = ConnectStepState.pending;
+      optimizeState = ConnectStepState.pending;
+  }
+  return [
+    ConnectStep('Conectando', connectState),
+    ConnectStep('Otimizando conexão', optimizeState, sublabel: '· MTU'),
+    // Fase 2 — ainda não executados pela camada BLE.
+    const ConnectStep(
+      'Preparando adaptador',
+      ConnectStepState.pending,
+      sublabel: '· init ELM327',
+    ),
+    const ConnectStep('Lendo capacidades do veículo', ConnectStepState.pending),
+  ];
+}
 
 /// 1.4 — Handshake de conexão em andamento.
 ///
-/// Mostra um spinner e os passos avançando (mockados por timer). Ao concluir,
-/// navega para o estado seguinte ([_firstConnectDropped] decide entre Conexão
-/// perdida e Conectado).
-class ConnectingScreen extends StatefulWidget {
+/// Dirige os passos a partir das fases REAIS do BLE (Fase 1): "Conectando" e
+/// "Otimizando · MTU". Os passos de init do ELM327 e leitura de capacidades
+/// são Fase 2 e ficam pendentes por ora. Ao ficar `ready`, segue para
+/// Conectado; em falha, para Conexão perdida.
+class ConnectingScreen extends ConsumerStatefulWidget {
   /// Cria a tela de conexão em andamento.
   const ConnectingScreen({super.key});
 
   @override
-  State<ConnectingScreen> createState() => _ConnectingScreenState();
+  ConsumerState<ConnectingScreen> createState() => _ConnectingScreenState();
 }
 
-class _ConnectingScreenState extends State<ConnectingScreen> {
-  Timer? _timer;
-  int _current = 0;
-
+class _ConnectingScreenState extends ConsumerState<ConnectingScreen> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(milliseconds: 700), (timer) {
-      if (_current >= _stepLabels.length) {
-        timer.cancel();
-        _finish();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final device = ref.read(selectedDongleProvider);
+      if (device == null) {
+        // Sem dongle selecionado (ex.: acesso direto à rota): volta à busca.
+        context.go(AppRoutes.scan);
         return;
       }
-      setState(() => _current++);
+      unawaited(
+        ref.read(connectingViewModelProvider.notifier).connect(device.id),
+      );
     });
   }
 
-  void _finish() {
-    if (!mounted) return;
-    if (!_firstConnectDropped) {
-      _firstConnectDropped = true;
-      context.pushReplacement(AppRoutes.connectionLost);
-    } else {
-      context.pushReplacement(AppRoutes.connected);
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  List<ConnectStep> get _steps => [
-        for (var i = 0; i < _stepLabels.length; i++)
-          ConnectStep(
-            _stepLabels[i].$1,
-            i < _current
-                ? ConnectStepState.done
-                : i == _current
-                    ? ConnectStepState.active
-                    : ConnectStepState.pending,
-            sublabel: _stepLabels[i].$2,
-          ),
-      ];
-
   @override
   Widget build(BuildContext context) {
+    final phase = ref.watch(connectingViewModelProvider);
+    final device = ref.watch(selectedDongleProvider);
+
+    // Navega conforme o desfecho do handshake.
+    ref.listen(connectingViewModelProvider, (_, next) {
+      if (!context.mounted) return;
+      if (next == BleConnectionPhase.ready) {
+        context.pushReplacement(AppRoutes.connected);
+      } else if (next == BleConnectionPhase.failed) {
+        context.pushReplacement(AppRoutes.connectionLost);
+      }
+    });
+
     return ConnectionBackground(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.s7),
@@ -93,7 +109,7 @@ class _ConnectingScreenState extends State<ConnectingScreen> {
             Text('Conectando ao dongle', style: AppTypography.title),
             const SizedBox(height: AppSpacing.s2),
             Text(
-              'OBD2Dongle',
+              device?.name ?? 'OBD2Dongle',
               style: AppTypography.mono(
                 const TextStyle(
                   fontSize: 14,
@@ -103,7 +119,7 @@ class _ConnectingScreenState extends State<ConnectingScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.s9),
-            StepList(_steps),
+            StepList(connectingStepsFor(phase)),
             const Spacer(),
             Text(
               'Mantenha o dongle plugado e o telefone próximo.',

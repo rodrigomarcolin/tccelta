@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/main.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
@@ -7,7 +8,8 @@ import 'package:tccelta_mobile/src/ui/showcase/view/showcase_screen.dart';
 
 void main() {
   testWidgets('app entra pelo fluxo de conexão (permissões)', (tester) async {
-    await tester.pumpWidget(const TcceltaApp());
+    // As telas leem providers Riverpod, então precisam de um ProviderScope.
+    await tester.pumpWidget(const ProviderScope(child: TcceltaApp()));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Permitir Bluetooth'), findsOneWidget);
   });

@@ -1,4 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- BLE: Android 12+ (API 31+). `neverForLocation` declara que o scan não é
+         usado para derivar localização física, dispensando a permissão de local. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- BLE: Android 11 e anteriores (API ≤30) exigem as permissões legadas e,
+         para escanear, a localização fina. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
     <application
         android:label="tccelta_mobile"
         android:name="${applicationName}"

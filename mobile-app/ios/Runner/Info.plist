@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>O app usa Bluetooth para encontrar e conversar com o seu dongle OBD2.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>O app usa Bluetooth para encontrar e conversar com o seu dongle OBD2.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

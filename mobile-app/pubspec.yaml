@@ -35,6 +35,7 @@ dependencies:
   dio: ^5.10.0
   flutter:
     sdk: flutter
+  flutter_blue_plus: ^2.3.10
   flutter_hooks: ^0.21.3+1
   flutter_riverpod: ^3.3.2
   flutter_svg: ^2.3.0
@@ -43,6 +44,10 @@ dependencies:
   google_fonts: ^8.1.0
   hooks_riverpod: ^3.3.2
   json_annotation: ^4.12.0
+  # Anotações puras de Dart (@immutable, etc.) para a camada domain, sem
+  # depender de Flutter.
+  meta: ^1.16.0
+  permission_handler: ^12.0.3
   shared_preferences: ^2.5.5
 
 dev_dependencies:
