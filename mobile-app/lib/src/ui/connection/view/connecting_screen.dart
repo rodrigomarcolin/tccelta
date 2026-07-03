@@ -107,17 +107,19 @@ class _ConnectingScreenState extends ConsumerState<ConnectingScreen> {
             const _BleSpinner(),
             const SizedBox(height: AppSpacing.s9),
             Text('Conectando ao dongle', style: AppTypography.title),
-            const SizedBox(height: AppSpacing.s2),
-            Text(
-              device?.name ?? 'OBD2Dongle',
-              style: AppTypography.mono(
-                const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
+            if (device?.displayName.isNotEmpty ?? false) ...[
+              const SizedBox(height: AppSpacing.s2),
+              Text(
+                device!.displayName,
+                style: AppTypography.mono(
+                  const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
-            ),
+            ],
             const SizedBox(height: AppSpacing.s9),
             StepList(connectingStepsFor(phase)),
             const Spacer(),

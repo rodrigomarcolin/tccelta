@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/router/app_router.dart';
+import 'package:tccelta_mobile/src/ui/connection/widgets/connection_guard.dart';
 
 void main() {
   runApp(const ProviderScope(child: TcceltaApp()));
@@ -23,6 +24,9 @@ class TcceltaApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       routerConfig: appRouter,
+      // Guarda de sessão BLE de escopo global: redireciona para "Conexão
+      // perdida" a partir de qualquer tela quando uma sessão ativa cai.
+      builder: (context, child) => ConnectionGuard(child: child!),
     );
   }
 }

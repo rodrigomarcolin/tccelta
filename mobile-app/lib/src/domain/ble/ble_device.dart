@@ -21,6 +21,10 @@ class BleDevice {
   /// de zero = sinal mais forte.
   final int rssi;
 
+  /// Rótulo para exibição: o [name] anunciado ou, se vazio, o [id]
+  /// (MAC no Android, UUID no iOS) — nunca vazio.
+  String get displayName => name.isNotEmpty ? name : id;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

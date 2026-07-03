@@ -30,6 +30,36 @@ void main() {
     expect(find.text('OBD2Dongle'), findsOneWidget);
   });
 
+  testWidgets('mostra o MAC quando o dongle não anuncia nome', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        FakeBleService(
+          devices: const [
+            BleDevice(id: '06:E5:28:3B:FD:E0', name: '', rssi: -50),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('06:E5:28:3B:FD:E0'), findsOneWidget);
+  });
+
+  testWidgets('omite o dongle sem nome e sem id (HEX)', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        FakeBleService(
+          devices: const [BleDevice(id: '', name: '', rssi: -50)],
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Nenhum dongle encontrado ainda…'), findsOneWidget);
+  });
+
   testWidgets('mostra estado vazio quando nada é encontrado', (tester) async {
     await tester.pumpWidget(wrap(FakeBleService()));
     await tester.pump();

@@ -115,7 +115,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                     for (final device in state.devices) ...[
                       CardButton(
                         leading: const IconTile(AppIconData.dongle),
-                        title: device.name,
+                        title: device.displayName,
                         titleMono: true,
                         subtitle: 'ELM327 · ${_signalLabel(device.rssi)}',
                         subtitleColor: AppColors.cyan500,

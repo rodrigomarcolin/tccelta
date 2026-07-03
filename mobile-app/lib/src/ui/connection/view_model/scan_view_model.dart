@@ -74,7 +74,12 @@ class ScanViewModel extends Notifier<ScanState> {
     );
     unawaited(_scanSub?.cancel());
     _scanSub = _repo.scan().listen(
-      (devices) => state = state.copyWith(devices: devices),
+      // Sem nome anunciado nem id (HEX) não há como rotular o dongle — omite.
+      (devices) => state = state.copyWith(
+        devices: devices
+            .where((d) => d.displayName.isNotEmpty)
+            .toList(growable: false),
+      ),
       onError: (Object e) => state = state.copyWith(
         isScanning: false,
         failure: e is Failure ? e : null,

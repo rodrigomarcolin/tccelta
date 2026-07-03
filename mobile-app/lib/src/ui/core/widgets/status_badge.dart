@@ -27,24 +27,24 @@ enum StatusTone {
 extension StatusToneX on StatusTone {
   /// Cor sólida do tom (acento/ícone/texto).
   Color get color => switch (this) {
-        StatusTone.live || StatusTone.ok => AppColors.cyan500,
-        StatusTone.warning => AppColors.amber500,
-        StatusTone.alert => AppColors.red500,
-      };
+    StatusTone.live || StatusTone.ok => AppColors.cyan500,
+    StatusTone.warning => AppColors.amber500,
+    StatusTone.alert => AppColors.red500,
+  };
 
   /// Preenchimento translúcido do tom (fundo de pílula/badge/tile).
   Color get wash => switch (this) {
-        StatusTone.live || StatusTone.ok => AppColors.cyan10,
-        StatusTone.warning => AppColors.amber08,
-        StatusTone.alert => AppColors.red20,
-      };
+    StatusTone.live || StatusTone.ok => AppColors.cyan10,
+    StatusTone.warning => AppColors.amber08,
+    StatusTone.alert => AppColors.red20,
+  };
 
   /// Borda translúcida do tom (anel de badge/tile/callout).
   Color get border => switch (this) {
-        StatusTone.live || StatusTone.ok => AppColors.cyan28,
-        StatusTone.warning => AppColors.amber20,
-        StatusTone.alert => AppColors.red32,
-      };
+    StatusTone.live || StatusTone.ok => AppColors.cyan28,
+    StatusTone.warning => AppColors.amber20,
+    StatusTone.alert => AppColors.red32,
+  };
 
   /// `true` quando o dot do tom deve brilhar (feed ao vivo / ok).
   bool get glows => this == StatusTone.live || this == StatusTone.ok;
@@ -222,8 +222,9 @@ class StatusBand extends StatelessWidget {
                   TextSpan(text: device, style: AppTypography.label),
                   TextSpan(
                     text: '  ·  $version',
-                    style: AppTypography.label
-                        .copyWith(color: AppColors.textTertiary),
+                    style: AppTypography.label.copyWith(
+                      color: AppColors.textTertiary,
+                    ),
                   ),
                 ],
               ),
