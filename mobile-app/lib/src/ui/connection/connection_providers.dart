@@ -1,9 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/data/datasources/dongle_datasource.dart';
+import 'package:tccelta_mobile/src/data/datasources/permissions_datasource.dart';
 import 'package:tccelta_mobile/src/data/repositories/dongle_repository_impl.dart';
+import 'package:tccelta_mobile/src/data/repositories/permissions_repository_impl.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
+import 'package:tccelta_mobile/src/domain/repositories/permissions_repository.dart';
 import 'package:tccelta_mobile/src/infra/ble/ble_plus.dart';
 import 'package:tccelta_mobile/src/services/ble/ble_service.dart';
 
@@ -23,6 +26,17 @@ final Provider<DongleDatasource> dongleDatasourceProvider =
 final Provider<DongleRepository> dongleRepositoryProvider =
     Provider<DongleRepository>(
   (ref) => DongleRepositoryImpl(ref.read(dongleDatasourceProvider)),
+);
+
+/// Datasource das permissões de BLE, sobre o plugin `permission_handler`.
+final Provider<PermissionsDatasource> permissionsDatasourceProvider =
+    Provider<PermissionsDatasource>((_) => const PermissionsDatasource());
+
+/// Repository = *source of truth* das permissões. O view model fala com este
+/// provider, nunca com o datasource.
+final Provider<PermissionsRepository> permissionsRepositoryProvider =
+    Provider<PermissionsRepository>(
+  (ref) => PermissionsRepositoryImpl(ref.read(permissionsDatasourceProvider)),
 );
 
 /// Estado do adaptador Bluetooth do telefone (para gating/auto-avanço nas

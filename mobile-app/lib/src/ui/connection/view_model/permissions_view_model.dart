@@ -1,11 +1,14 @@
-import 'dart:io' show Platform;
+import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:tccelta_mobile/src/domain/repositories/permissions_repository.dart';
+import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 
 /// Fase do fluxo de pedido de permissões.
 enum PermissionFlowState {
+  /// Verificando se a permissão já foi concedida (estado inicial, silencioso).
+  checking,
+
   /// Ainda não pedido.
   idle,
 
@@ -19,39 +22,29 @@ enum PermissionFlowState {
   denied,
 }
 
-/// ViewModel das permissões de BLE. Pede as permissões necessárias por
-/// plataforma e expõe o resultado; a tela observa e navega conforme o estado.
+/// ViewModel das permissões de BLE. Ao iniciar, verifica se a permissão já foi
+/// concedida (para que a tela seja pulada nesse caso) e, quando pedido, dispara
+/// o diálogo do sistema; a tela observa e navega conforme o estado.
 class PermissionsViewModel extends Notifier<PermissionFlowState> {
-  @override
-  PermissionFlowState build() => PermissionFlowState.idle;
+  PermissionsRepository get _repo => ref.read(permissionsRepositoryProvider);
 
-  /// Pede acesso ao BLE. Retorna `true` se concedido.
-  ///
-  /// Android 12+: `BLUETOOTH_SCAN` + `BLUETOOTH_CONNECT` (o manifest declara
-  /// `neverForLocation`, então não pedimos localização). Em Android ≤11 essas
-  /// permissões são de instalação e o scan exige localização — declarada no
-  /// manifest com `maxSdkVersion=30`.
-  Future<bool> request() async {
-    state = PermissionFlowState.requesting;
-    final ok = await _requestPlatform();
-    state = ok ? PermissionFlowState.granted : PermissionFlowState.denied;
-    return ok;
+  @override
+  PermissionFlowState build() {
+    unawaited(_check());
+    return PermissionFlowState.checking;
   }
 
-  Future<bool> _requestPlatform() async {
-    if (kIsWeb) return true;
-    if (Platform.isAndroid) {
-      final results = await [
-        Permission.bluetoothScan,
-        Permission.bluetoothConnect,
-      ].request();
-      return results.values.every((s) => s.isGranted || s.isLimited);
-    }
-    if (Platform.isIOS) {
-      final status = await Permission.bluetooth.request();
-      return status.isGranted || status.isLimited;
-    }
-    return true;
+  Future<void> _check() async {
+    final has = await _repo.hasBluetoothPermission();
+    state = has ? PermissionFlowState.granted : PermissionFlowState.idle;
+  }
+
+  /// Pede acesso ao BLE. Retorna `true` se concedido.
+  Future<bool> request() async {
+    state = PermissionFlowState.requesting;
+    final ok = await _repo.requestBluetoothPermission();
+    state = ok ? PermissionFlowState.granted : PermissionFlowState.denied;
+    return ok;
   }
 }
 

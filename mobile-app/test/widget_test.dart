@@ -3,13 +3,38 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/main.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/domain/repositories/permissions_repository.dart';
+import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/showcase/view/showcase_screen.dart';
+
+/// Repository de permissões fake para os testes de widget: controla se a
+/// permissão já foi concedida sem tocar no plugin real.
+class _FakePermissionsRepository implements PermissionsRepository {
+  _FakePermissionsRepository({this.granted = false});
+
+  final bool granted;
+
+  @override
+  Future<bool> hasBluetoothPermission() async => granted;
+
+  @override
+  Future<bool> requestBluetoothPermission() async => granted;
+}
 
 void main() {
   testWidgets('app entra pelo fluxo de conexão (permissões)', (tester) async {
     // As telas leem providers Riverpod, então precisam de um ProviderScope.
-    await tester.pumpWidget(const ProviderScope(child: TcceltaApp()));
+    // Sem permissão concedida => a tela de permissão deve aparecer.
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          permissionsRepositoryProvider
+              .overrideWithValue(_FakePermissionsRepository()),
+        ],
+        child: const TcceltaApp(),
+      ),
+    );
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Permitir Bluetooth'), findsOneWidget);
   });

@@ -9,16 +9,30 @@ import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/view_model/permissions_view_model.dart';
+import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_state_view.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
 /// 1.1 — Pedir permissões de Bluetooth (e Localização no Android antigo).
 ///
-/// "Permitir" dispara o pedido real de permissões; concedido, segue para a
-/// busca (ou para o estado de BT desligado, conforme o adaptador).
+/// Ao iniciar, o view model verifica se a permissão já foi concedida: se sim, a
+/// tela é pulada e o fluxo avança direto (busca ou "BT desligado", conforme o
+/// adaptador). Só quando ainda não há permissão a UI é renderizada; "Permitir"
+/// dispara o pedido real e, concedido, segue adiante.
 class PermissionsScreen extends ConsumerWidget {
   /// Cria a tela de permissões.
   const PermissionsScreen({super.key});
+
+  /// Avança para a busca ou para "BT desligado" conforme o estado atual do
+  /// adaptador. Usa `pushReplacement` para não deixar a tela de permissão na
+  /// pilha (a permissão já foi resolvida).
+  Future<void> _advance(BuildContext context, WidgetRef ref) async {
+    final adapter = await ref.read(dongleRepositoryProvider).adapterState.first;
+    if (!context.mounted) return;
+    context.pushReplacement(
+      adapter == BleAdapterState.on ? AppRoutes.scan : AppRoutes.bluetoothOff,
+    );
+  }
 
   Future<void> _onAllow(BuildContext context, WidgetRef ref) async {
     final granted =
@@ -30,22 +44,34 @@ class PermissionsScreen extends ConsumerWidget {
           content: Text('Permissão de Bluetooth necessária para continuar.'),
         ),
       );
-      return;
     }
-    // Decide entre busca e "BT desligado" conforme o estado atual do adaptador.
-    final adapter = await ref.read(dongleRepositoryProvider).adapterState.first;
-    if (!context.mounted) return;
-    unawaited(
-      context.push(
-        adapter == BleAdapterState.on ? AppRoutes.scan : AppRoutes.bluetoothOff,
-      ),
-    );
+    // A navegação em caso de sucesso é feita pelo `ref.listen` no `build`
+    // (mesmo caminho da checagem inicial "já concedido").
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final requesting = ref.watch(permissionsViewModelProvider) ==
-        PermissionFlowState.requesting;
+    final state = ref.watch(permissionsViewModelProvider);
+
+    // Concedido (pela checagem inicial ou após o pedido) => avança e sai.
+    ref.listen<PermissionFlowState>(permissionsViewModelProvider, (_, next) {
+      if (next == PermissionFlowState.granted) {
+        unawaited(_advance(context, ref));
+      }
+    });
+
+    // Enquanto verifica (ou já concedeu, aguardando o avanço) não mostramos a
+    // UI de permissão — evita "piscar" a tela para quem já concedeu.
+    if (state == PermissionFlowState.checking ||
+        state == PermissionFlowState.granted) {
+      return const ConnectionBackground(
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.cyan500),
+        ),
+      );
+    }
+
+    final requesting = state == PermissionFlowState.requesting;
 
     return ConnectionStateView(
       icon: AppIconData.bluetooth,

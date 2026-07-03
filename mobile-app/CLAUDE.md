@@ -119,11 +119,11 @@ Requisitos da slice:
  
 ## 5.1 Camada `application` (use cases) — quando e como
  
-Regra prática: comece com `view_model → repository`. Extraia um use case em `application/` **apenas** quando ocorrer um destes:
+Regra prática: comece com `view_model → repository` — a camada `repository` **sempre** existe (é a *source of truth* e a única que fala com o datasource); o que é opcional é a camada `application/` (use cases) acima dela. Extraia um use case em `application/` **apenas** quando ocorrer um destes:
 - a lógica combina dados de **mais de um repository** (repositories não se conhecem, então a orquestração precisa subir);
 - a mesma operação de negócio é **reusada por múltiplos view_models**;
 - o `view_model` está inchando de orquestração.
-Não criar use case "passthrough" (uma linha que só repassa pro repository) — isso é boilerplate sem ganho.
+Não criar use case "passthrough" (uma linha que só repassa pro repository) — isso é boilerplate sem ganho. **Atenção:** esta regra do passthrough vale APENAS para a camada `application/` (use cases). Ela NÃO autoriza pular o repository: o `view_model` fala com o repository, nunca com o datasource, mesmo que o repository pareça um simples repasse (datasource → repository → view_model é sempre a cadeia mínima).
  
 Segunda slice de validação (feature `checkout`) para exercitar a camada:
 - `application/checkout/place_order_use_case.dart` — classe *callable* (`call()`) que depende de `CartRepository` + `PaymentRepository`, aplica a regra (ex.: carrinho vazio → `Failure`, aplica desconto) e retorna um domain model `Order`. **Depende de repositories concretos, NUNCA de datasource.**
