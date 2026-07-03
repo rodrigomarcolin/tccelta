@@ -10,10 +10,6 @@ import 'package:tccelta_mobile/src/ui/showcase/view/showcase_screen.dart';
 
 /// Roteador do app. O fluxo de conexão (`01 FLUXO DE CONEXÃO`) é a entrada;
 /// `/painel` aponta hoje para a `ShowcaseScreen` como stand-in do painel.
-///
-/// As transições entre as telas são disparadas pelas próprias telas
-/// (`context.go(...)`) — mockadas por toque/timer enquanto a camada BLE não
-/// existe.
 final GoRouter appRouter = GoRouter(
   initialLocation: AppRoutes.permissions,
   routes: [

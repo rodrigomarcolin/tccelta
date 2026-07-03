@@ -13,10 +13,16 @@ abstract interface class BleService {
 
   /// Escaneia e emite a lista corrente de dispositivos que casam com os
   /// filtros. Emite uma nova lista a cada atualização de resultados.
+  ///
+  /// Com [continuousUpdates] `true`, processa também anúncios repetidos para
+  /// manter o RSSI atualizado em tempo real (custa mais bateria/CPU); com
+  /// `false` (default), cada dispositivo é reportado uma vez e o RSSI congela
+  /// no 1º anúncio.
   Stream<List<BleDevice>> scan({
     List<String> withServiceUuids,
     List<String> withNames,
     Duration timeout,
+    bool continuousUpdates,
   });
 
   /// Para o scan em andamento.

@@ -1,14 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_signal_level.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/view_model/scan_view_model.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
+import 'package:tccelta_mobile/src/ui/core/hooks/hooks.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
 /// 1.3 — Procurar dongles BLE próximos.
@@ -16,47 +19,39 @@ import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 /// Escaneia dongles `OBD2Dongle` reais e lista os encontrados. Tocar num
 /// dongle o seleciona e inicia a conexão; "Procurar novamente" reinicia a
 /// varredura (e a animação do radar).
-class ScanScreen extends ConsumerStatefulWidget {
+class ScanScreen extends HookConsumerWidget {
   /// Cria a tela de busca.
   const ScanScreen({super.key});
 
   @override
-  ConsumerState<ScanScreen> createState() => _ScanScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Trocar a key remonta o radar (reinicia a varredura) ao buscar de novo.
+    final scanAttempt = useState(0);
 
-class _ScanScreenState extends ConsumerState<ScanScreen> {
-  // Trocar a key remonta o radar (reinicia a varredura) ao buscar de novo.
-  int _scanAttempt = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    // Dispara o scan após o primeiro frame (evita mutar provider no build).
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => ref.read(scanViewModelProvider.notifier).startScan(),
+    // Dispara o scan uma única vez ao montar. O callback do useEffect roda
+    // DURANTE o build, então adiamos a mutação do provider para o pós-frame
+    // (equivale ao antigo initState + addPostFrameCallback).
+    useEffect(
+      () {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          unawaited(ref.read(scanViewModelProvider.notifier).startScan());
+        });
+        return null;
+      },
+      const [],
     );
-  }
 
-  void _rescan() {
-    unawaited(ref.read(scanViewModelProvider.notifier).startScan());
-    setState(() => _scanAttempt++);
-  }
+    Future<void> rescan() async {
+      unawaited(ref.read(scanViewModelProvider.notifier).startScan());
+      scanAttempt.value++;
+    }
 
-  Future<void> _select(BleDevice device) async {
-    ref.read(selectedDongleProvider.notifier).select(device);
-    await ref.read(scanViewModelProvider.notifier).stopScan();
-    if (mounted) unawaited(context.push(AppRoutes.connecting));
-  }
+    Future<void> select(BleDevice device) async {
+      ref.read(selectedDongleProvider.notifier).select(device);
+      await ref.read(scanViewModelProvider.notifier).stopScan();
+      if (context.mounted) unawaited(context.push(AppRoutes.connecting));
+    }
 
-  /// Rótulo de intensidade a partir do RSSI (dBm; perto de 0 = mais forte).
-  String _signalLabel(int rssi) {
-    if (rssi >= -60) return 'sinal forte';
-    if (rssi >= -75) return 'sinal médio';
-    return 'sinal fraco';
-  }
-
-  @override
-  Widget build(BuildContext context) {
     final state = ref.watch(scanViewModelProvider);
 
     return ConnectionBackground(
@@ -93,10 +88,17 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                         ),
                       ),
                     )
+                  else if (state.isScanning)
+                    const _SearchingLabel()
                   else
-                    const _SearchingLabel(),
+                    const SizedBox.shrink(),
                   const SizedBox(height: AppSpacing.s5),
-                  Center(child: RadarScanner(key: ValueKey(_scanAttempt))),
+                  Center(
+                    child: RadarScanner(
+                      key: ValueKey(scanAttempt.value),
+                      active: state.isScanning,
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.s7),
                   Text('ENCONTRADOS', style: AppTypography.overline),
                   const SizedBox(height: AppSpacing.s4),
@@ -117,12 +119,12 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                         leading: const IconTile(AppIconData.dongle),
                         title: device.displayName,
                         titleMono: true,
-                        subtitle: 'ELM327 · ${_signalLabel(device.rssi)}',
+                        subtitle: 'ELM327 · ${device.signal.label}',
                         subtitleColor: AppColors.cyan500,
                         subtitleMono: false,
                         showValue: false,
                         selected: true,
-                        onTap: () => _select(device),
+                        onTap: () => select(device),
                       ),
                       const SizedBox(height: AppSpacing.s3),
                     ],
@@ -132,7 +134,9 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
             const SizedBox(height: AppSpacing.s5),
             AppButton(
               variant: AppButtonVariant.secondary,
-              onPressed: _rescan,
+              // Desabilitado durante o scan: reiniciar em rajada dispara o
+              // throttle do Android; espera o ciclo atual terminar.
+              onPressed: state.isScanning ? null : rescan,
               child: const Text('Procurar novamente'),
             ),
             const SizedBox(height: AppSpacing.s7),
@@ -143,44 +147,28 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   }
 }
 
+/// Rótulo pt-BR de exibição do nível de sinal (a classificação vem do domain,
+/// aplicada no datasource — aqui a tela só traduz para texto).
+extension on BleSignalLevel {
+  String get label => switch (this) {
+        BleSignalLevel.strong => 'sinal forte',
+        BleSignalLevel.medium => 'sinal médio',
+        BleSignalLevel.weak => 'sinal fraco',
+      };
+}
+
 /// Rótulo "Procurando…" com três pontinhos piscando em sequência.
-class _SearchingLabel extends StatefulWidget {
+class _SearchingLabel extends HookWidget {
   const _SearchingLabel();
 
   @override
-  State<_SearchingLabel> createState() => _SearchingLabelState();
-}
-
-class _SearchingLabelState extends State<_SearchingLabel>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1200),
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (context.reduceMotion) {
-      _controller.stop();
-    } else if (!_controller.isAnimating) {
-      unawaited(_controller.repeat());
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final controller = useLoopController(const Duration(milliseconds: 1200));
     return Row(
       children: [
         for (var i = 0; i < 3; i++) ...[
           if (i > 0) const SizedBox(width: 3),
-          _Dot(controller: _controller, phase: i * 0.2),
+          _Dot(controller: controller, phase: i * 0.2),
         ],
         const SizedBox(width: AppSpacing.s2),
         Text(

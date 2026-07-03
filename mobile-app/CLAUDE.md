@@ -23,7 +23,6 @@ O app se comunica com o dongle via **BLE usando o Nordic UART Service**. Este é
 
 Os payloads são texto ASCII sobre BLE — não JSON/protobuf. A fila de comandos do firmware tem profundidade finita e **descarta comandos sob back-pressure**, então o app precisa lidar com timeouts/respostas ausentes de forma graciosa. Criptografia/autenticação (`SecureBleConnectivity`) está apenas esboçada (stub) no firmware hoje. Para testes sem hardware, o firmware pode rodar seu perfil PlatformIO `env:mock`.
 
-> Nota: ainda não há pacote BLE no `pubspec.yaml` — a camada de conectividade não está implementada. O app hoje é o design system mais uma tela de showcase.
 
 ## Comandos
 
@@ -38,7 +37,7 @@ Rodar a partir de `mobile-app/`:
 
 ## Arquitetura
 
-Em camadas, sob `lib/src/`, com `main.dart` como um bootstrap fino. `main.dart` atualmente monta `ShowcaseScreen` diretamente; a fiação de ProviderScope/go_router e as camadas de feature data/domain/service estão adiadas (anotado em `main.dart`).
+Em camadas, sob `lib/src/`, com `main.dart` como bootstrap fino. `main.dart` já monta `ProviderScope` + `MaterialApp.router` (go_router via `src/router/app_router.dart`) e entra pelo fluxo de conexão; um `ConnectionGuard` de escopo global é montado no `builder` do `MaterialApp`. A rota `/painel` aponta hoje para a `ShowcaseScreen` como stand-in do painel de verdade.
 
 - `src/core/theme/` — **design tokens**. Importar via o barrel `theme.dart`. Material 3 dark-first (`app_theme.dart`) montado a partir de `app_colors.dart`, `app_typography.dart` (Space Grotesk para UI, JetBrains Mono com algarismos tabulares para dados — carregado em runtime via `google_fonts`), `app_spacing.dart` (espaçamento + raios) e `app_effects.dart` (sombras, brilhos "live" ciano, durações de movimento com uma ponte de acessibilidade `MotionX` que respeita `disableAnimations`).
 - `src/ui/core/widgets/` — **átomos do design system** (a biblioteca de componentes). Importar via o barrel `widgets.dart`. Inclui `AppButton`, `AppTabBar`, `StatusBadge`, `SensorRow`, `StatCard`, `StatGraphCard`, e o característico `Gauge` (ring/arc270/arc180, CustomPainter em `gauge/gauge_painter.dart`) e `Sparkline`.
@@ -86,9 +85,13 @@ lib/
       dtos/                  # modelos de transporte (freezed + json_serializable)
       repositories/          # SOURCE OF TRUTH; mapeiam DTO -> domain model; cache/erros/retry
                              #   único que fala com datasource. NÃO conhece outros repositories.
-    services/                # CAMADA SERVICES — side-effects / integrações externas (transversal)
+    services/                # CAMADA SERVICES — ports / side-effects / integrações externas (transversal)
+      ble/                   #   ex: ble_service.dart -> PORT abstrato (BLE puro, sem "dongle")
       analytics_service.dart #   (analytics, notificações, storage, etc.) — NÃO confundir com use case
       notification_service.dart
+    infra/                   # CAMADA INFRA — ADAPTERS concretos que implementam os ports de services/
+      ble/                   #   ex: ble_plus.dart -> adapter sobre flutter_blue_plus (única camada
+                             #   que conhece a lib); trocar de lib = reescrever aqui + trocar 1 provider
     ui/                      # CAMADA UI — organizada por MÓDULO (feature-first)
       <modulo>/
         view/                # <modulo>_screen.dart  -> View "burra" (só observa + renderiza)
@@ -100,22 +103,28 @@ lib/
 test/                        # espelha lib/src/ (mesma árvore)
 ```
  
-## 5. Vertical slice de validação (feature `products`)
+## 5. Vertical slice de validação (feature `connection`)
  
-Implementar UMA feature ponta a ponta, como prova de que a arquitetura está fechada. Fluxo: `dio_client` → `ProductsDatasource` → `ProductsRepository` (DTO→domain) → `ProductsViewModel` (AsyncNotifier) → `ProductsScreen` (só renderiza `AsyncValue.when`).
+A fatia vertical que **fecha a arquitetura ponta a ponta já existe e está implementada**: é a feature `connection` (fluxo de conexão BLE com o dongle). Ela é a referência viva das camadas — copie o padrão dela ao criar novas features. Fluxo: `infra` (adapter da lib) → `services` (port BLE) → `data` (datasource → repository, mapeia erro → `Failure`) → `ui` (view_model `Notifier` → view `Consumer` que só renderiza). Difere da slice CRUD/HTTP clássica por ser transporte BLE de streams e texto (ver Notas ao fim).
  
-Requisitos da slice:
-- `domain/models/product.dart` — modelo de domínio (freezed).
-- `data/dtos/product_dto.dart` — DTO com `fromJson` (freezed + json_serializable) e `toDomain()`.
-- `data/datasources/products_datasource.dart` — usa `dio`, retorna `List<ProductDto>`.
-- `data/repositories/products_repository.dart` — interface no `domain` + impl no `data`; expõe `Future<List<Product>>`; trata erros virando `Failure`.
-- `ui/products/view_model/products_view_model.dart` — `AsyncNotifier<List<Product>>` com `build()` (fetch) e `refresh()`. **Toda a lógica vive aqui.**
-- `ui/products/view/products_screen.dart` — `ConsumerWidget` que faz `ref.watch(...)` e trata `loading/error/data` via `AsyncValue.when`. Sem lógica.
-- `ui/products/widgets/product_card.dart` — widget específico do módulo.
-- `ui/core/widgets/app_button.dart` — exemplo de componente genérico.
-- Providers conectando datasource → repository → view_model (DI via Riverpod).
-- Rota `/products` registrada no `go_router`.
-> Nota: a slice `products` é CRUD simples e o `view_model` chama o `repository` **direto** — de propósito, NÃO tem use case. Use cases só entram quando a regra justifica (ver §5.1).
+Peças da slice (todas já no código):
+- `domain/ble/{ble_device,ble_adapter_state,ble_connection}.dart` — modelos de domínio PUROS (só `meta`, `@immutable`). **Sem freezed/json_serializable e sem DTO**: o transporte é texto ASCII sobre BLE, não JSON, então não há camada de DTO/`fromJson` aqui.
+- `domain/repositories/{dongle,permissions}_repository.dart` — interfaces no `domain`.
+- `services/ble/ble_service.dart` — **port** BLE abstrato (BLE puro, sem "dongle").
+- `infra/ble/ble_plus.dart` — **adapter** concreto sobre `flutter_blue_plus`; única camada que conhece a lib. Trocar de lib BLE = reescrever só aqui + trocar 1 provider.
+- `data/datasources/{dongle,permissions}_datasource.dart` — envolvem o port/plugins.
+- `data/repositories/{dongle,permissions}_repository_impl.dart` — impls; *source of truth* da conexão/permissões; mapeiam erro cru → `Failure`/`BleFailure` (`src/core/errors/`).
+- `ui/connection/view_model/*.dart` — ViewModels `Notifier<Estado>`: `ScanViewModel` (estado `ScanState` imutável + `copyWith`), `ConnectingViewModel` (fase `BleConnectionPhase`), `PermissionsViewModel` (fase `PermissionFlowState`). **Toda a lógica vive aqui.**
+- `ui/connection/view/*.dart` — 6 telas `ConsumerWidget`/`ConsumerStatefulWidget` "burras" (só `ref.watch` + render).
+- `ui/connection/widgets/*.dart` — componentes específicos do módulo (`ConnectionGuard`, `ConnectionBackground`, `ConnectionStateView`).
+- `ui/connection/connection_providers.dart` — toda a DI via Riverpod (port → adapter, datasource → repository → view_model).
+- Rotas registradas no `go_router` (`src/router/app_router.dart`, `src/router/app_routes.dart`).
+
+> Notas (diferenças vs a slice CRUD/HTTP clássica):
+> - **Sem DTO/freezed/json**: o transporte é texto ASCII sobre BLE, não JSON. `freezed` + `json_serializable` seguem sendo o padrão para models serializáveis QUANDO houver backend HTTP (via `dio`).
+> - **`Notifier`, não `AsyncNotifier`**: o fluxo é orientado a streams/fases (scan contínuo, fases de conexão), não a um único fetch; o estado é síncrono e observável.
+> - **Par `services` (port) + `infra` (adapter)** entre `ui`/`data` e a lib, para isolar o `flutter_blue_plus`. Numa slice HTTP o próprio `dio` já cumpre esse papel, então esse par não é necessário.
+> - **Sem use case (`application/`)**: os view_models falam direto com os repositories — de propósito (ver §5.1).
  
 ## 5.1 Camada `application` (use cases) — quando e como
  
@@ -125,47 +134,46 @@ Regra prática: comece com `view_model → repository` — a camada `repository`
 - o `view_model` está inchando de orquestração.
 Não criar use case "passthrough" (uma linha que só repassa pro repository) — isso é boilerplate sem ganho. **Atenção:** esta regra do passthrough vale APENAS para a camada `application/` (use cases). Ela NÃO autoriza pular o repository: o `view_model` fala com o repository, nunca com o datasource, mesmo que o repository pareça um simples repasse (datasource → repository → view_model é sempre a cadeia mínima).
  
-Segunda slice de validação (feature `checkout`) para exercitar a camada:
-- `application/checkout/place_order_use_case.dart` — classe *callable* (`call()`) que depende de `CartRepository` + `PaymentRepository`, aplica a regra (ex.: carrinho vazio → `Failure`, aplica desconto) e retorna um domain model `Order`. **Depende de repositories concretos, NUNCA de datasource.**
-- `ui/checkout/view_model/checkout_view_model.dart` — chama `placeOrderUseCase()`; não conhece carrinho, pagamento nem datasource.
-- Provider do use case injetando os dois repositories.
-Esqueleto de referência:
+Na feature `connection` isto **ainda não ocorre**: cada view_model fala direto com um repository (`ScanViewModel`/`ConnectingViewModel` → `DongleRepository`; `PermissionsViewModel` → `PermissionsRepository`), e está correto — nenhum orquestra dois repositories nem repete regra. Portanto `connection` hoje NÃO tem camada `application/`.
+
+Onde um use case entraria neste domínio: a sequência *checar permissão → confirmar adaptador ligado → iniciar conexão* hoje está dividida entre `PermissionsScreen`, `ConnectionGuard` e os view_models. Se ela precisar ser reusada por mais de um view_model (ou inchar), sobe para `application/connection/prepare_connection_use_case.dart`, combinando `PermissionsRepository` + `DongleRepository`:
  
 ```dart
-// application/checkout/place_order_use_case.dart
-class PlaceOrderUseCase {
-  PlaceOrderUseCase(this._cart, this._payments);
-  final CartRepository _cart;         // orquestra repositories,
-  final PaymentRepository _payments;  // nunca datasources
+// application/connection/prepare_connection_use_case.dart
+class PrepareConnectionUseCase {
+  PrepareConnectionUseCase(this._permissions, this._dongle);
+  final PermissionsRepository _permissions; // orquestra repositories,
+  final DongleRepository _dongle;            // nunca datasources
  
-  Future<Order> call() async {
-    final cart = await _cart.current();
-    if (cart.isEmpty) throw const EmptyCartFailure();
-    final total = cart.applyDiscounts();   // regra de negócio vive aqui
-    return _payments.charge(total);        // combina dois repositories
+  Future<void> call(String deviceId) async {
+    if (!await _permissions.hasBluetoothPermission()) {
+      throw const BluetoothPermissionFailure(); // regra vive aqui
+    }
+    await _dongle.connect(deviceId);             // combina dois repositories
   }
 }
  
 // provider (DI via Riverpod)
-final placeOrderUseCaseProvider = Provider(
-  (ref) => PlaceOrderUseCase(
-    ref.read(cartRepositoryProvider),
-    ref.read(paymentRepositoryProvider),
+final prepareConnectionUseCaseProvider = Provider(
+  (ref) => PrepareConnectionUseCase(
+    ref.read(permissionsRepositoryProvider),
+    ref.read(dongleRepositoryProvider),
   ),
 );
 ```
  
 ## 6. Testes (definição mínima)
  
-- Teste unitário do `ProductsRepository` com `dio` mockado (`mocktail`), cobrindo sucesso e mapeamento de erro → `Failure`.
-- Teste do `ProductsViewModel` com repository mockado, validando transição loading → data e o caso de erro (usar `ProviderContainer` para overrides).
-- Teste unitário do `PlaceOrderUseCase` com os dois repositories mockados (`mocktail`): caminho feliz, carrinho vazio → `Failure`, e desconto aplicado corretamente.
-- 1 widget test da `ProductsScreen` renderizando os 3 estados.
+A costura de teste é o **port `BleService`**: um `FakeBleService` (`test/support/fake_ble_service.dart`) substitui a lib BLE, e as camadas reais rodam por cima. Cobertura existente (espelha `lib/src/`):
+- `DongleRepositoryImpl` sobre um `DongleDatasource(FakeBleService)`: `scan` emite os dongles vistos, erro cru vira `BleScanFailure`, e `connect` progride até `ready` expondo a conexão. (`PermissionsRepositoryImpl` tem teste análogo, com `mocktail` disponível para mockar dependências.)
+- ViewModels via `ProviderContainer` sobrescrevendo `bleServiceProvider` pelo `FakeBleService`: `ScanViewModel` (popula `devices`; toques em rajada coalescem sem reiniciar o scan), `ConnectingViewModel` (progressão de fases → `ready`/`failed`) e `PermissionsViewModel` (`checking → granted/denied`).
+- 1 widget test da `ScanScreen` (`test/ui/connection/scan_screen_test.dart`) renderizando os estados de busca.
 
 ## Stack e convenções
 
-- **Estado**: `flutter_riverpod` + `hooks_riverpod` + `flutter_hooks` (declarados; ainda não usados).
-- **Roteamento**: `go_router` (declarado; ainda não fiado).
+- **Estado**: `flutter_riverpod` já em uso (feature `connection`: `Notifier`/`NotifierProvider`, `StreamProvider`, `ConsumerWidget`). `hooks_riverpod` + `flutter_hooks` também em uso, de forma **seletiva**. Convenção: **estado de negócio → Riverpod** (ViewModels/providers); **estado efêmero de UI e ciclo de vida/animação → hooks** (`useState`, `useEffect`, `useAnimationController`). Na prática: telas sem estado local ficam `ConsumerWidget`; telas com estado efêmero viram `HookConsumerWidget` (mantêm o `WidgetRef ref` — `ref.watch`/`listen` inalterados); átomos animados que não tocam em `ref` são `HookWidget`. Não trocar `ConsumerWidget` por `HookConsumerWidget` sem necessidade (churn). Padrões de ciclo de vida repetidos viram hooks compartilhados em `src/ui/core/hooks/` (barrel `hooks.dart`) — ex.: `useLoopController(duration)`, que encapsula um `AnimationController` em loop respeitando `context.reduceMotion` (usado por `RadarScanner`, `_BleSpinner`, `_SearchingLabel`).
+- **Roteamento**: `go_router` já fiado em `src/router/app_router.dart` (rotas em `app_routes.dart`), montado via `MaterialApp.router` no `main.dart`.
+- **BLE**: `flutter_blue_plus` (transporte), `permission_handler` (permissões de BT/localização) e `app_settings` (abrir ajustes do sistema). `shared_preferences` disponível para persistência local.
 - **Rede**: `dio` (para qualquer backend futuro).
 - **Models**: `freezed` + `json_serializable` são o padrão pretendido para models serializáveis.
 - **Linting**: `analysis_options.yaml` inclui `very_good_analysis` (estrito). Os gerados `*.g.dart`/`*.freezed.dart` são excluídos, e `invalid_annotation_target` é rebaixado para permitir freezed + json_serializable. Espera-se que código novo passe limpo no `flutter analyze`.

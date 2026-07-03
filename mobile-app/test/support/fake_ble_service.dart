@@ -13,6 +13,7 @@ class FakeBleService implements BleService {
   /// Cria o fake com os [devices], estados de adaptador e sequência de fases.
   FakeBleService({
     this.devices = const [],
+    this.deviceFrames = const [],
     this.adapterStates = const [BleAdapterState.on],
     this.scanError,
     this.holdScanOpen = false,
@@ -25,8 +26,13 @@ class FakeBleService implements BleService {
     ],
   });
 
-  /// Dongles emitidos pelo scan.
+  /// Dongles emitidos pelo scan (emissão única).
   final List<BleDevice> devices;
+
+  /// Sequência de emissões do scan para simular resultados mudando ao vivo
+  /// (ex.: mesmo dongle com RSSI variando). Quando não vazio, tem precedência
+  /// sobre [devices]: cada quadro é emitido em um turno do loop de eventos.
+  final List<List<BleDevice>> deviceFrames;
 
   /// Estados de adaptador emitidos.
   final List<BleAdapterState> adapterStates;
@@ -58,6 +64,7 @@ class FakeBleService implements BleService {
     List<String> withServiceUuids = const [],
     List<String> withNames = const [],
     Duration timeout = const Duration(seconds: 15),
+    bool continuousUpdates = false,
   }) {
     scanCount++;
     if (scanError != null) {
@@ -72,7 +79,24 @@ class FakeBleService implements BleService {
     controller
       ..onListen = () {
         // Scan anterior ainda ativo (teardown não drenado) -> nada é achado.
-        controller.add(_scanActive ? const [] : devices);
+        if (_scanActive) {
+          controller.add(const []);
+        } else if (deviceFrames.isNotEmpty) {
+          // Emite o 1º quadro já; os seguintes (RSSI variando ao vivo) são
+          // espaçados por delay real para os widget tests conseguirem pumpar
+          // entre eles (sem isso, todos os Duration.zero coalesceriam).
+          controller.add(deviceFrames.first);
+          for (var i = 1; i < deviceFrames.length; i++) {
+            final frame = deviceFrames[i];
+            unawaited(
+              Future<void>.delayed(Duration(milliseconds: 50 * i), () {
+                if (!controller.isClosed) controller.add(frame);
+              }),
+            );
+          }
+        } else {
+          controller.add(devices);
+        }
         if (holdScanOpen) {
           _scanActive = true;
         } else {

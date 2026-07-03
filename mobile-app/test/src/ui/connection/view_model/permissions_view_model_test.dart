@@ -24,6 +24,13 @@ void main() {
       overrides: [permissionsRepositoryProvider.overrideWithValue(repo)],
     );
     addTearDown(container.dispose);
+    // Mantém o provider `autoDispose` vivo durante o teste (sem um listener
+    // ele seria descartado entre `read`s, reiniciando o `_check`).
+    container.listen<PermissionFlowState>(
+      permissionsViewModelProvider,
+      (_, _) {},
+      fireImmediately: true,
+    );
     return container;
   }
 
@@ -37,8 +44,7 @@ void main() {
 
   test('permissão já concedida => converge para granted', () async {
     final container = containerWith(_FakePermissionsRepository(has: true));
-    // Dispara o build (e o _check assíncrono).
-    container.read(permissionsViewModelProvider);
+    // O `containerWith` já dispara o build (e o _check assíncrono) via listen.
     await container.pump();
     expect(
       container.read(permissionsViewModelProvider),
@@ -50,7 +56,6 @@ void main() {
     final container = containerWith(
       _FakePermissionsRepository(grantOnRequest: true),
     );
-    container.read(permissionsViewModelProvider);
     await container.pump();
     expect(
       container.read(permissionsViewModelProvider),
@@ -68,7 +73,6 @@ void main() {
 
   test('request negado => denied', () async {
     final container = containerWith(_FakePermissionsRepository());
-    container.read(permissionsViewModelProvider);
     await container.pump();
 
     final ok =

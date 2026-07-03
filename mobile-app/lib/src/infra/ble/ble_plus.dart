@@ -23,6 +23,7 @@ class FlutterBluePlusBleService implements BleService {
     List<String> withServiceUuids = const [],
     List<String> withNames = const [],
     Duration timeout = const Duration(seconds: 15),
+    bool continuousUpdates = false,
   }) {
     // Controller próprio para: (a) surfacar erros do startScan na stream,
     // (b) parar o scan automaticamente quando ninguém mais escuta e (c) FECHAR
@@ -61,6 +62,9 @@ class FlutterBluePlusBleService implements BleService {
             withServices: withServiceUuids.map(Guid.new).toList(),
             withNames: withNames,
             timeout: timeout,
+            // Em modo contínuo processa todo anúncio (divisor 1, o default)
+            // para o RSSI atualizar em tempo real durante o scan.
+            continuousUpdates: continuousUpdates,
           );
         } on Object catch (e, st) {
           if (!controller.isClosed) controller.addError(e, st);

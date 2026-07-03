@@ -1,6 +1,7 @@
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_signal_level.dart';
 import 'package:tccelta_mobile/src/services/ble/ble_service.dart';
 
 /// Config específica do dongle (contrato do firmware — ver `CLAUDE.md`).
@@ -33,14 +34,27 @@ class DongleDatasource {
   Stream<BleAdapterState> get adapterState => _ble.adapterState;
 
   /// Escaneia apenas por dongles (filtra por serviço NUS + nome anunciado).
+  ///
+  /// Usa `continuousUpdates` para o RSSI atualizar em tempo real durante o scan
+  /// e classifica cada dispositivo com [BleSignalLevel] (regra do domain) —
+  /// aqui é o único ponto que aplica a classificação; a UI só exibe.
   Stream<List<BleDevice>> scanForDongles({
     Duration timeout = const Duration(seconds: 15),
   }) =>
-      _ble.scan(
-        withServiceUuids: const [DongleConfig.service],
-        withNames: const [DongleConfig.advertisedName],
-        timeout: timeout,
-      );
+      _ble
+          .scan(
+            withServiceUuids: const [DongleConfig.service],
+            withNames: const [DongleConfig.advertisedName],
+            timeout: timeout,
+            continuousUpdates: true,
+          )
+          .map(
+            (devices) => devices
+                .map(
+                  (d) => d.copyWith(signal: BleSignalLevel.fromRssi(d.rssi)),
+                )
+                .toList(growable: false),
+          );
 
   /// Para o scan em andamento.
   Future<void> stopScan() => _ble.stopScan();

@@ -10,9 +10,6 @@ void main() {
 
 /// Raiz do app. Aplica o tema do OBD2 Cockpit design system e entra pelo fluxo
 /// de conexão (`01 FLUXO DE CONEXÃO`) via [appRouter].
-///
-/// O `ProviderScope` já está montado para quando as features (camadas
-/// `data`/`domain`/`services`) chegarem; providers ainda não são usados.
 class TcceltaApp extends StatelessWidget {
   /// Cria a raiz do app.
   const TcceltaApp({super.key});

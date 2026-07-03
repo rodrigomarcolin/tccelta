@@ -2,14 +2,16 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/view_model/connecting_view_model.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
+import 'package:tccelta_mobile/src/ui/core/hooks/hooks.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
 /// Mapeia a fase BLE nos 4 passos honestos do handshake.
@@ -58,33 +60,35 @@ List<ConnectStep> connectingStepsFor(BleConnectionPhase phase) {
 /// "Otimizando · MTU". Os passos de init do ELM327 e leitura de capacidades
 /// são Fase 2 e ficam pendentes por ora. Ao ficar `ready`, segue para
 /// Conectado; em falha, para Conexão perdida.
-class ConnectingScreen extends ConsumerStatefulWidget {
+class ConnectingScreen extends HookConsumerWidget {
   /// Cria a tela de conexão em andamento.
   const ConnectingScreen({super.key});
 
   @override
-  ConsumerState<ConnectingScreen> createState() => _ConnectingScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Inicia o handshake uma única vez ao montar. O callback do useEffect roda
+    // DURANTE o build, então mutar um provider (connect() faz `state = ...`) ou
+    // navegar aqui direto dispara "modify a provider while building". Adiamos
+    // para o pós-frame (equivale ao antigo initState + addPostFrameCallback).
+    useEffect(
+      () {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
+          final device = ref.read(selectedDongleProvider);
+          if (device == null) {
+            // Sem dongle selecionado (ex.: acesso direto): volta à busca.
+            context.go(AppRoutes.scan);
+            return;
+          }
+          unawaited(
+            ref.read(connectingViewModelProvider.notifier).connect(device.id),
+          );
+        });
+        return null;
+      },
+      const [],
+    );
 
-class _ConnectingScreenState extends ConsumerState<ConnectingScreen> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final device = ref.read(selectedDongleProvider);
-      if (device == null) {
-        // Sem dongle selecionado (ex.: acesso direto à rota): volta à busca.
-        context.go(AppRoutes.scan);
-        return;
-      }
-      unawaited(
-        ref.read(connectingViewModelProvider.notifier).connect(device.id),
-      );
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
     final phase = ref.watch(connectingViewModelProvider);
     final device = ref.watch(selectedDongleProvider);
 
@@ -142,38 +146,12 @@ class _ConnectingScreenState extends ConsumerState<ConnectingScreen> {
 }
 
 /// Anel ciano girando com o rótulo "BLE" no centro.
-class _BleSpinner extends StatefulWidget {
+class _BleSpinner extends HookWidget {
   const _BleSpinner();
 
   @override
-  State<_BleSpinner> createState() => _BleSpinnerState();
-}
-
-class _BleSpinnerState extends State<_BleSpinner>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: AppMotion.durSpin,
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (context.reduceMotion) {
-      _controller.stop();
-    } else if (!_controller.isAnimating) {
-      unawaited(_controller.repeat());
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final controller = useLoopController(AppMotion.durSpin);
     return SizedBox(
       width: 120,
       height: 120,
@@ -181,7 +159,7 @@ class _BleSpinnerState extends State<_BleSpinner>
         alignment: Alignment.center,
         children: [
           RotationTransition(
-            turns: _controller,
+            turns: controller,
             child: const CustomPaint(
               size: Size(120, 120),
               painter: _RingPainter(),

@@ -5,6 +5,7 @@ import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/scan_screen.dart';
+import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
 import '../../support/fake_ble_service.dart';
 
@@ -86,5 +87,51 @@ void main() {
 
     expect(find.text('OBD2Dongle'), findsOneWidget);
     expect(fake.scanCount, 2);
+  });
+
+  testWidgets('durante o scan: mostra "Procurando", radar ativo e botão off',
+      (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        FakeBleService(
+          holdScanOpen: true, // scan segue ativo -> isScanning true.
+          devices: const [BleDevice(id: '1', name: 'OBD2Dongle', rssi: -50)],
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Procurando dispositivos próximos…'), findsOneWidget);
+    expect(tester.widget<RadarScanner>(find.byType(RadarScanner)).active, true);
+    expect(
+      tester.widget<AppButton>(find.byType(AppButton)).onPressed,
+      isNull,
+    );
+    // rssi -50 -> "sinal forte" (classificação vinda do datasource).
+    expect(find.text('ELM327 · sinal forte'), findsOneWidget);
+  });
+
+  testWidgets('atualiza o rótulo de sinal ao vivo quando o RSSI muda',
+      (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        FakeBleService(
+          holdScanOpen: true,
+          deviceFrames: const [
+            [BleDevice(id: '1', name: 'OBD2Dongle', rssi: -50)], // forte
+            [BleDevice(id: '1', name: 'OBD2Dongle', rssi: -90)], // fraco
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(find.text('ELM327 · sinal forte'), findsOneWidget);
+
+    // O segundo quadro (mesmo dongle, RSSI pior) chega em ~50ms -> rótulo muda.
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(find.text('ELM327 · sinal fraco'), findsOneWidget);
+    expect(find.text('ELM327 · sinal forte'), findsNothing);
   });
 }

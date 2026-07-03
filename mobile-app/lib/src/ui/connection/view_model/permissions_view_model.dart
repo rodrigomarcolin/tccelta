@@ -49,8 +49,16 @@ class PermissionsViewModel extends Notifier<PermissionFlowState> {
 }
 
 /// Provider do [PermissionsViewModel].
+///
+/// `autoDispose`: o estado NÃO deve sobreviver à presença da tela. Ao sair de
+/// `/permissions` (o `pushReplacement` para a busca), o provider é descartado;
+/// ao reentrar (ex.: "Esquecer dispositivo"), o `build()` roda de novo e
+/// re-checa a permissão — reproduzindo a transição `checking -> granted` que a
+/// tela observa para avançar (sem isso, um estado `granted` remanescente
+/// deixaria a tela presa no loading).
 final NotifierProvider<PermissionsViewModel, PermissionFlowState>
     permissionsViewModelProvider =
     NotifierProvider<PermissionsViewModel, PermissionFlowState>(
   PermissionsViewModel.new,
+  isAutoDispose: true,
 );
