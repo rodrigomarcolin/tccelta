@@ -67,4 +67,24 @@ void main() {
 
     expect(find.text('Nenhum dongle encontrado ainda…'), findsOneWidget);
   });
+
+  testWidgets('reencontra o dongle ao tocar em Procurar novamente',
+      (tester) async {
+    final fake = FakeBleService(
+      devices: const [BleDevice(id: '1', name: 'OBD2Dongle', rssi: -50)],
+    );
+    await tester.pumpWidget(wrap(fake));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('OBD2Dongle'), findsOneWidget);
+
+    // O scan inicial terminou (fake de disparo único); tocar em "Procurar
+    // novamente" reinicia a busca e reencontra o dongle.
+    await tester.tap(find.text('Procurar novamente'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('OBD2Dongle'), findsOneWidget);
+    expect(fake.scanCount, 2);
+  });
 }

@@ -38,7 +38,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   }
 
   void _rescan() {
-    ref.read(scanViewModelProvider.notifier).startScan();
+    unawaited(ref.read(scanViewModelProvider.notifier).startScan());
     setState(() => _scanAttempt++);
   }
 

@@ -15,6 +15,7 @@ class FakeBleService implements BleService {
     this.devices = const [],
     this.adapterStates = const [BleAdapterState.on],
     this.scanError,
+    this.holdScanOpen = false,
     this.phases = const [
       BleConnectionPhase.connecting,
       BleConnectionPhase.optimizingLink,
@@ -33,8 +34,20 @@ class FakeBleService implements BleService {
   /// Se não nulo, o scan emite este erro em vez dos [devices].
   final Object? scanError;
 
+  /// Quando `true`, o scan emite os [devices] mas NÃO fecha o stream — imita um
+  /// scan real que segue ativo até o timeout/stop (o default fecha na hora,
+  /// para manter os testes de scan único simples).
+  final bool holdScanOpen;
+
   /// Sequência de fases que a conexão falsa percorre.
   final List<BleConnectionPhase> phases;
+
+  /// Se há um scan ativo (não parado). Modela o contrato do FBP: um scan por
+  /// vez — o anterior precisa ser parado antes de o novo render resultados.
+  bool _scanActive = false;
+
+  /// Quantas vezes [scan] foi chamado (para asserir coalescência de rescans).
+  int scanCount = 0;
 
   @override
   Stream<BleAdapterState> get adapterState =>
@@ -46,14 +59,39 @@ class FakeBleService implements BleService {
     List<String> withNames = const [],
     Duration timeout = const Duration(seconds: 15),
   }) {
+    scanCount++;
     if (scanError != null) {
       return Stream<List<BleDevice>>.error(scanError!);
     }
-    return Stream<List<BleDevice>>.value(devices);
+    // Sempre via controller (não `Stream.value`): assim o cancel após concluído
+    // se comporta bem sob o FakeAsync dos widget tests, e o adapter real também
+    // fecha a stream ao fim do scan (ver ble_plus). Por padrão é disparo único
+    // (fecha após emitir); com [holdScanOpen] segue aberto imitando um scan em
+    // andamento até o timeout/stop.
+    final controller = StreamController<List<BleDevice>>();
+    controller
+      ..onListen = () {
+        // Scan anterior ainda ativo (teardown não drenado) -> nada é achado.
+        controller.add(_scanActive ? const [] : devices);
+        if (holdScanOpen) {
+          _scanActive = true;
+        } else {
+          unawaited(controller.close());
+        }
+      }
+      ..onCancel = () async {
+        // Reset deferido (microtask, sem Timer) espelhando o `stopScan()`
+        // assíncrono real: só drena quando o cancel é aguardado.
+        await Future<void>.microtask(() {});
+        _scanActive = false;
+      };
+    return controller.stream;
   }
 
   @override
-  Future<void> stopScan() async {}
+  Future<void> stopScan() async {
+    _scanActive = false;
+  }
 
   @override
   Future<BleConnection> connect({

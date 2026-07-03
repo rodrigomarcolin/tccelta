@@ -24,10 +24,15 @@ class FlutterBluePlusBleService implements BleService {
     List<String> withNames = const [],
     Duration timeout = const Duration(seconds: 15),
   }) {
-    // Controller próprio para: (a) surfacar erros do startScan na stream e
-    // (b) parar o scan automaticamente quando ninguém mais escuta.
+    // Controller próprio para: (a) surfacar erros do startScan na stream,
+    // (b) parar o scan automaticamente quando ninguém mais escuta e (c) FECHAR
+    // a stream quando o scan termina (timeout/stop). O `scanResults` do FBP
+    // nunca completa por conta própria, então sem (c) o `onDone` a montante
+    // nunca dispararia e o estado ficaria "escaneando" para sempre.
     final controller = StreamController<List<BleDevice>>();
     StreamSubscription<List<ScanResult>>? sub;
+    StreamSubscription<bool>? scanningSub;
+    var wasScanning = false;
 
     controller
       ..onListen = () async {
@@ -42,6 +47,15 @@ class FlutterBluePlusBleService implements BleService {
           },
           onError: controller.addError,
         );
+        // Espelha o ciclo do scan: quando o FBP passa de "escaneando" para
+        // "parado" (timeout), encerramos a stream (-> onDone a montante).
+        scanningSub = FlutterBluePlus.isScanning.listen((scanning) {
+          if (scanning) {
+            wasScanning = true;
+          } else if (wasScanning && !controller.isClosed) {
+            unawaited(controller.close());
+          }
+        });
         try {
           await FlutterBluePlus.startScan(
             withServices: withServiceUuids.map(Guid.new).toList(),
@@ -54,6 +68,7 @@ class FlutterBluePlusBleService implements BleService {
       }
       ..onCancel = () async {
         await sub?.cancel();
+        await scanningSub?.cancel();
         await FlutterBluePlus.stopScan();
       };
     return controller.stream;
@@ -106,6 +121,12 @@ class _FbpConnection implements BleConnection {
     required this.tx,
     required this.mtu,
   });
+
+  /// Tempo máximo que cada tentativa de connect (1ª conexão e reconexão)
+  /// aguarda antes de desistir. Numa queda não intencional, é a janela de
+  /// "grace period": durante ela o app fica em `reconnecting`/`connecting` e só
+  /// emite `failed` se o dongle não voltar dentro desse prazo.
+  static const Duration connectTimeout = Duration(seconds: 12);
 
   final BluetoothDevice device;
   final Guid service;
@@ -180,7 +201,7 @@ class _FbpConnection implements BleConnection {
     // fazermos o requestMtu explícito (com a fase `optimizingLink`).
     await device.connect(
       license: License.nonprofit,
-      timeout: const Duration(seconds: 12),
+      timeout: connectTimeout,
       mtu: null,
     );
 
