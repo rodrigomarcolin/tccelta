@@ -124,7 +124,10 @@ class ScanScreen extends HookConsumerWidget {
                         subtitleMono: false,
                         showValue: false,
                         selected: true,
-                        onTap: () => select(device),
+                        // BT desligado: nada a conectar — desabilita o toque
+                        // (onTap nulo) e esmaece o card.
+                        dimmed: !state.adapterOn,
+                        onTap: state.adapterOn ? () => select(device) : null,
                       ),
                       const SizedBox(height: AppSpacing.s3),
                     ],
@@ -134,9 +137,7 @@ class ScanScreen extends HookConsumerWidget {
             const SizedBox(height: AppSpacing.s5),
             AppButton(
               variant: AppButtonVariant.secondary,
-              // Desabilitado durante o scan: reiniciar em rajada dispara o
-              // throttle do Android; espera o ciclo atual terminar.
-              onPressed: state.isScanning ? null : rescan,
+              onPressed: !state.isScanning && state.adapterOn ? rescan : null,
               child: const Text('Procurar novamente'),
             ),
             const SizedBox(height: AppSpacing.s7),
@@ -151,10 +152,10 @@ class ScanScreen extends HookConsumerWidget {
 /// aplicada no datasource — aqui a tela só traduz para texto).
 extension on BleSignalLevel {
   String get label => switch (this) {
-        BleSignalLevel.strong => 'sinal forte',
-        BleSignalLevel.medium => 'sinal médio',
-        BleSignalLevel.weak => 'sinal fraco',
-      };
+    BleSignalLevel.strong => 'sinal forte',
+    BleSignalLevel.medium => 'sinal médio',
+    BleSignalLevel.weak => 'sinal fraco',
+  };
 }
 
 /// Rótulo "Procurando…" com três pontinhos piscando em sequência.
