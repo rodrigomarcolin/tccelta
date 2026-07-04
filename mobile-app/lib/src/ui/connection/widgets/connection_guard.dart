@@ -1,11 +1,12 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/router/app_router.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/view_model/connecting_view_model.dart';
+import 'package:tccelta_mobile/src/ui/core/hooks/hooks.dart';
 
 /// Guarda de sessão BLE de escopo global.
 ///
@@ -46,7 +47,15 @@ import 'package:tccelta_mobile/src/ui/connection/view_model/connecting_view_mode
 ///
 /// Como ambas são listas de EXCLUSÃO, qualquer tela pós-conexão futura (além de
 /// `connected`/`painel`) já fica coberta automaticamente.
-class ConnectionGuard extends ConsumerWidget {
+///
+/// 3. **Permissão revogada** — o SO permite revogar a permissão de Bluetooth
+///    pelos Ajustes enquanto o app está conectado, e o `permission_handler` não
+///    emite stream dessa mudança (nem o `adapterState`, que colapsa
+///    `unauthorized` em `unknown`). Como o usuário sempre passa pelos Ajustes
+///    (o app vai a segundo plano e volta), re-checamos a permissão a cada
+///    `resume`: se caiu, derrubamos a sessão e voltamos ao gate de permissões.
+///    Só age fora do fluxo de conexão (mesma exclusão [_flowRoutes]).
+class ConnectionGuard extends HookConsumerWidget {
   /// Cria o guard envolvendo [child] (a subárvore de rotas).
   const ConnectionGuard({required this.child, super.key});
 
@@ -78,6 +87,21 @@ class ConnectionGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // (3) Permissão revogada em runtime: re-checa a cada retorno ao primeiro
+    // plano (o usuário passou pelos Ajustes do SO). Se a permissão caiu,
+    // derruba a sessão morta e volta ao gate de permissões — que re-checa e
+    // re-avança sozinho.
+    useOnAppResume(() async {
+      // Só as telas pós-conexão têm sessão a proteger.
+      if (_flowRoutes.contains(appRouter.state.matchedLocation)) return;
+      final permissions = ref.read(permissionsRepositoryProvider);
+      if (await permissions.hasBluetoothPermission()) return;
+      await ref.read(dongleRepositoryProvider).disconnect();
+      // Reconfirma a rota após o await (o usuário pode ter navegado no meio).
+      if (_flowRoutes.contains(appRouter.state.matchedLocation)) return;
+      appRouter.go(AppRoutes.permissions);
+    });
+
     // (1) Bluetooth desligado: leva direto para a tela de BT desligado, de
     // qualquer tela pós-conexão. Tem prioridade sobre "Conexão perdida".
     ref

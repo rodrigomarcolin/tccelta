@@ -6,3 +6,4 @@
 library;
 
 export 'use_loop_controller.dart';
+export 'use_on_app_resume.dart';
