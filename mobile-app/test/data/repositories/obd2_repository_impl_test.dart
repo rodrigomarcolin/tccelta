@@ -48,6 +48,7 @@ class _FakeDongleRepository implements DongleRepository {
 const Map<String, String> _mockResponses = {
   'ATZ': 'ELM327 v1.5\r>',
   'ATE0': 'OK\r>',
+  'ATDP': 'ISO 15765-4 (CAN 11/500)\r>',
   '0104': '41 04 66\r>',
   '0105': '41 05 82\r>',
   '010C': '41 0C 17 70\r>',
@@ -71,6 +72,17 @@ void main() {
       expect(byPid[Obd2Pid.speed], 60);
       expect(byPid[Obd2Pid.timingAdvance], 10);
       expect(byPid[Obd2Pid.throttle], closeTo(20, 0.5));
+    });
+
+    test('readAll captura versão e protocolo do adaptador', () async {
+      final conn = ScriptedBleConnection(responses: _mockResponses);
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      expect(repo.adapterInfo, isNull);
+      await repo.readAll();
+
+      expect(repo.adapterInfo?.version, 'ELM327 v1.5');
+      expect(repo.adapterInfo?.protocol, 'ISO 15765-4 (CAN 11/500)');
     });
 
     test('readAll omite PID que responde NO DATA', () async {

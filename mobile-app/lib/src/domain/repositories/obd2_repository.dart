@@ -1,3 +1,4 @@
+import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 
@@ -10,6 +11,10 @@ import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 abstract interface class Obd2Repository {
   /// PIDs lidos pelo painel, na ordem de exibição.
   List<Obd2Pid> get pids;
+
+  /// Identidade do adaptador conectado (versão + protocolo), preenchida ao
+  /// longo das leituras. `null` enquanto nada foi capturado.
+  Obd2AdapterInfo? get adapterInfo;
 
   /// Prepara o adaptador ELM327 (reset + echo off) sobre a conexão atual.
   /// Idempotente: só executa a sequência de init uma vez por conexão.

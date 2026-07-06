@@ -4,6 +4,7 @@ import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/widgets/telemetry_status_band.dart';
 
 /// Painel de telemetria OBD-II — a tela `/painel`.
 ///
@@ -25,7 +26,7 @@ class PainelScreen extends ConsumerWidget {
         bottom: false,
         child: Column(
           children: [
-            const StatusBand(),
+            const TelemetryStatusBand(),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(

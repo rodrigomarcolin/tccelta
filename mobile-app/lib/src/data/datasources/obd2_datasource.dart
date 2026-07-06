@@ -11,22 +11,61 @@ class Obd2Datasource {
 
   final Elm327Client _elm;
 
-  /// Prepara o adaptador: reset (`ATZ`) + echo off (`ATE0`).
+  /// Prepara o adaptador: reset (`ATZ`) + echo off (`ATE0`) e devolve a
+  /// **identidade** do adaptador (ex.: `ELM327 v1.5`), extraída da resposta do
+  /// `ATZ`, ou `null` se indisponível.
   ///
   /// Best-effort: qualquer falha aqui é ignorada (o parser de [readPidRaw] é
   /// tolerante a echo/espaços mesmo sem init), então um `ATZ` lento não trava a
   /// telemetria.
-  Future<void> initialize() async {
+  Future<String?> initialize() async {
+    String? version;
     for (final cmd in const ['ATZ', 'ATE0']) {
       try {
-        await _elm.command(
+        final raw = await _elm.command(
           cmd,
           timeout: const Duration(seconds: 6),
         );
+        if (cmd == 'ATZ') version = _cleanIdentity(raw);
       } on Object {
         // Ignora — init é best-effort.
       }
     }
+    return version;
+  }
+
+  /// Consulta o protocolo do barramento em uso (`ATDP` — describe protocol),
+  /// ex.: `ISO 15765-4 (CAN 11/500)`. Devolve `null` quando o adaptador ainda
+  /// não detectou o protocolo (`AUTO`/`SEARCHING`/`?`) ou em qualquer erro.
+  ///
+  /// Só é confiável **após** a primeira troca com o veículo (no modo AUTO o
+  /// protocolo só é fixado quando um comando OBD é respondido).
+  Future<String?> describeProtocol() async {
+    try {
+      final raw = await _elm.command('ATDP');
+      // Remove um eventual eco do comando (`ATDP`) caso o echo off não tenha
+      // pego, e normaliza espaços.
+      final text =
+          raw.replaceFirst(RegExp('^ATDP', caseSensitive: false), '').trim();
+      final upper = text.toUpperCase();
+      if (text.isEmpty ||
+          text.contains('?') ||
+          upper.contains('SEARCHING') ||
+          upper == 'AUTO') {
+        return null;
+      }
+      return text;
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Extrai a identidade `ELM327 ...` de uma resposta de `ATZ` (que pode vir
+  /// com eco do comando e ruído do reset). Devolve `null` se não encontrar.
+  static String? _cleanIdentity(String raw) {
+    final match =
+        RegExp('ELM327[^\r\n]*', caseSensitive: false).firstMatch(raw);
+    return match?.group(0)?.trim();
   }
 
   /// Lê [pid] e devolve os **data bytes** crus (ex.: `[0x17, 0x70]` para RPM),

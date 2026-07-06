@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/core/errors/failure.dart';
+import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
@@ -12,6 +13,7 @@ class TelemetryState {
   const TelemetryState({
     this.isPolling = false,
     this.readings = const [],
+    this.adapterInfo,
     this.failure,
   });
 
@@ -21,6 +23,9 @@ class TelemetryState {
   /// Última leva de leituras decodificadas (parcial é válida).
   final List<Obd2Reading> readings;
 
+  /// Identidade do adaptador conectado (versão + protocolo), para a top bar.
+  final Obd2AdapterInfo? adapterInfo;
+
   /// Falha corrente (nula quando o último ciclo teve sucesso).
   final Failure? failure;
 
@@ -28,12 +33,14 @@ class TelemetryState {
   TelemetryState copyWith({
     bool? isPolling,
     List<Obd2Reading>? readings,
+    Obd2AdapterInfo? adapterInfo,
     Failure? failure,
     bool clearFailure = false,
   }) =>
       TelemetryState(
         isPolling: isPolling ?? this.isPolling,
         readings: readings ?? this.readings,
+        adapterInfo: adapterInfo ?? this.adapterInfo,
         failure: clearFailure ? null : (failure ?? this.failure),
       );
 }
@@ -73,7 +80,11 @@ class TelemetryViewModel extends Notifier<TelemetryState> {
     try {
       final readings = await _repo.readAll();
       if (_stopped) return;
-      state = state.copyWith(readings: readings, clearFailure: true);
+      state = state.copyWith(
+        readings: readings,
+        adapterInfo: _repo.adapterInfo,
+        clearFailure: true,
+      );
     } on Failure catch (f) {
       if (_stopped) return;
       state = state.copyWith(failure: f);

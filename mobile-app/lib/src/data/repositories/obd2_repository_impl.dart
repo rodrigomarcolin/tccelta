@@ -2,6 +2,7 @@ import 'package:tccelta_mobile/src/core/errors/obd_failure.dart';
 import 'package:tccelta_mobile/src/data/datasources/elm327_client.dart';
 import 'package:tccelta_mobile/src/data/datasources/obd2_datasource.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
+import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
@@ -23,8 +24,18 @@ class Obd2RepositoryImpl implements Obd2Repository {
   Obd2Datasource? _datasource;
   bool _initialized = false;
 
+  /// Identidade capturada da conexão atual (versão no init, protocolo após a
+  /// primeira leitura). Zerada no [_teardown] para recapturar na reconexão.
+  String? _version;
+  String? _protocol;
+
   @override
   List<Obd2Pid> get pids => Obd2Pid.values;
+
+  @override
+  Obd2AdapterInfo? get adapterInfo => (_version == null && _protocol == null)
+      ? null
+      : Obd2AdapterInfo(version: _version, protocol: _protocol);
 
   /// Garante um [Obd2Datasource] ligado à conexão ATUAL, reconstruindo-o quando
   /// a conexão muda de identidade (reconexão) e descartando-o quando não há
@@ -51,6 +62,8 @@ class Obd2RepositoryImpl implements Obd2Repository {
     _datasource = null;
     _boundConn = null;
     _initialized = false;
+    _version = null;
+    _protocol = null;
   }
 
   @override
@@ -60,7 +73,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
       throw const ObdCommandFailure('Sem conexão BLE pronta para inicializar');
     }
     if (_initialized) return;
-    await ds.initialize();
+    _version = await ds.initialize();
     _initialized = true;
   }
 
@@ -101,6 +114,11 @@ class Obd2RepositoryImpl implements Obd2Repository {
       } on Object {
         // PID individual falho é omitido — leitura parcial é válida.
       }
+    }
+    // O protocolo só é detectável após a primeira troca com o veículo, então é
+    // consultado uma única vez, após a primeira leitura bem-sucedida.
+    if (_protocol == null && readings.isNotEmpty) {
+      _protocol = await ds.describeProtocol();
     }
     return readings;
   }

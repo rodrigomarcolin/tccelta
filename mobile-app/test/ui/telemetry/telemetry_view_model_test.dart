@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
@@ -10,6 +11,9 @@ import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.
 class _FakeObd2Repository implements Obd2Repository {
   @override
   List<Obd2Pid> get pids => Obd2Pid.values;
+
+  @override
+  Obd2AdapterInfo? get adapterInfo => null;
 
   @override
   Future<void> initialize() async {}

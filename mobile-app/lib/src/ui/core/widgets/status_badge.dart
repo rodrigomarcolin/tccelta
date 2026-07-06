@@ -182,24 +182,41 @@ class _StatusDotState extends State<_StatusDot>
 
 /// A faixa fixa de conexão fixada sob a status bar nas telas ao vivo.
 ///
-/// Mostra o dispositivo + versão do firmware à esquerda e um [StatusBadge]
-/// "AO VIVO" pulsante à direita. Espelha `StatusBand`.
+/// Átomo puramente apresentacional: mostra o [device] + um [detail] secundário
+/// à esquerda e um [StatusBadge] à direita. O conteúdo é dirigido por
+/// parâmetros — o fio com o estado ao vivo fica na camada de feature (ex.:
+/// `TelemetryStatusBand`). Espelha `StatusBand`.
 class StatusBand extends StatelessWidget {
-  /// Cria a faixa de conexão com [device] e [version].
+  /// Cria a faixa de conexão.
   const StatusBand({
     this.device = 'OBD2Dongle',
-    this.version = 'ELM327 v1.5',
+    this.detail = 'ELM327 v1.5',
+    this.statusLabel = 'AO VIVO',
+    this.statusTone = StatusTone.live,
+    this.pulse = true,
     super.key,
   });
 
   /// Nome do dispositivo. @default "OBD2Dongle"
   final String device;
 
-  /// Versão do firmware. @default "ELM327 v1.5"
-  final String version;
+  /// Texto secundário (ex.: versão/protocolo). Se nulo/vazio, o `·` é omitido.
+  /// @default "ELM327 v1.5"
+  final String? detail;
+
+  /// Rótulo do badge de status à direita. @default "AO VIVO"
+  final String statusLabel;
+
+  /// Tom semântico do badge de status. @default [StatusTone.live]
+  final StatusTone statusTone;
+
+  /// Se o dot do badge deve "respirar" (feed ao vivo). @default true
+  final bool pulse;
 
   @override
   Widget build(BuildContext context) {
+    final detail = this.detail;
+    final hasDetail = detail != null && detail.isNotEmpty;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.s5,
@@ -220,19 +237,20 @@ class StatusBand extends StatelessWidget {
               TextSpan(
                 children: [
                   TextSpan(text: device, style: AppTypography.label),
-                  TextSpan(
-                    text: '  ·  $version',
-                    style: AppTypography.label.copyWith(
-                      color: AppColors.textTertiary,
+                  if (hasDetail)
+                    TextSpan(
+                      text: '  ·  $detail',
+                      style: AppTypography.label.copyWith(
+                        color: AppColors.textTertiary,
+                      ),
                     ),
-                  ),
                 ],
               ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: AppSpacing.s2),
-          const StatusBadge(label: 'AO VIVO', pulse: true),
+          StatusBadge(label: statusLabel, tone: statusTone, pulse: pulse),
         ],
       ),
     );
