@@ -7,6 +7,8 @@ import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 /// `dongleRepositoryProvider` para obter a conexão BLE viva. Não é autoDispose:
 /// o `Elm327Client` interno assina a TX da conexão e deve viver com ela.
 final Provider<Obd2Repository> obd2RepositoryProvider =
-    Provider<Obd2Repository>(
-  (ref) => Obd2RepositoryImpl(ref.read(dongleRepositoryProvider)),
-);
+    Provider<Obd2Repository>((ref) {
+  final repo = Obd2RepositoryImpl(ref.read(dongleRepositoryProvider));
+  ref.onDispose(repo.dispose);
+  return repo;
+});

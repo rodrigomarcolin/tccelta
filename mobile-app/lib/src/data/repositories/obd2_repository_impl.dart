@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:tccelta_mobile/src/core/errors/obd_failure.dart';
 import 'package:tccelta_mobile/src/data/datasources/elm327_client.dart';
 import 'package:tccelta_mobile/src/data/datasources/obd2_datasource.dart';
@@ -14,11 +16,26 @@ import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
 /// não num provider — mesmo motivo do adapter BLE). Decodifica os PIDs via a
 /// fórmula do domínio e mapeia erro cru → [ObdCommandFailure].
 class Obd2RepositoryImpl implements Obd2Repository {
-  /// Cria o repository sobre o [_dongle] (fonte da conexão ativa).
-  Obd2RepositoryImpl(this._dongle);
+  /// Cria o repository sobre o [_dongle] (fonte da conexão ativa) e passa a
+  /// observar as fases de conexão para teardown proativo.
+  Obd2RepositoryImpl(this._dongle) {
+    // Teardown proativo: quando o link cai (failed/disconnected), desmonta o
+    // Elm327Client sem esperar a próxima leitura. `reconnecting` NÃO desmonta —
+    // a recuperação é transparente e reaproveita a mesma conexão/cliente.
+    _phaseSub = _dongle.connectionPhase.listen(
+      (phase) {
+        if (phase == BleConnectionPhase.disconnected ||
+            phase == BleConnectionPhase.failed) {
+          _teardown();
+        }
+      },
+      onError: (_) => _teardown(),
+    );
+  }
 
   final DongleRepository _dongle;
 
+  StreamSubscription<BleConnectionPhase>? _phaseSub;
   BleConnection? _boundConn;
   Elm327Client? _elm;
   Obd2Datasource? _datasource;
@@ -64,6 +81,14 @@ class Obd2RepositoryImpl implements Obd2Repository {
     _initialized = false;
     _version = null;
     _protocol = null;
+  }
+
+  /// Cancela a escuta de fases e desmonta o cliente ativo. Chamado quando o
+  /// provider é descartado (fim do ProviderScope).
+  void dispose() {
+    unawaited(_phaseSub?.cancel());
+    _phaseSub = null;
+    _teardown();
   }
 
   @override

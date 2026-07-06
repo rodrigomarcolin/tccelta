@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/src/core/errors/obd_failure.dart';
 import 'package:tccelta_mobile/src/data/repositories/obd2_repository_impl.dart';
@@ -12,9 +14,11 @@ import '../../support/scripted_ble_connection.dart';
 /// [DongleRepository] falso que só expõe a conexão ativa (o que o
 /// [Obd2RepositoryImpl] consome). Os demais membros não são exercitados.
 class _FakeDongleRepository implements DongleRepository {
-  _FakeDongleRepository(this._conn);
+  _FakeDongleRepository(this._conn, {Stream<BleConnectionPhase>? phase})
+      : _phase = phase ?? const Stream.empty();
 
   final BleConnection? _conn;
+  final Stream<BleConnectionPhase> _phase;
 
   @override
   BleConnection? get connection => _conn;
@@ -26,7 +30,7 @@ class _FakeDongleRepository implements DongleRepository {
   Stream<BleAdapterState> get adapterState => const Stream.empty();
 
   @override
-  Stream<BleConnectionPhase> get connectionPhase => const Stream.empty();
+  Stream<BleConnectionPhase> get connectionPhase => _phase;
 
   @override
   Stream<List<BleDevice>> scan({
@@ -115,6 +119,27 @@ void main() {
         repo.read(Obd2Pid.rpm),
         throwsA(isA<ObdCommandFailure>()),
       );
+    });
+
+    test('desmonta o cliente proativamente ao cair a conexão', () async {
+      final conn = ScriptedBleConnection(responses: _mockResponses);
+      final phaseCtrl = StreamController<BleConnectionPhase>.broadcast();
+      addTearDown(phaseCtrl.close);
+      final repo = Obd2RepositoryImpl(
+        _FakeDongleRepository(conn, phase: phaseCtrl.stream),
+      );
+
+      // Uma leitura constrói o Elm327Client, que assina a TX da conexão.
+      await repo.readAll();
+      expect(conn.hasIncomingListener, isTrue);
+      expect(repo.adapterInfo, isNotNull);
+
+      // Uma fase terminal deve desmontar o cliente sem esperar outra leitura.
+      phaseCtrl.add(BleConnectionPhase.disconnected);
+      await pumpEventQueue();
+
+      expect(conn.hasIncomingListener, isFalse);
+      expect(repo.adapterInfo, isNull);
     });
   });
 }

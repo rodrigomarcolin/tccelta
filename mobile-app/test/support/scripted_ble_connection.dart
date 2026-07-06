@@ -39,6 +39,9 @@ class ScriptedBleConnection implements BleConnection {
   @override
   Stream<List<int>> get incoming => _incoming.stream;
 
+  /// `true` enquanto houver assinante da TX — para asserir teardown do cliente.
+  bool get hasIncomingListener => _incoming.hasListener;
+
   @override
   bool get isReady => ready;
 
