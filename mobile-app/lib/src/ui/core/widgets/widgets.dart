@@ -10,6 +10,7 @@ export 'app_card.dart';
 export 'app_tab_bar.dart';
 export 'callout.dart';
 export 'card_button.dart';
+export 'card_grid.dart';
 export 'gauge/gauge.dart';
 export 'graph/sparkline.dart';
 export 'icon_badge.dart';
