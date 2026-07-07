@@ -4,14 +4,16 @@ import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
+import 'package:tccelta_mobile/src/ui/connection/view_model/connected_view_model.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_state_view.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
 /// 1.5 — Conectado ao dongle (transporte BLE pronto).
 ///
-/// Fase 1: confirma o link BLE. Protocolo e PIDs disponíveis são preenchidos na
-/// Fase 2 (ELM327), por isso aparecem como placeholder. Se o link cair aqui,
-/// segue para Conexão perdida.
+/// Fase 1 confirma o link BLE; ao montar, o [ConnectedViewModel] sonda o
+/// adaptador (Fase 2: init ELM327 + descoberta de capacidades) e preenche o
+/// protocolo e o nº de sensores disponíveis. Se o link cair aqui, segue para
+/// Conexão perdida.
 class ConnectedScreen extends ConsumerWidget {
   /// Cria a tela de conectado.
   const ConnectedScreen({super.key});
@@ -19,6 +21,10 @@ class ConnectedScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final device = ref.watch(selectedDongleProvider);
+    final probe = ref.watch(connectedViewModelProvider);
+    // Enquanto sonda, mostra '—'; ao terminar, o valor real (ou '—' ausente).
+    final protocol = probe.probing ? '—' : (probe.info?.protocol ?? '—');
+    final sensores = probe.probing ? '—' : '${probe.supported.length}';
 
     // A perda de conexão em sessão ativa -> Conexão perdida agora é tratada de
     // forma global pelo `ConnectionGuard` (montado no topo em `main.dart`), que
@@ -50,15 +56,14 @@ class ConnectedScreen extends ConsumerWidget {
               value: 'Nordic UART (BLE)',
             ),
             const SizedBox(height: AppSpacing.s3),
-            // Preenchidos na Fase 2 (init ELM327 + leitura de capacidades).
-            const StatCard.info(
+            StatCard.info(
               label: 'Protocolo',
-              value: '—',
+              value: protocol,
             ),
             const SizedBox(height: AppSpacing.s3),
-            const StatCard.info(
+            StatCard.info(
               label: 'Sensores disponíveis',
-              value: '—',
+              value: sensores,
             ),
           ],
         ),

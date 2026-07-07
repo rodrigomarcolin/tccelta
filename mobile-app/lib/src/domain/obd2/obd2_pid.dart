@@ -55,6 +55,16 @@ enum Obd2Pid {
   /// Byte do modo na RESPOSTA OBD-II (serviço + 0x40), ex.: 0x41 para o 0x01.
   static const int responseMode = mode + 0x40;
 
+  /// Mapeia um número de PID cru (ex.: 0x0C) no valor do enum, ou `null` se não
+  /// for um PID que o painel sabe decodificar. Usado para filtrar a descoberta
+  /// de capacidades ao subconjunto exibível.
+  static Obd2Pid? fromByte(int pid) {
+    for (final p in Obd2Pid.values) {
+      if (p.pid == pid) return p;
+    }
+    return null;
+  }
+
   /// Converte os [data] bytes crus (já extraídos da resposta) na grandeza
   /// física, aplicando a fórmula do PID.
   ///

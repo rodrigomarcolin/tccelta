@@ -53,6 +53,7 @@ const Map<String, String> _mockResponses = {
   'ATZ': 'ELM327 v1.5\r>',
   'ATE0': 'OK\r>',
   'ATDP': 'ISO 15765-4 (CAN 11/500)\r>',
+  '0100': '41 00 18 1E 80 00\r>',
   '0104': '41 04 66\r>',
   '0105': '41 05 82\r>',
   '010C': '41 0C 17 70\r>',
@@ -118,6 +119,60 @@ void main() {
       await expectLater(
         repo.read(Obd2Pid.rpm),
         throwsA(isA<ObdCommandFailure>()),
+      );
+    });
+
+    test('discoverSupported mapeia o bitmask p/ o enum (dropa 0x0F)', () async {
+      final conn = ScriptedBleConnection(responses: _mockResponses);
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final supported = await repo.discoverSupported();
+
+      expect(supported, {
+        Obd2Pid.engineLoad,
+        Obd2Pid.coolantTemp,
+        Obd2Pid.rpm,
+        Obd2Pid.speed,
+        Obd2Pid.timingAdvance,
+        Obd2Pid.throttle,
+      });
+      // Fixa o protocolo (a descoberta faz a 1ª troca OBD).
+      expect(repo.adapterInfo?.protocol, 'ISO 15765-4 (CAN 11/500)');
+    });
+
+    test('discoverSupported varre o próximo range quando sinalizado', () async {
+      final conn = ScriptedBleConnection(
+        responses: {
+          'ATZ': 'ELM327 v1.5\r>',
+          'ATE0': 'OK\r>',
+          'ATDP': 'ISO 15765-4 (CAN 11/500)\r>',
+          '0100': '41 00 00 18 00 01\r>', // rpm+speed, flag de próximo range
+          '0120': '41 20 80 00 00 00\r>', // PID 0x21 (desconhecido) → dropado
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final supported = await repo.discoverSupported();
+
+      expect(supported, {Obd2Pid.rpm, Obd2Pid.speed});
+      expect(conn.written, containsAll(['0100', '0120']));
+    });
+
+    test('readAll após descoberta lê só os PIDs suportados', () async {
+      final conn = ScriptedBleConnection(
+        responses: {
+          ..._mockResponses,
+          '0100': '41 00 00 18 00 00\r>', // só rpm+speed, sem próximo range
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      await repo.discoverSupported();
+      final readings = await repo.readAll();
+
+      expect(
+        readings.map((r) => r.pid).toSet(),
+        {Obd2Pid.rpm, Obd2Pid.speed},
       );
     });
 

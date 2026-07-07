@@ -46,6 +46,10 @@ class Obd2RepositoryImpl implements Obd2Repository {
   String? _version;
   String? _protocol;
 
+  /// PIDs suportados descobertos (subconjunto conhecido). `null` até a primeira
+  /// descoberta; cacheado por conexão e zerado no [_teardown].
+  Set<Obd2Pid>? _supported;
+
   @override
   List<Obd2Pid> get pids => Obd2Pid.values;
 
@@ -81,6 +85,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
     _initialized = false;
     _version = null;
     _protocol = null;
+    _supported = null;
   }
 
   /// Cancela a escuta de fases e desmonta o cliente ativo. Chamado quando o
@@ -100,6 +105,27 @@ class Obd2RepositoryImpl implements Obd2Repository {
     if (_initialized) return;
     _version = await ds.initialize();
     _initialized = true;
+  }
+
+  @override
+  Future<Set<Obd2Pid>> discoverSupported() async {
+    final cached = _supported;
+    if (cached != null) return cached;
+
+    final ds = _ensureDatasource();
+    if (ds == null) {
+      throw const ObdCommandFailure('Sem conexão BLE pronta para descoberta');
+    }
+    if (!_initialized) await initialize();
+
+    final raw = await ds.readSupportedPids();
+    final supported = <Obd2Pid>{
+      for (final n in raw) ?Obd2Pid.fromByte(n),
+    };
+    _supported = supported;
+    // A descoberta faz uma troca OBD (0100), então o protocolo já é detectável.
+    _protocol ??= await ds.describeProtocol();
+    return supported;
   }
 
   @override
@@ -129,8 +155,14 @@ class Obd2RepositoryImpl implements Obd2Repository {
     }
     if (!_initialized) await initialize();
 
+    // Se a descoberta já rodou, lê só os PIDs suportados; senão, todos os
+    // curados (fallback quando o painel foi aberto sem sondar antes).
+    final supported = _supported;
+    final toRead =
+        supported == null ? pids : pids.where(supported.contains);
+
     final readings = <Obd2Reading>[];
-    for (final pid in pids) {
+    for (final pid in toRead) {
       try {
         final data = await ds.readPidRaw(pid);
         if (data != null) {

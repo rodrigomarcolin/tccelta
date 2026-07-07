@@ -46,6 +46,9 @@ class _FakeObd2Repository implements Obd2Repository {
   Future<void> initialize() async {}
 
   @override
+  Future<Set<Obd2Pid>> discoverSupported() async => Obd2Pid.values.toSet();
+
+  @override
   Future<Obd2Reading> read(Obd2Pid pid) async =>
       Obd2Reading(pid: pid, value: _exampleValues[pid]!);
 

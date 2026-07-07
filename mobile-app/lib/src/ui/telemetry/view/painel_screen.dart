@@ -20,6 +20,12 @@ class PainelScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(telemetryViewModelProvider);
     final byPid = {for (final r in state.readings) r.pid: r};
+    final supported = state.supportedPids;
+    // Só os PIDs suportados (ordem estável do enum); se a descoberta ainda não
+    // rodou, mostra todos os curados como fallback.
+    final pids = Obd2Pid.values
+        .where((p) => supported.isEmpty || supported.contains(p))
+        .toList(growable: false);
 
     return Scaffold(
       body: SafeArea(
@@ -47,7 +53,7 @@ class PainelScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.s7),
                   CardGrid(
                     children: [
-                      for (final pid in Obd2Pid.values)
+                      for (final pid in pids)
                         StatCard.value(
                           label: pid.label,
                           value: byPid[pid]?.value.round(),

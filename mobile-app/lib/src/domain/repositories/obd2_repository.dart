@@ -20,6 +20,12 @@ abstract interface class Obd2Repository {
   /// Idempotente: só executa a sequência de init uma vez por conexão.
   Future<void> initialize();
 
+  /// Descobre quais PIDs (dentre os que o painel sabe decodificar) a ECU
+  /// suporta, lendo o bitmask do PID 0x00 (e ranges seguintes). Idempotente:
+  /// cacheia o resultado por conexão. Devolve o conjunto vazio se a descoberta
+  /// falhar.
+  Future<Set<Obd2Pid>> discoverSupported();
+
   /// Lê um único [pid]. Lança `ObdCommandFailure` se não houver conexão pronta
   /// ou se o dongle não devolver dados.
   Future<Obd2Reading> read(Obd2Pid pid);
