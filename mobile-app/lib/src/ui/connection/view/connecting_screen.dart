@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -12,7 +11,6 @@ import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/view_model/connecting_view_model.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
-import 'package:tccelta_mobile/src/ui/core/hooks/hooks.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
 /// Mapeia o estado do handshake nos 4 passos honestos.
@@ -138,7 +136,7 @@ class ConnectingScreen extends HookConsumerWidget {
         child: Column(
           children: [
             const SizedBox(height: AppSpacing.s7),
-            const _BleSpinner(),
+            const SpinnerRing(label: 'BLE'),
             const SizedBox(height: AppSpacing.s9),
             Text('Conectando ao dongle', style: AppTypography.title),
             if (device?.displayName.isNotEmpty ?? false) ...[
@@ -173,69 +171,4 @@ class ConnectingScreen extends HookConsumerWidget {
       ),
     );
   }
-}
-
-/// Anel ciano girando com o rótulo "BLE" no centro.
-class _BleSpinner extends HookWidget {
-  const _BleSpinner();
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = useLoopController(AppMotion.durSpin);
-    return SizedBox(
-      width: 120,
-      height: 120,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          RotationTransition(
-            turns: controller,
-            child: const CustomPaint(
-              size: Size(120, 120),
-              painter: _RingPainter(),
-            ),
-          ),
-          Text(
-            'BLE',
-            style: AppTypography.mono(
-              const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.cyan500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Trilha escura + um arco ciano (o "progresso" girando).
-class _RingPainter extends CustomPainter {
-  const _RingPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final radius = size.width / 2 - 4;
-    final rect = Rect.fromCircle(center: center, radius: radius);
-
-    final track = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..color = AppColors.neutral800;
-    canvas.drawCircle(center, radius, track);
-
-    final arc = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..color = AppColors.cyan500;
-    // Arco de ~80° a partir do topo.
-    canvas.drawArc(rect, -math.pi / 2, math.pi / 2.2, false, arc);
-  }
-
-  @override
-  bool shouldRepaint(_RingPainter oldDelegate) => false;
 }

@@ -183,6 +183,31 @@ void main() {
     expect(find.byType(AppTabBar), findsOneWidget);
   });
 
+  testWidgets('SpinnerRing renderiza o anel e o rótulo central',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SpinnerRing(label: 'BLE'),
+                SpinnerRing(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    // Uma pump animada: o arco gira em loop (useLoopController).
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(SpinnerRing), findsNWidgets(2));
+    // Rótulo central só aparece quando informado.
+    expect(find.text('BLE'), findsOneWidget);
+  });
+
   testWidgets('StatCard.gauge não estoura em largura apertada', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
