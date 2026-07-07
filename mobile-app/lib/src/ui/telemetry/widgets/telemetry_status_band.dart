@@ -17,7 +17,7 @@ class TelemetryStatusBand extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final device = ref.watch(selectedDongleProvider);
-    final phase = ref.watch(connectingViewModelProvider);
+    final phase = ref.watch(connectingViewModelProvider.select((s) => s.phase));
     final telemetry = ref.watch(telemetryViewModelProvider);
 
     final status = _statusFor(phase, telemetry.failure);

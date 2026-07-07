@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -14,12 +15,14 @@ import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.d
 import 'package:tccelta_mobile/src/ui/core/hooks/hooks.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
-/// Mapeia a fase BLE nos 4 passos honestos do handshake.
+/// Mapeia o estado do handshake nos 4 passos honestos.
 ///
-/// Decisão de escopo (Fase 1): só "Conectando" e "Otimizando · MTU" são
-/// dirigidos pelo BLE real; os passos de init do ELM327 e leitura de
-/// capacidades são Fase 2 e permanecem pendentes por ora.
-List<ConnectStep> connectingStepsFor(BleConnectionPhase phase) {
+/// Os 2 primeiros ("Conectando", "Otimizando · MTU") são dirigidos pela fase
+/// BLE (Fase 1); os 2 últimos ("Preparando adaptador · init ELM327", "Lendo
+/// capacidades do veículo") pela sub-fase de preparação OBD-II (Fase 2), que
+/// roda após o BLE ficar `ready`.
+List<ConnectStep> connectingStepsFor(ConnectingState state) {
+  final phase = state.phase;
   final ConnectStepState connectState;
   final ConnectStepState optimizeState;
   switch (phase) {
@@ -41,16 +44,41 @@ List<ConnectStep> connectingStepsFor(BleConnectionPhase phase) {
       connectState = ConnectStepState.pending;
       optimizeState = ConnectStepState.pending;
   }
+
+  final ConnectStepState prepareState;
+  final ConnectStepState readState;
+  switch (state.prep) {
+    case ConnectingPrep.idle:
+      prepareState = ConnectStepState.pending;
+      readState = ConnectStepState.pending;
+    case ConnectingPrep.preparing:
+      prepareState = ConnectStepState.active;
+      readState = ConnectStepState.pending;
+    case ConnectingPrep.reading:
+      prepareState = ConnectStepState.done;
+      readState = ConnectStepState.active;
+    case ConnectingPrep.done:
+      prepareState = ConnectStepState.done;
+      readState = ConnectStepState.done;
+  }
+
+  // O `requestMtu` explícito só ocorre no Android; no iOS o SO negocia o MTU
+  // sozinho, então o sublabel "· MTU" não se aplica lá.
+  final optimizeSublabel = Platform.isAndroid ? '· MTU' : null;
+
   return [
     ConnectStep('Conectando', connectState),
-    ConnectStep('Otimizando conexão', optimizeState, sublabel: '· MTU'),
-    // Fase 2 — ainda não executados pela camada BLE.
-    const ConnectStep(
+    ConnectStep(
+      'Otimizando conexão',
+      optimizeState,
+      sublabel: optimizeSublabel,
+    ),
+    ConnectStep(
       'Preparando adaptador',
-      ConnectStepState.pending,
+      prepareState,
       sublabel: '· init ELM327',
     ),
-    const ConnectStep('Lendo capacidades do veículo', ConnectStepState.pending),
+    ConnectStep('Lendo capacidades do veículo', readState),
   ];
 }
 
@@ -89,15 +117,17 @@ class ConnectingScreen extends HookConsumerWidget {
       const [],
     );
 
-    final phase = ref.watch(connectingViewModelProvider);
+    final state = ref.watch(connectingViewModelProvider);
     final device = ref.watch(selectedDongleProvider);
 
-    // Navega conforme o desfecho do handshake.
+    // Navega conforme o desfecho do handshake. Só segue para "Conectado" quando
+    // a preparação OBD-II terminou (protocolo + sensores já preenchidos).
     ref.listen(connectingViewModelProvider, (_, next) {
       if (!context.mounted) return;
-      if (next == BleConnectionPhase.ready) {
+      if (next.phase == BleConnectionPhase.ready &&
+          next.prep == ConnectingPrep.done) {
         context.pushReplacement(AppRoutes.connected);
-      } else if (next == BleConnectionPhase.failed) {
+      } else if (next.phase == BleConnectionPhase.failed) {
         context.pushReplacement(AppRoutes.connectionLost);
       }
     });
@@ -125,7 +155,7 @@ class ConnectingScreen extends HookConsumerWidget {
               ),
             ],
             const SizedBox(height: AppSpacing.s9),
-            StepList(connectingStepsFor(phase)),
+            StepList(connectingStepsFor(state)),
             const Spacer(),
             Text(
               'Mantenha o dongle plugado e o telefone próximo.',

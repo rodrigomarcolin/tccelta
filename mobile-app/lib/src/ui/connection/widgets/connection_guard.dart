@@ -114,7 +114,8 @@ class ConnectionGuard extends HookConsumerWidget {
       })
       // (2) Conexão perdida: só quando o link cai por outra causa que não o BT
       // desligado (esse caso já foi tratado acima).
-      ..listen<BleConnectionPhase>(connectingViewModelProvider, (_, next) {
+      ..listen<BleConnectionPhase>(
+          connectingViewModelProvider.select((s) => s.phase), (_, next) {
         final dropped = next == BleConnectionPhase.failed ||
             next == BleConnectionPhase.disconnected;
         if (!dropped) return;
