@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,6 +61,30 @@ class _FakeObd2Repository implements Obd2Repository {
       ];
 }
 
+/// Repository que trava (nunca resolve) — mantém o painel na fase inicial, para
+/// exercitar os skeletons de carregamento antes da primeira leitura.
+class _HangingObd2Repository implements Obd2Repository {
+  final Completer<Never> _never = Completer<Never>();
+
+  @override
+  List<Obd2Pid> get pids => Obd2Pid.values;
+
+  @override
+  Obd2AdapterInfo? get adapterInfo => null;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<Set<Obd2Pid>> discoverSupported() => _never.future;
+
+  @override
+  Future<Obd2Reading> read(Obd2Pid pid) => _never.future;
+
+  @override
+  Future<List<Obd2Reading>> readAll() => _never.future;
+}
+
 void main() {
   testWidgets('app entra pelo fluxo de conexão (permissões)', (tester) async {
     // As telas leem providers Riverpod, então precisam de um ProviderScope.
@@ -94,6 +120,23 @@ void main() {
     expect(find.text('1500'), findsOneWidget); // RPM
     expect(find.text('60'), findsOneWidget); // velocidade
     expect(find.text('90'), findsOneWidget); // temp. do líquido
+  });
+
+  testWidgets('painel mostra skeletons antes da primeira leitura',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          obd2RepositoryProvider.overrideWithValue(_HangingObd2Repository()),
+        ],
+        child: MaterialApp(theme: AppTheme.dark, home: const PainelScreen()),
+      ),
+    );
+    await tester.pump();
+
+    // Descoberta/leitura ainda pendentes => barras de shimmer, sem valores.
+    expect(find.byType(Shimmer), findsWidgets);
+    expect(find.text('1500'), findsNothing);
   });
 
   testWidgets('design system atoms build without error', (tester) async {

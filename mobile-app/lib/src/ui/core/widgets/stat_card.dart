@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/app_card.dart';
+import 'package:tccelta_mobile/src/ui/core/widgets/shimmer.dart';
 
 /// Tratamento interno de um [StatCard]. Selecionado pelo construtor nomeado,
 /// nunca exposto à API pública.
@@ -20,31 +21,40 @@ class StatCard extends StatelessWidget {
     this.pct = 0,
     this.colorByZone = false,
     this.gauge,
+    this.loading = false,
     super.key,
   });
 
   /// Número grande rotulado (uma leitura).
+  ///
+  /// Com [loading] `true`, o slot do valor vira uma barra [Shimmer] (e o rótulo
+  /// também, quando vazio) — o estado "ainda não lido" do painel, distinto de
+  /// um `—` de "sem dado neste ciclo".
   const StatCard.value({
     required String label,
     Object? value,
     String? unit,
+    bool loading = false,
     Key? key,
   }) : this._(
           _Variant.value,
           label: label,
           value: value,
           unit: unit,
+          loading: loading,
           key: key,
         );
 
   /// Igual a [StatCard.value] + barra de progresso (leituras percentuais).
   /// [colorByZone] recolore a barra ciano→âmbar→vermelho conforme [pct].
+  /// Com [loading] `true`, valor e barra viram [Shimmer].
   const StatCard.progress({
     required String label,
     required double pct,
     Object? value,
     String? unit,
     bool colorByZone = false,
+    bool loading = false,
     Key? key,
   }) : this._(
           _Variant.progress,
@@ -53,6 +63,7 @@ class StatCard extends StatelessWidget {
           unit: unit,
           pct: pct,
           colorByZone: colorByZone,
+          loading: loading,
           key: key,
         );
 
@@ -70,11 +81,13 @@ class StatCard extends StatelessWidget {
 
   /// Gauge à esquerda + valor/unidade e label à direita. O instrumento é
   /// passado em [gauge] — qualquer `GaugeVariant` (ou widget) serve.
+  /// Com [loading] `true`, o valor vira uma barra [Shimmer].
   const StatCard.gauge({
     required String label,
     required Widget gauge,
     Object? value,
     String? unit,
+    bool loading = false,
     Key? key,
   }) : this._(
           _Variant.gauge,
@@ -82,6 +95,7 @@ class StatCard extends StatelessWidget {
           value: value,
           unit: unit,
           gauge: gauge,
+          loading: loading,
           key: key,
         );
 
@@ -105,6 +119,10 @@ class StatCard extends StatelessWidget {
 
   /// Instrumento renderizado à esquerda na variante `gauge`.
   final Widget? gauge;
+
+  /// Enquanto `true`, o slot do valor (e o rótulo, se vazio) vira uma barra
+  /// [Shimmer] — o estado "ainda não lido". @default false
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
@@ -148,18 +166,33 @@ class StatCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label.toUpperCase(), style: AppTypography.overline),
+        _label(),
         const SizedBox(height: AppSpacing.s2),
         _valueRow(),
         // O espaço da barra é sempre reservado para que `value` e `progress`
         // tenham a mesma altura; na variante `value` a barra fica invisível.
         const SizedBox(height: AppSpacing.s4),
         if (_variant == _Variant.progress)
-          _ProgressBar(pct: pct, colorByZone: colorByZone)
+          if (loading)
+            const Shimmer(
+              height: _ProgressBar.height,
+              borderRadius: AppRadii.brPill,
+            )
+          else
+            _ProgressBar(pct: pct, colorByZone: colorByZone)
         else
           const SizedBox(height: _ProgressBar.height),
       ],
     );
+  }
+
+  /// Rótulo overline — ou uma barra [Shimmer] quando carregando sem rótulo
+  /// conhecido (fase inicial do painel, antes de descobrir os PIDs).
+  Widget _label() {
+    if (loading && label.isEmpty) {
+      return const Shimmer(width: 54, height: 10);
+    }
+    return Text(label.toUpperCase(), style: AppTypography.overline);
   }
 
   Widget _gauge() {
@@ -193,6 +226,7 @@ class StatCard extends StatelessWidget {
   /// baixo quando não cabe ao lado; o número trunca como último recurso (nunca
   /// estoura). O alinhamento por baixo aproxima a baseline do par.
   Widget _gaugeValue() {
+    if (loading) return _valueShimmer(width: 64);
     final number = Text(
       '${value ?? '—'}',
       maxLines: 1,
@@ -226,8 +260,21 @@ class StatCard extends StatelessWidget {
     );
   }
 
+  /// Barra [Shimmer] ocupando a mesma altura da linha do número (30px), para o
+  /// card não pular quando o valor real chega.
+  Widget _valueShimmer({required double width}) {
+    return SizedBox(
+      height: 30,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Shimmer(width: width, height: 22),
+      ),
+    );
+  }
+
   /// Número grande + sufixo de unidade, compartilhado por `value`/`progress`.
   Widget _valueRow() {
+    if (loading) return _valueShimmer(width: 76);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.baseline,
       textBaseline: TextBaseline.alphabetic,

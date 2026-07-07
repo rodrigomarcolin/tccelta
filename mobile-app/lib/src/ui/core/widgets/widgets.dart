@@ -16,6 +16,7 @@ export 'graph/sparkline.dart';
 export 'icon_badge.dart';
 export 'icon_tile.dart';
 export 'radar_scanner.dart';
+export 'shimmer.dart';
 export 'stat_card.dart';
 export 'stat_graph_card.dart';
 export 'status_badge.dart';

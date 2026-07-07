@@ -57,6 +57,9 @@ abstract final class AppMotion {
   /// Spinner de conexão.
   static const Duration durSpin = Duration(milliseconds: 1100);
 
+  /// Varredura do shimmer de carregamento (barra esqueleto).
+  static const Duration durShimmer = Duration(milliseconds: 1300);
+
   /// Easing de assentamento do valor — `cubic-bezier(.25,.1,.25,1)`.
   static const Cubic easeValue = Cubic(0.25, 0.1, 0.25, 1);
 }
