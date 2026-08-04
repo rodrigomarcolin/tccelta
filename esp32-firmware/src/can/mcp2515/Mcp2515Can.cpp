@@ -1,8 +1,6 @@
 #include "Mcp2515Can.h"
 #include <cstring>
 
-// TODO: Revisar. Este arquivo foi gerado com IA.
-
 Mcp2515Can::Mcp2515Can(uint8_t csPin, CAN_SPEED bitrate, CAN_CLOCK clock)
     : _mcp(csPin), _bitrate(bitrate), _clock(clock) {}
 

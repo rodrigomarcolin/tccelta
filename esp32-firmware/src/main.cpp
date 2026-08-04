@@ -22,11 +22,8 @@ void setup() {
     delay(200);
     Serial.println("\n=== OBD2 Dongle ===");
 
-    // Inicializa implementações relevantes 
-    // TODO: Adicionar condições e procedimentos para instanciar a implementação segura ou a plain-text
-
 #if defined(USE_MCP2515)
-    static Mcp2515Can        can;           // CS=5, 500 kbps, 8 MHz
+    static Mcp2515Can        can;           // CSif=5, 500 kbps, 8 MHz
     static Obd2Can           obd2(&can);
     Serial.println("[main] CAN backend : MCP2515 (SPI)");
 
@@ -40,15 +37,22 @@ void setup() {
     Serial.println("[main] CAN backend : MOCK (simulated)");
 #endif
 
-    static BleConnectivity   ble("OBD2Dongle");
-    static Elm327Task        task(&ble, &obd2);
+static BleConnectivity   plainBle("OBD2Dongle");
+
+#if defined(USE_SECURE_CONNECTIVITY)
+SecureBleConnectivity ble(&plainBle);
+static BleConnectivity* ble = &secureBle;
+#else
+static BleConnectivity* ble = &plainBle;
+#endif
+    static Elm327Task        task(ble, &obd2);
 
     if (!obd2.begin()) {
         Serial.println("[main] OBD2 init failed — halting");
         while (true) delay(1000);
     }
 
-    if (!ble.begin()) {
+    if (!ble->begin()) {
         Serial.println("[main] BLE init failed — halting");
         while (true) delay(1000);
     }
