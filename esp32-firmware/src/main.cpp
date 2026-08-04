@@ -40,7 +40,7 @@ void setup() {
     Serial.println("[main] CAN backend : MOCK (simulated)");
 #endif
 
-    static BleConnectivity   ble("OBD2Dongle");
+    static BleConnectivity   ble("TCCeltaDongle");
     static Elm327Task        task(&ble, &obd2);
 
     if (!obd2.begin()) {
