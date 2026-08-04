@@ -32,17 +32,17 @@ Rodar a partir de `mobile-app/`:
 - `flutter run` — iniciar em um dispositivo/emulador conectado (`--release` para release)
 - `flutter analyze` — lint (estrito; ver abaixo)
 - `flutter test` — rodar todos os widget tests
-- `flutter test test/widget_test.dart --plain-name "app builds the design system showcase"` — rodar um único teste pelo nome
+- `flutter test test/widget_test.dart --plain-name "painel mostra os valores de exemplo dos PIDs"` — rodar um único teste pelo nome
 - `dart run build_runner build --delete-conflicting-outputs` — regerar código após editar models freezed/json_serializable (ainda não existe nenhum, mas a toolchain está montada)
 
 ## Arquitetura
 
-Em camadas, sob `lib/src/`, com `main.dart` como bootstrap fino. `main.dart` já monta `ProviderScope` + `MaterialApp.router` (go_router via `src/router/app_router.dart`) e entra pelo fluxo de conexão; um `ConnectionGuard` de escopo global é montado no `builder` do `MaterialApp`. A rota `/painel` aponta hoje para a `ShowcaseScreen` como stand-in do painel de verdade.
+Em camadas, sob `lib/src/`, com `main.dart` como bootstrap fino. `main.dart` já monta `ProviderScope` + `MaterialApp.router` (go_router via `src/router/app_router.dart`) e entra pelo fluxo de conexão; um `ConnectionGuard` de escopo global é montado no `builder` do `MaterialApp`. A rota `/painel` abre a `PainelScreen` (feature `telemetry`) — o painel de telemetria OBD-II ao vivo.
 
 - `src/core/theme/` — **design tokens**. Importar via o barrel `theme.dart`. Material 3 dark-first (`app_theme.dart`) montado a partir de `app_colors.dart`, `app_typography.dart` (Space Grotesk para UI, JetBrains Mono com algarismos tabulares para dados — carregado em runtime via `google_fonts`), `app_spacing.dart` (espaçamento + raios) e `app_effects.dart` (sombras, brilhos "live" ciano, durações de movimento com uma ponte de acessibilidade `MotionX` que respeita `disableAnimations`).
 - `src/ui/core/widgets/` — **átomos do design system** (a biblioteca de componentes). Importar via o barrel `widgets.dart`. Inclui `AppButton`, `AppTabBar`, `StatusBadge`, `SensorRow`, `StatCard`, `StatGraphCard`, e o característico `Gauge` (ring/arc270/arc180, CustomPainter em `gauge/gauge_painter.dart`) e `Sparkline`.
 - `src/ui/core/icons/` — sistema de ícones SVG: widget `AppIcon` + enum `AppIconData` (`app_icons.dart`), apoiado em 16 SVGs em `assets/icons/` recoloridos em runtime via `flutter_svg`.
-- `src/ui/showcase/view/showcase_screen.dart` — galeria de todos os tokens e átomos com dados de sensores simulados ao vivo. Apenas referência/onboarding — não é uma tela de feature.
+- `src/ui/telemetry/` — feature **telemetry** (Fase 2 ELM327): lê os PIDs OBD-II sobre a `BleConnection` viva e exibe cada leitura em `StatCard.value` na `PainelScreen` (`/painel`). Camadas: `data/datasources/{elm327_client,obd2_datasource}.dart` (interações byte-a-byte + parsing) → `data/repositories/obd2_repository_impl.dart` (decodifica via `domain/obd2/obd2_pid.dart` e mapeia erro → `ObdCommandFailure`) → `view_model/telemetry_view_model.dart` (polling contínuo) → `view/painel_screen.dart`.
 
 Ao adicionar elementos visuais, reutilize os tokens e átomos existentes em vez de fixar cores, espaçamentos ou estilos de texto no código — o design system é a única fonte da verdade para esses valores.
 

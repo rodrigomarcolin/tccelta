@@ -22,6 +22,6 @@ abstract final class AppRoutes {
   /// Conexão perdida / queda do link.
   static const String connectionLost = '/connection-lost';
 
-  /// Painel ao vivo (hoje a `ShowcaseScreen` como stand-in).
+  /// Painel de telemetria OBD-II ao vivo (`PainelScreen`).
   static const String painel = '/painel';
 }

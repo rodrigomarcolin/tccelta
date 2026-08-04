@@ -3,7 +3,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tccelta_mobile/src/data/datasources/permissions_datasource.dart';
 import 'package:tccelta_mobile/src/data/repositories/permissions_repository_impl.dart';
 
-class _MockPermissionsDatasource extends Mock implements PermissionsDatasource {}
+class _MockPermissionsDatasource extends Mock
+    implements PermissionsDatasource {}
 
 void main() {
   late _MockPermissionsDatasource ds;

@@ -1,6 +1,5 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:permission_handler/permission_handler.dart';
 
 /// Envelopa o plugin `permission_handler` com o que é específico do BLE do app.
@@ -17,7 +16,6 @@ class PermissionsDatasource {
   /// Permissão de Bluetooth já concedida? Lê o `status` atual **sem** abrir o
   /// diálogo do sistema.
   Future<bool> hasBluetoothPermission() async {
-    if (kIsWeb) return true;
     if (Platform.isAndroid) {
       final scan = await Permission.bluetoothScan.status;
       final connect = await Permission.bluetoothConnect.status;
@@ -31,7 +29,6 @@ class PermissionsDatasource {
 
   /// Pede acesso ao BLE (abre o diálogo do sistema). `true` se concedido.
   Future<bool> requestBluetoothPermission() async {
-    if (kIsWeb) return true;
     if (Platform.isAndroid) {
       final results = await [
         Permission.bluetoothScan,

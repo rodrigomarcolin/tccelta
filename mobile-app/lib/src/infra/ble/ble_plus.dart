@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
@@ -110,10 +109,10 @@ class FlutterBluePlusBleService implements BleService {
   }
 
   BleAdapterState _mapAdapter(BluetoothAdapterState s) => switch (s) {
-        BluetoothAdapterState.on => BleAdapterState.on,
-        BluetoothAdapterState.off => BleAdapterState.off,
-        _ => BleAdapterState.unknown,
-      };
+    BluetoothAdapterState.on => BleAdapterState.on,
+    BluetoothAdapterState.off => BleAdapterState.off,
+    _ => BleAdapterState.unknown,
+  };
 }
 
 /// Uma conexão BLE ativa sobre `flutter_blue_plus`, resiliente a reconexão.
@@ -209,7 +208,7 @@ class _FbpConnection implements BleConnection {
       mtu: null,
     );
 
-    if (!kIsWeb && Platform.isAndroid) {
+    if (Platform.isAndroid) {
       _emit(BleConnectionPhase.optimizingLink);
       try {
         await device.requestMtu(mtu); // iOS negocia sozinho e ignora.
