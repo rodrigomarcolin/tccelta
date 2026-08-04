@@ -37,7 +37,7 @@ void setup() {
     Serial.println("[main] CAN backend : MOCK (simulated)");
 #endif
 
-static BleConnectivity   plainBle("OBD2Dongle");
+static BleConnectivity   plainBle("TCCeltaDongle");
 
 #if defined(USE_SECURE_CONNECTIVITY)
 SecureBleConnectivity ble(&plainBle);

@@ -45,7 +45,7 @@ bool BleConnectivity::begin() {
     pAdv->enableScanResponse(true);
     pAdv->start();
 
-    Serial.println("[BLE] Advertising started");
+    Serial.println("[BLE] Advertising started for device: " + String(_deviceName));
     return true;
 }
 

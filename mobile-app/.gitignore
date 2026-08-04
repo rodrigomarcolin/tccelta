@@ -1,0 +1,106 @@
+# ==============================================================
+# .gitignore para projeto Flutter
+# ==============================================================
+
+# --------------------------------------------------------------
+# Arquivos gerais do Dart / Flutter
+# --------------------------------------------------------------
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata.bak
+
+# Cobertura de testes
+coverage/
+
+# Arquivos de log e symbols
+*.log
+app.*.symbols
+app.*.map.json
+
+# --------------------------------------------------------------
+# IDEs e editores
+# --------------------------------------------------------------
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code (mantenha launch.json/settings.json se quiser compartilhar)
+.vscode/
+
+# --------------------------------------------------------------
+# Android
+# --------------------------------------------------------------
+android/.gradle/
+android/captures/
+android/local.properties
+android/**/GeneratedPluginRegistrant.java
+android/key.properties
+android/app/release/
+*.jks
+*.keystore
+
+# --------------------------------------------------------------
+# iOS / macOS
+# --------------------------------------------------------------
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+**/Pods/
+**/*.xcuserstate
+*.xcworkspace/xcuserdata/
+
+macos/Pods/
+macos/Flutter/GeneratedPluginRegistrant.swift
+macos/Flutter/ephemeral/
+
+# --------------------------------------------------------------
+# Web
+# --------------------------------------------------------------
+web/.dart_tool/
+
+# --------------------------------------------------------------
+# Windows / Linux
+# --------------------------------------------------------------
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+
+# --------------------------------------------------------------
+# Sistema operacional
+# --------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --------------------------------------------------------------
+# Segredos e variáveis de ambiente (NUNCA commitar)
+# --------------------------------------------------------------
+.env
+.env.*
+*.pem
+
+# --------------------------------------------------------------
+# Code generation (opcional)
+# Descomente se o time optar por NÃO versionar arquivos gerados
+# e rodar o build_runner no CI.
+# --------------------------------------------------------------
+# *.g.dart
+# *.freezed.dart
+# *.config.dart
+# *.gr.dart

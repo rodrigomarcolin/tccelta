@@ -1,0 +1,8 @@
+include: package:very_good_analysis/analysis_options.yaml
+
+analyzer:
+  errors:
+    invalid_annotation_target: ignore   # necessário p/ freezed + json_serializable
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
