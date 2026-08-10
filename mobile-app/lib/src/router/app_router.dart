@@ -7,6 +7,7 @@ import 'package:tccelta_mobile/src/ui/connection/view/connection_lost_screen.dar
 import 'package:tccelta_mobile/src/ui/connection/view/permissions_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/scan_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
+import 'package:tccelta_mobile/src/ui/settings/view/psk_settings_screen.dart';
 
 /// Roteador do app. O fluxo de conexão (`01 FLUXO DE CONEXÃO`) é a entrada;
 /// `/painel` abre o painel de telemetria OBD-II (`PainelScreen`).
@@ -40,6 +41,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.painel,
       builder: (context, state) => const PainelScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.settings,
+      builder: (context, state) => const PskSettingsScreen(),
     ),
   ],
 );

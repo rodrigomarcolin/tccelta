@@ -24,4 +24,7 @@ abstract final class AppRoutes {
 
   /// Painel de telemetria OBD-II ao vivo (`PainelScreen`).
   static const String painel = '/painel';
+
+  /// Tela de configuração de criptografia (PSK).
+  static const String settings = '/settings';
 }

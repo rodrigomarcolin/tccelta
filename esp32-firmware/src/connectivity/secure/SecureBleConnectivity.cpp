@@ -4,32 +4,36 @@
 #include <freertos/task.h>
 #include "SecureBleConnectivity.h"
 
-/**
- * Decorador para IConnectivity.
- *
- * Encapsula qualquer IConnectivity*, interceptando os métodos sendResponse() e
- * setOnCommandReceivedCallback() para aplicar autenticação ou encriptação
- * de maneira transparente.
- *
- * Intercepta a mensagem recebida, colocando-a na fila para desencriptação antes de repassar
- * para o callback EML327 registrado.
- * 
- */
+// ── Constructor / Destructor ──────────────────────────────────────────────────
 
 SecureBleConnectivity::SecureBleConnectivity(IConnectivity* inner) : _inner(inner) {
     _rawQueue = xQueueCreate(kSecureQueueDepth, sizeof(RawMessage));
     configASSERT(_rawQueue);
 }
 
+SecureBleConnectivity::~SecureBleConnectivity() {
+    if (_taskHandle) {
+        vTaskDelete(_taskHandle);
+        _taskHandle = nullptr;
+    }
+    if (_rawQueue) {
+        vQueueDelete(_rawQueue);
+        _rawQueue = nullptr;
+    }
+}
+
+// ── IConnectivity implementation 
+
 /**
- * Chama o begin() da classe interna, então determina o callback
- * que colocará o comando na fila para ser desencriptado, e cria 
- * a task de desencriptação.
+ * Calls begin() on the inner transport, then installs a lightweight BLE
+ * callback that enqueues every raw incoming frame (ISR-safe), and spawns the
+ * processing task that will drain the queue and invoke onRawFrameReceived().
  */
 bool SecureBleConnectivity::begin() {
     if (!_inner->begin()) return false;
 
-    // callback lightweight; copia dados raw e coloca na fila.
+    // Install inner callback — runs in the BLE stack context (ISR-like).
+    // Must be fast: only copies bytes and enqueues; no heavy work here.
     _inner->setOnCommandReceivedCallback(
         [this](const uint8_t* data, size_t len) {
             RawMessage msg;
@@ -54,59 +58,64 @@ bool SecureBleConnectivity::begin() {
 }
 
 /**
- * Armazena o callback registrado (ex. o do Elm327Task).
- * A task de desencriptar chamará o _userCallback com um plaintext.
+ * Stores the user callback (e.g. registered by Elm327Task).
+ * deliverPlaintext() will invoke it once a frame is successfully decrypted.
  */
 void SecureBleConnectivity::setOnCommandReceivedCallback(CommandCallback cb) {
     _userCallback = cb;
 }
 
 /**
- * Encripta/assina dados antes de encaminhar para o transporte interno
- * É chamado no contexto de uma task, então pode conter "heavy work"
+ * Encrypts/frames plaintext via the subclass hook sendSecured(), which in turn
+ * calls sendRaw() to push the result to the inner transport.
  */
 void SecureBleConnectivity::sendResponse(const uint8_t* data, size_t len) {
-    // TODO: encrypt / sign data, write result into encBuf / encLen
-    const uint8_t* encBuf = data;
-    size_t         encLen = len;
-    _inner->sendResponse(encBuf, encLen);
+    sendSecured(data, len);
 }
 
 void* SecureBleConnectivity::getSessionContext() {
-    // TODO: return a populated SessionContext with auth token / session key
+    // Overridable by subclasses that maintain session state.
     return nullptr;
 }
 
+// ── Protected helpers 
+
+/**
+ * Forwards authenticated plaintext to the user-registered callback.
+ * Called by subclass implementations of onRawFrameReceived() after successful
+ * decryption/authentication.
+ */
+void SecureBleConnectivity::deliverPlaintext(const uint8_t* plain, size_t len) {
+    if (_userCallback) {
+        _userCallback(plain, len);
+    }
+}
+
+/**
+ * Pushes already-encrypted bytes to the inner transport (BleConnectivity).
+ * Called by subclass implementations of sendSecured().
+ */
+void SecureBleConnectivity::sendRaw(const uint8_t* data, size_t len) {
+    _inner->sendResponse(data, len);
+}
+
+// ── FreeRTOS task 
 
 void SecureBleConnectivity::secureTaskEntry(void* arg) {
     static_cast<SecureBleConnectivity*>(arg)->secureTask();
 }
 
+/**
+ * Processing task: blocks on _rawQueue and dispatches each frame to the
+ * concrete subclass via onRawFrameReceived(). The subclass performs decryption
+ * and calls deliverPlaintext() on success; it silently drops the frame on any
+ * authentication failure.
+ */
 void SecureBleConnectivity::secureTask() {
-    // Tarefa que reagirá ao enfileiramento de um comando recebido pelo Dongle.
-    // TODO: Renomear e implementar.
     RawMessage msg;
     while (true) {
         if (xQueueReceive(_rawQueue, &msg, portMAX_DELAY) == pdTRUE) {
-            // TODO: decrypt msg.buf / msg.len → plain / plainLen
-            const uint8_t* plain    = msg.buf;
-            size_t         plainLen = msg.len;
-
-            if (_userCallback) {
-                // Após ter o plaintext e verificar autenticidade, repassa-o para o userCallback registrado
-                // que, no nosso caso, colocará o plaintext na fila para ser processado pelo ELM327 =)
-                _userCallback(plain, plainLen);
-            }
+            onRawFrameReceived(msg.buf, msg.len);
         }
-    }
-}
-
-SecureBleConnectivity::~SecureBleConnectivity() {
-    if (_taskHandle) {
-        vTaskDelete(_taskHandle);
-    }
-
-    if (_rawQueue) {
-        vQueueDelete(_rawQueue);
     }
 }

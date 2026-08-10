@@ -29,48 +29,75 @@ class ConnectedScreen extends ConsumerWidget {
     // A perda de conexão em sessão ativa -> Conexão perdida agora é tratada de
     // forma global pelo `ConnectionGuard` (montado no topo em `main.dart`), que
     // cobre também o painel e demais telas pós-conexão.
-    return ConnectionStateView(
-      icon: AppIconData.check,
-      badgeShape: IconBadgeShape.circle,
-      pulse: true,
-      title: 'Conectado',
-      centerExtra: SizedBox(
-        width: double.infinity,
-        child: Column(
-          children: [
-            if (device?.displayName.isNotEmpty ?? false) ...[
-              Text(
-                device!.displayName,
-                style: AppTypography.mono(
-                  const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
+    return Scaffold(
+      backgroundColor: AppColors.bgScreen,
+      appBar: AppBar(
+        backgroundColor: AppColors.bgScreen,
+        elevation: 0,
+        title: Text(
+          'Conectado',
+          style: AppTypography.ui(
+            const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+        centerTitle: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, size: 20),
+            color: AppColors.textSecondary,
+            tooltip: 'Criptografia',
+            onPressed: () => context.push(AppRoutes.settings),
+          ),
+          const SizedBox(width: AppSpacing.s3),
+        ],
+      ),
+      body: ConnectionStateView(
+        icon: AppIconData.check,
+        badgeShape: IconBadgeShape.circle,
+        pulse: true,
+        title: 'Conexão Estabelecida',
+        centerExtra: SizedBox(
+          width: double.infinity,
+          child: Column(
+            children: [
+              if (device?.displayName.isNotEmpty ?? false) ...[
+                Text(
+                  device!.displayName,
+                  style: AppTypography.mono(
+                    const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
+                const SizedBox(height: AppSpacing.s7),
+              ],
+              const StatCard.info(
+                label: 'Canal',
+                value: 'Nordic UART (BLE)',
               ),
-              const SizedBox(height: AppSpacing.s7),
+              const SizedBox(height: AppSpacing.s3),
+              StatCard.info(
+                label: 'Protocolo',
+                value: protocol,
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              StatCard.info(
+                label: 'Sensores disponíveis',
+                value: sensores,
+              ),
             ],
-            const StatCard.info(
-              label: 'Canal',
-              value: 'Nordic UART (BLE)',
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            StatCard.info(
-              label: 'Protocolo',
-              value: protocol,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            StatCard.info(
-              label: 'Sensores disponíveis',
-              value: sensores,
-            ),
-          ],
+          ),
         ),
-      ),
-      primaryAction: AppButton(
-        onPressed: () => context.go(AppRoutes.painel),
-        child: const Text('Abrir painel'),
+        primaryAction: AppButton(
+          onPressed: () => context.go(AppRoutes.painel),
+          child: const Text('Abrir painel'),
+        ),
       ),
     );
   }
