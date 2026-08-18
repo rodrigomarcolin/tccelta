@@ -156,9 +156,8 @@ void main() {
       expect(gaugeCenter.dy, lessThan(labelCenter.dy));
     });
 
-    testWidgets('centered=false (default) mantém o gauge ao lado do texto', (
-      tester,
-    ) async {
+    testWidgets('centered=false (default) mostra o rótulo no topo do card, '
+        'acima do gauge', (tester) async {
       await tester.pumpWidget(
         wrap(
           const StatCard.gauge(
@@ -170,9 +169,33 @@ void main() {
         ),
       );
 
+      // O rótulo do gauge pequeno usa o mesmo overline (uppercase) das
+      // demais variantes — não o texto tal qual.
       final gaugeCenter = tester.getCenter(find.byType(Gauge));
-      final labelCenter = tester.getCenter(find.text('Rotação do motor'));
-      expect(gaugeCenter.dx, lessThan(labelCenter.dx));
+      final labelCenter = tester.getCenter(find.text('ROTAÇÃO DO MOTOR'));
+      expect(labelCenter.dy, lessThan(gaugeCenter.dy));
+    });
+
+    testWidgets('centered=false (default) não desenha valor/label dentro do '
+        'gauge (evita duplicar com o texto do card)', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          const StatCard.gauge(
+            label: 'Rotação do motor',
+            value: 3000,
+            unit: 'RPM',
+            gauge: Gauge(
+              value: 3000,
+              label: 'Rotação do motor',
+              showValue: false,
+              size: 54,
+            ),
+          ),
+        ),
+      );
+
+      // O card mostra "3000" uma única vez (fora do gauge) — não duas.
+      expect(find.text('3000'), findsOneWidget);
     });
   });
 }

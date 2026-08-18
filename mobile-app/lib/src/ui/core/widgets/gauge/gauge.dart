@@ -40,6 +40,7 @@ class Gauge extends StatelessWidget {
     this.warningThreshold = defaultWarningThreshold,
     this.alertThreshold = defaultAlertThreshold,
     this.display,
+    this.showValue = true,
     super.key,
   });
 
@@ -92,6 +93,11 @@ class Gauge extends StatelessWidget {
 
   /// Sobrescreve o número central (ex.: string pré-formatada).
   final Object? display;
+
+  /// Desenha o número + label (ou as zonas, no `arc180`) dentro do arco.
+  /// `false` deixa só o instrumento — para um card pequeno que já mostra
+  /// valor/label ao lado, evitando duplicar a informação. @default true
+  final bool showValue;
 
   /// Cor do traço de progresso conforme o valor cruza os thresholds: ciano
   /// (normal) → âmbar (aviso) → vermelho (alerta).
@@ -149,10 +155,11 @@ class Gauge extends StatelessWidget {
                   alertThreshold: alertThreshold,
                 ),
               ),
-              if (variant == GaugeVariant.arc180)
-                _zonesValue(big)
-              else
-                _centerValue(big),
+              if (showValue)
+                if (variant == GaugeVariant.arc180)
+                  _zonesValue(big)
+                else
+                  _centerValue(big),
             ],
           );
         },

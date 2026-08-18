@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
@@ -8,27 +7,12 @@ import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.dart';
 
-/// Argumentos de navegação para [IndicatorFormatScreen], passados por `extra`.
+/// Resultado devolvido por [Navigator.pop] ao fechar o
+/// [IndicatorFormatSheet].
 ///
-/// [initial] nulo abre o fluxo de adicionar (a partir dos defaults do PID via
-/// [IndicatorDisplay.defaultFor]); não-nulo abre o fluxo de editar,
-/// pré-preenchido e com a opção de remover do painel.
-@immutable
-class IndicatorFormatArgs {
-  /// Cria os argumentos para configurar [pid].
-  const IndicatorFormatArgs({required this.pid, this.initial});
-
-  /// PID sendo configurado.
-  final Obd2Pid pid;
-
-  /// Customização atual, quando o indicador já está no painel.
-  final IndicatorDisplay? initial;
-}
-
-/// Resultado devolvido por [context.pop] ao sair de [IndicatorFormatScreen].
-///
-/// `null` (o pop "cru", sem valor) significa que o usuário cancelou — nada
-/// deve ser adicionado/alterado/removido.
+/// `null` (o pop "cru", sem valor — inclusive o de tocar fora do sheet)
+/// significa que o usuário cancelou — nada deve ser adicionado/alterado/
+/// removido.
 @immutable
 class IndicatorFormatResult {
   /// Cria o resultado de confirmar [display] (adicionar/editar).
@@ -42,6 +26,25 @@ class IndicatorFormatResult {
 
   /// Se o usuário pediu para remover o indicador do painel.
   final bool remove;
+}
+
+/// Abre o sheet de escolha/customização de formato para [pid], empilhado
+/// sobre a tela atual — direto, sem nenhuma tela de detalhe/gráfico no meio.
+///
+/// [initial] nulo abre o fluxo de adicionar (a partir dos defaults do PID via
+/// [IndicatorDisplay.defaultFor]); não-nulo abre o fluxo de editar,
+/// pré-preenchido e com a opção de remover do painel.
+Future<IndicatorFormatResult?> showIndicatorFormatSheet(
+  BuildContext context, {
+  required Obd2Pid pid,
+  IndicatorDisplay? initial,
+}) {
+  return showModalBottomSheet<IndicatorFormatResult>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => IndicatorFormatSheet(pid: pid, initial: initial),
+  );
 }
 
 /// Passos possíveis do assistente, na ordem em que aparecem.
@@ -58,20 +61,23 @@ enum _WizardStep {
   scale,
 }
 
-/// Tela empilhada (`context.push`) para escolher e customizar o formato de
-/// exibição de um indicador do Painel.
+/// Conteúdo do sheet para escolher e customizar o formato de exibição de um
+/// indicador do Painel.
 ///
-/// Substitui qualquer tela intermediária de "detalhe/gráfico" — é aberta
+/// Substitui qualquer tela intermediária de "detalhe/gráfico" — é aberto
 /// diretamente ao tocar em adicionar um sensor novo ou em editar um já
-/// presente no painel (card do Painel ou linha do sheet de sensores).
-class IndicatorFormatScreen extends HookConsumerWidget {
-  /// Cria a tela para configurar [args.pid].
-  const IndicatorFormatScreen({required this.args, super.key});
+/// presente no painel (card do Painel ou linha da tela de sensores).
+class IndicatorFormatSheet extends HookConsumerWidget {
+  /// Cria o sheet para configurar [pid].
+  const IndicatorFormatSheet({required this.pid, this.initial, super.key});
 
-  /// PID sendo configurado + customização atual (nula = fluxo de adicionar).
-  final IndicatorFormatArgs args;
+  /// PID sendo configurado.
+  final Obd2Pid pid;
 
-  bool get _isEditing => args.initial != null;
+  /// Customização atual, quando o indicador já está no painel.
+  final IndicatorDisplay? initial;
+
+  bool get _isEditing => initial != null;
 
   List<_WizardStep> _stepsFor(IndicatorFormat format) {
     final steps = [_WizardStep.format];
@@ -86,8 +92,7 @@ class IndicatorFormatScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pid = args.pid;
-    final draft = useState(args.initial ?? IndicatorDisplay.defaultFor(pid));
+    final draft = useState(initial ?? IndicatorDisplay.defaultFor(pid));
     final stepIndex = useState(0);
     final steps = _stepsFor(draft.value.format);
     final index = stepIndex.value.clamp(0, steps.length - 1);
@@ -99,7 +104,7 @@ class IndicatorFormatScreen extends HookConsumerWidget {
 
     void onBack() {
       if (index == 0) {
-        context.pop();
+        Navigator.of(context).pop();
         return;
       }
       stepIndex.value = index - 1;
@@ -110,94 +115,85 @@ class IndicatorFormatScreen extends HookConsumerWidget {
         stepIndex.value = index + 1;
         return;
       }
-      context.pop(IndicatorFormatResult.confirmed(draft.value));
+      Navigator.of(
+        context,
+      ).pop(IndicatorFormatResult.confirmed(draft.value));
     }
 
-    return Scaffold(
-      backgroundColor: AppColors.bgScreen,
-      appBar: AppBar(
-        backgroundColor: AppColors.bgScreen,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          color: AppColors.textSecondary,
-          onPressed: onBack,
+    return FractionallySizedBox(
+      heightFactor: 0.92,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: AppColors.surfaceCard,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
         ),
-        title: Text(
-          switch (current) {
-            _WizardStep.format => 'Exibir no painel',
-            _WizardStep.gaugeStyle => 'Estilo do gauge',
-            _WizardStep.scale => 'Escala',
-          },
-          style: AppTypography.ui(
-            const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.s7,
+              AppSpacing.s4,
+              AppSpacing.s7,
+              AppSpacing.s7,
             ),
-          ),
-        ),
-        centerTitle: false,
-      ),
-      body: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.s7,
-            AppSpacing.s4,
-            AppSpacing.s7,
-            AppSpacing.s7,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: ListView(
-                  children: [
-                    Text(pid.label, style: AppTypography.title),
-                    const SizedBox(height: AppSpacing.s7),
-                    switch (current) {
-                      _WizardStep.format => _FormatStep(
-                        value: draft.value.format,
-                        onChanged: (f) =>
-                            draft.value = draft.value.copyWith(format: f),
-                      ),
-                      _WizardStep.gaugeStyle => _GaugeStyleStep(
-                        pid: pid,
-                        display: draft.value,
-                        liveValue: liveValue,
-                        onChanged: (d) => draft.value = d,
-                      ),
-                      _WizardStep.scale => _ScaleStep(
-                        pid: pid,
-                        display: draft.value,
-                        liveValue: liveValue,
-                        history: telemetry.history[pid] ?? const [],
-                        onChanged: (d) => draft.value = d,
-                      ),
-                    },
-                  ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _DragHandle(),
+                const SizedBox(height: AppSpacing.s4),
+                _Header(step: current, index: index, onBack: onBack),
+                const SizedBox(height: AppSpacing.s2),
+                Text(pid.label, style: AppTypography.title),
+                const SizedBox(height: AppSpacing.s7),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      switch (current) {
+                        _WizardStep.format => _FormatStep(
+                          value: draft.value.format,
+                          onChanged: (f) =>
+                              draft.value = draft.value.copyWith(format: f),
+                        ),
+                        _WizardStep.gaugeStyle => _GaugeStyleStep(
+                          pid: pid,
+                          display: draft.value,
+                          liveValue: liveValue,
+                          onChanged: (d) => draft.value = d,
+                        ),
+                        _WizardStep.scale => _ScaleStep(
+                          pid: pid,
+                          display: draft.value,
+                          liveValue: liveValue,
+                          history: telemetry.history[pid] ?? const [],
+                          onChanged: (d) => draft.value = d,
+                        ),
+                      },
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.s4),
-              AppButton(
-                key: const Key('indicator_format_primary'),
-                onPressed: onPrimary,
-                child: Text(
-                  !isLast ? 'Continuar' : (_isEditing ? 'Salvar' : 'Adicionar'),
-                ),
-              ),
-              if (_isEditing && isLast) ...[
-                const SizedBox(height: AppSpacing.s3),
+                const SizedBox(height: AppSpacing.s4),
                 AppButton(
-                  key: const Key('indicator_format_remove'),
-                  variant: AppButtonVariant.danger,
-                  onPressed: () =>
-                      context.pop(const IndicatorFormatResult.removed()),
-                  child: const Text('Remover do painel'),
+                  key: const Key('indicator_format_primary'),
+                  onPressed: onPrimary,
+                  child: Text(
+                    !isLast
+                        ? 'Continuar'
+                        : (_isEditing ? 'Salvar' : 'Adicionar'),
+                  ),
                 ),
+                if (_isEditing) ...[
+                  const SizedBox(height: AppSpacing.s3),
+                  AppButton(
+                    key: const Key('indicator_format_remove'),
+                    variant: AppButtonVariant.danger,
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pop(const IndicatorFormatResult.removed()),
+                    child: const Text('Remover do painel'),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -209,6 +205,68 @@ class IndicatorFormatScreen extends HookConsumerWidget {
       if (reading.pid == pid) return reading.value;
     }
     return null;
+  }
+}
+
+/// Alça de arrastar visual do sheet (drag-to-dismiss), sem lógica própria —
+/// o gesto é do [showModalBottomSheet].
+class _DragHandle extends StatelessWidget {
+  const _DragHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 40,
+        height: 4,
+        decoration: const BoxDecoration(
+          color: AppColors.borderStrong,
+          borderRadius: AppRadii.brPill,
+        ),
+      ),
+    );
+  }
+}
+
+/// Cabeçalho do sheet: um chevron de voltar (só a partir do 2º passo — o 1º
+/// só se cancela arrastando/tocando fora do sheet) + o nome do passo atual.
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.step,
+    required this.index,
+    required this.onBack,
+  });
+
+  final _WizardStep step;
+  final int index;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        if (index > 0) ...[
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, size: 16),
+            color: AppColors.textSecondary,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: onBack,
+          ),
+          const SizedBox(width: AppSpacing.s2),
+        ],
+        Text(
+          switch (step) {
+            _WizardStep.format => 'Exibir no painel',
+            _WizardStep.gaugeStyle => 'Estilo do gauge',
+            _WizardStep.scale => 'Escala',
+          },
+          style: AppTypography.ui(
+            const TextStyle(fontSize: 12, color: AppColors.textTertiary),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -258,6 +316,7 @@ class _FormatStep extends StatelessWidget {
             subtitle: subtitle,
             showValue: false,
             showChevron: false,
+            leading: _FormatPreviewIcon(format: format),
             selected: value == format,
             trailing: RadioDot(selected: value == format),
             onTap: () => onChanged(format),
@@ -267,6 +326,73 @@ class _FormatStep extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Miniatura de 44×30 do formato, na lista de escolha — o mesmo padrão visual
+/// (número mono, mini gauge, mini barra, mini sparkline) usado no card real
+/// do Painel, só que em miniatura.
+class _FormatPreviewIcon extends StatelessWidget {
+  const _FormatPreviewIcon({required this.format});
+
+  final IndicatorFormat format;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 30,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.bgScreen,
+        borderRadius: AppRadii.brSm,
+        border: Border.all(color: AppColors.borderHairline),
+      ),
+      child: switch (format) {
+        IndicatorFormat.number => _glyph('12', AppColors.textPrimary),
+        IndicatorFormat.numberFull => _glyph('123', AppColors.cyan500),
+        IndicatorFormat.gauge => const Gauge(
+          value: 0.55,
+          max: 1,
+          label: '',
+          size: 22,
+          weight: 5,
+          showValue: false,
+        ),
+        IndicatorFormat.bar => _miniBar(),
+        IndicatorFormat.history => const SizedBox(
+          width: 30,
+          child: Sparkline(
+            values: [2, 6, 3, 9, 5, 10, 7],
+            height: 18,
+            strokeWidth: 1.6,
+          ),
+        ),
+      },
+    );
+  }
+
+  Widget _glyph(String text, Color color) => Text(
+    text,
+    style: AppTypography.mono(
+      TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
+    ),
+  );
+
+  Widget _miniBar() => ClipRRect(
+    borderRadius: AppRadii.brPill,
+    child: Container(
+      width: 28,
+      height: 6,
+      color: AppColors.track,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: FractionallySizedBox(
+          widthFactor: 0.6,
+          child: Container(color: AppColors.cyan500),
+        ),
+      ),
+    ),
+  );
 }
 
 /// Passo 2 — estilo do gauge (anel/arco 270°/ponteiro) + tamanho no grid.

@@ -7,10 +7,9 @@ import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
-import 'package:tccelta_mobile/src/ui/telemetry/view/indicator_format_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.dart';
-import 'package:tccelta_mobile/src/ui/telemetry/widgets/sensor_picker_sheet.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/widgets/indicator_format_sheet.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/widgets/telemetry_status_band.dart';
 
 /// Painel de telemetria OBD-II — a tela `/painel`.
@@ -20,13 +19,13 @@ import 'package:tccelta_mobile/src/ui/telemetry/widgets/telemetry_status_band.da
 /// ordem, e com que customização — [IndicatorDisplay]) e renderiza cada
 /// indicador no widget certo para o seu formato (número, número linha
 /// inteira, gauge, barra ou histórico — ver [_IndicatorCell]). O painel
-/// começa vazio — o usuário adiciona indicadores pelo sheet de sensores
-/// ([showSensorPickerSheet]), que abre a [IndicatorFormatScreen] empilhada
-/// para escolher o formato; tocar num card já presente reabre essa mesma tela
-/// para editar, direto (sem tela de detalhe/gráfico no meio). Os cards podem
-/// ser reordenados por arrastar ([ReorderableCardGrid]). O `ConnectionGuard`
-/// global protege a rota; se o link cair, ele redireciona para "Conexão
-/// perdida".
+/// começa vazio — o usuário adiciona indicadores pela tela de sensores
+/// (`SensorPickerScreen`, empilhada com `context.push`), que abre o
+/// [IndicatorFormatSheet] para escolher o formato; tocar num card já presente
+/// reabre esse mesmo sheet para editar, direto (sem tela de detalhe/gráfico
+/// no meio). Os cards podem ser reordenados por arrastar
+/// ([ReorderableCardGrid]). O `ConnectionGuard` global protege a rota; se o
+/// link cair, ele redireciona para "Conexão perdida".
 class PainelScreen extends ConsumerWidget {
   /// Cria o painel.
   const PainelScreen({super.key});
@@ -63,7 +62,9 @@ class PainelScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.s7),
                   if (indicators.isEmpty)
-                    _EmptyPanel(onAdd: () => showSensorPickerSheet(context))
+                    _EmptyPanel(
+                      onAdd: () => context.push(AppRoutes.sensorPicker),
+                    )
                   else ...[
                     ReorderableCardGrid<Obd2Pid>(
                       items: indicators,
@@ -89,7 +90,7 @@ class PainelScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: AppSpacing.s3),
                     _AddIndicatorButton(
-                      onTap: () => showSensorPickerSheet(context),
+                      onTap: () => context.push(AppRoutes.sensorPicker),
                     ),
                   ],
                 ],
@@ -181,7 +182,7 @@ double _minHeightFor(IndicatorDisplay display) {
   return isBig ? 220 : 86;
 }
 
-/// Abre a tela de formato pré-preenchida com [current] para editar [pid], e
+/// Abre o sheet de formato pré-preenchido com [current] para editar [pid], e
 /// aplica o resultado ao [PanelViewModel] (edita ou remove). Sem tela de
 /// detalhe/gráfico no meio — vai direto para a escolha/edição de formato.
 Future<void> _openEdit(
@@ -190,9 +191,10 @@ Future<void> _openEdit(
   Obd2Pid pid,
   IndicatorDisplay current,
 ) async {
-  final result = await context.push<IndicatorFormatResult>(
-    AppRoutes.indicatorFormat,
-    extra: IndicatorFormatArgs(pid: pid, initial: current),
+  final result = await showIndicatorFormatSheet(
+    context,
+    pid: pid,
+    initial: current,
   );
   if (result == null || !context.mounted) return;
   final notifier = ref.read(panelViewModelProvider.notifier);
@@ -297,6 +299,9 @@ class _IndicatorCell extends StatelessWidget {
       warningThreshold: display.lowMax / display.max,
       alertThreshold: display.highMin / display.max,
       size: large ? 172 : 54,
+      // No card pequeno, tipo (label) e número já aparecem ao lado do
+      // instrumento (StatCard) — o gauge desenha só o arco, sem duplicar.
+      showValue: large,
     );
     return StatCard.gauge(
       label: pid.label,

@@ -5,32 +5,19 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
-import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
-import 'package:tccelta_mobile/src/ui/telemetry/view/indicator_format_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/widgets/indicator_format_sheet.dart';
 
-/// Abre a lista de sensores empilhada sobre a tela atual (sem navegar para
-/// uma rota separada) — um bottom sheet listando todos os PIDs curados, com
-/// busca e toque para abrir a tela de formato (adicionar/editar) ou remover
-/// do Painel.
-Future<void> showSensorPickerSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) => const SensorPickerSheet(),
-  );
-}
-
-/// Conteúdo do sheet de sensores: busca por nome/PID + lista cuja linha abre
-/// a [IndicatorFormatScreen] (direto, sem tela de detalhe/gráfico no meio) —
-/// para adicionar (ainda não presente) ou editar (já presente); o ícone
-/// quadrado à direita só remove (com confirmação), quando já adicionado.
-class SensorPickerSheet extends HookConsumerWidget {
-  /// Cria o sheet de sensores.
-  const SensorPickerSheet({super.key});
+/// Tela empilhada (`context.push`) com a lista de sensores: busca por nome/PID
+/// + lista cuja linha abre o [IndicatorFormatSheet] (direto, sem tela de
+/// detalhe/gráfico no meio) — para adicionar (ainda não presente) ou editar
+/// (já presente); o ícone quadrado à direita só remove (com confirmação),
+/// quando já adicionado.
+class SensorPickerScreen extends HookConsumerWidget {
+  /// Cria a tela de sensores.
+  const SensorPickerScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,75 +28,73 @@ class SensorPickerSheet extends HookConsumerWidget {
 
     final results = _filter(Obd2Pid.values, query.value);
 
-    return FractionallySizedBox(
-      heightFactor: 0.88,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceCard,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+    return Scaffold(
+      backgroundColor: AppColors.bgScreen,
+      appBar: AppBar(
+        backgroundColor: AppColors.bgScreen,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          color: AppColors.textSecondary,
+          onPressed: context.pop,
         ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.s7,
-              AppSpacing.s4,
-              AppSpacing.s7,
-              AppSpacing.s4,
-            ),
-            child: Column(
-              children: [
-                const _DragHandle(),
-                const SizedBox(height: AppSpacing.s4),
-                Text('Sensores', style: AppTypography.heading),
-                const SizedBox(height: AppSpacing.s4),
-                _SearchField(
-                  value: query.value,
-                  onChanged: (v) => query.value = v,
-                ),
-                const SizedBox(height: AppSpacing.s4),
-                Expanded(
-                  child: results.isEmpty
-                      ? _NoResults(query: query.value)
-                      : ListView.separated(
-                          itemCount: results.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(height: AppSpacing.s2),
-                          itemBuilder: (context, i) {
-                            final pid = results[i];
-                            final added = panel.contains(pid);
-                            final reading = byPid[pid];
-                            return _SensorTile(
-                              pid: pid,
-                              added: added,
-                              valueStr: reading == null
-                                  ? '—'
-                                  : reading.value.round().toString(),
-                              onOpen: () => _openFormat(
-                                context,
-                                ref,
-                                pid,
-                                added ? panel.displayFor(pid) : null,
-                              ),
-                              onRemove: () => _confirmRemove(context, ref, pid),
-                            );
-                          },
-                        ),
-                ),
-                const SizedBox(height: AppSpacing.s4),
-                AppButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
+        title: Text('Sensores', style: AppTypography.heading),
+        centerTitle: false,
+      ),
+      body: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.s7,
+            AppSpacing.s2,
+            AppSpacing.s7,
+            AppSpacing.s7,
+          ),
+          child: Column(
+            children: [
+              _SearchField(
+                value: query.value,
+                onChanged: (v) => query.value = v,
+              ),
+              const SizedBox(height: AppSpacing.s4),
+              Expanded(
+                child: results.isEmpty
+                    ? _NoResults(query: query.value)
+                    : ListView.separated(
+                        itemCount: results.length,
+                        separatorBuilder: (_, _) =>
+                            const SizedBox(height: AppSpacing.s2),
+                        itemBuilder: (context, i) {
+                          final pid = results[i];
+                          final added = panel.contains(pid);
+                          final reading = byPid[pid];
+                          return _SensorTile(
+                            pid: pid,
+                            added: added,
+                            valueStr: reading == null
+                                ? '—'
+                                : reading.value.round().toString(),
+                            onOpen: () => _openFormat(
+                              context,
+                              ref,
+                              pid,
+                              added ? panel.displayFor(pid) : null,
+                            ),
+                            onRemove: () => _confirmRemove(context, ref, pid),
+                          );
+                        },
+                      ),
+              ),
+              const SizedBox(height: AppSpacing.s4),
+              AppButton(onPressed: context.pop, child: const Text('OK')),
+            ],
           ),
         ),
       ),
     );
   }
 
-  /// Abre a tela de formato para [pid]: [initial] nulo é o fluxo de
+  /// Abre o sheet de formato para [pid]: [initial] nulo é o fluxo de
   /// adicionar (a linha ainda não está no painel); não-nulo é o fluxo de
   /// editar (pré-preenchido com a customização atual). Direto — sem tela de
   /// detalhe/gráfico no meio.
@@ -119,9 +104,10 @@ class SensorPickerSheet extends HookConsumerWidget {
     Obd2Pid pid,
     IndicatorDisplay? initial,
   ) async {
-    final result = await context.push<IndicatorFormatResult>(
-      AppRoutes.indicatorFormat,
-      extra: IndicatorFormatArgs(pid: pid, initial: initial),
+    final result = await showIndicatorFormatSheet(
+      context,
+      pid: pid,
+      initial: initial,
     );
     if (result == null || !context.mounted) return;
     final notifier = ref.read(panelViewModelProvider.notifier);
@@ -169,22 +155,6 @@ class SensorPickerSheet extends HookConsumerWidget {
   /// Normaliza para comparação de código hex: minúsculas, sem espaços.
   static String _normalize(String s) =>
       s.toLowerCase().replaceAll(' ', '').trim();
-}
-
-class _DragHandle extends StatelessWidget {
-  const _DragHandle();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 40,
-      height: 4,
-      decoration: const BoxDecoration(
-        color: AppColors.borderStrong,
-        borderRadius: AppRadii.brPill,
-      ),
-    );
-  }
 }
 
 class _SearchField extends StatelessWidget {
@@ -256,11 +226,11 @@ class _NoResults extends StatelessWidget {
 /// leitura + unidade, e um alternador quadrado à direita — check (ciano)
 /// quando já adicionado, `+` quando não.
 ///
-/// A linha inteira ([onOpen]) sempre abre a tela de formato — para adicionar
-/// (ainda não presente) ou editar (já presente), pré-preenchida. Só o toque
-/// específico no ícone quadrado ([onRemove]) — quando já adicionado — pede
-/// confirmação para remover; sem adição prévia, o ícone tem o mesmo efeito
-/// da linha (abrir a tela de formato).
+/// A linha inteira ([onOpen]) sempre abre o sheet de formato — para
+/// adicionar (ainda não presente) ou editar (já presente), pré-preenchida. Só
+/// o toque específico no ícone quadrado ([onRemove]) — quando já adicionado —
+/// pede confirmação para remover; sem adição prévia, o ícone tem o mesmo
+/// efeito da linha (abrir o sheet de formato).
 class _SensorTile extends StatelessWidget {
   const _SensorTile({
     required this.pid,

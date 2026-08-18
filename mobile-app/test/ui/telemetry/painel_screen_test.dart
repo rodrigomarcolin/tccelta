@@ -42,7 +42,7 @@ class _FakeObd2Repository implements Obd2Repository {
 
 void main() {
   // Usa o `appRouter` real (`MaterialApp.router`), não `MaterialApp(home: ...)`
-  // direto: a tela de formato é uma rota empilhada de verdade
+  // direto: a tela de sensores é uma rota empilhada de verdade
   // (`context.push`), que depende de um `GoRouter` no contexto.
   Widget app({List<Obd2Reading> readings = const []}) => ProviderScope(
     overrides: [
@@ -57,7 +57,7 @@ void main() {
   Finder toggleFinder(Obd2Pid pid) =>
       find.byKey(ValueKey('sensor_toggle_${pid.name}'));
 
-  /// Abre o sheet de sensores e filtra por [query].
+  /// Abre a tela de sensores (empilhada) e filtra por [query].
   Future<void> openSheet(WidgetTester tester, [String query = '']) async {
     await tester.tap(find.text('Adicionar indicador').first);
     await tester.pumpAndSettle();
@@ -67,7 +67,7 @@ void main() {
     }
   }
 
-  /// Toca na linha do sensor [pid] (não no ícone) — abre a tela de formato,
+  /// Toca na linha do sensor [pid] (não no ícone) — abre o sheet de formato,
   /// direto (fluxo de adicionar ou de editar, conforme já esteja no painel).
   Future<void> openFormatFor(WidgetTester tester, Obd2Pid pid) async {
     await tester.tap(find.text(pid.label));
@@ -85,9 +85,15 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Adiciona [pid] com o formato padrão (Número): abre o sheet, abre a tela
-  /// de formato pela linha, confirma sem mexer em nada (já é o último passo),
-  /// e fecha o sheet.
+  /// Fecha a tela de sensores (rota empilhada) pela seta de voltar da AppBar.
+  Future<void> closeSensorScreen(WidgetTester tester) async {
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+    await tester.pumpAndSettle();
+  }
+
+  /// Adiciona [pid] com o formato padrão (Número): abre a tela de sensores,
+  /// abre o sheet de formato pela linha, confirma sem mexer em nada (já é o
+  /// último passo — o sheet fecha sozinho), e volta ao Painel.
   Future<void> addWithDefaultFormat(
     WidgetTester tester,
     String query,
@@ -96,8 +102,7 @@ void main() {
     await openSheet(tester, query);
     await openFormatFor(tester, pid);
     await tapPrimary(tester); // 'Adicionar' — Número não tem passo de escala.
-    await tester.tapAt(const Offset(10, 10)); // fecha o sheet
-    await tester.pumpAndSettle();
+    await closeSensorScreen(tester);
   }
 
   setUp(() => appRouter.go(AppRoutes.painel));
@@ -110,13 +115,27 @@ void main() {
     expect(find.text('Adicionar indicador'), findsOneWidget);
   });
 
-  testWidgets('botão OK fecha o sheet de sensores', (tester) async {
+  testWidgets('seta de voltar fecha a tela de sensores', (tester) async {
     await tester.pumpWidget(app());
     await tester.pump(const Duration(milliseconds: 10));
 
     await tester.tap(find.text('Adicionar indicador').first);
     await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsOneWidget); // campo de busca do sheet
+    // Campo de busca da tela de sensores.
+    expect(find.byType(TextField), findsOneWidget);
+
+    await closeSensorScreen(tester);
+
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('botão OK fecha a tela de sensores', (tester) async {
+    await tester.pumpWidget(app());
+    await tester.pump(const Duration(milliseconds: 10));
+
+    await tester.tap(find.text('Adicionar indicador').first);
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
 
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
@@ -125,7 +144,7 @@ void main() {
   });
 
   testWidgets(
-    'tocar na linha do sensor abre a tela de escolha de formato, direto',
+    'tocar na linha do sensor abre o sheet de escolha de formato, direto',
     (tester) async {
       await tester.pumpWidget(app());
       await tester.pump(const Duration(milliseconds: 10));
@@ -191,8 +210,7 @@ void main() {
 
       await tester.tap(find.text('Remover'));
       await tester.pumpAndSettle();
-      await tester.tapAt(const Offset(10, 10)); // fecha o sheet
-      await tester.pumpAndSettle();
+      await closeSensorScreen(tester);
 
       expect(find.text('ROTAÇÃO DO MOTOR'), findsNothing);
       expect(find.text('Painel vazio'), findsOneWidget);
@@ -279,8 +297,7 @@ void main() {
         await tester.pumpAndSettle();
         await tapPrimary(tester); // 'Continuar' -> passo de escala.
         await tapPrimary(tester); // 'Adicionar'.
-        await tester.tapAt(const Offset(10, 10));
-        await tester.pumpAndSettle();
+        await closeSensorScreen(tester);
 
         final rpmWidth = tester.getSize(find.text('ROTAÇÃO DO MOTOR')).width;
         final rpmCardWidth = tester

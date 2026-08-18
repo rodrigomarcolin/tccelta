@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
@@ -10,7 +9,7 @@ import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
-import 'package:tccelta_mobile/src/ui/telemetry/view/indicator_format_screen.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/widgets/indicator_format_sheet.dart';
 
 /// Repository de telemetria fake — sem leituras (o preview cai no ponto
 /// sintético de 60% da escala) a menos que o teste precise de um valor ao
@@ -40,12 +39,13 @@ class _FakeObd2Repository implements Obd2Repository {
   Future<List<Obd2Reading>> readAll() async => readings;
 }
 
-/// Resultado capturado pelo host: `null` enquanto a tela de formato não
+/// Resultado capturado pelo host: `null` enquanto o sheet de formato não
 /// fechou; depois, o [IndicatorFormatResult] devolvido pelo `pop`.
 class _Host extends StatefulWidget {
-  const _Host({required this.args});
+  const _Host({required this.pid, this.initial});
 
-  final IndicatorFormatArgs args;
+  final Obd2Pid pid;
+  final IndicatorDisplay? initial;
 
   @override
   State<_Host> createState() => _HostState();
@@ -63,18 +63,20 @@ class _HostState extends State<_Host> {
   Widget build(BuildContext context) {
     if (!_opened) {
       // Abre automaticamente no primeiro build — evita um toque extra em
-      // cada teste só para entrar na tela.
+      // cada teste só para abrir o sheet.
       _opened = true;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        final r = await context.push<IndicatorFormatResult>(
-          '/format',
-          extra: widget.args,
+        final r = await showIndicatorFormatSheet(
+          context,
+          pid: widget.pid,
+          initial: widget.initial,
         );
-        if (mounted)
+        if (mounted) {
           setState(() {
             result = r;
             done = true;
           });
+        }
       });
     }
     return Scaffold(
@@ -101,30 +103,20 @@ void main() {
   });
 
   Widget wrap(
-    IndicatorFormatArgs args, {
+    Obd2Pid pid, {
+    IndicatorDisplay? initial,
     List<Obd2Reading> readings = const [],
   }) {
-    final router = GoRouter(
-      initialLocation: '/',
-      routes: [
-        GoRoute(
-          path: '/',
-          builder: (context, state) => _Host(args: args),
-        ),
-        GoRoute(
-          path: '/format',
-          builder: (context, state) =>
-              IndicatorFormatScreen(args: state.extra! as IndicatorFormatArgs),
-        ),
-      ],
-    );
     return ProviderScope(
       overrides: [
         obd2RepositoryProvider.overrideWithValue(
           _FakeObd2Repository(readings: readings),
         ),
       ],
-      child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
+      child: MaterialApp(
+        theme: AppTheme.dark,
+        home: _Host(pid: pid, initial: initial),
+      ),
     );
   }
 
@@ -175,9 +167,7 @@ void main() {
     testWidgets('Número já abre com "Adicionar" — sem passo de escala', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
 
       expect(find.text('Exibir no painel'), findsOneWidget);
@@ -194,9 +184,7 @@ void main() {
     testWidgets('escolher "Número — linha inteira" e confirmar', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
 
       await tapVisible(tester, find.text('Número — linha inteira'));
@@ -216,9 +204,7 @@ void main() {
     testWidgets('estilo anel é o padrão; preview usa GaugeVariant.ring', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
       await selectGauge(tester);
 
@@ -230,9 +216,7 @@ void main() {
     testWidgets('escolher Arco 270° muda a variante do preview', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
       await selectGauge(tester);
 
@@ -245,9 +229,7 @@ void main() {
     testWidgets('escolher Ponteiro muda a variante do preview para arc180', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
       await selectGauge(tester);
 
@@ -259,9 +241,7 @@ void main() {
 
     testWidgets('toggle Maior reflete em IndicatorGaugeSize.large no '
         'resultado final', (tester) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
       await selectGauge(tester);
 
@@ -275,9 +255,7 @@ void main() {
 
     testWidgets('passo de escala do anel/arco não mostra os campos baixo/médio '
         '(só min/máx)', (tester) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
       await selectGauge(tester);
       await tapPrimary(tester); // -> passo de escala (ring)
@@ -290,9 +268,7 @@ void main() {
 
     testWidgets('passo de escala do ponteiro mostra baixo/médio, e o resultado '
         'final carrega os valores editados', (tester) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
       await selectGauge(tester);
       await tapVisible(tester, find.text('Ponteiro'));
@@ -318,9 +294,7 @@ void main() {
     testWidgets('passo de escala edita min/máx, sem campos de zona', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.coolantTemp)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.coolantTemp));
       await tester.pumpAndSettle();
 
       await tapVisible(tester, find.text('Número + barra'));
@@ -344,9 +318,7 @@ void main() {
       'passo de escala mostra só "Quantidade de pontos", clampada entre '
       '10 e 50',
       (tester) async {
-        await tester.pumpWidget(
-          wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-        );
+        await tester.pumpWidget(wrap(Obd2Pid.rpm));
         await tester.pumpAndSettle();
 
         await tapVisible(tester, find.text('Histórico — gráfico'));
@@ -371,9 +343,7 @@ void main() {
     );
 
     testWidgets('quantidade de pontos não passa do teto de 50', (tester) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
 
       await tapVisible(tester, find.text('Histórico — gráfico'));
@@ -396,31 +366,30 @@ void main() {
   });
 
   group('Edição (initial != null)', () {
-    testWidgets('mostra "Salvar" e "Remover do painel", pré-preenchido', (
-      tester,
-    ) async {
-      final initial = IndicatorDisplay.defaultFor(
-        Obd2Pid.rpm,
-      ).copyWith(format: IndicatorFormat.bar);
+    testWidgets(
+      '"Remover do painel" já aparece no passo 1, assim que abre para editar',
+      (tester) async {
+        final initial = IndicatorDisplay.defaultFor(
+          Obd2Pid.rpm,
+        ).copyWith(format: IndicatorFormat.bar);
 
-      await tester.pumpWidget(
-        wrap(IndicatorFormatArgs(pid: Obd2Pid.rpm, initial: initial)),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          wrap(Obd2Pid.rpm, initial: initial),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.text('Número + barra'), findsOneWidget);
-      // Já no último passo (bar tem passo de escala) -> ainda não, primeiro
-      // passo é a escolha de formato, que já mostra "Continuar" (bar tem
-      // passo de escala) — não "Salvar" ainda.
-      expect(find.text('Continuar'), findsOneWidget);
-    });
+        expect(find.text('Número + barra'), findsOneWidget);
+        // Bar tem passo de escala -> passo 1 ainda mostra "Continuar", não
+        // "Salvar" — mas o botão de remover já aparece, acima dele.
+        expect(find.text('Continuar'), findsOneWidget);
+        expect(find.text('Remover do painel'), findsOneWidget);
+      },
+    );
 
     testWidgets('"Remover do painel" retorna remove=true', (tester) async {
       final initial = IndicatorDisplay.defaultFor(Obd2Pid.rpm);
 
-      await tester.pumpWidget(
-        wrap(IndicatorFormatArgs(pid: Obd2Pid.rpm, initial: initial)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm, initial: initial));
       await tester.pumpAndSettle();
 
       // Número não tem passo de escala -> já é o último passo -> "Salvar" +
@@ -435,28 +404,26 @@ void main() {
     });
   });
 
-  group('Voltar', () {
-    testWidgets('back no passo 1 cancela (pop sem resultado)', (
+  group('Voltar / cancelar', () {
+    testWidgets('tocar fora do sheet no passo 1 cancela (sem resultado)', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+      // Passo 1 não tem seta de voltar (só se cancela arrastando/tocando
+      // fora) — toca na faixa superior do backdrop, fora do sheet.
+      expect(find.byIcon(Icons.arrow_back_ios_new), findsNothing);
+      await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
 
       expect(host(tester).result, isNull);
       expect(find.text('resultado: pronto'), findsOneWidget);
     });
 
-    testWidgets('back num passo >1 volta um passo, sem sair da tela', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        wrap(const IndicatorFormatArgs(pid: Obd2Pid.rpm)),
-      );
+    testWidgets('seta de voltar num passo >1 volta um passo, sem fechar o '
+        'sheet', (tester) async {
+      await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
 
       await tapVisible(tester, find.text('Gauge'));
@@ -466,13 +433,9 @@ void main() {
       await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
       await tester.pumpAndSettle();
 
-      // Voltou ao passo 1 (escolha de formato) da MESMA tela — não saiu da
-      // rota. `_Host` fica fora da árvore de widgets enquanto '/format'
-      // estiver no topo (a rota anterior não é mantida renderizada pelo
-      // Navigator), então a prova de "não fechou" é continuar vendo o
-      // conteúdo da tela de formato, não inspecionar o host.
       expect(find.text('Exibir no painel'), findsOneWidget);
       expect(find.text('Estilo do gauge'), findsNothing);
+      expect(find.text('resultado: pendente'), findsOneWidget);
     });
   });
 }

@@ -321,27 +321,21 @@ class StatCard extends StatelessWidget {
         ],
       );
     }
-    return Row(
+    // Rótulo sempre no topo (não ao lado) — cabe mesmo num card pequeno, e o
+    // instrumento em si não desenha mais valor/label dentro (ver
+    // `Gauge.showValue`), então não há duplicação de texto.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        gauge!,
-        const SizedBox(width: AppSpacing.s4),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _gaugeValue(),
-              const SizedBox(height: AppSpacing.s2),
-              Text(
-                label,
-                style: AppTypography.label.copyWith(
-                  color: AppColors.textTertiary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+        _label(),
+        const SizedBox(height: AppSpacing.s2),
+        Row(
+          children: [
+            gauge!,
+            const SizedBox(width: AppSpacing.s4),
+            Expanded(child: _gaugeValue()),
+          ],
         ),
       ],
     );
@@ -350,16 +344,18 @@ class StatCard extends StatelessWidget {
   /// Número + unidade para a variante `gauge`, onde o espaço horizontal é
   /// disputado com o instrumento. Um [Wrap] joga a unidade para a linha de
   /// baixo quando não cabe ao lado; o número trunca como último recurso (nunca
-  /// estoura). O alinhamento por baixo aproxima a baseline do par.
+  /// estoura). O alinhamento por baixo aproxima a baseline do par. Fonte
+  /// menor que os outros tratamentos — o gauge pequeno tem pouca largura
+  /// sobrando ao lado do instrumento.
   Widget _gaugeValue() {
-    if (loading) return _valueShimmer(width: 64);
+    if (loading) return _valueShimmer(width: 48);
     final number = Text(
       '${value ?? '—'}',
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: AppTypography.mono(
         const TextStyle(
-          fontSize: 30,
+          fontSize: 20,
           fontWeight: FontWeight.w700,
           height: 1,
           color: AppColors.textPrimary,
@@ -376,7 +372,7 @@ class StatCard extends StatelessWidget {
           unit!,
           style: AppTypography.mono(
             const TextStyle(
-              fontSize: 14,
+              fontSize: 11,
               fontWeight: FontWeight.w500,
               color: AppColors.textTertiary,
             ),
