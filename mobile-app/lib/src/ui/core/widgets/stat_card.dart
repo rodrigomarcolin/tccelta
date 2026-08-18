@@ -273,36 +273,43 @@ class StatCard extends StatelessWidget {
   }
 
   /// Número grande + sufixo de unidade, compartilhado por `value`/`progress`.
+  ///
+  /// `Wrap` (não `Row`) pelo mesmo motivo de [_gaugeValue]: um card de
+  /// largura apertada (grid de 2 colunas em telas estreitas) não tem espaço
+  /// garantido para o número + unidade lado a lado — o `Wrap` joga a unidade
+  /// para a linha de baixo quando não cabe, e o número trunca como último
+  /// recurso (nunca estoura).
   Widget _valueRow() {
     if (loading) return _valueShimmer(width: 76);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
+    final number = Text(
+      '${value ?? '—'}',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: AppTypography.mono(
+        const TextStyle(
+          fontSize: 30,
+          fontWeight: FontWeight.w700,
+          height: 1,
+          color: AppColors.textPrimary,
+        ),
+      ),
+    );
+    if (unit == null || unit!.isEmpty) return number;
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.end,
+      spacing: 4,
       children: [
+        number,
         Text(
-          '${value ?? '—'}',
+          unit!,
           style: AppTypography.mono(
             const TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w700,
-              height: 1,
-              color: AppColors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textTertiary,
             ),
           ),
         ),
-        if (unit != null && unit!.isNotEmpty) ...[
-          const SizedBox(width: 4),
-          Text(
-            unit!,
-            style: AppTypography.mono(
-              const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textTertiary,
-              ),
-            ),
-          ),
-        ],
       ],
     );
   }

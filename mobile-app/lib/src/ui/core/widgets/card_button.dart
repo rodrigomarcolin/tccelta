@@ -14,12 +14,15 @@ import 'package:tccelta_mobile/src/ui/core/widgets/app_card.dart';
 /// - [leading] troca o ícone bare por outro widget (ex.: `IconTile`).
 /// - [titleMono] mostra o título em mono (nome de dispositivo).
 /// - [subtitleColor]/[subtitleMono] ajustam a cor/fonte do subtítulo.
-/// - [showValue]/[showChevron] escondem a coluna de valor e/ou o chevron.
+/// - [showValue] esconde a coluna de valor.
+/// - [trailing] troca o chevron por outro widget à direita (ex.: um
+///   alternador de ação); ignora [showChevron] quando informado.
 /// - [selected] destaca a borda em ciano; [dimmed] esmaece a linha.
 class CardButton extends StatelessWidget {
   /// Cria uma linha de lista para [title]/[subtitle].
   ///
-  /// Informe ao menos um entre [icon] e [leading].
+  /// [icon]/[leading] são opcionais: sem nenhum dos dois, a linha não tem
+  /// elemento à esquerda (título/subtítulo encostam na margem).
   const CardButton({
     required this.title,
     required this.subtitle,
@@ -28,6 +31,7 @@ class CardButton extends StatelessWidget {
     this.unit,
     this.iconColor,
     this.leading,
+    this.trailing,
     this.titleMono = false,
     this.subtitleColor,
     this.subtitleMono = true,
@@ -37,10 +41,7 @@ class CardButton extends StatelessWidget {
     this.dimmed = false,
     this.onTap,
     super.key,
-  }) : assert(
-          icon != null || leading != null,
-          'Informe `icon` ou `leading`.',
-        );
+  });
 
   /// Ícone bare à esquerda. Ignorado quando [leading] é informado.
   final AppIconData? icon;
@@ -62,6 +63,10 @@ class CardButton extends StatelessWidget {
 
   /// Elemento à esquerda no lugar do [icon] bare (ex.: `IconTile`).
   final Widget? leading;
+
+  /// Elemento à direita no lugar do chevron (ex.: um alternador de ação).
+  /// Quando informado, ignora [showChevron].
+  final Widget? trailing;
 
   /// Renderiza o título em mono (nome de dispositivo). @default false
   final bool titleMono;
@@ -89,6 +94,10 @@ class CardButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final leadingWidget = leading ??
+        (icon != null
+            ? AppIcon(icon!, size: 18, color: iconColor ?? AppColors.neutral600)
+            : null);
     final card = AppCard(
       color: selected ? AppColors.surfaceCard : AppColors.surfaceList,
       borderRadius: AppRadii.brMd,
@@ -101,19 +110,19 @@ class CardButton extends StatelessWidget {
       onTap: onTap,
       child: Row(
         children: [
-          leading ??
-              AppIcon(
-                icon!,
-                size: 18,
-                color: iconColor ?? AppColors.neutral600,
-              ),
-          const SizedBox(width: AppSpacing.s4),
+          if (leadingWidget != null) ...[
+            leadingWidget,
+            const SizedBox(width: AppSpacing.s4),
+          ],
           Expanded(child: _titleAndSubtitle()),
           if (showValue) ...[
             const SizedBox(width: AppSpacing.s3),
             _value(),
           ],
-          if (showChevron) ...[
+          if (trailing != null) ...[
+            const SizedBox(width: AppSpacing.s2),
+            trailing!,
+          ] else if (showChevron) ...[
             const SizedBox(width: AppSpacing.s2),
             const AppIcon(
               AppIconData.chevron,

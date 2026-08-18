@@ -14,6 +14,7 @@ import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 
 /// Repository de permissões fake para os testes de widget: controla se a
 /// permissão já foi concedida sem tocar no plugin real.
@@ -102,41 +103,74 @@ void main() {
     expect(find.text('Permitir Bluetooth'), findsOneWidget);
   });
 
-  testWidgets('painel mostra os valores de exemplo dos PIDs', (tester) async {
+  testWidgets('painel começa vazio e mostra os valores dos indicadores '
+      'adicionados', (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
+      ],
+    );
+
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
-        ],
+      UncontrolledProviderScope(
+        container: container,
         child: MaterialApp(theme: AppTheme.dark, home: const PainelScreen()),
       ),
     );
-    // Deixa o primeiro ciclo de leitura resolver e popular o estado.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    // "Painel" aparece no título e na tab bar — basta existir.
-    expect(find.text('Painel'), findsWidgets);
+    // Painel começa vazio — nenhum PID some sozinho no painel.
+    expect(find.text('Painel vazio'), findsOneWidget);
+    expect(find.text('1500'), findsNothing);
+
+    // O usuário adiciona indicadores (fora do escopo desta tela é o sheet de
+    // sensores — aqui exercitamos o view model diretamente).
+    container.read(panelViewModelProvider.notifier)
+      ..addIndicator(Obd2Pid.rpm)
+      ..addIndicator(Obd2Pid.speed)
+      ..addIndicator(Obd2Pid.coolantTemp);
+    await tester.pump();
+
     expect(find.text('1500'), findsOneWidget); // RPM
     expect(find.text('60'), findsOneWidget); // velocidade
     expect(find.text('90'), findsOneWidget); // temp. do líquido
+
+    // Descarta a árvore antes do container: o polling do
+    // `telemetryViewModelProvider` (`autoDispose`) só cancela o timer quando
+    // o container é encerrado, e o binding de teste reclama de timers
+    // pendentes se isso acontecer depois do fim do teste.
+    await tester.pumpWidget(const SizedBox());
+    container.dispose();
   });
 
-  testWidgets('painel mostra skeletons antes da primeira leitura',
+  testWidgets(
+      'indicador adicionado sem leitura ainda mostra — (sem travar a tela)',
       (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        obd2RepositoryProvider.overrideWithValue(_HangingObd2Repository()),
+      ],
+    );
+
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          obd2RepositoryProvider.overrideWithValue(_HangingObd2Repository()),
-        ],
+      UncontrolledProviderScope(
+        container: container,
         child: MaterialApp(theme: AppTheme.dark, home: const PainelScreen()),
       ),
     );
     await tester.pump();
 
-    // Descoberta/leitura ainda pendentes => barras de shimmer, sem valores.
-    expect(find.byType(Shimmer), findsWidgets);
+    container.read(panelViewModelProvider.notifier).addIndicator(Obd2Pid.rpm);
+    await tester.pump();
+
+    // Descoberta/leitura nunca resolve => sem valor ainda, mas o card
+    // aparece (rótulo do PID) sem travar em skeleton.
+    expect(find.text('ROTAÇÃO DO MOTOR'), findsOneWidget);
     expect(find.text('1500'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    container.dispose();
   });
 
   testWidgets('design system atoms build without error', (tester) async {
@@ -228,6 +262,28 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
     // Overflow vira um FlutterError pego pelo binding; takeException() o expõe.
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('StatCard.value não estoura em largura apertada (2 colunas '
+      'num telefone estreito)', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 141, // largura real de uma célula em grid 2 colunas
+              child: StatCard.value(
+                label: 'Rotação do motor',
+                value: 1500,
+                unit: 'RPM',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
   });
 }
