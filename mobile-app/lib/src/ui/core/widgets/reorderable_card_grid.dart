@@ -74,24 +74,61 @@ class ReorderableCardGrid<T extends Object> extends StatelessWidget {
       builder: (context, constraints) {
         final singleWidth =
             (constraints.maxWidth - gap * (columns - 1)) / columns;
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
+        final rows = _rowsOf();
+        return Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            for (var i = 0; i < items.length; i++)
-              _buildCell(context, constraints, singleWidth, i),
+            for (var r = 0; r < rows.length; r++) ...[
+              if (r > 0) SizedBox(height: gap),
+              // `IntrinsicHeight` mede a maior altura entre os cards da
+              // linha e a repassa como constraint tight — só assim o `Row`
+              // consegue esticar (`stretch`) os mais curtos até igualá-la,
+              // mesmo numa lista de altura ilimitada (o `ListView` que
+              // envolve o Painel). Sem isso, cada card ficaria só com a
+              // própria altura mínima/intrínseca, deixando vão vazio nos
+              // mais curtos da linha.
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var c = 0; c < rows[r].length; c++) ...[
+                      if (c > 0) SizedBox(width: gap),
+                      _buildCell(context, singleWidth, rows[r][c]),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ],
         );
       },
     );
   }
 
-  Widget _buildCell(
-    BuildContext context,
-    BoxConstraints constraints,
-    double singleWidth,
-    int i,
-  ) {
+  /// Agrupa os índices de [items] em linhas, respeitando [spanOf]: uma linha
+  /// acumula itens até [columns]; um item cujo span já preenche a linha (ex.:
+  /// linha inteira) fica sozinho na sua própria linha. Mesma regra de quebra
+  /// que o antigo `Wrap` produzia, só que explícita — para que cada linha
+  /// possa ser um `Row` cujos cards esticam (`stretch`) para a mesma altura.
+  List<List<int>> _rowsOf() {
+    final rows = <List<int>>[];
+    var current = <int>[];
+    var used = 0;
+    for (var i = 0; i < items.length; i++) {
+      final span = (spanOf?.call(items[i]) ?? 1).clamp(1, columns);
+      if (used + span > columns && current.isNotEmpty) {
+        rows.add(current);
+        current = [];
+        used = 0;
+      }
+      current.add(i);
+      used += span;
+    }
+    if (current.isNotEmpty) rows.add(current);
+    return rows;
+  }
+
+  Widget _buildCell(BuildContext context, double singleWidth, int i) {
     final item = items[i];
     final span = (spanOf?.call(item) ?? 1).clamp(1, columns);
     final cellWidth = span * singleWidth + (span - 1) * gap;

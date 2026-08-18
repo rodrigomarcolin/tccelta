@@ -226,7 +226,12 @@ class _IndicatorCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // `StackFit.expand` força o card a preencher toda a altura que o grid
+    // reservou para ele (igualada entre os cards da mesma linha por
+    // `ReorderableCardGrid`) — sem isso, o card ficaria só com a própria
+    // altura de conteúdo, deixando vão vazio dentro da célula do grid.
     return Stack(
+      fit: StackFit.expand,
       children: [
         _card(),
         const Positioned(
@@ -296,8 +301,9 @@ class _IndicatorCell extends StatelessWidget {
       label: pid.label,
       unit: pid.unit,
       variant: gaugeVariantFor(display.gaugeStyle),
-      warningThreshold: display.lowMax / display.max,
-      alertThreshold: display.highMin / display.max,
+      warningThreshold: display.lowFraction,
+      alertThreshold: display.highFraction,
+      invertZones: pid.higherIsBetter,
       size: large ? 172 : 54,
       // No card pequeno, tipo (label) e número já aparecem ao lado do
       // instrumento (StatCard) — o gauge desenha só o arco, sem duplicar.

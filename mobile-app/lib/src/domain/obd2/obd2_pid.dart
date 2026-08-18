@@ -25,6 +25,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 60,
     defaultHighMin: 85,
+    higherIsBetter: false,
   ),
 
   /// Temperatura do líquido de arrefecimento (°C). Fórmula: A − 40.
@@ -36,6 +37,7 @@ enum Obd2Pid {
     defaultMax: 130,
     defaultLowMax: 95,
     defaultHighMin: 110,
+    higherIsBetter: false,
   ),
 
   /// Ajuste de combustível de curto prazo, banco 1 (%). Oscila em torno de 0;
@@ -49,6 +51,7 @@ enum Obd2Pid {
     defaultMax: 25,
     defaultLowMax: 10,
     defaultHighMin: 15,
+    higherIsBetter: false,
   ),
 
   /// Ajuste de combustível de longo prazo, banco 1 (%). Fórmula:
@@ -61,6 +64,7 @@ enum Obd2Pid {
     defaultMax: 25,
     defaultLowMax: 10,
     defaultHighMin: 15,
+    higherIsBetter: false,
   ),
 
   /// Pressão da linha de combustível (kPa, gauge). Fórmula: 3·A.
@@ -72,6 +76,7 @@ enum Obd2Pid {
     defaultMax: 500,
     defaultLowMax: 350,
     defaultHighMin: 450,
+    higherIsBetter: false,
   ),
 
   /// Pressão absoluta do coletor de admissão (kPa). Fórmula: A.
@@ -83,6 +88,7 @@ enum Obd2Pid {
     defaultMax: 200,
     defaultLowMax: 100,
     defaultHighMin: 150,
+    higherIsBetter: false,
   ),
 
   /// Rotação do motor (RPM). Fórmula: ((A×256) + B) / 4.
@@ -94,6 +100,7 @@ enum Obd2Pid {
     defaultMax: 8000,
     defaultLowMax: 5000,
     defaultHighMin: 6500,
+    higherIsBetter: false,
   ),
 
   /// Velocidade do veículo (km/h). Fórmula: A.
@@ -105,6 +112,7 @@ enum Obd2Pid {
     defaultMax: 220,
     defaultLowMax: 120,
     defaultHighMin: 180,
+    higherIsBetter: false,
   ),
 
   /// Avanço de ignição (° antes do PMS). Fórmula: A/2 − 64.
@@ -116,6 +124,7 @@ enum Obd2Pid {
     defaultMax: 60,
     defaultLowMax: 20,
     defaultHighMin: 40,
+    higherIsBetter: false,
   ),
 
   /// Temperatura do ar de admissão (°C). Fórmula: A − 40.
@@ -127,6 +136,7 @@ enum Obd2Pid {
     defaultMax: 80,
     defaultLowMax: 45,
     defaultHighMin: 60,
+    higherIsBetter: false,
   ),
 
   /// Fluxo de massa de ar — MAF (g/s). Fórmula: (256·A + B) / 100.
@@ -138,6 +148,7 @@ enum Obd2Pid {
     defaultMax: 60,
     defaultLowMax: 35,
     defaultHighMin: 50,
+    higherIsBetter: false,
   ),
 
   /// Posição do acelerador (%). Fórmula: A / 2.55.
@@ -149,6 +160,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 40,
     defaultHighMin: 75,
+    higherIsBetter: false,
   ),
 
   /// Sonda lambda 1, banco 1 (tensão, V). O PID também carrega o ajuste de
@@ -162,6 +174,7 @@ enum Obd2Pid {
     defaultMax: 1,
     defaultLowMax: 0.6,
     defaultHighMin: 0.8,
+    higherIsBetter: false,
   ),
 
   /// Sonda lambda 2, banco 1, pós-catalisador (tensão, V). Fórmula: A / 200.
@@ -173,6 +186,7 @@ enum Obd2Pid {
     defaultMax: 1,
     defaultLowMax: 0.6,
     defaultHighMin: 0.8,
+    higherIsBetter: false,
   ),
 
   /// Tempo de funcionamento do motor desde a partida (s). Fórmula:
@@ -185,6 +199,7 @@ enum Obd2Pid {
     defaultMax: 3600,
     defaultLowMax: 1800,
     defaultHighMin: 3000,
+    higherIsBetter: false,
   ),
 
   /// Distância percorrida com a luz de falha (MIL) acesa (km). Fórmula:
@@ -197,6 +212,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 20,
     defaultHighMin: 50,
+    higherIsBetter: false,
   ),
 
   /// EGR comandada (%). Fórmula: 100·A/255.
@@ -208,6 +224,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 40,
     defaultHighMin: 70,
+    higherIsBetter: false,
   ),
 
   /// Erro de EGR (%) — oscila em torno de 0. Fórmula: 100·A/128 − 100.
@@ -219,6 +236,7 @@ enum Obd2Pid {
     defaultMax: 25,
     defaultLowMax: 10,
     defaultHighMin: 15,
+    higherIsBetter: false,
   ),
 
   /// Purga evaporativa comandada (%). Fórmula: 100·A/255.
@@ -230,6 +248,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 50,
     defaultHighMin: 80,
+    higherIsBetter: false,
   ),
 
   /// Nível do tanque de combustível (%). Fórmula: 100·A/255.
@@ -241,6 +260,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 20,
     defaultHighMin: 40,
+    higherIsBetter: true,
   ),
 
   /// Ciclos de aquecimento (warm-ups) desde o reset dos códigos — contagem
@@ -253,6 +273,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 20,
     defaultHighMin: 50,
+    higherIsBetter: false,
   ),
 
   /// Distância percorrida desde o reset dos códigos (km). Fórmula:
@@ -265,6 +286,7 @@ enum Obd2Pid {
     defaultMax: 2000,
     defaultLowMax: 500,
     defaultHighMin: 1000,
+    higherIsBetter: false,
   ),
 
   /// Pressão de vapor do sistema evaporativo (Pa). Fórmula: (256·A + B) / 4.
@@ -276,6 +298,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 40,
     defaultHighMin: 70,
+    higherIsBetter: false,
   ),
 
   /// Pressão barométrica absoluta (kPa). Fórmula: A.
@@ -287,6 +310,7 @@ enum Obd2Pid {
     defaultMax: 110,
     defaultLowMax: 95,
     defaultHighMin: 105,
+    higherIsBetter: false,
   ),
 
   /// Temperatura do catalisador, banco 1 sensor 1 (°C). Fórmula:
@@ -299,6 +323,7 @@ enum Obd2Pid {
     defaultMax: 900,
     defaultLowMax: 500,
     defaultHighMin: 700,
+    higherIsBetter: false,
   ),
 
   /// Tensão do módulo de controle (bateria/alternador, V). Fórmula:
@@ -311,6 +336,7 @@ enum Obd2Pid {
     defaultMax: 16,
     defaultLowMax: 12.5,
     defaultHighMin: 14.5,
+    higherIsBetter: true,
   ),
 
   /// Carga absoluta do motor (%) — pode passar de 100% sob boost. Fórmula:
@@ -323,6 +349,7 @@ enum Obd2Pid {
     defaultMax: 150,
     defaultLowMax: 70,
     defaultHighMin: 110,
+    higherIsBetter: false,
   ),
 
   /// Razão ar-combustível equivalente comandada (λ) — 1.0 = estequiométrica.
@@ -335,6 +362,7 @@ enum Obd2Pid {
     defaultMax: 2,
     defaultLowMax: 0.9,
     defaultHighMin: 1.1,
+    higherIsBetter: false,
   ),
 
   /// Posição relativa do acelerador (%). Fórmula: 100·A/255.
@@ -346,6 +374,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 40,
     defaultHighMin: 75,
+    higherIsBetter: false,
   ),
 
   /// Temperatura do ar ambiente (°C). Fórmula: A − 40.
@@ -357,6 +386,7 @@ enum Obd2Pid {
     defaultMax: 50,
     defaultLowMax: 35,
     defaultHighMin: 42,
+    higherIsBetter: false,
   ),
 
   /// Posição da borboleta B (%). Fórmula: 100·A/255.
@@ -368,6 +398,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 40,
     defaultHighMin: 75,
+    higherIsBetter: false,
   ),
 
   /// Posição do pedal do acelerador, sensor D (%). Fórmula: 100·A/255.
@@ -379,6 +410,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 40,
     defaultHighMin: 75,
+    higherIsBetter: false,
   ),
 
   /// Atuador de borboleta comandado (%). Fórmula: 100·A/255.
@@ -390,6 +422,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 40,
     defaultHighMin: 75,
+    higherIsBetter: false,
   ),
 
   /// Tempo total com a luz de falha (MIL) acesa (min). Fórmula: 256·A + B.
@@ -401,6 +434,7 @@ enum Obd2Pid {
     defaultMax: 600,
     defaultLowMax: 100,
     defaultHighMin: 300,
+    higherIsBetter: false,
   ),
 
   /// Tempo desde o reset dos códigos de falha (min). Fórmula: 256·A + B.
@@ -412,6 +446,7 @@ enum Obd2Pid {
     defaultMax: 2000,
     defaultLowMax: 500,
     defaultHighMin: 1000,
+    higherIsBetter: false,
   ),
 
   /// Percentual de etanol no combustível (%). Fórmula: 100·A/255.
@@ -423,6 +458,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 30,
     defaultHighMin: 75,
+    higherIsBetter: false,
   ),
 
   /// Posição relativa do pedal do acelerador (%). Fórmula: 100·A/255.
@@ -434,6 +470,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 40,
     defaultHighMin: 75,
+    higherIsBetter: false,
   ),
 
   /// Temperatura do óleo do motor (°C). Fórmula: A − 40.
@@ -445,6 +482,7 @@ enum Obd2Pid {
     defaultMax: 150,
     defaultLowMax: 110,
     defaultHighMin: 130,
+    higherIsBetter: false,
   ),
 
   /// Temporização de injeção de combustível (°) — oscila em torno de 0.
@@ -457,6 +495,7 @@ enum Obd2Pid {
     defaultMax: 50,
     defaultLowMax: 20,
     defaultHighMin: 35,
+    higherIsBetter: false,
   ),
 
   /// Taxa de consumo de combustível (L/h). Fórmula: (256·A + B)/20.
@@ -468,6 +507,7 @@ enum Obd2Pid {
     defaultMax: 40,
     defaultLowMax: 20,
     defaultHighMin: 30,
+    higherIsBetter: false,
   ),
 
   /// Torque demandado pelo motorista, % do torque máximo do motor. Fórmula:
@@ -480,6 +520,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 50,
     defaultHighMin: 80,
+    higherIsBetter: false,
   ),
 
   /// Torque real do motor, % do torque máximo. Fórmula: A − 125.
@@ -491,6 +532,7 @@ enum Obd2Pid {
     defaultMax: 100,
     defaultLowMax: 50,
     defaultHighMin: 80,
+    higherIsBetter: false,
   ),
 
   /// Torque de referência do motor (N·m). Fórmula: 256·A + B.
@@ -502,6 +544,7 @@ enum Obd2Pid {
     defaultMax: 600,
     defaultLowMax: 400,
     defaultHighMin: 500,
+    higherIsBetter: false,
   );
 
   const Obd2Pid({
@@ -512,6 +555,7 @@ enum Obd2Pid {
     required this.defaultMax,
     required this.defaultLowMax,
     required this.defaultHighMin,
+    required this.higherIsBetter,
   });
 
   /// Serviço/modo OBD-II. Todos os PIDs do painel são do Serviço 0x01
@@ -535,13 +579,22 @@ enum Obd2Pid {
   /// Fundo de escala máximo padrão para gauge/barra deste PID.
   final double defaultMax;
 
-  /// Limite superior padrão da zona "baixo" (ciano) do gauge ponteiro deste
-  /// PID, em valor absoluto (não fração).
+  /// Limite superior padrão da zona "baixo" da escala deste PID, em valor
+  /// absoluto (não fração).
   final double defaultLowMax;
 
-  /// Limite inferior padrão da zona "alto" (vermelho) do gauge ponteiro deste
-  /// PID — entre [defaultLowMax] e este valor é a zona "médio" (âmbar).
+  /// Limite inferior padrão da zona "alto" da escala deste PID — entre
+  /// [defaultLowMax] e este valor é a zona "médio".
   final double defaultHighMin;
+
+  /// Informação de domínio (curada, não customizável pelo usuário): `true`
+  /// quando um valor **alto** deste PID é fisicamente desejável (ex.: nível
+  /// de combustível cheio, bateria bem carregada); `false` quando um valor
+  /// alto é que pede atenção (a maioria — RPM, temperaturas, cargas etc.).
+  /// Define a ordem das cores das zonas do gauge: com `false`, baixo é ciano
+  /// (bom) e alto é vermelho (atenção); com `true`, essa ordem se inverte.
+  /// @see [Gauge.invertZones]
+  final bool higherIsBetter;
 
   /// Comando de texto ELM327 para requisitar este PID, ex.: `010C`.
   ///

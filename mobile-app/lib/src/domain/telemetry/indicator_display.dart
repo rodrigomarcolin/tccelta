@@ -140,6 +140,16 @@ class IndicatorDisplay {
   /// [HistoryPointsRange.max].
   final int historyPoints;
 
+  /// [lowMax] como fração 0..1 da escala ([min]..[max]) — o
+  /// `warningThreshold` que o gauge espera. Zero quando a escala é
+  /// degenerada (`max <= min`).
+  double get lowFraction => max > min ? (lowMax - min) / (max - min) : 0;
+
+  /// [highMin] como fração 0..1 da escala ([min]..[max]) — o
+  /// `alertThreshold` que o gauge espera. Zero quando a escala é
+  /// degenerada (`max <= min`).
+  double get highFraction => max > min ? (highMin - min) / (max - min) : 0;
+
   /// Cópia com os campos sobrescritos.
   IndicatorDisplay copyWith({
     IndicatorFormat? format,

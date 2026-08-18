@@ -427,8 +427,9 @@ class _GaugeStyleStep extends StatelessWidget {
             label: pid.label,
             unit: pid.unit,
             variant: gaugeVariantFor(display.gaugeStyle),
-            warningThreshold: display.lowMax / display.max,
-            alertThreshold: display.highMin / display.max,
+            warningThreshold: display.lowFraction,
+            alertThreshold: display.highFraction,
+            invertZones: pid.higherIsBetter,
             size: 150,
           ),
         ),
@@ -533,8 +534,7 @@ class _ScaleStep extends StatelessWidget {
           step: _step,
           onChanged: _setMax,
         ),
-        if (display.format == IndicatorFormat.gauge &&
-            display.gaugeStyle == IndicatorGaugeStyle.needle) ...[
+        if (display.format == IndicatorFormat.gauge) ...[
           const SizedBox(height: AppSpacing.s3),
           NumberStepper(
             label: 'Baixo até',
@@ -585,8 +585,9 @@ class _ScaleStep extends StatelessWidget {
         label: pid.label,
         unit: pid.unit,
         variant: gaugeVariantFor(display.gaugeStyle),
-        warningThreshold: display.lowMax / display.max,
-        alertThreshold: display.highMin / display.max,
+        warningThreshold: display.lowFraction,
+        alertThreshold: display.highFraction,
+        invertZones: pid.higherIsBetter,
         size: 150,
       ),
     );

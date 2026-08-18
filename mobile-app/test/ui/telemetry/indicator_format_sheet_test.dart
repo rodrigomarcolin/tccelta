@@ -253,8 +253,8 @@ void main() {
       expect(result!.display!.gaugeSize, IndicatorGaugeSize.large);
     });
 
-    testWidgets('passo de escala do anel/arco não mostra os campos baixo/médio '
-        '(só min/máx)', (tester) async {
+    testWidgets('passo de escala do anel também mostra baixo/médio — '
+        'configurável em todos os estilos de gauge', (tester) async {
       await tester.pumpWidget(wrap(Obd2Pid.rpm));
       await tester.pumpAndSettle();
       await selectGauge(tester);
@@ -262,8 +262,8 @@ void main() {
 
       expect(find.text('Valor mínimo'), findsOneWidget);
       expect(find.text('Valor máximo'), findsOneWidget);
-      expect(find.text('Baixo até'), findsNothing);
-      expect(find.text('Médio até'), findsNothing);
+      expect(find.text('Baixo até'), findsOneWidget);
+      expect(find.text('Médio até'), findsOneWidget);
     });
 
     testWidgets('passo de escala do ponteiro mostra baixo/médio, e o resultado '

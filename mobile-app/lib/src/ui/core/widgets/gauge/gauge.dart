@@ -39,6 +39,7 @@ class Gauge extends StatelessWidget {
     this.colorByZone = true,
     this.warningThreshold = defaultWarningThreshold,
     this.alertThreshold = defaultAlertThreshold,
+    this.invertZones = false,
     this.display,
     this.showValue = true,
     super.key,
@@ -91,6 +92,12 @@ class Gauge extends StatelessWidget {
   /// (0..1). @default [defaultAlertThreshold]
   final double alertThreshold;
 
+  /// Inverte a semântica das zonas: com `true`, valor **alto** é a zona boa
+  /// (ciano/verde) e valor **baixo** é a zona de atenção (vermelho) — para
+  /// PIDs em que um valor alto é desejável (ex.: nível de combustível,
+  /// tensão da bateria). @see [Obd2Pid.higherIsBetter]. @default false
+  final bool invertZones;
+
   /// Sobrescreve o número central (ex.: string pré-formatada).
   final Object? display;
 
@@ -100,11 +107,20 @@ class Gauge extends StatelessWidget {
   final bool showValue;
 
   /// Cor do traço de progresso conforme o valor cruza os thresholds: ciano
-  /// (normal) → âmbar (aviso) → vermelho (alerta).
-  static Color zoneColor(double pct, double warnAt, double alertAt) {
-    if (pct >= alertAt) return AppColors.red500;
-    if (pct >= warnAt) return AppColors.amber500;
-    return AppColors.cyan500;
+  /// (normal) → âmbar (aviso) → vermelho (alerta). Com [invert] `true`, a
+  /// ordem se inverte — zona alta vira ciano (boa) e zona baixa vira
+  /// vermelho (atenção). @see [invertZones]
+  static Color zoneColor(
+    double pct,
+    double warnAt,
+    double alertAt, {
+    bool invert = false,
+  }) {
+    final lowZone = pct < warnAt;
+    final highZone = pct >= alertAt;
+    if (!lowZone && !highZone) return AppColors.amber500;
+    final isGoodZone = invert ? highZone : lowZone;
+    return isGoodZone ? AppColors.cyan500 : AppColors.red500;
   }
 
   /// Milhar no padrão pt-BR ("3.240").
@@ -139,7 +155,12 @@ class Gauge extends StatelessWidget {
         curve: AppMotion.easeValue,
         builder: (context, pct, _) {
           final color = colorByZone
-              ? zoneColor(pct, warningThreshold, alertThreshold)
+              ? zoneColor(
+                  pct,
+                  warningThreshold,
+                  alertThreshold,
+                  invert: invertZones,
+                )
               : AppColors.cyan500;
           return Stack(
             alignment: Alignment.center,
@@ -153,6 +174,7 @@ class Gauge extends StatelessWidget {
                   weight: weight,
                   warningThreshold: warningThreshold,
                   alertThreshold: alertThreshold,
+                  invertZones: invertZones,
                 ),
               ),
               if (showValue)
