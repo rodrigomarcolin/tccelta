@@ -10,6 +10,8 @@ import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/widgets/indicator_format_sheet.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/widgets/panel_manager_sheet.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/widgets/panel_tabs_row.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/widgets/telemetry_status_band.dart';
 
 /// Painel de telemetria OBD-II — a tela `/painel`.
@@ -24,8 +26,11 @@ import 'package:tccelta_mobile/src/ui/telemetry/widgets/telemetry_status_band.da
 /// [IndicatorFormatSheet] para escolher o formato; tocar num card já presente
 /// reabre esse mesmo sheet para editar, direto (sem tela de detalhe/gráfico
 /// no meio). Os cards podem ser reordenados por arrastar
-/// ([ReorderableCardGrid]). O `ConnectionGuard` global protege a rota; se o
-/// link cair, ele redireciona para "Conexão perdida".
+/// ([ReorderableCardGrid]). O usuário pode manter vários painéis — a linha de
+/// abas (`PanelTabsRow`) troca/cria, e o botão "⋯" abre o gerenciador
+/// (`showPanelManagerSheet`) para renomear/duplicar/excluir. O
+/// `ConnectionGuard` global protege a rota; se o link cair, ele redireciona
+/// para "Conexão perdida".
 class PainelScreen extends ConsumerWidget {
   /// Cria o painel.
   const PainelScreen({super.key});
@@ -52,13 +57,39 @@ class PainelScreen extends ConsumerWidget {
                   AppSpacing.s9,
                 ),
                 children: [
-                  Text('Painel', style: AppTypography.heading),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          panel.active.name,
+                          style: AppTypography.heading,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.s3),
+                      _PanelManagerButton(
+                        key: const Key('panel_manager_button'),
+                        onTap: () => showPanelManagerSheet(context),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: AppSpacing.s2),
                   Text(
                     'Leituras OBD-II em tempo real',
                     style: AppTypography.body.copyWith(
                       color: AppColors.textTertiary,
                     ),
+                  ),
+                  const SizedBox(height: AppSpacing.s4),
+                  PanelTabsRow(
+                    panels: panel.panels,
+                    activeId: panel.activeId,
+                    onSelect: ref
+                        .read(panelViewModelProvider.notifier)
+                        .switchPanel,
+                    onCreate: ref
+                        .read(panelViewModelProvider.notifier)
+                        .createPanel,
                   ),
                   const SizedBox(height: AppSpacing.s7),
                   if (indicators.isEmpty)
@@ -136,6 +167,36 @@ class _EmptyPanel extends StatelessWidget {
           const SizedBox(height: AppSpacing.s7),
           _AddIndicatorButton(onTap: onAdd, fullWidth: false),
         ],
+      ),
+    );
+  }
+}
+
+/// Botão "⋯" ao lado do nome do painel ativo — abre o sheet "Meus painéis".
+class _PanelManagerButton extends StatelessWidget {
+  const _PanelManagerButton({required this.onTap, super.key});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 34,
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceCard,
+          borderRadius: AppRadii.brSm,
+          border: Border.all(color: AppColors.borderStrong),
+        ),
+        child: const Icon(
+          Icons.more_horiz,
+          size: 18,
+          color: AppColors.textTertiary,
+        ),
       ),
     );
   }

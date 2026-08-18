@@ -11,6 +11,7 @@ import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/widgets/panel_manager_sheet.dart';
 
 import '../../support/fake_ble_service.dart';
 
@@ -390,5 +391,136 @@ void main() {
     expect(cardRect.height, greaterThanOrEqualTo(86));
     expect(cardRect.contains(handleRect.topLeft), isTrue);
     expect(cardRect.contains(handleRect.bottomRight), isTrue);
+  });
+
+  group('gerenciamento de painéis', () {
+    Finder createPanelTab() => find.byKey(const ValueKey('panel_tabs_create'));
+    // O botão "⋯" do cabeçalho (fora do sheet) usa o mesmo ícone — restringe
+    // a busca ao sheet para não colidir com ele.
+    Finder editButton() => find.descendant(
+      of: find.byType(PanelManagerSheet),
+      matching: find.byIcon(Icons.more_horiz),
+    );
+
+    Future<void> openManager(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('panel_manager_button')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'tocar "+" na linha de abas cria um painel novo, vazio, e ativo',
+      (tester) async {
+        await tester.pumpWidget(app());
+        await tester.pump(const Duration(milliseconds: 10));
+
+        expect(find.text('Painel 1'), findsNWidgets(2)); // cabeçalho + aba
+
+        await tester.tap(createPanelTab());
+        await tester.pumpAndSettle();
+
+        expect(find.text('Painel 2'), findsNWidgets(2));
+        expect(find.text('Painel vazio'), findsOneWidget);
+      },
+    );
+
+    testWidgets('trocar de painel pela aba preserva os indicadores de cada '
+        'um', (tester) async {
+      await tester.pumpWidget(
+        app(readings: const [Obd2Reading(pid: Obd2Pid.rpm, value: 1500)]),
+      );
+      await tester.pump(const Duration(milliseconds: 10));
+      await addWithDefaultFormat(tester, '010C', Obd2Pid.rpm);
+
+      await tester.tap(createPanelTab());
+      await tester.pumpAndSettle();
+      expect(find.text('Painel vazio'), findsOneWidget);
+
+      // "Painel 1" só aparece na aba agora (o cabeçalho mostra "Painel 2").
+      await tester.tap(find.text('Painel 1'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ROTAÇÃO DO MOTOR'), findsOneWidget);
+      expect(find.text('Painel vazio'), findsNothing);
+    });
+
+    testWidgets('renomear o painel ativo pelo gerenciador', (tester) async {
+      await tester.pumpWidget(app());
+      await tester.pump(const Duration(milliseconds: 10));
+
+      await openManager(tester);
+      expect(find.text('Meus painéis'), findsOneWidget);
+      expect(find.text('Excluir painel'), findsNothing); // único painel
+
+      await tester.tap(editButton().first);
+      await tester.pumpAndSettle();
+      expect(find.text('Editar painel'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'Pista');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Concluir')); // volta pra lista
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Concluir')); // fecha o sheet
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pista'), findsNWidgets(2));
+    });
+
+    testWidgets(
+      'duplicar um painel copia os indicadores e vira o ativo',
+      (tester) async {
+        await tester.pumpWidget(
+          app(readings: const [Obd2Reading(pid: Obd2Pid.rpm, value: 1500)]),
+        );
+        await tester.pump(const Duration(milliseconds: 10));
+        await addWithDefaultFormat(tester, '010C', Obd2Pid.rpm);
+
+        await openManager(tester);
+        await tester.tap(editButton().first);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Duplicar painel'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Meus painéis'), findsOneWidget); // voltou pra lista
+        // Aparece no cabeçalho, na aba e na linha da lista — todos ao mesmo
+        // tempo (o cabeçalho/aba ficam só visualmente cobertos pelo sheet).
+        expect(find.text('Painel 1 (cópia)'), findsWidgets);
+
+        await tester.tap(find.text('Concluir'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Painel 1 (cópia)'), findsWidgets);
+        expect(find.text('ROTAÇÃO DO MOTOR'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'excluir só é oferecido com mais de um painel, e exige confirmação',
+      (tester) async {
+        await tester.pumpWidget(app());
+        await tester.pump(const Duration(milliseconds: 10));
+
+        await tester.tap(createPanelTab());
+        await tester.pumpAndSettle();
+        await openManager(tester);
+
+        await tester.tap(editButton().first);
+        await tester.pumpAndSettle();
+        expect(find.text('Excluir painel'), findsOneWidget);
+
+        await tester.tap(find.text('Excluir painel'));
+        await tester.pumpAndSettle();
+        expect(find.text('Excluir painel?'), findsOneWidget);
+
+        await tester.tap(find.text('Excluir'));
+        await tester.pumpAndSettle();
+
+        // O editado (primeira linha da lista) era o painel original — some;
+        // o painel criado depois vira o único restante.
+        expect(find.text('Meus painéis'), findsOneWidget);
+        expect(find.text('Painel 1'), findsNothing);
+        expect(find.text('Painel 2'), findsWidgets);
+      },
+    );
   });
 }

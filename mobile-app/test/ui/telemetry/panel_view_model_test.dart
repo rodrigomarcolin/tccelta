@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
+import 'package:tccelta_mobile/src/domain/telemetry/panel.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 
 void main() {
@@ -13,7 +14,7 @@ void main() {
   });
 
   PanelViewModel notifier() => container.read(panelViewModelProvider.notifier);
-  PanelState state() => container.read(panelViewModelProvider);
+  PanelsState state() => container.read(panelViewModelProvider);
   IndicatorDisplay display(Obd2Pid pid) => IndicatorDisplay.defaultFor(pid);
 
   test('painel começa vazio', () {
@@ -146,5 +147,134 @@ void main() {
       Obd2Pid.rpm,
       Obd2Pid.speed,
     ]);
+  });
+
+  group('gerenciamento de painéis', () {
+    test('começa com um único painel ativo, vazio', () {
+      expect(state().panels, hasLength(1));
+      expect(state().active.name, 'Painel 1');
+      expect(state().activeId, state().active.id);
+    });
+
+    test('createPanel adiciona um painel vazio numerado e o torna ativo', () {
+      notifier().createPanel();
+
+      expect(state().panels, hasLength(2));
+      expect(state().active.name, 'Painel 2');
+      expect(state().active.indicators, isEmpty);
+    });
+
+    test('addIndicator só afeta o painel ativo', () {
+      final firstId = state().activeId;
+      notifier()
+        ..addIndicator(Obd2Pid.rpm, display(Obd2Pid.rpm))
+        ..createPanel()
+        ..addIndicator(Obd2Pid.speed, display(Obd2Pid.speed));
+
+      final first = state().panels.firstWhere((p) => p.id == firstId);
+      expect(first.indicators, [Obd2Pid.rpm]);
+      expect(state().active.indicators, [Obd2Pid.speed]);
+    });
+
+    test(
+      'duplicatePanel clona indicadores/displays num painel "(cópia)" e o '
+      'torna ativo',
+      () {
+        final originalId = state().activeId;
+        notifier()
+          ..addIndicator(Obd2Pid.rpm, display(Obd2Pid.rpm))
+          ..duplicatePanel(originalId);
+
+        expect(state().panels, hasLength(2));
+        expect(state().active.name, 'Painel 1 (cópia)');
+        expect(state().active.indicators, [Obd2Pid.rpm]);
+        expect(state().active.id, isNot(originalId));
+        // O original continua intacto.
+        final original = state().panels.firstWhere((p) => p.id == originalId);
+        expect(original.indicators, [Obd2Pid.rpm]);
+      },
+    );
+
+    test('renamePanel muda só o nome do painel indicado', () {
+      final id = state().activeId;
+
+      notifier().renamePanel(id, 'Pista');
+
+      expect(state().active.name, 'Pista');
+    });
+
+    test(
+      'deletePanel remove o painel e reatribui o ativo se era o excluído',
+      () {
+        final firstId = state().activeId;
+        notifier().createPanel();
+        final secondId = state().activeId;
+
+        notifier().deletePanel(secondId);
+
+        expect(state().panels, hasLength(1));
+        expect(state().activeId, firstId);
+      },
+    );
+
+    test('deletePanel sem efeito quando só resta 1 painel', () {
+      final onlyId = state().activeId;
+
+      notifier().deletePanel(onlyId);
+
+      expect(state().panels, hasLength(1));
+      expect(state().activeId, onlyId);
+    });
+
+    test('deletePanel de um painel inativo não muda o ativo', () {
+      final firstId = state().activeId;
+      notifier().createPanel();
+      final activeId = state().activeId;
+
+      notifier().deletePanel(firstId);
+
+      expect(state().panels, hasLength(1));
+      expect(state().activeId, activeId);
+    });
+
+    test('switchPanel troca o painel ativo', () {
+      final firstId = state().activeId;
+      notifier().createPanel();
+      final secondId = state().activeId;
+
+      notifier().switchPanel(firstId);
+
+      expect(state().activeId, firstId);
+      expect(secondId, isNot(firstId));
+    });
+
+    test('switchPanel sem efeito para um id inexistente', () {
+      final id = state().activeId;
+
+      notifier().switchPanel('nao-existe');
+
+      expect(state().activeId, id);
+    });
+
+    test('renamePanel corta o nome em PanelNameLimits.max caracteres', () {
+      final id = state().activeId;
+      final long = 'x' * (PanelNameLimits.max + 10);
+
+      notifier().renamePanel(id, long);
+
+      expect(state().active.name, 'x' * PanelNameLimits.max);
+    });
+
+    test(
+      'duplicatePanel corta o nome "(cópia)" quando ultrapassa o limite',
+      () {
+        final id = state().activeId;
+        notifier().renamePanel(id, 'x' * PanelNameLimits.max);
+
+        notifier().duplicatePanel(id);
+
+        expect(state().active.name.length, PanelNameLimits.max);
+      },
+    );
   });
 }
