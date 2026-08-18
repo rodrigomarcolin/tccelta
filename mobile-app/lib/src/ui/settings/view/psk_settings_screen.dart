@@ -66,14 +66,6 @@ class PskSettingsScreen extends HookConsumerWidget {
         if (!context.mounted) return;
         if (setupFlow) {
           unawaited(context.push(AppRoutes.connecting));
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Chave salva — nova conexão usará criptografia AES-256-GCM.',
-              ),
-            ),
-          );
         }
       } finally {
         saving.value = false;
