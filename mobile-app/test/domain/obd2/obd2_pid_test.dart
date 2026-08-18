@@ -11,6 +11,23 @@ void main() {
     });
   });
 
+  group('Obd2Pid.shortLabel', () {
+    test('todo PID tem um rótulo curto não-vazio para o gauge', () {
+      for (final pid in Obd2Pid.values) {
+        expect(
+          pid.shortLabel,
+          isNotEmpty,
+          reason: '${pid.name} sem shortLabel',
+        );
+        expect(
+          pid.shortLabel.length,
+          lessThanOrEqualTo(14),
+          reason: '${pid.name}.shortLabel longo demais para o gauge',
+        );
+      }
+    });
+  });
+
   group('Obd2Pid.decode — valores de exemplo da documentação', () {
     test('carga do motor: A/2.55 (0x66 -> 40%)', () {
       expect(Obd2Pid.engineLoad.decode([0x66]), closeTo(40, 0.5));

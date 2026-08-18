@@ -31,6 +31,9 @@ class _FakeObd2Repository implements Obd2Repository {
 
   @override
   Future<List<Obd2Reading>> readAll() async => const [];
+
+  @override
+  Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async => const [];
 }
 
 void main() {

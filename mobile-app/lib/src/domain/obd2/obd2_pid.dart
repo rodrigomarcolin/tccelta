@@ -20,6 +20,7 @@ enum Obd2Pid {
   engineLoad(
     pid: 0x04,
     label: 'Carga do motor',
+    shortLabel: 'Carga',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -32,6 +33,7 @@ enum Obd2Pid {
   coolantTemp(
     pid: 0x05,
     label: 'Temp. do líquido',
+    shortLabel: 'Arref.',
     unit: '°C',
     defaultMin: 0,
     defaultMax: 130,
@@ -46,6 +48,7 @@ enum Obd2Pid {
   shortFuelTrim1(
     pid: 0x06,
     label: 'Ajuste de combustível curto prazo (Banco 1)',
+    shortLabel: 'Aj. curto',
     unit: '%',
     defaultMin: -25,
     defaultMax: 25,
@@ -59,6 +62,7 @@ enum Obd2Pid {
   longFuelTrim1(
     pid: 0x07,
     label: 'Ajuste de combustível longo prazo (Banco 1)',
+    shortLabel: 'Aj. longo',
     unit: '%',
     defaultMin: -25,
     defaultMax: 25,
@@ -71,6 +75,7 @@ enum Obd2Pid {
   fuelPressureGauge(
     pid: 0x0A,
     label: 'Pressão de combustível',
+    shortLabel: 'Pressão comb.',
     unit: 'kPa',
     defaultMin: 0,
     defaultMax: 500,
@@ -83,6 +88,7 @@ enum Obd2Pid {
   intakeManifoldPressure(
     pid: 0x0B,
     label: 'Pressão absoluta do coletor de admissão',
+    shortLabel: 'Pressão adm.',
     unit: 'kPa',
     defaultMin: 0,
     defaultMax: 200,
@@ -95,6 +101,7 @@ enum Obd2Pid {
   rpm(
     pid: 0x0C,
     label: 'Rotação do motor',
+    shortLabel: 'RPM',
     unit: 'RPM',
     defaultMin: 0,
     defaultMax: 8000,
@@ -107,6 +114,7 @@ enum Obd2Pid {
   speed(
     pid: 0x0D,
     label: 'Velocidade',
+    shortLabel: 'Veloc.',
     unit: 'km/h',
     defaultMin: 0,
     defaultMax: 220,
@@ -119,6 +127,7 @@ enum Obd2Pid {
   timingAdvance(
     pid: 0x0E,
     label: 'Avanço de ignição',
+    shortLabel: 'Ignição',
     unit: '°',
     defaultMin: -10,
     defaultMax: 60,
@@ -131,6 +140,7 @@ enum Obd2Pid {
   intakeAirTemp(
     pid: 0x0F,
     label: 'Temp. do ar de admissão',
+    shortLabel: 'Temp. ar',
     unit: '°C',
     defaultMin: -20,
     defaultMax: 80,
@@ -143,6 +153,7 @@ enum Obd2Pid {
   maf(
     pid: 0x10,
     label: 'Fluxo de massa de ar (MAF)',
+    shortLabel: 'MAF',
     unit: 'g/s',
     defaultMin: 0,
     defaultMax: 60,
@@ -155,6 +166,7 @@ enum Obd2Pid {
   throttle(
     pid: 0x11,
     label: 'Posição do acelerador',
+    shortLabel: 'Acelerador',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -169,6 +181,7 @@ enum Obd2Pid {
   o2Sensor1Voltage(
     pid: 0x14,
     label: 'Sonda lambda 1 (tensão)',
+    shortLabel: 'O2 sonda 1',
     unit: 'V',
     defaultMin: 0,
     defaultMax: 1,
@@ -181,6 +194,7 @@ enum Obd2Pid {
   o2Sensor2Voltage(
     pid: 0x15,
     label: 'Sonda lambda 2 pós-catalisador (tensão)',
+    shortLabel: 'O2 sonda 2',
     unit: 'V',
     defaultMin: 0,
     defaultMax: 1,
@@ -194,6 +208,7 @@ enum Obd2Pid {
   engineRunTime(
     pid: 0x1F,
     label: 'Tempo de funcionamento do motor',
+    shortLabel: 'Tempo motor',
     unit: 's',
     defaultMin: 0,
     defaultMax: 3600,
@@ -207,6 +222,7 @@ enum Obd2Pid {
   distanceWithMil(
     pid: 0x21,
     label: 'Distância percorrida com MIL acesa',
+    shortLabel: 'Dist. MIL',
     unit: 'km',
     defaultMin: 0,
     defaultMax: 100,
@@ -219,6 +235,7 @@ enum Obd2Pid {
   commandedEgr(
     pid: 0x2C,
     label: 'EGR comandada',
+    shortLabel: 'EGR',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -231,6 +248,7 @@ enum Obd2Pid {
   egrError(
     pid: 0x2D,
     label: 'Erro de EGR',
+    shortLabel: 'Erro EGR',
     unit: '%',
     defaultMin: -25,
     defaultMax: 25,
@@ -243,6 +261,7 @@ enum Obd2Pid {
   commandedEvapPurge(
     pid: 0x2E,
     label: 'Purga evaporativa comandada',
+    shortLabel: 'Purga evap.',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -255,6 +274,7 @@ enum Obd2Pid {
   fuelTankLevel(
     pid: 0x2F,
     label: 'Nível do tanque de combustível',
+    shortLabel: 'Combustível',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -268,6 +288,7 @@ enum Obd2Pid {
   warmupsSinceClear(
     pid: 0x30,
     label: 'Ciclos de aquecimento desde reset',
+    shortLabel: 'Aquecim.',
     unit: '',
     defaultMin: 0,
     defaultMax: 100,
@@ -281,6 +302,7 @@ enum Obd2Pid {
   distanceSinceClear(
     pid: 0x31,
     label: 'Distância desde reset de códigos',
+    shortLabel: 'Dist. reset',
     unit: 'km',
     defaultMin: 0,
     defaultMax: 2000,
@@ -293,6 +315,7 @@ enum Obd2Pid {
   evapVaporPressure(
     pid: 0x32,
     label: 'Pressão de vapor evaporativo',
+    shortLabel: 'Pressão evap.',
     unit: 'Pa',
     defaultMin: 0,
     defaultMax: 100,
@@ -305,6 +328,7 @@ enum Obd2Pid {
   baroPressure(
     pid: 0x33,
     label: 'Pressão barométrica absoluta',
+    shortLabel: 'Pressão baro.',
     unit: 'kPa',
     defaultMin: 80,
     defaultMax: 110,
@@ -318,6 +342,7 @@ enum Obd2Pid {
   catalystTemp1(
     pid: 0x3C,
     label: 'Temp. do catalisador (banco 1, sensor 1)',
+    shortLabel: 'Temp. catalis.',
     unit: '°C',
     defaultMin: 0,
     defaultMax: 900,
@@ -331,6 +356,7 @@ enum Obd2Pid {
   controlModuleVoltage(
     pid: 0x42,
     label: 'Tensão do módulo de controle',
+    shortLabel: 'Tensão',
     unit: 'V',
     defaultMin: 8,
     defaultMax: 16,
@@ -344,6 +370,7 @@ enum Obd2Pid {
   absoluteLoad(
     pid: 0x43,
     label: 'Carga absoluta do motor',
+    shortLabel: 'Carga abs.',
     unit: '%',
     defaultMin: 0,
     defaultMax: 150,
@@ -357,6 +384,7 @@ enum Obd2Pid {
   commandedEquivRatio(
     pid: 0x44,
     label: 'Razão ar-combustível comandada (λ)',
+    shortLabel: 'Razão AC (λ)',
     unit: 'λ',
     defaultMin: 0,
     defaultMax: 2,
@@ -369,6 +397,7 @@ enum Obd2Pid {
   relativeThrottle(
     pid: 0x45,
     label: 'Posição relativa do acelerador',
+    shortLabel: 'Acel. rel.',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -381,6 +410,7 @@ enum Obd2Pid {
   ambientAirTemp(
     pid: 0x46,
     label: 'Temp. do ar ambiente',
+    shortLabel: 'Temp. ambiente',
     unit: '°C',
     defaultMin: -20,
     defaultMax: 50,
@@ -393,6 +423,7 @@ enum Obd2Pid {
   throttlePositionB(
     pid: 0x47,
     label: 'Posição da borboleta B',
+    shortLabel: 'Borboleta B',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -405,6 +436,7 @@ enum Obd2Pid {
   acceleratorPedalD(
     pid: 0x49,
     label: 'Posição do pedal do acelerador D',
+    shortLabel: 'Pedal D',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -417,6 +449,7 @@ enum Obd2Pid {
   commandedThrottleActuator(
     pid: 0x4C,
     label: 'Atuador de borboleta comandado',
+    shortLabel: 'Atuador borb.',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -429,6 +462,7 @@ enum Obd2Pid {
   timeMilOn(
     pid: 0x4D,
     label: 'Tempo com MIL acesa',
+    shortLabel: 'Tempo MIL',
     unit: 'min',
     defaultMin: 0,
     defaultMax: 600,
@@ -441,6 +475,7 @@ enum Obd2Pid {
   timeSinceClear(
     pid: 0x4E,
     label: 'Tempo desde reset de códigos',
+    shortLabel: 'Tempo reset',
     unit: 'min',
     defaultMin: 0,
     defaultMax: 2000,
@@ -453,6 +488,7 @@ enum Obd2Pid {
   ethanolPercent(
     pid: 0x52,
     label: 'Percentual de etanol no combustível',
+    shortLabel: 'Etanol',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -465,6 +501,7 @@ enum Obd2Pid {
   relativeAcceleratorPedal(
     pid: 0x5A,
     label: 'Posição relativa do pedal do acelerador',
+    shortLabel: 'Pedal rel.',
     unit: '%',
     defaultMin: 0,
     defaultMax: 100,
@@ -477,6 +514,7 @@ enum Obd2Pid {
   engineOilTemp(
     pid: 0x5C,
     label: 'Temp. do óleo do motor',
+    shortLabel: 'Temp. óleo',
     unit: '°C',
     defaultMin: -20,
     defaultMax: 150,
@@ -490,6 +528,7 @@ enum Obd2Pid {
   fuelInjectionTiming(
     pid: 0x5D,
     label: 'Temporização de injeção de combustível',
+    shortLabel: 'Inj. timing',
     unit: '°',
     defaultMin: -50,
     defaultMax: 50,
@@ -502,6 +541,7 @@ enum Obd2Pid {
   engineFuelRate(
     pid: 0x5E,
     label: 'Taxa de consumo de combustível',
+    shortLabel: 'Consumo',
     unit: 'L/h',
     defaultMin: 0,
     defaultMax: 40,
@@ -515,6 +555,7 @@ enum Obd2Pid {
   driverDemandTorque(
     pid: 0x61,
     label: 'Torque demandado pelo motorista',
+    shortLabel: 'Torque dem.',
     unit: '%',
     defaultMin: -25,
     defaultMax: 100,
@@ -527,6 +568,7 @@ enum Obd2Pid {
   actualEngineTorque(
     pid: 0x62,
     label: 'Torque real do motor',
+    shortLabel: 'Torque real',
     unit: '%',
     defaultMin: -25,
     defaultMax: 100,
@@ -539,6 +581,7 @@ enum Obd2Pid {
   engineReferenceTorque(
     pid: 0x63,
     label: 'Torque de referência do motor',
+    shortLabel: 'Torque ref.',
     unit: 'N·m',
     defaultMin: 0,
     defaultMax: 600,
@@ -550,6 +593,7 @@ enum Obd2Pid {
   const Obd2Pid({
     required this.pid,
     required this.label,
+    required this.shortLabel,
     required this.unit,
     required this.defaultMin,
     required this.defaultMax,
@@ -567,6 +611,11 @@ enum Obd2Pid {
 
   /// Rótulo legível (pt-BR) exibido no card.
   final String label;
+
+  /// Rótulo curto (pt-BR, 1-2 palavras) para a legenda central do [Gauge] —
+  /// o arco tem pouco espaço horizontal e [label] costuma ser longo demais
+  /// para caber numa linha ali.
+  final String shortLabel;
 
   /// Unidade da grandeza (ex.: "RPM", "%", "°C").
   final String unit;

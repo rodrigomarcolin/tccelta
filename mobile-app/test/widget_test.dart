@@ -98,6 +98,11 @@ class _FakeObd2Repository implements Obd2Repository {
     for (final pid in Obd2Pid.values)
       Obd2Reading(pid: pid, value: _exampleValues[pid]!),
   ];
+
+  @override
+  Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async => [
+    for (final pid in pids) Obd2Reading(pid: pid, value: _exampleValues[pid]!),
+  ];
 }
 
 /// Repository que trava (nunca resolve) — mantém o painel na fase inicial, para
@@ -122,6 +127,9 @@ class _HangingObd2Repository implements Obd2Repository {
 
   @override
   Future<List<Obd2Reading>> readAll() => _never.future;
+
+  @override
+  Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) => _never.future;
 }
 
 void main() {

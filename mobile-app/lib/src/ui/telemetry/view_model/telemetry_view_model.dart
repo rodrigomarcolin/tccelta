@@ -7,6 +7,7 @@ import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 
 /// Estado observável do painel de telemetria.
 class TelemetryState {
@@ -70,35 +71,47 @@ abstract final class Obd2ReadingHistory {
   static const int maxSamples = 50;
 }
 
-/// ViewModel do painel: faz um ciclo de leitura sequencial de todos os PIDs e o
-/// repete continuamente enquanto a tela estiver montada. Toda a lógica vive
-/// aqui; a tela só observa e renderiza.
+/// ViewModel do painel: mantém dois ciclos de leitura independentes e cada um
+/// não-sobreposto (só agenda a própria próxima volta depois que a anterior
+/// termina) enquanto a tela estiver montada — um ciclo **rápido** (800ms) que
+/// lê só os indicadores que o usuário tem no Painel agora, para essas leituras
+/// ficarem responsivas, e um ciclo **completo** (5s) que varre todos os PIDs
+/// suportados, para descobrir/atualizar sensores mesmo quando não estão no
+/// Painel (ex.: a tela de busca de sensores). Toda a lógica vive aqui; a tela
+/// só observa e renderiza.
 class TelemetryViewModel extends Notifier<TelemetryState> {
   late final Obd2Repository _repo;
 
-  /// Sinaliza o encerramento do loop (a tela saiu / provider descartado).
+  /// Sinaliza o encerramento dos loops (a tela saiu / provider descartado).
   bool _stopped = false;
 
-  /// Timer do próximo ciclo — cancelável no dispose (evita timer pendente).
-  Timer? _timer;
+  /// Timer do próximo ciclo rápido — cancelável no dispose.
+  Timer? _fastTimer;
 
-  /// Intervalo entre ciclos de leitura. Um ciclo lê os PIDs um a um
-  /// (respeitando o back-pressure); a pausa evita saturar a fila do firmware.
-  static const Duration _interval = Duration(milliseconds: 800);
+  /// Timer do próximo ciclo completo — cancelável no dispose.
+  Timer? _fullTimer;
+
+  /// Intervalo do ciclo rápido: só os indicadores do Painel.
+  static const Duration _fastInterval = Duration(milliseconds: 800);
+
+  /// Intervalo do ciclo completo: todos os PIDs suportados.
+  static const Duration _fullInterval = Duration(seconds: 5);
 
   @override
   TelemetryState build() {
     _repo = ref.read(obd2RepositoryProvider);
     ref.onDispose(() {
       _stopped = true;
-      _timer?.cancel();
+      _fastTimer?.cancel();
+      _fullTimer?.cancel();
     });
     unawaited(_start());
     return const TelemetryState(isPolling: true);
   }
 
-  /// Descobre os PIDs suportados uma vez (best-effort — se falhar, o painel cai
-  /// no fallback de todos os curados) e então inicia o loop de leitura.
+  /// Descobre os PIDs suportados uma vez (best-effort — se falhar, o ciclo
+  /// completo cai no fallback de todos os curados) e então inicia os dois
+  /// loops de leitura.
   Future<void> _start() async {
     try {
       final supported = await _repo.discoverSupported();
@@ -107,23 +120,25 @@ class TelemetryViewModel extends Notifier<TelemetryState> {
     } on Object {
       // Descoberta é best-effort; segue para o polling mesmo assim.
     }
-    await _cycle();
+    unawaited(_fastCycle());
+    unawaited(_fullCycle());
   }
 
-  /// Um ciclo de leitura não-sobreposto: lê tudo, publica o estado e agenda o
-  /// próximo ciclo por um [Timer] cancelável. Uma falha atualiza
-  /// [TelemetryState.failure] mas NÃO interrompe o loop (o link pode voltar).
-  Future<void> _cycle() async {
+  /// Ciclo rápido: lê só os PIDs que o usuário tem no Painel neste exato
+  /// momento — consulta o [panelViewModelProvider] a cada volta (não uma vez
+  /// no `build()`), para sempre refletir add/remove sem precisar reiniciar o
+  /// loop. Painel vazio pula a leitura mas mantém o cadenciamento.
+  Future<void> _fastCycle() async {
     if (_stopped) return;
+    final panelPids = ref.read(panelViewModelProvider).indicators;
+    if (panelPids.isEmpty) {
+      _fastTimer = Timer(_fastInterval, () => unawaited(_fastCycle()));
+      return;
+    }
     try {
-      final readings = await _repo.readAll();
+      final readings = await _repo.readMany(panelPids);
       if (_stopped) return;
-      state = state.copyWith(
-        readings: readings,
-        adapterInfo: _repo.adapterInfo,
-        clearFailure: true,
-        history: _appendHistory(readings),
-      );
+      _applyReadings(readings);
     } on Failure catch (f) {
       if (_stopped) return;
       state = state.copyWith(failure: f);
@@ -131,7 +146,43 @@ class TelemetryViewModel extends Notifier<TelemetryState> {
       // Erro inesperado: não derruba o loop.
     }
     if (_stopped) return;
-    _timer = Timer(_interval, () => unawaited(_cycle()));
+    _fastTimer = Timer(_fastInterval, () => unawaited(_fastCycle()));
+  }
+
+  /// Ciclo completo: varre todos os PIDs suportados (ou curados, no fallback
+  /// sem descoberta), independentemente do que está no Painel — mantém o
+  /// catálogo de sensores atualizado.
+  Future<void> _fullCycle() async {
+    if (_stopped) return;
+    try {
+      final readings = await _repo.readAll();
+      if (_stopped) return;
+      _applyReadings(readings);
+    } on Failure catch (f) {
+      if (_stopped) return;
+      state = state.copyWith(failure: f);
+    } on Object {
+      // Erro inesperado: não derruba o loop.
+    }
+    if (_stopped) return;
+    _fullTimer = Timer(_fullInterval, () => unawaited(_fullCycle()));
+  }
+
+  /// Funde [readings] no estado: cada leitura sobrescreve a anterior do mesmo
+  /// PID, preservando as leituras de PIDs não tocados por este ciclo (os dois
+  /// ciclos — rápido e completo — reportam PIDs potencialmente diferentes a
+  /// cada volta).
+  void _applyReadings(List<Obd2Reading> readings) {
+    final merged = {for (final r in state.readings) r.pid: r};
+    for (final r in readings) {
+      merged[r.pid] = r;
+    }
+    state = state.copyWith(
+      readings: merged.values.toList(growable: false),
+      adapterInfo: _repo.adapterInfo,
+      clearFailure: true,
+      history: _appendHistory(readings),
+    );
   }
 
   /// Acrescenta cada leitura de [readings] ao fim do histórico do seu PID,

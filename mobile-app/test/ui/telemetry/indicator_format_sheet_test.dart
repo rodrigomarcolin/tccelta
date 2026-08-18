@@ -37,6 +37,10 @@ class _FakeObd2Repository implements Obd2Repository {
 
   @override
   Future<List<Obd2Reading>> readAll() async => readings;
+
+  @override
+  Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async =>
+      readings.where((r) => pids.contains(r.pid)).toList();
 }
 
 /// Resultado capturado pelo host: `null` enquanto o sheet de formato não

@@ -215,6 +215,31 @@ void main() {
       );
     });
 
+    test('readMany lê só os PIDs pedidos, na ordem', () async {
+      final conn = ScriptedBleConnection(responses: _mockResponses);
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final readings = await repo.readMany([Obd2Pid.speed, Obd2Pid.rpm]);
+
+      expect(readings.map((r) => r.pid).toList(), [
+        Obd2Pid.speed,
+        Obd2Pid.rpm,
+      ]);
+      expect(readings[0].value, 60);
+      expect(readings[1].value, 1500);
+    });
+
+    test('readMany omite PID que responde NO DATA', () async {
+      final conn = ScriptedBleConnection(
+        responses: {..._mockResponses, '010D': 'NO DATA\r>'},
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final readings = await repo.readMany([Obd2Pid.speed, Obd2Pid.rpm]);
+
+      expect(readings.map((r) => r.pid).toList(), [Obd2Pid.rpm]);
+    });
+
     test('desmonta o cliente proativamente ao cair a conexão', () async {
       final conn = ScriptedBleConnection(responses: _mockResponses);
       final phaseCtrl = StreamController<BleConnectionPhase>.broadcast();

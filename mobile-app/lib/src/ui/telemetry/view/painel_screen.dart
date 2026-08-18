@@ -298,7 +298,7 @@ class _IndicatorCell extends StatelessWidget {
     final gauge = Gauge(
       value: value ?? display.min,
       max: display.max,
-      label: pid.label,
+      label: pid.shortLabel,
       unit: pid.unit,
       variant: gaugeVariantFor(display.gaugeStyle),
       warningThreshold: display.lowFraction,

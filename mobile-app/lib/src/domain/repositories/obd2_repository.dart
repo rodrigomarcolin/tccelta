@@ -34,4 +34,11 @@ abstract interface class Obd2Repository {
   /// back-pressure da fila do firmware). PIDs sem resposta são omitidos —
   /// leituras parciais são válidas.
   Future<List<Obd2Reading>> readAll();
+
+  /// Lê só os [pids] informados, sequencialmente — mesma semântica de
+  /// [readAll] (um comando por vez, PIDs sem resposta omitidos), mas
+  /// restrita a um subconjunto explícito. Usado pelo ciclo rápido do painel,
+  /// que consulta apenas os indicadores que o usuário tem exibidos, em vez
+  /// de varrer o catálogo inteiro a cada volta.
+  Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids);
 }

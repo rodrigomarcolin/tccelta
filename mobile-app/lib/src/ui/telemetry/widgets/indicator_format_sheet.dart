@@ -424,7 +424,7 @@ class _GaugeStyleStep extends StatelessWidget {
           child: Gauge(
             value: previewValue,
             max: display.max,
-            label: pid.label,
+            label: pid.shortLabel,
             unit: pid.unit,
             variant: gaugeVariantFor(display.gaugeStyle),
             warningThreshold: display.lowFraction,
@@ -582,7 +582,7 @@ class _ScaleStep extends StatelessWidget {
       child: Gauge(
         value: previewValue,
         max: display.max,
-        label: pid.label,
+        label: pid.shortLabel,
         unit: pid.unit,
         variant: gaugeVariantFor(display.gaugeStyle),
         warningThreshold: display.lowFraction,
