@@ -223,8 +223,25 @@ void main() {
 
     await openSheet(tester);
 
-    // Todos os sensores aparecem sem filtro.
+    // Todos os sensores aparecem sem filtro (a lista tem mais itens do que
+    // cabem na viewport, então rola até o sensor alvo antes de checar).
+    await tester.scrollUntilVisible(
+      find.text('Velocidade'),
+      300,
+      scrollable: find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+      ),
+    );
     expect(find.text('Velocidade'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Rotação do motor'),
+      -300,
+      scrollable: find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+      ),
+    );
     expect(find.text('Rotação do motor'), findsOneWidget);
 
     // Filtro por fragmento do NOME.

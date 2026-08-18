@@ -37,8 +37,8 @@ void main() {
       expect(Obd2Pid.fromByte(0x11), Obd2Pid.throttle);
     });
 
-    test('null para PID desconhecido (ex.: 0x0F)', () {
-      expect(Obd2Pid.fromByte(0x0F), isNull);
+    test('null para PID desconhecido (ex.: 0xFF)', () {
+      expect(Obd2Pid.fromByte(0xFF), isNull);
     });
   });
 }
