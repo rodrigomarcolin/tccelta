@@ -27,4 +27,10 @@ abstract final class AppRoutes {
 
   /// Tela de configuração de criptografia (PSK).
   static const String settings = '/settings';
+
+  /// Tela de opções ("Mais"), aberta pela aba homônima da tab bar.
+  static const String more = '/more';
+
+  /// Configuração da PSK dentro do fluxo de conexão (antes de conectar).
+  static const String pskSetup = '/psk-setup';
 }

@@ -45,15 +45,6 @@ class ConnectedScreen extends ConsumerWidget {
           ),
         ),
         centerTitle: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, size: 20),
-            color: AppColors.textSecondary,
-            tooltip: 'Criptografia',
-            onPressed: () => context.push(AppRoutes.settings),
-          ),
-          const SizedBox(width: AppSpacing.s3),
-        ],
       ),
       body: ConnectionStateView(
         icon: AppIconData.check,

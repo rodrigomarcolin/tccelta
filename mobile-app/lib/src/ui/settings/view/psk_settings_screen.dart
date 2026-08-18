@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
@@ -13,9 +16,19 @@ import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
 /// O usuário digita a chave de 64 chars hex (= 32 bytes). Enquanto não houver
 /// chave configurada, a comunicação BLE usa texto puro (modo compatível). Ao
 /// salvar uma chave válida, toda nova conexão passa por [EncryptedBleConnection].
+///
+/// Quando [setupFlow] é `true`, a tela funciona como um passo do fluxo de
+/// conexão (aberta pela `ScanScreen` ao selecionar um dongle): os botões viram
+/// "Salvar chave" / "Continuar sem chave" e, após qualquer um dos dois, segue
+/// para [AppRoutes.connecting]. Quando `false` (padrão — aberta pela aba
+/// "Mais" ou pela `ConnectedScreen`), a tela só gerencia a chave localmente,
+/// sem navegar.
 class PskSettingsScreen extends HookConsumerWidget {
   /// Cria a tela de configurações de criptografia.
-  const PskSettingsScreen({super.key});
+  const PskSettingsScreen({this.setupFlow = false, super.key});
+
+  /// `true` quando esta tela é um passo do fluxo de conexão (pré-conexão).
+  final bool setupFlow;
 
   static const int _hexLen = 64;
 
@@ -47,10 +60,19 @@ class PskSettingsScreen extends HookConsumerWidget {
       if (!formKey.currentState!.validate()) return;
       saving.value = true;
       try {
-        await ref.read(pskNotifierProvider.notifier).save(controller.text.trim());
-        if (context.mounted) {
+        await ref
+            .read(pskNotifierProvider.notifier)
+            .save(controller.text.trim());
+        if (!context.mounted) return;
+        if (setupFlow) {
+          unawaited(context.push(AppRoutes.connecting));
+        } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Chave salva — nova conexão usará criptografia AES-256-GCM.')),
+            const SnackBar(
+              content: Text(
+                'Chave salva — nova conexão usará criptografia AES-256-GCM.',
+              ),
+            ),
           );
         }
       } finally {
@@ -65,9 +87,21 @@ class PskSettingsScreen extends HookConsumerWidget {
         controller.clear();
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Chave removida — nova conexão usará texto puro.')),
+            const SnackBar(
+              content: Text('Chave removida — nova conexão usará texto puro.'),
+            ),
           );
         }
+      } finally {
+        saving.value = false;
+      }
+    }
+
+    Future<void> onContinueWithoutKey() async {
+      saving.value = true;
+      try {
+        await ref.read(pskNotifierProvider.notifier).clear();
+        if (context.mounted) unawaited(context.push(AppRoutes.connecting));
       } finally {
         saving.value = false;
       }
@@ -108,7 +142,10 @@ class PskSettingsScreen extends HookConsumerWidget {
                 const SizedBox(height: AppSpacing.s7),
 
                 // ── Section label ─────────────────────────────────────────
-                Text('CHAVE PRÉ-COMPARTILHADA (PSK)', style: AppTypography.overline),
+                Text(
+                  'CHAVE PRÉ-COMPARTILHADA (PSK)',
+                  style: AppTypography.overline,
+                ),
                 const SizedBox(height: AppSpacing.s4),
 
                 // ── Key input ─────────────────────────────────────────────
@@ -138,15 +175,22 @@ class PskSettingsScreen extends HookConsumerWidget {
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: AppColors.borderHairline),
+                      borderSide: const BorderSide(
+                        color: AppColors.borderHairline,
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: AppColors.borderHairline),
+                      borderSide: const BorderSide(
+                        color: AppColors.borderHairline,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+                      borderSide: const BorderSide(
+                        color: AppColors.accent,
+                        width: 1.5,
+                      ),
                     ),
                     errorBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -161,11 +205,16 @@ class PskSettingsScreen extends HookConsumerWidget {
                       children: [
                         // Paste button
                         IconButton(
-                          icon: const Icon(Icons.content_paste_rounded, size: 18),
+                          icon: const Icon(
+                            Icons.content_paste_rounded,
+                            size: 18,
+                          ),
                           color: AppColors.textSecondary,
                           tooltip: 'Colar',
                           onPressed: () async {
-                            final data = await Clipboard.getData(Clipboard.kTextPlain);
+                            final data = await Clipboard.getData(
+                              Clipboard.kTextPlain,
+                            );
                             final text = data?.text?.trim();
                             if (text != null) controller.text = text;
                           },
@@ -173,7 +222,9 @@ class PskSettingsScreen extends HookConsumerWidget {
                         // Visibility toggle
                         IconButton(
                           icon: Icon(
-                            obscure.value ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                            obscure.value
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
                             size: 18,
                           ),
                           color: AppColors.textSecondary,
@@ -221,9 +272,16 @@ class PskSettingsScreen extends HookConsumerWidget {
                             color: AppColors.accentOn,
                           ),
                         )
-                      : const Text('Salvar chave'),
+                      : const Text('Continuar e salvar chave'),
                 ),
-                if (isActive) ...[
+                if (setupFlow) ...[
+                  const SizedBox(height: AppSpacing.s3),
+                  AppButton(
+                    variant: AppButtonVariant.secondary,
+                    onPressed: saving.value ? null : onContinueWithoutKey,
+                    child: const Text('Continuar sem chave'),
+                  ),
+                ] else if (isActive) ...[
                   const SizedBox(height: AppSpacing.s3),
                   AppButton(
                     variant: AppButtonVariant.secondary,

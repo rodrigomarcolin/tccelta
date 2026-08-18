@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
+import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/widgets/telemetry_status_band.dart';
@@ -93,7 +95,11 @@ class PainelScreen extends ConsumerWidget {
           ],
         ),
       ),
-      bottomNavigationBar: const AppTabBar(),
+      bottomNavigationBar: AppTabBar(
+        onChanged: (key) {
+          if (key == 'mais') context.go(AppRoutes.more);
+        },
+      ),
     );
   }
 }

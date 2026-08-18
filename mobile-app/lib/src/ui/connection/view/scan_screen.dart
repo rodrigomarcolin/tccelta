@@ -49,7 +49,7 @@ class ScanScreen extends HookConsumerWidget {
     Future<void> select(BleDevice device) async {
       ref.read(selectedDongleProvider.notifier).select(device);
       await ref.read(scanViewModelProvider.notifier).stopScan();
-      if (context.mounted) unawaited(context.push(AppRoutes.connecting));
+      if (context.mounted) unawaited(context.push(AppRoutes.pskSetup));
     }
 
     final state = ref.watch(scanViewModelProvider);
@@ -70,15 +70,6 @@ class ScanScreen extends HookConsumerWidget {
           ),
         ),
         centerTitle: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, size: 20),
-            color: AppColors.textSecondary,
-            tooltip: 'Criptografia',
-            onPressed: () => context.push(AppRoutes.settings),
-          ),
-          const SizedBox(width: AppSpacing.s3),
-        ],
       ),
       body: ConnectionBackground(
         child: Padding(
