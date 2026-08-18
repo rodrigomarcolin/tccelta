@@ -7,6 +7,7 @@ import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
+import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
 
@@ -196,5 +197,53 @@ void main() {
     final rpmCenterAfter = tester.getCenter(find.text('ROTAÇÃO DO MOTOR'));
     final speedCenterAfter = tester.getCenter(find.text('VELOCIDADE'));
     expect(speedCenterAfter.dx, lessThan(rpmCenterAfter.dx));
+  });
+
+  testWidgets(
+      'alça de arrastar fica dentro do card (mesmo o mais curto) em '
+      'viewport de telefone real', (tester) async {
+    tester.view.physicalSize = const Size(392, 806);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      wrap(
+        readings: const [
+          Obd2Reading(pid: Obd2Pid.rpm, value: 1500),
+          Obd2Reading(pid: Obd2Pid.speed, value: 60),
+        ],
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 10));
+
+    await openAndToggle(tester, '010C', Obd2Pid.rpm);
+    await tester.enterText(find.byType(TextField), '010D');
+    await tester.pumpAndSettle();
+    await tester.tap(toggleFinder(Obd2Pid.speed));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+
+    // O card de "Velocidade" (rótulo + valor mais curtos) é o caso mais
+    // provável de sobrar altura de sobra — ainda assim a alça precisa caber
+    // dentro do card, e o card precisa ter ao menos uma posição de grid.
+    final speedCard = find.ancestor(
+      of: find.text('VELOCIDADE'),
+      matching: find.byType(StatCard),
+    );
+    final cardRect = tester.getRect(speedCard);
+    final handleRect = tester.getRect(
+      find.descendant(
+        of: speedCard,
+        matching: find.byType(DragHandleDots),
+      ),
+    );
+
+    expect(cardRect.height, greaterThanOrEqualTo(86));
+    expect(cardRect.contains(handleRect.topLeft), isTrue);
+    expect(cardRect.contains(handleRect.bottomRight), isTrue);
   });
 }

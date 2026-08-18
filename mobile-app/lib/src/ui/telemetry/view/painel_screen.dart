@@ -66,6 +66,7 @@ class PainelScreen extends ConsumerWidget {
                         label: pid.label,
                         value: byPid[pid]?.value.round(),
                         unit: pid.unit,
+                        cornerAccessory: const DragHandleDots(),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.s3),

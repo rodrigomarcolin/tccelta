@@ -13,7 +13,8 @@ import 'package:tccelta_mobile/src/core/theme/theme.dart';
 /// cada chamada — os valores ao vivo não param de atualizar durante o
 /// arrasto. Um único `Wrap` (não uma grade de `Row`s por linha) mantém todas
 /// as células num mesmo pai, para que [keyOf] preserve a identidade de cada
-/// item através das reordenações.
+/// item através das reordenações. Cada célula tem no mínimo [minCellHeight]
+/// (pode crescer além disso — nunca fica menor).
 class ReorderableCardGrid<T extends Object> extends StatelessWidget {
   /// Cria o grid reordenável.
   const ReorderableCardGrid({
@@ -23,6 +24,7 @@ class ReorderableCardGrid<T extends Object> extends StatelessWidget {
     required this.keyOf,
     this.columns = 2,
     this.gap = AppSpacing.s3,
+    this.minCellHeight = 86,
     super.key,
   });
 
@@ -46,6 +48,10 @@ class ReorderableCardGrid<T extends Object> extends StatelessWidget {
   /// Espaço horizontal e vertical entre as células. @default [AppSpacing.s3]
   final double gap;
 
+  /// Altura mínima de cada célula — o card sempre ocupa ao menos uma posição
+  /// inteira do grid, mesmo com conteúdo curto. @default 86
+  final double minCellHeight;
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -57,9 +63,13 @@ class ReorderableCardGrid<T extends Object> extends StatelessWidget {
           runSpacing: gap,
           children: [
             for (var i = 0; i < items.length; i++)
-              SizedBox(
+              ConstrainedBox(
                 key: keyOf(items[i]),
-                width: cellWidth,
+                constraints: BoxConstraints(
+                  minWidth: cellWidth,
+                  maxWidth: cellWidth,
+                  minHeight: minCellHeight,
+                ),
                 child: _Cell<T>(
                   item: items[i],
                   index: i,

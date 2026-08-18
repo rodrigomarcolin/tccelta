@@ -22,6 +22,7 @@ class StatCard extends StatelessWidget {
     this.colorByZone = false,
     this.gauge,
     this.loading = false,
+    this.cornerAccessory,
     super.key,
   });
 
@@ -35,6 +36,7 @@ class StatCard extends StatelessWidget {
     Object? value,
     String? unit,
     bool loading = false,
+    Widget? cornerAccessory,
     Key? key,
   }) : this._(
           _Variant.value,
@@ -42,6 +44,7 @@ class StatCard extends StatelessWidget {
           value: value,
           unit: unit,
           loading: loading,
+          cornerAccessory: cornerAccessory,
           key: key,
         );
 
@@ -55,6 +58,7 @@ class StatCard extends StatelessWidget {
     String? unit,
     bool colorByZone = false,
     bool loading = false,
+    Widget? cornerAccessory,
     Key? key,
   }) : this._(
           _Variant.progress,
@@ -64,6 +68,7 @@ class StatCard extends StatelessWidget {
           pct: pct,
           colorByZone: colorByZone,
           loading: loading,
+          cornerAccessory: cornerAccessory,
           key: key,
         );
 
@@ -124,6 +129,11 @@ class StatCard extends StatelessWidget {
   /// [Shimmer] — o estado "ainda não lido". @default false
   final bool loading;
 
+  /// Acessório opcional no canto superior direito do rótulo (ex.: uma alça
+  /// de arrastar). Divide a linha com o rótulo — que quebra para uma segunda
+  /// linha quando o espaço é curto — em vez de sobrepor o texto.
+  final Widget? cornerAccessory;
+
   @override
   Widget build(BuildContext context) {
     return AppCard(
@@ -166,7 +176,7 @@ class StatCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _label(),
+        _labelRow(),
         const SizedBox(height: AppSpacing.s2),
         _valueRow(),
         // O espaço da barra é sempre reservado para que `value` e `progress`
@@ -193,6 +203,21 @@ class StatCard extends StatelessWidget {
       return const Shimmer(width: 54, height: 10);
     }
     return Text(label.toUpperCase(), style: AppTypography.overline);
+  }
+
+  /// [_label] + [cornerAccessory], quando informado. O rótulo fica num
+  /// [Expanded] — sobra menos largura para o texto, então ele quebra para uma
+  /// segunda linha em vez de ficar por baixo do acessório.
+  Widget _labelRow() {
+    if (cornerAccessory == null) return _label();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _label()),
+        const SizedBox(width: AppSpacing.s2),
+        cornerAccessory!,
+      ],
+    );
   }
 
   Widget _gauge() {

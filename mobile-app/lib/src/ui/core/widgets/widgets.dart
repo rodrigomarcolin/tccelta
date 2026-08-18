@@ -12,6 +12,7 @@ export 'callout.dart';
 export 'card_button.dart';
 export 'card_grid.dart';
 export 'confirm_dialog.dart';
+export 'drag_handle_dots.dart';
 export 'gauge/gauge.dart';
 export 'graph/sparkline.dart';
 export 'icon_badge.dart';
