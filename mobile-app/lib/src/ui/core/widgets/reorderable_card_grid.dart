@@ -25,6 +25,8 @@ class ReorderableCardGrid<T extends Object> extends StatelessWidget {
     this.columns = 2,
     this.gap = AppSpacing.s3,
     this.minCellHeight = 86,
+    this.spanOf,
+    this.minHeightOf,
     super.key,
   });
 
@@ -52,36 +54,63 @@ class ReorderableCardGrid<T extends Object> extends StatelessWidget {
   /// inteira do grid, mesmo com conteúdo curto. @default 86
   final double minCellHeight;
 
+  /// Quantas colunas o item ocupa (1..[columns]). @default sempre 1
+  ///
+  /// Um item com `spanOf(item) == columns` ocupa a linha inteira — como o
+  /// grid é um [Wrap] (não uma grade fixa), ele naturalmente força uma
+  /// quebra de linha antes e depois de si, sem precisar de nenhuma mudança na
+  /// mecânica de arrastar/soltar (que opera sobre índices da lista, não sobre
+  /// geometria).
+  final int Function(T item)? spanOf;
+
+  /// Altura mínima específica do item, no lugar de [minCellHeight] — para um
+  /// item maior (ex.: gauge grande, histórico) precisar de mais espaço
+  /// vertical que uma célula normal. @default [minCellHeight] para todo item
+  final double Function(T item)? minHeightOf;
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cellWidth =
+        final singleWidth =
             (constraints.maxWidth - gap * (columns - 1)) / columns;
         return Wrap(
           spacing: gap,
           runSpacing: gap,
           children: [
             for (var i = 0; i < items.length; i++)
-              ConstrainedBox(
-                key: keyOf(items[i]),
-                constraints: BoxConstraints(
-                  minWidth: cellWidth,
-                  maxWidth: cellWidth,
-                  minHeight: minCellHeight,
-                ),
-                child: _Cell<T>(
-                  item: items[i],
-                  index: i,
-                  items: items,
-                  cellWidth: cellWidth,
-                  onReorder: onReorder,
-                  child: itemBuilder(context, items[i], i),
-                ),
-              ),
+              _buildCell(context, constraints, singleWidth, i),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildCell(
+    BuildContext context,
+    BoxConstraints constraints,
+    double singleWidth,
+    int i,
+  ) {
+    final item = items[i];
+    final span = (spanOf?.call(item) ?? 1).clamp(1, columns);
+    final cellWidth = span * singleWidth + (span - 1) * gap;
+    final minHeight = minHeightOf?.call(item) ?? minCellHeight;
+    return ConstrainedBox(
+      key: keyOf(item),
+      constraints: BoxConstraints(
+        minWidth: cellWidth,
+        maxWidth: cellWidth,
+        minHeight: minHeight,
+      ),
+      child: _Cell<T>(
+        item: item,
+        index: i,
+        items: items,
+        cellWidth: cellWidth,
+        onReorder: onReorder,
+        child: itemBuilder(context, item, i),
+      ),
     );
   }
 }

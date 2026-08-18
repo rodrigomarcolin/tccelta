@@ -10,6 +10,7 @@ import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
 import 'package:tccelta_mobile/src/domain/repositories/permissions_repository.dart';
+import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
@@ -57,9 +58,9 @@ class _FakeObd2Repository implements Obd2Repository {
 
   @override
   Future<List<Obd2Reading>> readAll() async => [
-        for (final pid in Obd2Pid.values)
-          Obd2Reading(pid: pid, value: _exampleValues[pid]!),
-      ];
+    for (final pid in Obd2Pid.values)
+      Obd2Reading(pid: pid, value: _exampleValues[pid]!),
+  ];
 }
 
 /// Repository que trava (nunca resolve) — mantém o painel na fase inicial, para
@@ -93,8 +94,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          permissionsRepositoryProvider
-              .overrideWithValue(_FakePermissionsRepository()),
+          permissionsRepositoryProvider.overrideWithValue(
+            _FakePermissionsRepository(),
+          ),
         ],
         child: const TcceltaApp(),
       ),
@@ -127,9 +129,12 @@ void main() {
     // O usuário adiciona indicadores (fora do escopo desta tela é o sheet de
     // sensores — aqui exercitamos o view model diretamente).
     container.read(panelViewModelProvider.notifier)
-      ..addIndicator(Obd2Pid.rpm)
-      ..addIndicator(Obd2Pid.speed)
-      ..addIndicator(Obd2Pid.coolantTemp);
+      ..addIndicator(Obd2Pid.rpm, IndicatorDisplay.defaultFor(Obd2Pid.rpm))
+      ..addIndicator(Obd2Pid.speed, IndicatorDisplay.defaultFor(Obd2Pid.speed))
+      ..addIndicator(
+        Obd2Pid.coolantTemp,
+        IndicatorDisplay.defaultFor(Obd2Pid.coolantTemp),
+      );
     await tester.pump();
 
     expect(find.text('1500'), findsOneWidget); // RPM
@@ -145,33 +150,36 @@ void main() {
   });
 
   testWidgets(
-      'indicador adicionado sem leitura ainda mostra — (sem travar a tela)',
-      (tester) async {
-    final container = ProviderContainer(
-      overrides: [
-        obd2RepositoryProvider.overrideWithValue(_HangingObd2Repository()),
-      ],
-    );
+    'indicador adicionado sem leitura ainda mostra — (sem travar a tela)',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          obd2RepositoryProvider.overrideWithValue(_HangingObd2Repository()),
+        ],
+      );
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(theme: AppTheme.dark, home: const PainelScreen()),
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(theme: AppTheme.dark, home: const PainelScreen()),
+        ),
+      );
+      await tester.pump();
 
-    container.read(panelViewModelProvider.notifier).addIndicator(Obd2Pid.rpm);
-    await tester.pump();
+      container
+          .read(panelViewModelProvider.notifier)
+          .addIndicator(Obd2Pid.rpm, IndicatorDisplay.defaultFor(Obd2Pid.rpm));
+      await tester.pump();
 
-    // Descoberta/leitura nunca resolve => sem valor ainda, mas o card
-    // aparece (rótulo do PID) sem travar em skeleton.
-    expect(find.text('ROTAÇÃO DO MOTOR'), findsOneWidget);
-    expect(find.text('1500'), findsNothing);
+      // Descoberta/leitura nunca resolve => sem valor ainda, mas o card
+      // aparece (rótulo do PID) sem travar em skeleton.
+      expect(find.text('ROTAÇÃO DO MOTOR'), findsOneWidget);
+      expect(find.text('1500'), findsNothing);
 
-    await tester.pumpWidget(const SizedBox());
-    container.dispose();
-  });
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+    },
+  );
 
   testWidgets('design system atoms build without error', (tester) async {
     await tester.pumpWidget(
@@ -217,8 +225,9 @@ void main() {
     expect(find.byType(AppTabBar), findsOneWidget);
   });
 
-  testWidgets('SpinnerRing renderiza o anel e o rótulo central',
-      (tester) async {
+  testWidgets('SpinnerRing renderiza o anel e o rótulo central', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(

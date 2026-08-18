@@ -8,6 +8,7 @@ import 'package:tccelta_mobile/src/ui/connection/view/permissions_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/scan_screen.dart';
 import 'package:tccelta_mobile/src/ui/more/view/more_screen.dart';
 import 'package:tccelta_mobile/src/ui/settings/view/psk_settings_screen.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/view/indicator_format_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
 
 /// Roteador do app. O fluxo de conexão (`01 FLUXO DE CONEXÃO`) é a entrada;
@@ -54,6 +55,12 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.pskSetup,
       builder: (context, state) => const PskSettingsScreen(setupFlow: true),
+    ),
+    GoRoute(
+      path: AppRoutes.indicatorFormat,
+      builder: (context, state) => IndicatorFormatScreen(
+        args: state.extra! as IndicatorFormatArgs,
+      ),
     ),
   ],
 );

@@ -33,4 +33,8 @@ abstract final class AppRoutes {
 
   /// Configuração da PSK dentro do fluxo de conexão (antes de conectar).
   static const String pskSetup = '/psk-setup';
+
+  /// Escolha de formato de um indicador do Painel (`IndicatorFormatScreen`),
+  /// empilhada com `context.push` sobre o Painel ou o sheet de sensores.
+  static const String indicatorFormat = '/indicator-format';
 }

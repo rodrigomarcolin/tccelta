@@ -1,19 +1,29 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
+import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
 
 /// Estado observável do conjunto de indicadores exibidos no Painel.
 ///
 /// [indicatorIds] guarda `Obd2Pid.name` (ex.: `"rpm"`) em vez do enum
 /// diretamente: uma `List<String>` é trivial de serializar (`["rpm","speed"]`)
 /// quando a persistência entrar em escopo. A ordem da lista é a própria ordem
-/// de exibição no grid.
+/// de exibição no grid. [displays] guarda a customização de cada indicador
+/// (formato, escala, estilo/tamanho do gauge), também chaveada por
+/// `Obd2Pid.name`.
 class PanelState {
   /// Cria o estado do painel. Começa vazio — o usuário escolhe o que aparece.
-  const PanelState({this.indicatorIds = const []});
+  const PanelState({
+    this.indicatorIds = const [],
+    this.displays = const {},
+  });
 
   /// Identificadores (`Obd2Pid.name`) dos indicadores adicionados, na ordem de
   /// exibição.
   final List<String> indicatorIds;
+
+  /// Customização de exibição de cada indicador adicionado, por
+  /// `Obd2Pid.name`.
+  final Map<String, IndicatorDisplay> displays;
 
   /// Os PIDs adicionados, na ordem de exibição.
   List<Obd2Pid> get indicators =>
@@ -22,9 +32,28 @@ class PanelState {
   /// Se [pid] já foi adicionado ao painel.
   bool contains(Obd2Pid pid) => indicatorIds.contains(pid.name);
 
-  /// Cópia com [indicatorIds] sobrescrito.
-  PanelState copyWith({List<String>? indicatorIds}) =>
-      PanelState(indicatorIds: indicatorIds ?? this.indicatorIds);
+  /// Customização de exibição de [pid] — os defaults do PID quando ele ainda
+  /// não tem uma customização salva (não deveria acontecer para um
+  /// indicador já adicionado, mas mantém o getter total).
+  IndicatorDisplay displayFor(Obd2Pid pid) =>
+      displays[pid.name] ?? IndicatorDisplay.defaultFor(pid);
+
+  /// Cópia com os campos sobrescritos.
+  PanelState copyWith({
+    List<String>? indicatorIds,
+    Map<String, IndicatorDisplay>? displays,
+  }) => PanelState(
+    indicatorIds: indicatorIds ?? this.indicatorIds,
+    displays: displays ?? this.displays,
+  );
+
+  /// Serializa para um `Map` codificável em JSON — a peça que deixa o estado
+  /// do Painel pronto para uma futura persistência local (ainda fora de
+  /// escopo).
+  Map<String, dynamic> toJson() => {
+    'indicatorIds': indicatorIds,
+    'displays': displays.map((id, d) => MapEntry(id, d.toJson())),
+  };
 }
 
 /// ViewModel do gerenciamento de indicadores do Painel: adiciona, remove e
@@ -34,17 +63,35 @@ class PanelViewModel extends Notifier<PanelState> {
   @override
   PanelState build() => const PanelState();
 
-  /// Adiciona [pid] ao final do painel. Sem efeito se já estiver presente.
-  void addIndicator(Obd2Pid pid) {
-    if (state.contains(pid)) return;
-    state = state.copyWith(indicatorIds: [...state.indicatorIds, pid.name]);
+  /// Adiciona [pid] ao final do painel com a customização [display]. Sem
+  /// efeito na ordem se [pid] já estiver presente — mas [display] sempre
+  /// sobrescreve (mesmo caminho usado para editar, ver [updateDisplay]).
+  void addIndicator(Obd2Pid pid, IndicatorDisplay display) {
+    final ids = state.contains(pid)
+        ? state.indicatorIds
+        : [...state.indicatorIds, pid.name];
+    state = state.copyWith(
+      indicatorIds: ids,
+      displays: {...state.displays, pid.name: display},
+    );
+  }
+
+  /// Sobrescreve a customização de exibição de [pid], sem alterar sua posição
+  /// no painel. Sem efeito se [pid] não estiver presente.
+  void updateDisplay(Obd2Pid pid, IndicatorDisplay display) {
+    if (!state.contains(pid)) return;
+    state = state.copyWith(
+      displays: {...state.displays, pid.name: display},
+    );
   }
 
   /// Remove [pid] do painel. Sem efeito se não estiver presente.
   void removeIndicator(Obd2Pid pid) {
     if (!state.contains(pid)) return;
+    final displays = {...state.displays}..remove(pid.name);
     state = state.copyWith(
       indicatorIds: state.indicatorIds.where((id) => id != pid.name).toList(),
+      displays: displays,
     );
   }
 

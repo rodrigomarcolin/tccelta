@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
+import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
+import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/view/indicator_format_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.dart';
 
 /// Abre a lista de sensores empilhada sobre a tela atual (sem navegar para
 /// uma rota separada) — um bottom sheet listando todos os PIDs curados, com
-/// busca e toque para adicionar/remover do Painel.
+/// busca e toque para abrir a tela de formato (adicionar/editar) ou remover
+/// do Painel.
 Future<void> showSensorPickerSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
@@ -19,8 +24,10 @@ Future<void> showSensorPickerSheet(BuildContext context) {
   );
 }
 
-/// Conteúdo do sheet de sensores: busca por nome/PID + lista com toque para
-/// adicionar (ícone `+`) ou remover com confirmação (ícone de check).
+/// Conteúdo do sheet de sensores: busca por nome/PID + lista cuja linha abre
+/// a [IndicatorFormatScreen] (direto, sem tela de detalhe/gráfico no meio) —
+/// para adicionar (ainda não presente) ou editar (já presente); o ícone
+/// quadrado à direita só remove (com confirmação), quando já adicionado.
 class SensorPickerSheet extends HookConsumerWidget {
   /// Cria o sheet de sensores.
   const SensorPickerSheet({super.key});
@@ -78,8 +85,13 @@ class SensorPickerSheet extends HookConsumerWidget {
                               valueStr: reading == null
                                   ? '—'
                                   : reading.value.round().toString(),
-                              onToggle: () =>
-                                  _onToggle(context, ref, pid, added),
+                              onOpen: () => _openFormat(
+                                context,
+                                ref,
+                                pid,
+                                added ? panel.displayFor(pid) : null,
+                              ),
+                              onRemove: () => _confirmRemove(context, ref, pid),
                             );
                           },
                         ),
@@ -97,24 +109,49 @@ class SensorPickerSheet extends HookConsumerWidget {
     );
   }
 
-  Future<void> _onToggle(
+  /// Abre a tela de formato para [pid]: [initial] nulo é o fluxo de
+  /// adicionar (a linha ainda não está no painel); não-nulo é o fluxo de
+  /// editar (pré-preenchido com a customização atual). Direto — sem tela de
+  /// detalhe/gráfico no meio.
+  Future<void> _openFormat(
     BuildContext context,
     WidgetRef ref,
     Obd2Pid pid,
-    bool added,
+    IndicatorDisplay? initial,
   ) async {
+    final result = await context.push<IndicatorFormatResult>(
+      AppRoutes.indicatorFormat,
+      extra: IndicatorFormatArgs(pid: pid, initial: initial),
+    );
+    if (result == null || !context.mounted) return;
     final notifier = ref.read(panelViewModelProvider.notifier);
-    if (!added) {
-      notifier.addIndicator(pid);
-      return;
+    if (result.remove) {
+      notifier.removeIndicator(pid);
+    } else if (result.display != null) {
+      if (initial == null) {
+        notifier.addIndicator(pid, result.display!);
+      } else {
+        notifier.updateDisplay(pid, result.display!);
+      }
     }
+  }
+
+  /// Confirmação de remoção — só disparada pelo toque específico no ícone
+  /// quadrado de alternância (nunca pelo toque na linha, que abre a edição).
+  Future<void> _confirmRemove(
+    BuildContext context,
+    WidgetRef ref,
+    Obd2Pid pid,
+  ) async {
     final confirmed = await showConfirmDialog(
       context,
       title: 'Remover ${pid.label}?',
       message: 'Esse indicador vai sair do painel.',
       confirmLabel: 'Remover',
     );
-    if (confirmed ?? false) notifier.removeIndicator(pid);
+    if (confirmed ?? false) {
+      ref.read(panelViewModelProvider.notifier).removeIndicator(pid);
+    }
   }
 
   static List<Obd2Pid> _filter(List<Obd2Pid> pids, String query) {
@@ -217,67 +254,83 @@ class _NoResults extends StatelessWidget {
 
 /// Linha de um sensor na lista: nome + código (via [CardButton]), última
 /// leitura + unidade, e um alternador quadrado à direita — check (ciano)
-/// quando já adicionado, `+` quando não. O card inteiro é o alvo de toque
-/// (adiciona, ou pede confirmação para remover).
+/// quando já adicionado, `+` quando não.
+///
+/// A linha inteira ([onOpen]) sempre abre a tela de formato — para adicionar
+/// (ainda não presente) ou editar (já presente), pré-preenchida. Só o toque
+/// específico no ícone quadrado ([onRemove]) — quando já adicionado — pede
+/// confirmação para remover; sem adição prévia, o ícone tem o mesmo efeito
+/// da linha (abrir a tela de formato).
 class _SensorTile extends StatelessWidget {
   const _SensorTile({
     required this.pid,
     required this.added,
     required this.valueStr,
-    required this.onToggle,
+    required this.onOpen,
+    required this.onRemove,
   });
 
   final Obd2Pid pid;
   final bool added;
   final String valueStr;
-  final VoidCallback onToggle;
+  final VoidCallback onOpen;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     return CardButton(
-      key: ValueKey('sensor_toggle_${pid.name}'),
+      key: ValueKey('sensor_row_${pid.name}'),
       title: pid.label,
       subtitle: pid.command,
       value: valueStr,
       unit: pid.unit,
       showChevron: false,
-      trailing: _ToggleSquare(added: added),
-      onTap: onToggle,
+      trailing: _ToggleSquare(
+        key: ValueKey('sensor_toggle_${pid.name}'),
+        added: added,
+        onTap: added ? onRemove : onOpen,
+      ),
+      onTap: onOpen,
     );
   }
 }
 
-/// Indicador quadrado puramente visual — o toque é tratado pelo `onTap` do
-/// [CardButton] que o contém (a linha inteira é o alvo de toque).
+/// Indicador quadrado com toque próprio — separado do toque na linha (ver
+/// [_SensorTile]).
 class _ToggleSquare extends StatelessWidget {
-  const _ToggleSquare({required this.added});
+  const _ToggleSquare({required this.added, required this.onTap, super.key});
 
   final bool added;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 32,
-      height: 32,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        borderRadius: AppRadii.brSm,
-        color: added ? AppColors.cyan14 : AppColors.surfaceSunken,
-        border: Border.all(
-          color: added ? AppColors.cyan28 : AppColors.borderStrong,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: AppRadii.brSm,
+          color: added ? AppColors.cyan14 : AppColors.surfaceSunken,
+          border: Border.all(
+            color: added ? AppColors.cyan28 : AppColors.borderStrong,
+          ),
         ),
+        child: added
+            ? const AppIcon(
+                AppIconData.check,
+                size: 16,
+                color: AppColors.cyan500,
+              )
+            : const Icon(
+                Icons.add_rounded,
+                size: 18,
+                color: AppColors.textSecondary,
+              ),
       ),
-      child: added
-          ? const AppIcon(
-              AppIconData.check,
-              size: 16,
-              color: AppColors.cyan500,
-            )
-          : const Icon(
-              Icons.add_rounded,
-              size: 18,
-              color: AppColors.textSecondary,
-            ),
     );
   }
 }

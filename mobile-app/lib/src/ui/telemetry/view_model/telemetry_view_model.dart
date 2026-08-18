@@ -17,6 +17,7 @@ class TelemetryState {
     this.supportedPids = const {},
     this.adapterInfo,
     this.failure,
+    this.history = const {},
   });
 
   /// Se o ciclo de leitura está ativo.
@@ -35,6 +36,13 @@ class TelemetryState {
   /// Falha corrente (nula quando o último ciclo teve sucesso).
   final Failure? failure;
 
+  /// Amostras recentes de cada PID, em ordem cronológica, limitadas a
+  /// [Obd2ReadingHistory.maxSamples] por PID — o teto de qualquer indicador
+  /// no formato histórico ([HistoryPointsRange.max]). Alimenta o formato
+  /// "Histórico" do Painel; cada indicador recorta os últimos N pontos que
+  /// sua própria customização pedir.
+  final Map<Obd2Pid, List<double>> history;
+
   /// Cópia com campos sobrescritos. Use [clearFailure] para zerar a falha.
   TelemetryState copyWith({
     bool? isPolling,
@@ -43,14 +51,23 @@ class TelemetryState {
     Obd2AdapterInfo? adapterInfo,
     Failure? failure,
     bool clearFailure = false,
-  }) =>
-      TelemetryState(
-        isPolling: isPolling ?? this.isPolling,
-        readings: readings ?? this.readings,
-        supportedPids: supportedPids ?? this.supportedPids,
-        adapterInfo: adapterInfo ?? this.adapterInfo,
-        failure: clearFailure ? null : (failure ?? this.failure),
-      );
+    Map<Obd2Pid, List<double>>? history,
+  }) => TelemetryState(
+    isPolling: isPolling ?? this.isPolling,
+    readings: readings ?? this.readings,
+    supportedPids: supportedPids ?? this.supportedPids,
+    adapterInfo: adapterInfo ?? this.adapterInfo,
+    failure: clearFailure ? null : (failure ?? this.failure),
+    history: history ?? this.history,
+  );
+}
+
+/// Limite de amostras mantidas em [TelemetryState.history] por PID.
+abstract final class Obd2ReadingHistory {
+  /// Teto de amostras — o máximo que qualquer indicador em formato
+  /// histórico pode pedir (`HistoryPointsRange.max`), para não crescer sem
+  /// limite enquanto o painel fica aberto.
+  static const int maxSamples = 50;
 }
 
 /// ViewModel do painel: faz um ciclo de leitura sequencial de todos os PIDs e o
@@ -105,6 +122,7 @@ class TelemetryViewModel extends Notifier<TelemetryState> {
         readings: readings,
         adapterInfo: _repo.adapterInfo,
         clearFailure: true,
+        history: _appendHistory(readings),
       );
     } on Failure catch (f) {
       if (_stopped) return;
@@ -115,6 +133,22 @@ class TelemetryViewModel extends Notifier<TelemetryState> {
     if (_stopped) return;
     _timer = Timer(_interval, () => unawaited(_cycle()));
   }
+
+  /// Acrescenta cada leitura de [readings] ao fim do histórico do seu PID,
+  /// recortando para no máximo [Obd2ReadingHistory.maxSamples] amostras.
+  Map<Obd2Pid, List<double>> _appendHistory(List<Obd2Reading> readings) {
+    final history = {...state.history};
+    for (final reading in readings) {
+      final samples = <double>[
+        ...history[reading.pid] ?? const <double>[],
+        reading.value,
+      ];
+      history[reading.pid] = samples.length > Obd2ReadingHistory.maxSamples
+          ? samples.sublist(samples.length - Obd2ReadingHistory.maxSamples)
+          : samples;
+    }
+    return history;
+  }
 }
 
 /// Provider do [TelemetryViewModel].
@@ -122,8 +156,8 @@ class TelemetryViewModel extends Notifier<TelemetryState> {
 /// `autoDispose`: o polling deve parar ao sair do painel. Ao reentrar, o
 /// `build()` roda de novo e reinicia o ciclo.
 final NotifierProvider<TelemetryViewModel, TelemetryState>
-    telemetryViewModelProvider =
+telemetryViewModelProvider =
     NotifierProvider<TelemetryViewModel, TelemetryState>(
-  TelemetryViewModel.new,
-  isAutoDispose: true,
-);
+      TelemetryViewModel.new,
+      isAutoDispose: true,
+    );
