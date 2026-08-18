@@ -6,9 +6,13 @@
  * Útil para permitir desenvolvimento somente com o ESP32, sem necessidade da
  * parafernália CAN como ECU (simulado ou não), transceivers etc.
  *
- * Suporta PIDs do service 01:
- *   0x00 (supported PIDs),  0x04 (engine load),  0x05 (coolant temp),
- *   0x0C (RPM),  0x0D (speed),  0x0E (timing advance),  0x11 (throttle)
+ * Simula um veículo leve a gasolina, cobrindo os PIDs do service 01 (Modo 01 /
+ * SAE J1979) aplicáveis a esse perfil de veículo, na faixa 0x00-0x67. PIDs
+ * fora desse conjunto (específicos de diesel/caminhão pesado, sensores
+ * duplicados/inexistentes neste veículo simulado, etc.) retornam -1 ("NO
+ * DATA"). Os bitmasks de "PIDs supported" (0x00, 0x20, 0x40, 0x60) são
+ * derivados automaticamente a partir dos PIDs de fato implementados, nunca
+ * mantidos à mão em paralelo.
  */
 class Obd2Mock : public IObd2 {
 public:
