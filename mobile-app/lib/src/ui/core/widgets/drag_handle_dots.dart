@@ -22,13 +22,21 @@ class DragHandleDots extends StatelessWidget {
     );
     const row = Row(
       mainAxisSize: MainAxisSize.min,
-      children: [dot, SizedBox(width: _gap), dot],
+      children: [
+        dot,
+        SizedBox(width: _gap),
+        dot,
+      ],
     );
     return const Opacity(
       opacity: 0.4,
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: [row, SizedBox(height: _gap), row],
+        children: [
+          row,
+          SizedBox(height: _gap),
+          row,
+        ],
       ),
     );
   }

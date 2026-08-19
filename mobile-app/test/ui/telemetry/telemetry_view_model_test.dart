@@ -24,8 +24,10 @@ class _FakeObd2Repository implements Obd2Repository {
   Future<void> initialize() async {}
 
   @override
-  Future<Set<Obd2Pid>> discoverSupported() async =>
-      {Obd2Pid.rpm, Obd2Pid.speed};
+  Future<Set<Obd2Pid>> discoverSupported() async => {
+    Obd2Pid.rpm,
+    Obd2Pid.speed,
+  };
 
   @override
   Future<Obd2Reading> read(Obd2Pid pid) async =>
@@ -33,9 +35,9 @@ class _FakeObd2Repository implements Obd2Repository {
 
   @override
   Future<List<Obd2Reading>> readAll() async => const [
-        Obd2Reading(pid: Obd2Pid.rpm, value: 1500),
-        Obd2Reading(pid: Obd2Pid.speed, value: 60),
-      ];
+    Obd2Reading(pid: Obd2Pid.rpm, value: 1500),
+    Obd2Reading(pid: Obd2Pid.speed, value: 60),
+  ];
 
   @override
   Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async {

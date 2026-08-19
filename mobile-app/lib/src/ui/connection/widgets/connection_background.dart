@@ -27,10 +27,10 @@ class ConnectionBackground extends StatelessWidget {
   // do frame (não tokens reusáveis): espelham os tops dos radial-gradients do
   // design. A base é sempre [AppColors.bgScreen].
   Color get _gradientTop => switch (tone) {
-        StatusTone.live || StatusTone.ok => const Color(0xFF121A24),
-        StatusTone.warning => const Color(0xFF1C1810),
-        StatusTone.alert => const Color(0xFF1A1014),
-      };
+    StatusTone.live || StatusTone.ok => const Color(0xFF121A24),
+    StatusTone.warning => const Color(0xFF1C1810),
+    StatusTone.alert => const Color(0xFF1A1014),
+  };
 
   @override
   Widget build(BuildContext context) {

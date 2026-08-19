@@ -69,8 +69,7 @@ class StatGraphCard extends StatelessWidget {
       avg ??= sum / history.length;
     }
 
-    final bigValue =
-        value?.toString() ?? (hasData ? _fmt(history.last) : '—');
+    final bigValue = value?.toString() ?? (hasData ? _fmt(history.last) : '—');
 
     return DecoratedBox(
       decoration: BoxDecoration(

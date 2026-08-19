@@ -46,8 +46,9 @@ class Obd2Datasource {
       final raw = await _elm.command('ATDP');
       // Remove um eventual eco do comando (`ATDP`) caso o echo off não tenha
       // pego, e normaliza espaços.
-      final text =
-          raw.replaceFirst(RegExp('^ATDP', caseSensitive: false), '').trim();
+      final text = raw
+          .replaceFirst(RegExp('^ATDP', caseSensitive: false), '')
+          .trim();
       final upper = text.toUpperCase();
       if (text.isEmpty ||
           text.contains('?') ||
@@ -64,8 +65,10 @@ class Obd2Datasource {
   /// Extrai a identidade `ELM327 ...` de uma resposta de `ATZ` (que pode vir
   /// com eco do comando e ruído do reset). Devolve `null` se não encontrar.
   static String? _cleanIdentity(String raw) {
-    final match =
-        RegExp('ELM327[^\r\n]*', caseSensitive: false).firstMatch(raw);
+    final match = RegExp(
+      'ELM327[^\r\n]*',
+      caseSensitive: false,
+    ).firstMatch(raw);
     return match?.group(0)?.trim();
   }
 

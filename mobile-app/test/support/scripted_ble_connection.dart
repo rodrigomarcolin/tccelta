@@ -47,10 +47,9 @@ class ScriptedBleConnection implements BleConnection {
 
   @override
   Future<void> write(List<int> bytes) async {
-    final cmd = String.fromCharCodes(bytes)
-        .replaceAll('\r', '')
-        .replaceAll(' ', '')
-        .toUpperCase();
+    final cmd = String.fromCharCodes(
+      bytes,
+    ).replaceAll('\r', '').replaceAll(' ', '').toUpperCase();
     written.add(cmd);
     if (!autoRespond) return;
     final resp = responses[cmd];

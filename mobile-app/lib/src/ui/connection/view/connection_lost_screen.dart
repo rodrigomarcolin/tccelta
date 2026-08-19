@@ -27,7 +27,8 @@ class ConnectionLostScreen extends ConsumerWidget {
       tone: StatusTone.alert,
       icon: AppIconData.desconectar,
       title: 'Conexão perdida',
-      description: 'O dongle saiu de alcance ou foi desplugado. Toque em '
+      description:
+          'O dongle saiu de alcance ou foi desplugado. Toque em '
           'reconectar para tentar novamente.',
       primaryAction: AppButton(
         icon: const AppIcon(

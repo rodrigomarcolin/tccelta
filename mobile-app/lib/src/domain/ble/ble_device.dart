@@ -44,13 +44,12 @@ class BleDevice {
     String? name,
     int? rssi,
     BleSignalLevel? signal,
-  }) =>
-      BleDevice(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        rssi: rssi ?? this.rssi,
-        signal: signal ?? this.signal,
-      );
+  }) => BleDevice(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    rssi: rssi ?? this.rssi,
+    signal: signal ?? this.signal,
+  );
 
   // `signal` é derivado de `rssi`, então fica FORA de ==/hashCode: dois
   // dispositivos com mesmo id/name/rssi são iguais (e têm o mesmo nível).

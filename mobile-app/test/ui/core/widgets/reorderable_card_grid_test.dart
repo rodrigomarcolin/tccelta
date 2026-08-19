@@ -83,7 +83,8 @@ void main() {
   testWidgets(
     'itens da mesma linha esticam para a mesma altura (a maior '
     'minHeightOf entre eles) — cada card preenche o espaço que o grid lhe '
-    'reservou', (tester) async {
+    'reservou',
+    (tester) async {
       await tester.pumpWidget(
         wrap(
           items: const [1, 2],
@@ -97,20 +98,22 @@ void main() {
   );
 
   testWidgets(
-    'itens de linhas diferentes (largura inteira) não esticam entre si', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      wrap(
-        items: const [1, 2],
-        spanOf: (item) => 2,
-        minHeightOf: (item) => item == 2 ? 220 : 86,
-      ),
-    );
+    'itens de linhas diferentes (largura inteira) não esticam entre si',
+    (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(
+          items: const [1, 2],
+          spanOf: (item) => 2,
+          minHeightOf: (item) => item == 2 ? 220 : 86,
+        ),
+      );
 
-    expect(cellHeight(tester, 1), closeTo(86, 0.5));
-    expect(cellHeight(tester, 2), closeTo(220, 0.5));
-  });
+      expect(cellHeight(tester, 1), closeTo(86, 0.5));
+      expect(cellHeight(tester, 2), closeTo(220, 0.5));
+    },
+  );
 
   testWidgets('sem minHeightOf, a altura mínima default é 86', (tester) async {
     await tester.pumpWidget(wrap(items: const [1]));

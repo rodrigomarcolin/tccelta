@@ -21,10 +21,13 @@ class EncryptedBleConnection implements BleConnection {
   EncryptedBleConnection({
     required BleConnection inner,
     required PskCipher cipher,
-  })  : _inner = inner,
-        _cipher = cipher {
+  }) : _inner = inner,
+       _cipher = cipher {
     _decryptedCtrl = StreamController<List<int>>.broadcast();
-    _incomingSub = inner.incoming.listen(_onRawFrame, onDone: _decryptedCtrl.close);
+    _incomingSub = inner.incoming.listen(
+      _onRawFrame,
+      onDone: _decryptedCtrl.close,
+    );
   }
 
   final BleConnection _inner;

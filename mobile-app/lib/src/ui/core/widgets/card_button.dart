@@ -94,7 +94,8 @@ class CardButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final leadingWidget = leading ??
+    final leadingWidget =
+        leading ??
         (icon != null
             ? AppIcon(icon!, size: 18, color: iconColor ?? AppColors.neutral600)
             : null);

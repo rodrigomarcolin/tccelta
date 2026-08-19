@@ -13,8 +13,10 @@ import 'package:pointycastle/export.dart';
 class PskCipher {
   PskCipher({required Uint8List key}) : _key = key {
     if (key.length != 32) {
-      throw ArgumentError('AES-256 key must be exactly 32 bytes, '
-          'got ${key.length}');
+      throw ArgumentError(
+        'AES-256 key must be exactly 32 bytes, '
+        'got ${key.length}',
+      );
     }
   }
 
@@ -22,8 +24,10 @@ class PskCipher {
   factory PskCipher.fromHex(String hex) {
     final clean = hex.trim();
     if (clean.length != 64) {
-      throw ArgumentError('PSK must be 64 hex chars (32 bytes), '
-          'got ${clean.length} chars');
+      throw ArgumentError(
+        'PSK must be 64 hex chars (32 bytes), '
+        'got ${clean.length} chars',
+      );
     }
     final key = Uint8List(32);
     for (var i = 0; i < 32; i++) {
@@ -58,7 +62,9 @@ class PskCipher {
   Uint8List? decrypt(Uint8List frame) {
     if (frame.length < _ivLen + _tagLen) return null;
     final iv = frame.sublist(0, _ivLen);
-    final ctAndTag = frame.sublist(_ivLen); // CT + TAG (PointyCastle expects this)
+    final ctAndTag = frame.sublist(
+      _ivLen,
+    ); // CT + TAG (PointyCastle expects this)
 
     try {
       final gcm = _buildCipher(forEncryption: false, iv: iv);

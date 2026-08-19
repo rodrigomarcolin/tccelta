@@ -15,7 +15,7 @@ import '../../support/scripted_ble_connection.dart';
 /// [Obd2RepositoryImpl] consome). Os demais membros não são exercitados.
 class _FakeDongleRepository implements DongleRepository {
   _FakeDongleRepository(this._conn, {Stream<BleConnectionPhase>? phase})
-      : _phase = phase ?? const Stream.empty();
+    : _phase = phase ?? const Stream.empty();
 
   final BleConnection? _conn;
   final Stream<BleConnectionPhase> _phase;
@@ -35,8 +35,7 @@ class _FakeDongleRepository implements DongleRepository {
   @override
   Stream<List<BleDevice>> scan({
     Duration timeout = const Duration(seconds: 15),
-  }) =>
-      const Stream.empty();
+  }) => const Stream.empty();
 
   @override
   Future<void> stopScan() async {}

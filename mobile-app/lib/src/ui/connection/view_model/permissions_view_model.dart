@@ -57,8 +57,8 @@ class PermissionsViewModel extends Notifier<PermissionFlowState> {
 /// tela observa para avançar (sem isso, um estado `granted` remanescente
 /// deixaria a tela presa no loading).
 final NotifierProvider<PermissionsViewModel, PermissionFlowState>
-    permissionsViewModelProvider =
+permissionsViewModelProvider =
     NotifierProvider<PermissionsViewModel, PermissionFlowState>(
-  PermissionsViewModel.new,
-  isAutoDispose: true,
-);
+      PermissionsViewModel.new,
+      isAutoDispose: true,
+    );

@@ -162,7 +162,8 @@ class ScanScreen extends HookConsumerWidget {
           ),
         ),
       ),
-    );  }
+    );
+  }
 }
 
 /// Rótulo pt-BR de exibição do nível de sinal (a classificação vem do domain,

@@ -6,24 +6,24 @@ import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 void main() {
   bool? result = false; // sentinela distinta de todos os valores possíveis
   Widget wrap({required bool destructive}) => MaterialApp(
-        theme: AppTheme.dark,
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              onPressed: () async {
-                result = await showConfirmDialog(
-                  context,
-                  title: 'Remover Rotação do motor?',
-                  message: 'Esse indicador vai sair do painel.',
-                  confirmLabel: 'Remover',
-                  destructive: destructive,
-                );
-              },
-              child: const Text('abrir'),
-            ),
-          ),
+    theme: AppTheme.dark,
+    home: Scaffold(
+      body: Builder(
+        builder: (context) => TextButton(
+          onPressed: () async {
+            result = await showConfirmDialog(
+              context,
+              title: 'Remover Rotação do motor?',
+              message: 'Esse indicador vai sair do painel.',
+              confirmLabel: 'Remover',
+              destructive: destructive,
+            );
+          },
+          child: const Text('abrir'),
         ),
-      );
+      ),
+    ),
+  );
 
   setUp(() {
     result = false;
@@ -62,8 +62,9 @@ void main() {
     expect(find.text('Remover Rotação do motor?'), findsNothing);
   });
 
-  testWidgets('destructive=true usa AppButtonVariant.danger na confirmação',
-      (tester) async {
+  testWidgets('destructive=true usa AppButtonVariant.danger na confirmação', (
+    tester,
+  ) async {
     await tester.pumpWidget(wrap(destructive: true));
     await tester.tap(find.text('abrir'));
     await tester.pumpAndSettle();
@@ -78,23 +79,26 @@ void main() {
   });
 
   testWidgets(
-      'destructive=false usa AppButtonVariant.primary na confirmação (ação '
-      'não destrutiva)', (tester) async {
-    await tester.pumpWidget(wrap(destructive: false));
-    await tester.tap(find.text('abrir'));
-    await tester.pumpAndSettle();
+    'destructive=false usa AppButtonVariant.primary na confirmação (ação '
+    'não destrutiva)',
+    (tester) async {
+      await tester.pumpWidget(wrap(destructive: false));
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
 
-    final confirmButton = tester.widget<AppButton>(
-      find.ancestor(
-        of: find.text('Remover'),
-        matching: find.byType(AppButton),
-      ),
-    );
-    expect(confirmButton.variant, AppButtonVariant.primary);
-  });
+      final confirmButton = tester.widget<AppButton>(
+        find.ancestor(
+          of: find.text('Remover'),
+          matching: find.byType(AppButton),
+        ),
+      );
+      expect(confirmButton.variant, AppButtonVariant.primary);
+    },
+  );
 
-  testWidgets('há espaço visível entre os botões cancelar/confirmar',
-      (tester) async {
+  testWidgets('há espaço visível entre os botões cancelar/confirmar', (
+    tester,
+  ) async {
     await tester.pumpWidget(wrap(destructive: true));
     await tester.tap(find.text('abrir'));
     await tester.pumpAndSettle();
@@ -107,7 +111,8 @@ void main() {
       of: find.text('Remover'),
       matching: find.byType(AppButton),
     );
-    final gap = tester.getTopLeft(confirmButton).dx -
+    final gap =
+        tester.getTopLeft(confirmButton).dx -
         tester.getTopRight(cancelButton).dx;
 
     expect(gap, greaterThanOrEqualTo(AppSpacing.s3));

@@ -28,10 +28,11 @@ class DongleRepositoryImpl implements DongleRepository {
   @override
   Stream<List<BleDevice>> scan({
     Duration timeout = const Duration(seconds: 15),
-  }) =>
-      _ds.scanForDongles(timeout: timeout).handleError(
-            (Object e) => throw BleScanFailure('Falha no scan BLE', cause: e),
-          );
+  }) => _ds
+      .scanForDongles(timeout: timeout)
+      .handleError(
+        (Object e) => throw BleScanFailure('Falha no scan BLE', cause: e),
+      );
 
   @override
   Future<void> stopScan() => _ds.stopScan();

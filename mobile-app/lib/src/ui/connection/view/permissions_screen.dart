@@ -35,8 +35,9 @@ class PermissionsScreen extends ConsumerWidget {
   }
 
   Future<void> _onAllow(BuildContext context, WidgetRef ref) async {
-    final granted =
-        await ref.read(permissionsViewModelProvider.notifier).request();
+    final granted = await ref
+        .read(permissionsViewModelProvider.notifier)
+        .request();
     if (!context.mounted) return;
     if (!granted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -76,7 +77,8 @@ class PermissionsScreen extends ConsumerWidget {
     return ConnectionStateView(
       icon: AppIconData.bluetooth,
       title: 'Permitir Bluetooth',
-      description: 'O app usa Bluetooth para encontrar e conversar com o seu '
+      description:
+          'O app usa Bluetooth para encontrar e conversar com o seu '
           'dongle OBD2. No Android antigo, o sistema pode exigir também a '
           'localização.',
       bottomExtra: Column(

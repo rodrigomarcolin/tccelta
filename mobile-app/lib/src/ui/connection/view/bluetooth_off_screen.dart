@@ -51,7 +51,8 @@ class BluetoothOffScreen extends ConsumerWidget {
       description:
           'Ligue o Bluetooth do telefone para procurar o seu dongle OBD2.',
       bottomExtra: const Callout(
-        text: 'O dongle continua anunciando sozinho — assim que o BT voltar, '
+        text:
+            'O dongle continua anunciando sozinho — assim que o BT voltar, '
             'ele reaparece na busca.',
       ),
       primaryAction: AppButton(

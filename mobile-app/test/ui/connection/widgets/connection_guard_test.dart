@@ -28,17 +28,18 @@ void main() {
   // rotas via o `builder` do MaterialApp.router. O adaptador fica `on` para o
   // caminho de permissão não ser mascarado pelo gate de "BT desligado".
   Widget app({required bool granted}) => ProviderScope(
-        overrides: [
-          bleServiceProvider.overrideWithValue(FakeBleService()),
-          permissionsRepositoryProvider
-              .overrideWithValue(_FakePermissions(granted: granted)),
-        ],
-        child: MaterialApp.router(
-          theme: AppTheme.dark,
-          routerConfig: appRouter,
-          builder: (context, child) => ConnectionGuard(child: child!),
-        ),
-      );
+    overrides: [
+      bleServiceProvider.overrideWithValue(FakeBleService()),
+      permissionsRepositoryProvider.overrideWithValue(
+        _FakePermissions(granted: granted),
+      ),
+    ],
+    child: MaterialApp.router(
+      theme: AppTheme.dark,
+      routerConfig: appRouter,
+      builder: (context, child) => ConnectionGuard(child: child!),
+    ),
+  );
 
   // Simula ir aos Ajustes do SO e voltar: resumed -> inactive -> resumed
   // dispara o `onResume` do AppLifecycleListener.
@@ -52,20 +53,23 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('permissão revogada no resume, estando no painel -> permissions',
-      (tester) async {
-    appRouter.go(AppRoutes.painel);
-    await tester.pumpWidget(app(granted: false));
-    await tester.pump();
-    expect(appRouter.state.matchedLocation, AppRoutes.painel);
+  testWidgets(
+    'permissão revogada no resume, estando no painel -> permissions',
+    (tester) async {
+      appRouter.go(AppRoutes.painel);
+      await tester.pumpWidget(app(granted: false));
+      await tester.pump();
+      expect(appRouter.state.matchedLocation, AppRoutes.painel);
 
-    await resumeApp(tester);
+      await resumeApp(tester);
 
-    expect(appRouter.state.matchedLocation, AppRoutes.permissions);
-  });
+      expect(appRouter.state.matchedLocation, AppRoutes.permissions);
+    },
+  );
 
-  testWidgets('permissão mantida no resume, no painel -> fica no painel',
-      (tester) async {
+  testWidgets('permissão mantida no resume, no painel -> fica no painel', (
+    tester,
+  ) async {
     appRouter.go(AppRoutes.painel);
     await tester.pumpWidget(app(granted: true));
     await tester.pump();

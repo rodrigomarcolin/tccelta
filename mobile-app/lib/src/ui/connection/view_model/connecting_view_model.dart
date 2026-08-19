@@ -114,7 +114,7 @@ class ConnectingViewModel extends Notifier<ConnectingState> {
 
 /// Provider do [ConnectingViewModel].
 final NotifierProvider<ConnectingViewModel, ConnectingState>
-    connectingViewModelProvider =
+connectingViewModelProvider =
     NotifierProvider<ConnectingViewModel, ConnectingState>(
-  ConnectingViewModel.new,
-);
+      ConnectingViewModel.new,
+    );

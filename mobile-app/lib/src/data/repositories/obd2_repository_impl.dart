@@ -158,8 +158,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
     // Se a descoberta já rodou, lê só os PIDs suportados; senão, todos os
     // curados (fallback quando o painel foi aberto sem sondar antes).
     final supported = _supported;
-    final toRead =
-        supported == null ? pids : pids.where(supported.contains);
+    final toRead = supported == null ? pids : pids.where(supported.contains);
     return _readEach(ds, toRead);
   }
 

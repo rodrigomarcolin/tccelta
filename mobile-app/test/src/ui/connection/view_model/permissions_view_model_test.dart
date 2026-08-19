@@ -62,8 +62,9 @@ void main() {
       PermissionFlowState.idle,
     );
 
-    final ok =
-        await container.read(permissionsViewModelProvider.notifier).request();
+    final ok = await container
+        .read(permissionsViewModelProvider.notifier)
+        .request();
     expect(ok, isTrue);
     expect(
       container.read(permissionsViewModelProvider),
@@ -75,8 +76,9 @@ void main() {
     final container = containerWith(_FakePermissionsRepository());
     await container.pump();
 
-    final ok =
-        await container.read(permissionsViewModelProvider.notifier).request();
+    final ok = await container
+        .read(permissionsViewModelProvider.notifier)
+        .request();
     expect(ok, isFalse);
     expect(
       container.read(permissionsViewModelProvider),

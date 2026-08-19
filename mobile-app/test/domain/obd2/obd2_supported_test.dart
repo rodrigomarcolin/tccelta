@@ -5,15 +5,20 @@ import 'package:tccelta_mobile/src/domain/obd2/obd2_supported.dart';
 void main() {
   group('supportedPidNumbersFromBitmap', () {
     test('decodifica o bitmask de exemplo do mock (0x181E8000)', () {
-      final pids =
-          supportedPidNumbersFromBitmap(0x00, [0x18, 0x1E, 0x80, 0x00]);
+      final pids = supportedPidNumbersFromBitmap(0x00, [
+        0x18,
+        0x1E,
+        0x80,
+        0x00,
+      ]);
       expect(pids, {0x04, 0x05, 0x0C, 0x0D, 0x0E, 0x0F, 0x11});
     });
 
     test('desloca os números pelo base do range', () {
       // Mesmo bit set (MSB do byte A) → PID base+1.
-      expect(supportedPidNumbersFromBitmap(0x20, [0x80, 0x00, 0x00, 0x00]),
-          {0x21});
+      expect(supportedPidNumbersFromBitmap(0x20, [0x80, 0x00, 0x00, 0x00]), {
+        0x21,
+      });
     });
 
     test('vazio quando vêm menos de 4 bytes', () {
