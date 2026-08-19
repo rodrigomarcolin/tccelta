@@ -612,7 +612,7 @@ enum Obd2Pid {
   /// Rótulo legível (pt-BR) exibido no card.
   final String label;
 
-  /// Rótulo curto (pt-BR, 1-2 palavras) para a legenda central do [Gauge] —
+  /// Rótulo curto (pt-BR, 1-2 palavras) para a legenda central do `Gauge` —
   /// o arco tem pouco espaço horizontal e [label] costuma ser longo demais
   /// para caber numa linha ali.
   final String shortLabel;
@@ -622,7 +622,7 @@ enum Obd2Pid {
 
   /// Fundo de escala mínimo padrão para gauge/barra deste PID — ponto de
   /// partida razoável para a customização do usuário, não um limite físico
-  /// rígido. @see [IndicatorDisplay.defaultFor]
+  /// rígido. @see `IndicatorDisplay.defaultFor`
   final double defaultMin;
 
   /// Fundo de escala máximo padrão para gauge/barra deste PID.
@@ -642,7 +642,7 @@ enum Obd2Pid {
   /// alto é que pede atenção (a maioria — RPM, temperaturas, cargas etc.).
   /// Define a ordem das cores das zonas do gauge: com `false`, baixo é ciano
   /// (bom) e alto é vermelho (atenção); com `true`, essa ordem se inverte.
-  /// @see [Gauge.invertZones]
+  /// @see `Gauge.invertZones`
   final bool higherIsBetter;
 
   /// Comando de texto ELM327 para requisitar este PID, ex.: `010C`.

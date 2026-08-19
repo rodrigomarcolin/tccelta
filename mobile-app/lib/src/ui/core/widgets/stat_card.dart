@@ -309,7 +309,7 @@ class StatCard extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Center(child: gauge!),
+          Center(child: gauge),
           const SizedBox(height: AppSpacing.s4),
           Text(
             label,

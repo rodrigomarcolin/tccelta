@@ -12,7 +12,8 @@ final FutureProvider<String?> pskProvider = FutureProvider<String?>(
   (ref) => ref.watch(settingsServiceProvider).getPsk(),
 );
 
-/// Mutable notifier for the PSK — use [save] or [clear] from the UI.
+/// Mutable notifier for the PSK — use [PskNotifier.save] or
+/// [PskNotifier.clear] from the UI.
 final AsyncNotifierProvider<PskNotifier, String?> pskNotifierProvider =
     AsyncNotifierProvider<PskNotifier, String?>(PskNotifier.new);
 

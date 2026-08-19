@@ -39,7 +39,7 @@ class TelemetryState {
 
   /// Amostras recentes de cada PID, em ordem cronológica, limitadas a
   /// [Obd2ReadingHistory.maxSamples] por PID — o teto de qualquer indicador
-  /// no formato histórico ([HistoryPointsRange.max]). Alimenta o formato
+  /// no formato histórico (`HistoryPointsRange.max`). Alimenta o formato
   /// "Histórico" do Painel; cada indicador recorta os últimos N pontos que
   /// sua própria customização pedir.
   final Map<Obd2Pid, List<double>> history;

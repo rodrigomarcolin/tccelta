@@ -95,7 +95,7 @@ class Gauge extends StatelessWidget {
   /// Inverte a semântica das zonas: com `true`, valor **alto** é a zona boa
   /// (ciano/verde) e valor **baixo** é a zona de atenção (vermelho) — para
   /// PIDs em que um valor alto é desejável (ex.: nível de combustível,
-  /// tensão da bateria). @see [Obd2Pid.higherIsBetter]. @default false
+  /// tensão da bateria). @see `Obd2Pid.higherIsBetter`. @default false
   final bool invertZones;
 
   /// Sobrescreve o número central (ex.: string pré-formatada).

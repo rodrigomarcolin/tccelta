@@ -3,7 +3,7 @@ import 'package:tccelta_mobile/src/core/theme/theme.dart';
 
 /// Indicador de seleção "rádio": um círculo vazio, ou preenchido em ciano
 /// quando [selected]. Puramente visual — o toque é tratado pelo widget que o
-/// contém (ex.: um [CardButton] usado como linha de seleção).
+/// contém (ex.: um `CardButton` usado como linha de seleção).
 class RadioDot extends StatelessWidget {
   /// Cria o indicador, preenchido conforme [selected].
   const RadioDot({required this.selected, super.key});

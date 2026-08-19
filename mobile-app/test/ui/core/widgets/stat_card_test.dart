@@ -142,7 +142,7 @@ void main() {
         wrap(
           const StatCard.gauge(
             label: 'Rotação do motor',
-            gauge: Gauge(value: 3000, max: 8000, label: '', size: 100),
+            gauge: Gauge(value: 3000, label: '', size: 100),
             centered: true,
           ),
         ),
@@ -164,7 +164,7 @@ void main() {
             label: 'Rotação do motor',
             value: 3000,
             unit: 'RPM',
-            gauge: Gauge(value: 3000, max: 8000, label: '', size: 54),
+            gauge: Gauge(value: 3000, label: '', size: 54),
           ),
         ),
       );

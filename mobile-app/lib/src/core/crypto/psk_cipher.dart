@@ -8,9 +8,10 @@ import 'package:pointycastle/export.dart';
 /// Wire format (raw bytes): `IV(12) || ciphertext(n) || TAG(16)`
 /// This matches the dongle's `SecurePskBleConnectivity` — which additionally
 /// hex-encodes the whole frame and appends `\n` before putting it on the wire.
-/// The hex-encoding/decoding is handled by [EncryptedBleConnection]; this class
-/// works purely in raw bytes.
+/// The hex-encoding/decoding is handled by `EncryptedBleConnection`; this
+/// class works purely in raw bytes.
 class PskCipher {
+  /// Creates a cipher bound to a raw 32-byte AES-256 [key].
   PskCipher({required Uint8List key}) : _key = key {
     if (key.length != 32) {
       throw ArgumentError(
@@ -49,9 +50,9 @@ class PskCipher {
     // PointyCastle GCM output is CT + TAG concatenated.
     final ctAndTag = gcm.process(plaintext);
 
-    final out = Uint8List(_ivLen + ctAndTag.length);
-    out.setRange(0, _ivLen, iv);
-    out.setRange(_ivLen, _ivLen + ctAndTag.length, ctAndTag);
+    final out = Uint8List(_ivLen + ctAndTag.length)
+      ..setRange(0, _ivLen, iv)
+      ..setRange(_ivLen, _ivLen + ctAndTag.length, ctAndTag);
     return out;
   }
 

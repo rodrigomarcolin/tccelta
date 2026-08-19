@@ -2,7 +2,6 @@ import 'package:tccelta_mobile/src/core/crypto/psk_cipher.dart';
 import 'package:tccelta_mobile/src/data/datasources/dongle_datasource.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/infra/ble/encrypted_ble_connection.dart';
-import 'package:tccelta_mobile/src/services/ble/ble_service.dart';
 import 'package:tccelta_mobile/src/services/settings/settings_service.dart';
 
 /// Extends [DongleDatasource] to wrap every new [BleConnection] with
@@ -11,7 +10,9 @@ import 'package:tccelta_mobile/src/services/settings/settings_service.dart';
 /// If no key is configured the raw connection is returned unchanged —
 /// backward-compatible with plain-text dongles.
 class SecureDongleDatasource extends DongleDatasource {
-  SecureDongleDatasource(super.ble, this._settings);
+  /// Creates the datasource over the same `BleService` as [DongleDatasource],
+  /// plus the [SettingsService] used to look up the stored PSK.
+  SecureDongleDatasource(super._ble, this._settings);
 
   final SettingsService _settings;
 
@@ -25,9 +26,9 @@ class SecureDongleDatasource extends DongleDatasource {
         inner: raw,
         cipher: PskCipher.fromHex(hex),
       );
-    } catch (_) {
-      // Falha ao obter a chave (ex: SharedPreferences não mocked em testes unitários).
-      // Fallback seguro para conexão em texto puro.
+    } on Object {
+      // Falha ao obter a chave (ex: SharedPreferences não mocked em testes
+      // unitários). Fallback seguro para conexão em texto puro.
       return raw;
     }
   }

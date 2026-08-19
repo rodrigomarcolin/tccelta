@@ -15,7 +15,8 @@ import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
 ///
 /// O usuário digita a chave de 64 chars hex (= 32 bytes). Enquanto não houver
 /// chave configurada, a comunicação BLE usa texto puro (modo compatível). Ao
-/// salvar uma chave válida, toda nova conexão passa por [EncryptedBleConnection].
+/// salvar uma chave válida, toda nova conexão passa por
+/// `EncryptedBleConnection`.
 ///
 /// Quando [setupFlow] é `true`, a tela funciona como um passo do fluxo de
 /// conexão (aberta pela `ScanScreen` ao selecionar um dongle): os botões viram
@@ -285,11 +286,11 @@ class PskSettingsScreen extends HookConsumerWidget {
 
                 // ── Info callout ──────────────────────────────────────────
                 const Callout(
-                  icon: AppIconData.info,
                   text:
                       'A chave é armazenada localmente. '
-                      'Ela deve ser idêntica à configurada no firmware do dongle (SECURE_PSK_HEX). '
-                      'A chave entra em vigor na próxima conexão.',
+                      'Ela deve ser idêntica à configurada no firmware do '
+                      'dongle (SECURE_PSK_HEX). A chave entra em vigor na '
+                      'próxima conexão.',
                 ),
               ],
             ),

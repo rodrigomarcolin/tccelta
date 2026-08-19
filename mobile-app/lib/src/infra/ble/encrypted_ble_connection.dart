@@ -14,14 +14,17 @@ import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 ///   INBOUND:  `<12-byte IV hex><ciphertext hex><16-byte tag hex>\n`
 ///
 /// When a received frame fails authentication (wrong key / tampered bytes) it
-/// is silently dropped — the [Elm327Client] above will time-out waiting for a
+/// is silently dropped — the `Elm327Client` above will time-out waiting for a
 /// prompt, which is the same observable behaviour as the dongle discarding a
 /// bad command.
 class EncryptedBleConnection implements BleConnection {
+  /// Wraps [inner] so every outgoing/incoming frame is transparently
+  /// encrypted/decrypted with [cipher].
   EncryptedBleConnection({
     required BleConnection inner,
     required PskCipher cipher,
   }) : _inner = inner,
+       // ignore: prefer_initializing_formals (mantém o rótulo público "cipher:")
        _cipher = cipher {
     _decryptedCtrl = StreamController<List<int>>.broadcast();
     _incomingSub = inner.incoming.listen(

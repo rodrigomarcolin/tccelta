@@ -70,7 +70,7 @@ abstract final class HistoryPointsRange {
 /// Modelo de domínio puro (`@immutable`, sem `freezed`/`json_serializable` —
 /// mesmo estilo de `domain/ble/*`): não há transporte de rede envolvido, só a
 /// necessidade de serializar para uma futura persistência local, coberta por
-/// [toJson]/[fromJson].
+/// [toJson]/[IndicatorDisplay.fromJson].
 @immutable
 class IndicatorDisplay {
   /// Cria a customização de exibição.
@@ -115,7 +115,8 @@ class IndicatorDisplay {
   /// Formato escolhido para exibir o indicador.
   final IndicatorFormat format;
 
-  /// Valor mínimo da escala (gauge/barra). @default 0 (via [defaultFor])
+  /// Valor mínimo da escala (gauge/barra).
+  /// @default 0 (via [IndicatorDisplay.defaultFor])
   final double min;
 
   /// Valor máximo da escala (gauge/barra).

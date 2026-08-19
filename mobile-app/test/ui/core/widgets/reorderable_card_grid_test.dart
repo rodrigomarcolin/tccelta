@@ -21,7 +21,7 @@ void main() {
           onReorder: (_, _) {},
           spanOf: spanOf,
           minHeightOf: minHeightOf,
-          itemBuilder: (context, item, index) => Container(
+          itemBuilder: (context, item, index) => ColoredBox(
             key: ValueKey('cell_$item'),
             color: Colors.blueGrey,
             child: Text('item $item'),
@@ -42,8 +42,8 @@ void main() {
   ) async {
     await tester.pumpWidget(wrap(items: const [1, 2]));
 
-    final gap = AppSpacing.s3;
-    final expectedWidth = (gridWidth - gap) / 2;
+    const gap = AppSpacing.s3;
+    const expectedWidth = (gridWidth - gap) / 2;
     expect(cellWidth(tester, 1), closeTo(expectedWidth, 0.5));
     expect(cellWidth(tester, 2), closeTo(expectedWidth, 0.5));
   });
@@ -55,8 +55,8 @@ void main() {
       wrap(items: const [1, 2, 3], spanOf: (item) => item == 2 ? 2 : 1),
     );
 
-    final gap = AppSpacing.s3;
-    final halfWidth = (gridWidth - gap) / 2;
+    const gap = AppSpacing.s3;
+    const halfWidth = (gridWidth - gap) / 2;
     expect(cellWidth(tester, 1), closeTo(halfWidth, 0.5));
     expect(cellWidth(tester, 2), closeTo(gridWidth, 0.5));
     expect(cellWidth(tester, 3), closeTo(halfWidth, 0.5));

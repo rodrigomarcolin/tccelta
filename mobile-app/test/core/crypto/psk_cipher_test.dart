@@ -61,7 +61,8 @@ void main() {
       final plain = Uint8List.fromList('010D\r'.codeUnits);
       final frame1 = cipher.encrypt(plain);
       final frame2 = cipher.encrypt(plain);
-      // IV is random per call, so frames should differ (with overwhelming probability).
+      // IV is random per call, so frames should differ (with overwhelming
+      // probability).
       expect(frame1, isNot(equals(frame2)));
     });
 
@@ -82,7 +83,8 @@ void main() {
     test('decrypt with bitflip in ciphertext returns null (auth failure)', () {
       final plain = Uint8List.fromList('test data'.codeUnits);
       final frame = cipher.encrypt(plain);
-      // Flip a bit in the ciphertext body (after 12-byte IV, before 16-byte tag).
+      // Flip a bit in the ciphertext body (after 12-byte IV, before 16-byte
+      // tag).
       frame[12] ^= 0xFF;
       expect(cipher.decrypt(frame), isNull);
     });
