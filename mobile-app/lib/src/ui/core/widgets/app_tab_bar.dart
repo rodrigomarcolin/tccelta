@@ -25,8 +25,10 @@ class AppTab {
 
   /// Se `true`, a aba ainda não tem tela — o ícone fica sempre na cor
   /// inativa (nunca ciano, mesmo se `active` apontar pra ela) e ganha a
-  /// legenda "EM BREVE" embaixo do rótulo. Não desativa o toque em si — a
-  /// aba simplesmente não reage porque nenhuma tela trata essa `key` ainda.
+  /// legenda "EM BREVE" sobreposta a ele (não embaixo do rótulo — senão só
+  /// essa coluna cresceria e desalinharia os ícones das demais abas). Não
+  /// desativa o toque em si — a aba simplesmente não reage porque nenhuma
+  /// tela trata essa `key` ainda.
   /// @default false
   final bool comingSoon;
 }
@@ -38,7 +40,7 @@ class AppTab {
 /// um hairline no topo. Fixe-a na base da tela. Espelha o componente `TabBar`.
 ///
 /// "Terminal" é `comingSoon` (ver [AppTab.comingSoon]): ainda sem tela, fica
-/// sempre na cor inativa e ganha a legenda "EM BREVE".
+/// sempre na cor inativa e ganha a legenda "EM BREVE" sobreposta ao ícone.
 class AppTabBar extends StatelessWidget {
   /// Cria a tab bar inferior, com [active] indicando a aba selecionada.
   const AppTabBar({
@@ -123,7 +125,28 @@ class _TabItem extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AppIcon(tab.icon, color: color),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              AppIcon(tab.icon, color: color),
+              // Sobrepõe a legenda ao ícone (em vez de empilhar embaixo do
+              // rótulo) pra não esticar só esta coluna e desalinhar os
+              // ícones das demais abas na `Row`.
+              if (tab.comingSoon)
+                Text(
+                  'EM BREVE',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.ui(
+                    const TextStyle(
+                      fontSize: 6,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                      color: AppColors.amber500,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
             tab.label,
@@ -135,20 +158,6 @@ class _TabItem extends StatelessWidget {
               ),
             ),
           ),
-          if (tab.comingSoon) ...[
-            const SizedBox(height: 2),
-            Text(
-              'EM BREVE',
-              style: AppTypography.ui(
-                const TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                  color: AppColors.amber500,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );

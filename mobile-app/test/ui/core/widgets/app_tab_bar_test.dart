@@ -61,4 +61,19 @@ void main() {
 
     expect(tapped, 'terminal');
   });
+
+  testWidgets(
+    'a legenda "EM BREVE" fica sobreposta ao ícone — os ícones das 4 abas '
+    'ficam alinhados na mesma altura',
+    (tester) async {
+      await tester.pumpWidget(wrap());
+
+      final icons = tester.widgetList<AppIcon>(find.byType(AppIcon)).toList();
+      expect(icons, hasLength(4));
+      final tops = icons
+          .map((icon) => tester.getTopLeft(find.byWidget(icon)).dy)
+          .toSet();
+      expect(tops, hasLength(1)); // todos na mesma linha
+    },
+  );
 }
