@@ -5,6 +5,7 @@ import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/panel.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/widgets/new_panel_row.dart';
 
 /// Abre o sheet "Meus painéis", empilhado sobre a tela atual: uma lista de
 /// painéis (tocar troca de painel, "⋯" abre a edição) e, por painel, uma
@@ -136,7 +137,10 @@ class _DragHandle extends StatelessWidget {
 }
 
 /// Rótulo "N indicador(es)" — singular/plural do PT-BR.
-String _indicatorCountLabel(int count) =>
+///
+/// Compartilhado com `PanelPickerSheet`, que também lista painéis com sua
+/// contagem de indicadores.
+String indicatorCountLabel(int count) =>
     count == 1 ? '1 indicador' : '$count indicadores';
 
 /// Lista de painéis: tocar troca de painel, "⋯" abre a edição do painel
@@ -172,7 +176,7 @@ class _PanelList extends StatelessWidget {
           CardButton(
             key: ValueKey('panel_row_${panel.id}'),
             title: panel.name,
-            subtitle: _indicatorCountLabel(panel.indicatorIds.length),
+            subtitle: indicatorCountLabel(panel.indicatorIds.length),
             showValue: false,
             showChevron: false,
             selected: panel.id == panels.activeId,
@@ -185,7 +189,7 @@ class _PanelList extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.s2),
         ],
-        _NewPanelRow(onTap: onCreate),
+        NewPanelRow(onTap: onCreate),
         const SizedBox(height: AppSpacing.s4),
         AppButton(onPressed: onClose, child: const Text('Concluir')),
       ],
@@ -242,48 +246,6 @@ class _PanelRowTrailing extends StatelessWidget {
   }
 }
 
-/// Linha tracejada "Novo painel" ao final da lista.
-class _NewPanelRow extends StatelessWidget {
-  const _NewPanelRow({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 56),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.s5,
-          vertical: AppSpacing.s4,
-        ),
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.borderStrong),
-          borderRadius: AppRadii.brMd,
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.add_rounded,
-              size: 18,
-              color: AppColors.textTertiary,
-            ),
-            const SizedBox(width: AppSpacing.s3),
-            Text(
-              'Novo painel',
-              style: AppTypography.label.copyWith(
-                color: AppColors.textTertiary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// Edição de um painel: renomear (texto ao vivo), duplicar e — se não for o
 /// único painel restante — excluir (com confirmação).
 class _PanelEdit extends HookWidget {
@@ -325,7 +287,7 @@ class _PanelEdit extends HookWidget {
         ),
         const SizedBox(height: AppSpacing.s2),
         Text(
-          _indicatorCountLabel(panel.indicatorIds.length),
+          indicatorCountLabel(panel.indicatorIds.length),
           style: AppTypography.body.copyWith(color: AppColors.textTertiary),
         ),
         const SizedBox(height: AppSpacing.s7),

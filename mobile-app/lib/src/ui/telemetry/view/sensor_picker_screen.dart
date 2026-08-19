@@ -5,91 +5,156 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
+import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/widgets/indicator_format_sheet.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/widgets/panel_picker_sheet.dart';
 
-/// Tela empilhada (`context.push`) com a lista de sensores: busca por nome/PID
-/// + lista cuja linha abre o [IndicatorFormatSheet] (direto, sem tela de
-/// detalhe/gráfico no meio) — para adicionar (ainda não presente) ou editar
-/// (já presente); o ícone quadrado à direita só remove (com confirmação),
-/// quando já adicionado.
+/// Lista de sensores: busca por nome/PID + lista cuja linha abre o
+/// `IndicatorFormatSheet` (direto, sem tela de detalhe/gráfico no meio) —
+/// para adicionar (ainda não presente) ou editar (já presente).
+///
+/// Dois modos de entrada, conforme [fromTab]:
+/// - `false` (padrão) — tela empilhada (`context.push`) a partir do botão
+///   "Adicionar indicador" do Painel: a linha atua sobre o **painel ativo**
+///   direto; o ícone quadrado à direita remove (com confirmação) quando já
+///   adicionado a ele.
+/// - `true` — raiz da aba "Sensores" da `AppTabBar` (`context.go`): a linha
+///   abre antes um sheet para **escolher o painel** (`showPanelPickerSheet`),
+///   e só então o sheet de formato — no painel escolhido, não
+///   necessariamente o ativo.
 class SensorPickerScreen extends HookConsumerWidget {
   /// Cria a tela de sensores.
-  const SensorPickerScreen({super.key});
+  const SensorPickerScreen({this.fromTab = false, super.key});
+
+  /// Se `true`, a tela é a raiz da aba "Sensores" (ver documentação da
+  /// classe). @default false
+  final bool fromTab;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final query = useState('');
     final telemetry = ref.watch(telemetryViewModelProvider);
-    final panel = ref.watch(panelViewModelProvider);
+    final panels = ref.watch(panelViewModelProvider);
     final byPid = {for (final r in telemetry.readings) r.pid: r};
 
     final results = _filter(Obd2Pid.values, query.value);
 
-    return Scaffold(
-      backgroundColor: AppColors.bgScreen,
-      appBar: AppBar(
-        backgroundColor: AppColors.bgScreen,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          color: AppColors.textSecondary,
-          onPressed: context.pop,
+    Widget tile(BuildContext context, int i) {
+      final pid = results[i];
+      final reading = byPid[pid];
+      final valueStr = reading == null ? '—' : reading.value.round().toString();
+      if (fromTab) {
+        final added = panels.panels.any((p) => p.contains(pid));
+        void onOpen() => _openViaPanelPicker(context, ref, pid);
+        return _SensorTile(
+          pid: pid,
+          added: added,
+          valueStr: valueStr,
+          onOpen: onOpen,
+          onRemove: onOpen,
+        );
+      }
+      final added = panels.contains(pid);
+      return _SensorTile(
+        pid: pid,
+        added: added,
+        valueStr: valueStr,
+        onOpen: () => _openFormat(
+          context,
+          ref,
+          pid,
+          added ? panels.displayFor(pid) : null,
         ),
-        title: Text('Sensores', style: AppTypography.heading),
-        centerTitle: false,
-      ),
+        onRemove: () => _confirmRemove(context, ref, pid),
+      );
+    }
+
+    final list = Column(
+      children: [
+        _SearchField(value: query.value, onChanged: (v) => query.value = v),
+        const SizedBox(height: AppSpacing.s4),
+        Expanded(
+          child: results.isEmpty
+              ? _NoResults(query: query.value)
+              : ListView.separated(
+                  itemCount: results.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(height: AppSpacing.s2),
+                  itemBuilder: tile,
+                ),
+        ),
+        if (!fromTab) ...[
+          const SizedBox(height: AppSpacing.s4),
+          AppButton(onPressed: context.pop, child: const Text('OK')),
+        ],
+      ],
+    );
+
+    if (!fromTab) {
+      return Scaffold(
+        backgroundColor: AppColors.bgScreen,
+        appBar: AppBar(
+          backgroundColor: AppColors.bgScreen,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+            color: AppColors.textSecondary,
+            onPressed: context.pop,
+          ),
+          title: Text('Sensores', style: AppTypography.heading),
+          centerTitle: false,
+        ),
+        body: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.s7,
+              AppSpacing.s2,
+              AppSpacing.s7,
+              AppSpacing.s7,
+            ),
+            child: list,
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
       body: SafeArea(
-        top: false,
+        bottom: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.s7,
-            AppSpacing.s2,
             AppSpacing.s7,
             AppSpacing.s7,
+            AppSpacing.s4,
           ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _SearchField(
-                value: query.value,
-                onChanged: (v) => query.value = v,
+              Text('Sensores', style: AppTypography.heading),
+              const SizedBox(height: AppSpacing.s2),
+              Text(
+                'Toque num sensor para escolher em qual painel exibi-lo.',
+                style: AppTypography.body.copyWith(
+                  color: AppColors.textTertiary,
+                ),
               ),
               const SizedBox(height: AppSpacing.s4),
-              Expanded(
-                child: results.isEmpty
-                    ? _NoResults(query: query.value)
-                    : ListView.separated(
-                        itemCount: results.length,
-                        separatorBuilder: (_, _) =>
-                            const SizedBox(height: AppSpacing.s2),
-                        itemBuilder: (context, i) {
-                          final pid = results[i];
-                          final added = panel.contains(pid);
-                          final reading = byPid[pid];
-                          return _SensorTile(
-                            pid: pid,
-                            added: added,
-                            valueStr: reading == null
-                                ? '—'
-                                : reading.value.round().toString(),
-                            onOpen: () => _openFormat(
-                              context,
-                              ref,
-                              pid,
-                              added ? panel.displayFor(pid) : null,
-                            ),
-                            onRemove: () => _confirmRemove(context, ref, pid),
-                          );
-                        },
-                      ),
-              ),
-              const SizedBox(height: AppSpacing.s4),
-              AppButton(onPressed: context.pop, child: const Text('OK')),
+              Expanded(child: list),
             ],
           ),
         ),
+      ),
+      bottomNavigationBar: AppTabBar(
+        active: 'sensores',
+        onChanged: (key) {
+          if (key == 'painel') context.go(AppRoutes.painel);
+          if (key == 'mais') context.go(AppRoutes.more);
+        },
       ),
     );
   }
@@ -97,7 +162,8 @@ class SensorPickerScreen extends HookConsumerWidget {
   /// Abre o sheet de formato para [pid]: [initial] nulo é o fluxo de
   /// adicionar (a linha ainda não está no painel); não-nulo é o fluxo de
   /// editar (pré-preenchido com a customização atual). Direto — sem tela de
-  /// detalhe/gráfico no meio.
+  /// detalhe/gráfico no meio. Sempre sobre o **painel ativo** — usado pelo
+  /// modo `fromTab: false` (ver [_openViaPanelPicker] para o outro modo).
   Future<void> _openFormat(
     BuildContext context,
     WidgetRef ref,
@@ -124,6 +190,7 @@ class SensorPickerScreen extends HookConsumerWidget {
 
   /// Confirmação de remoção — só disparada pelo toque específico no ícone
   /// quadrado de alternância (nunca pelo toque na linha, que abre a edição).
+  /// Usado só pelo modo `fromTab: false`.
   Future<void> _confirmRemove(
     BuildContext context,
     WidgetRef ref,
@@ -137,6 +204,41 @@ class SensorPickerScreen extends HookConsumerWidget {
     );
     if (confirmed ?? false) {
       ref.read(panelViewModelProvider.notifier).removeIndicator(pid);
+    }
+  }
+
+  /// Fluxo do modo `fromTab: true`: escolhe o painel (`showPanelPickerSheet`)
+  /// e só então abre o sheet de formato — em modo adicionar ou editar
+  /// conforme [pid] já esteja ou não no painel escolhido — aplicando o
+  /// resultado especificamente a esse painel (nunca ao painel ativo).
+  Future<void> _openViaPanelPicker(
+    BuildContext context,
+    WidgetRef ref,
+    Obd2Pid pid,
+  ) async {
+    final panelId = await showPanelPickerSheet(context, pid: pid);
+    if (panelId == null || !context.mounted) return;
+    final panel = ref
+        .read(panelViewModelProvider)
+        .panels
+        .firstWhere((p) => p.id == panelId);
+    final already = panel.contains(pid);
+
+    final result = await showIndicatorFormatSheet(
+      context,
+      pid: pid,
+      initial: already ? panel.displayFor(pid) : null,
+    );
+    if (result == null || !context.mounted) return;
+    final notifier = ref.read(panelViewModelProvider.notifier);
+    if (result.remove) {
+      notifier.removeIndicatorFrom(panelId, pid);
+    } else if (result.display != null) {
+      if (already) {
+        notifier.updateDisplayIn(panelId, pid, result.display!);
+      } else {
+        notifier.addIndicatorTo(panelId, pid, result.display!);
+      }
     }
   }
 
@@ -226,11 +328,12 @@ class _NoResults extends StatelessWidget {
 /// leitura + unidade, e um alternador quadrado à direita — check (ciano)
 /// quando já adicionado, `+` quando não.
 ///
-/// A linha inteira ([onOpen]) sempre abre o sheet de formato — para
-/// adicionar (ainda não presente) ou editar (já presente), pré-preenchida. Só
-/// o toque específico no ícone quadrado ([onRemove]) — quando já adicionado —
-/// pede confirmação para remover; sem adição prévia, o ícone tem o mesmo
-/// efeito da linha (abrir o sheet de formato).
+/// A linha inteira ([onOpen]) sempre abre o próximo passo (o sheet de
+/// formato, ou o de escolha de painel — ver `SensorPickerScreen.fromTab`).
+/// No modo `fromTab: false`, o toque específico no ícone quadrado
+/// ([onRemove]) — quando já adicionado — pede confirmação para remover em
+/// vez de abrir o sheet; no modo `fromTab: true`, o ícone tem sempre o mesmo
+/// efeito da linha (a remoção acontece dentro do sheet de formato).
 class _SensorTile extends StatelessWidget {
   const _SensorTile({
     required this.pid,

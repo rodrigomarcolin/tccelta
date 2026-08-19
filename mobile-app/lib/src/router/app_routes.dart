@@ -34,8 +34,11 @@ abstract final class AppRoutes {
   /// Configuração da PSK dentro do fluxo de conexão (antes de conectar).
   static const String pskSetup = '/psk-setup';
 
-  /// Lista de sensores (`SensorPickerScreen`), empilhada com `context.push`
-  /// sobre o Painel. A escolha de formato do indicador é um bottom sheet
-  /// (`showIndicatorFormatSheet`), não uma rota.
+  /// Lista de sensores (`SensorPickerScreen`). Dois modos de entrada: o
+  /// botão "Adicionar indicador" do Painel empilha com `context.push` (sem
+  /// `extra`); a aba "Sensores" da tab bar navega com
+  /// `context.go(sensorPicker, extra: true)`, tornando a tela raiz dessa
+  /// aba. A escolha de painel/formato do indicador são bottom sheets
+  /// (`showPanelPickerSheet`/`showIndicatorFormatSheet`), não rotas.
   static const String sensorPicker = '/sensor-picker';
 }

@@ -277,4 +277,100 @@ void main() {
       },
     );
   });
+
+  group('operações sobre um painel específico (*To/*In/*From)', () {
+    test(
+      'addIndicatorTo adiciona num painel não-ativo, sem afetar o ativo',
+      () {
+        final firstId = state().activeId;
+        notifier().createPanel();
+        final activeId = state().activeId;
+
+        notifier().addIndicatorTo(
+          firstId,
+          Obd2Pid.rpm,
+          display(Obd2Pid.rpm),
+        );
+
+        final first = state().panels.firstWhere((p) => p.id == firstId);
+        expect(first.indicators, [Obd2Pid.rpm]);
+        expect(state().activeId, activeId); // não muda o ativo
+        expect(state().active.indicators, isEmpty);
+      },
+    );
+
+    test(
+      'addIndicator (painel ativo) equivale a addIndicatorTo(activeId)',
+      () {
+        final id = state().activeId;
+
+        notifier().addIndicatorTo(id, Obd2Pid.rpm, display(Obd2Pid.rpm));
+
+        expect(state().indicators, [Obd2Pid.rpm]);
+      },
+    );
+
+    test('updateDisplayIn edita a customização só no painel indicado', () {
+      final firstId = state().activeId;
+      notifier()
+        ..addIndicatorTo(firstId, Obd2Pid.rpm, display(Obd2Pid.rpm))
+        ..createPanel()
+        ..addIndicatorTo(state().activeId, Obd2Pid.rpm, display(Obd2Pid.rpm));
+      final secondId = state().activeId;
+
+      notifier().updateDisplayIn(
+        firstId,
+        Obd2Pid.rpm,
+        display(Obd2Pid.rpm).copyWith(format: IndicatorFormat.gauge),
+      );
+
+      final first = state().panels.firstWhere((p) => p.id == firstId);
+      final second = state().panels.firstWhere((p) => p.id == secondId);
+      expect(first.displayFor(Obd2Pid.rpm).format, IndicatorFormat.gauge);
+      expect(second.displayFor(Obd2Pid.rpm).format, IndicatorFormat.number);
+    });
+
+    test(
+      'updateDisplayIn sem efeito quando o indicador não está no painel '
+      'indicado',
+      () {
+        final id = state().activeId;
+
+        notifier().updateDisplayIn(
+          id,
+          Obd2Pid.rpm,
+          display(Obd2Pid.rpm).copyWith(format: IndicatorFormat.gauge),
+        );
+
+        expect(state().indicators, isEmpty);
+      },
+    );
+
+    test('removeIndicatorFrom tira o indicador só do painel indicado', () {
+      final firstId = state().activeId;
+      notifier()
+        ..addIndicatorTo(firstId, Obd2Pid.rpm, display(Obd2Pid.rpm))
+        ..createPanel()
+        ..addIndicatorTo(state().activeId, Obd2Pid.rpm, display(Obd2Pid.rpm));
+      final secondId = state().activeId;
+
+      notifier().removeIndicatorFrom(firstId, Obd2Pid.rpm);
+
+      final first = state().panels.firstWhere((p) => p.id == firstId);
+      final second = state().panels.firstWhere((p) => p.id == secondId);
+      expect(first.indicators, isEmpty);
+      expect(second.indicators, [Obd2Pid.rpm]);
+    });
+
+    test('*To/*In/*From sem efeito para um panelId inexistente', () {
+      notifier().addIndicatorTo(
+        'nao-existe',
+        Obd2Pid.rpm,
+        display(Obd2Pid.rpm),
+      );
+
+      expect(state().panels, hasLength(1));
+      expect(state().indicators, isEmpty);
+    });
+  });
 }

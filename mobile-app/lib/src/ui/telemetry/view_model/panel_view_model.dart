@@ -78,21 +78,32 @@ class PanelViewModel extends Notifier<PanelsState> {
     activeId: 'panel_1',
   );
 
-  /// Aplica [fn] ao painel ativo, preservando os demais.
-  void _updateActive(Panel Function(Panel) fn) {
+  /// Aplica [fn] ao painel [id], preservando os demais. Sem efeito se [id]
+  /// não existir.
+  void _updatePanel(String id, Panel Function(Panel) fn) {
     state = state.copyWith(
       panels: [
         for (final p in state.panels)
-          if (p.id == state.activeId) fn(p) else p,
+          if (p.id == id) fn(p) else p,
       ],
     );
   }
 
+  /// Aplica [fn] ao painel ativo, preservando os demais.
+  void _updateActive(Panel Function(Panel) fn) =>
+      _updatePanel(state.activeId, fn);
+
   /// Adiciona [pid] ao final do painel ativo com a customização [display].
-  /// Sem efeito na ordem se [pid] já estiver presente — mas [display] sempre
-  /// sobrescreve (mesmo caminho usado para editar, ver [updateDisplay]).
-  void addIndicator(Obd2Pid pid, IndicatorDisplay display) {
-    _updateActive((p) {
+  /// Ver [addIndicatorTo].
+  void addIndicator(Obd2Pid pid, IndicatorDisplay display) =>
+      addIndicatorTo(state.activeId, pid, display);
+
+  /// Adiciona [pid] ao final do painel [panelId] com a customização
+  /// [display]. Sem efeito na ordem se [pid] já estiver presente nesse
+  /// painel — mas [display] sempre sobrescreve (mesmo caminho usado para
+  /// editar, ver [updateDisplayIn]). Sem efeito se [panelId] não existir.
+  void addIndicatorTo(String panelId, Obd2Pid pid, IndicatorDisplay display) {
+    _updatePanel(panelId, (p) {
       final ids = p.contains(pid)
           ? p.indicatorIds
           : [...p.indicatorIds, pid.name];
@@ -103,19 +114,32 @@ class PanelViewModel extends Notifier<PanelsState> {
     });
   }
 
-  /// Sobrescreve a customização de exibição de [pid] no painel ativo, sem
-  /// alterar sua posição. Sem efeito se [pid] não estiver presente.
-  void updateDisplay(Obd2Pid pid, IndicatorDisplay display) {
-    if (!state.contains(pid)) return;
-    _updateActive(
+  /// Sobrescreve a customização de exibição de [pid] no painel ativo. Ver
+  /// [updateDisplayIn].
+  void updateDisplay(Obd2Pid pid, IndicatorDisplay display) =>
+      updateDisplayIn(state.activeId, pid, display);
+
+  /// Sobrescreve a customização de exibição de [pid] no painel [panelId],
+  /// sem alterar sua posição. Sem efeito se [pid] não estiver presente nesse
+  /// painel, ou se [panelId] não existir.
+  void updateDisplayIn(String panelId, Obd2Pid pid, IndicatorDisplay display) {
+    final matches = state.panels.where((p) => p.id == panelId);
+    if (matches.isEmpty || !matches.first.contains(pid)) return;
+    _updatePanel(
+      panelId,
       (p) => p.copyWith(displays: {...p.displays, pid.name: display}),
     );
   }
 
-  /// Remove [pid] do painel ativo. Sem efeito se não estiver presente.
-  void removeIndicator(Obd2Pid pid) {
-    if (!state.contains(pid)) return;
-    _updateActive((p) {
+  /// Remove [pid] do painel ativo. Ver [removeIndicatorFrom].
+  void removeIndicator(Obd2Pid pid) => removeIndicatorFrom(state.activeId, pid);
+
+  /// Remove [pid] do painel [panelId]. Sem efeito se não estiver presente
+  /// nesse painel, ou se [panelId] não existir.
+  void removeIndicatorFrom(String panelId, Obd2Pid pid) {
+    final matches = state.panels.where((p) => p.id == panelId);
+    if (matches.isEmpty || !matches.first.contains(pid)) return;
+    _updatePanel(panelId, (p) {
       final displays = {...p.displays}..remove(pid.name);
       return p.copyWith(
         indicatorIds: p.indicatorIds.where((id) => id != pid.name).toList(),

@@ -58,7 +58,8 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.sensorPicker,
-      builder: (context, state) => const SensorPickerScreen(),
+      builder: (context, state) =>
+          SensorPickerScreen(fromTab: state.extra == true),
     ),
   ],
 );

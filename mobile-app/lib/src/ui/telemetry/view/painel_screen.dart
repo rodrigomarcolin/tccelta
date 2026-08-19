@@ -28,9 +28,12 @@ import 'package:tccelta_mobile/src/ui/telemetry/widgets/telemetry_status_band.da
 /// no meio). Os cards podem ser reordenados por arrastar
 /// ([ReorderableCardGrid]). O usuário pode manter vários painéis — a linha de
 /// abas (`PanelTabsRow`) troca/cria, e o botão "⋯" abre o gerenciador
-/// (`showPanelManagerSheet`) para renomear/duplicar/excluir. O
-/// `ConnectionGuard` global protege a rota; se o link cair, ele redireciona
-/// para "Conexão perdida".
+/// (`showPanelManagerSheet`) para renomear/duplicar/excluir. A aba "Sensores"
+/// da `AppTabBar` abre a mesma `SensorPickerScreen` num segundo modo
+/// (`fromTab: true`, via `context.go`): lá, tocar um sensor primeiro escolhe
+/// o painel (`showPanelPickerSheet`) antes do sheet de formato — podendo
+/// mirar qualquer painel, não só o ativo. O `ConnectionGuard` global protege
+/// a rota; se o link cair, ele redireciona para "Conexão perdida".
 class PainelScreen extends ConsumerWidget {
   /// Cria o painel.
   const PainelScreen({super.key});
@@ -132,6 +135,9 @@ class PainelScreen extends ConsumerWidget {
       ),
       bottomNavigationBar: AppTabBar(
         onChanged: (key) {
+          if (key == 'sensores') {
+            context.go(AppRoutes.sensorPicker, extra: true);
+          }
           if (key == 'mais') context.go(AppRoutes.more);
         },
       ),
