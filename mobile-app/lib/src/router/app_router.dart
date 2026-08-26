@@ -6,7 +6,10 @@ import 'package:tccelta_mobile/src/ui/connection/view/connecting_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/connection_lost_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/permissions_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/scan_screen.dart';
+import 'package:tccelta_mobile/src/ui/more/view/more_screen.dart';
+import 'package:tccelta_mobile/src/ui/settings/view/psk_settings_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/view/sensor_picker_screen.dart';
 
 /// Roteador do app. O fluxo de conexão (`01 FLUXO DE CONEXÃO`) é a entrada;
 /// `/painel` abre o painel de telemetria OBD-II (`PainelScreen`).
@@ -40,6 +43,23 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.painel,
       builder: (context, state) => const PainelScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.settings,
+      builder: (context, state) => const PskSettingsScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.more,
+      builder: (context, state) => const MoreScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.pskSetup,
+      builder: (context, state) => const PskSettingsScreen(setupFlow: true),
+    ),
+    GoRoute(
+      path: AppRoutes.sensorPicker,
+      builder: (context, state) =>
+          SensorPickerScreen(fromTab: state.extra == true),
     ),
   ],
 );

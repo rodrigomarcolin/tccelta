@@ -158,9 +158,28 @@ class Obd2RepositoryImpl implements Obd2Repository {
     // Se a descoberta já rodou, lê só os PIDs suportados; senão, todos os
     // curados (fallback quando o painel foi aberto sem sondar antes).
     final supported = _supported;
-    final toRead =
-        supported == null ? pids : pids.where(supported.contains);
+    final toRead = supported == null ? pids : pids.where(supported.contains);
+    return _readEach(ds, toRead);
+  }
 
+  @override
+  Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async {
+    final ds = _ensureDatasource();
+    if (ds == null) {
+      throw const ObdCommandFailure('Sem conexão BLE pronta');
+    }
+    if (!_initialized) await initialize();
+    return _readEach(ds, pids);
+  }
+
+  /// Lê cada PID de [toRead] sequencialmente, na ordem, omitindo os sem
+  /// resposta — leitura parcial é válida. Consulta o protocolo uma única vez
+  /// (não importa qual ciclo — completo ou restrito a alguns PIDs — dispara
+  /// a primeira leitura bem-sucedida).
+  Future<List<Obd2Reading>> _readEach(
+    Obd2Datasource ds,
+    Iterable<Obd2Pid> toRead,
+  ) async {
     final readings = <Obd2Reading>[];
     for (final pid in toRead) {
       try {

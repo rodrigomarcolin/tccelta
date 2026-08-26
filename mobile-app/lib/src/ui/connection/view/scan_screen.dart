@@ -49,99 +49,117 @@ class ScanScreen extends HookConsumerWidget {
     Future<void> select(BleDevice device) async {
       ref.read(selectedDongleProvider.notifier).select(device);
       await ref.read(scanViewModelProvider.notifier).stopScan();
-      if (context.mounted) unawaited(context.push(AppRoutes.connecting));
+      if (context.mounted) unawaited(context.push(AppRoutes.pskSetup));
     }
 
     final state = ref.watch(scanViewModelProvider);
 
-    return ConnectionBackground(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s7),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.s7),
-                children: [
-                  Text('Procurar dongle', style: AppTypography.heading),
-                  const SizedBox(height: AppSpacing.s2),
-                  if (!state.adapterOn)
-                    Text(
-                      'Ligue o Bluetooth para procurar o dongle.',
-                      style: AppTypography.ui(
-                        const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.amber500,
+    return Scaffold(
+      backgroundColor: AppColors.bgScreen,
+      appBar: AppBar(
+        backgroundColor: AppColors.bgScreen,
+        elevation: 0,
+        title: Text(
+          'OBD-II Dongle',
+          style: AppTypography.ui(
+            const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+        centerTitle: false,
+      ),
+      body: ConnectionBackground(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s7),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.s7),
+                  children: [
+                    Text('Procurar dongle', style: AppTypography.heading),
+                    const SizedBox(height: AppSpacing.s2),
+                    if (!state.adapterOn)
+                      Text(
+                        'Ligue o Bluetooth para procurar o dongle.',
+                        style: AppTypography.ui(
+                          const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.amber500,
+                          ),
                         ),
-                      ),
-                    )
-                  else if (state.failure != null)
-                    Text(
-                      'Falha na busca. Tente novamente.',
-                      style: AppTypography.ui(
-                        const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.red200,
+                      )
+                    else if (state.failure != null)
+                      Text(
+                        'Falha na busca. Tente novamente.',
+                        style: AppTypography.ui(
+                          const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.red200,
+                          ),
                         ),
+                      )
+                    else if (state.isScanning)
+                      const _SearchingLabel()
+                    else
+                      const SizedBox.shrink(),
+                    const SizedBox(height: AppSpacing.s5),
+                    Center(
+                      child: RadarScanner(
+                        key: ValueKey(scanAttempt.value),
+                        active: state.isScanning,
                       ),
-                    )
-                  else if (state.isScanning)
-                    const _SearchingLabel()
-                  else
-                    const SizedBox.shrink(),
-                  const SizedBox(height: AppSpacing.s5),
-                  Center(
-                    child: RadarScanner(
-                      key: ValueKey(scanAttempt.value),
-                      active: state.isScanning,
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.s7),
-                  Text('ENCONTRADOS', style: AppTypography.overline),
-                  const SizedBox(height: AppSpacing.s4),
-                  if (state.devices.isEmpty)
-                    Text(
-                      'Nenhum dongle encontrado ainda…',
-                      style: AppTypography.ui(
-                        const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.textTertiary,
+                    const SizedBox(height: AppSpacing.s7),
+                    Text('ENCONTRADOS', style: AppTypography.overline),
+                    const SizedBox(height: AppSpacing.s4),
+                    if (state.devices.isEmpty)
+                      Text(
+                        'Nenhum dongle encontrado ainda…',
+                        style: AppTypography.ui(
+                          const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.textTertiary,
+                          ),
                         ),
-                      ),
-                    )
-                  else
-                    for (final device in state.devices) ...[
-                      CardButton(
-                        leading: const IconTile(AppIconData.dongle),
-                        title: device.displayName,
-                        titleMono: true,
-                        subtitle: 'ELM327 · ${device.signal.label}',
-                        subtitleColor: AppColors.cyan500,
-                        subtitleMono: false,
-                        showValue: false,
-                        selected: true,
-                        // BT desligado: nada a conectar — desabilita o toque
-                        // (onTap nulo) e esmaece o card.
-                        dimmed: !state.adapterOn,
-                        onTap: state.adapterOn ? () => select(device) : null,
-                      ),
-                      const SizedBox(height: AppSpacing.s3),
-                    ],
-                ],
+                      )
+                    else
+                      for (final device in state.devices) ...[
+                        CardButton(
+                          leading: const IconTile(AppIconData.dongle),
+                          title: device.displayName,
+                          titleMono: true,
+                          subtitle: 'ELM327 · ${device.signal.label}',
+                          subtitleColor: AppColors.cyan500,
+                          subtitleMono: false,
+                          showValue: false,
+                          selected: true,
+                          // BT desligado: nada a conectar — desabilita o toque
+                          // (onTap nulo) e esmaece o card.
+                          dimmed: !state.adapterOn,
+                          onTap: state.adapterOn ? () => select(device) : null,
+                        ),
+                        const SizedBox(height: AppSpacing.s3),
+                      ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.s5),
-            AppButton(
-              variant: AppButtonVariant.secondary,
-              onPressed: !state.isScanning && state.adapterOn ? rescan : null,
-              child: const Text('Procurar novamente'),
-            ),
-            const SizedBox(height: AppSpacing.s7),
-          ],
+              const SizedBox(height: AppSpacing.s5),
+              AppButton(
+                variant: AppButtonVariant.secondary,
+                onPressed: !state.isScanning && state.adapterOn ? rescan : null,
+                child: const Text('Procurar novamente'),
+              ),
+              const SizedBox(height: AppSpacing.s7),
+            ],
+          ),
         ),
       ),
     );

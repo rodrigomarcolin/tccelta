@@ -18,6 +18,9 @@ enum AppButtonVariant {
 
   /// Texto inline (ciano ou neutro), sem fundo.
   link,
+
+  /// Vermelho sólido — ação destrutiva (ex.: "Remover" numa confirmação).
+  danger,
 }
 
 /// Botão de ação do cockpit.
@@ -51,12 +54,10 @@ class AppButton extends StatelessWidget {
   /// `null` desabilita o botão.
   final VoidCallback? onPressed;
 
-  bool get _filled =>
-      variant == AppButtonVariant.primary ||
-      variant == AppButtonVariant.warning;
-
   double get _height => switch (variant) {
-    AppButtonVariant.primary || AppButtonVariant.warning => 54,
+    AppButtonVariant.primary ||
+    AppButtonVariant.warning ||
+    AppButtonVariant.danger => 54,
     AppButtonVariant.secondary || AppButtonVariant.tonal => 50,
     AppButtonVariant.link => 44, // hit target mínimo
   };
@@ -64,6 +65,7 @@ class AppButton extends StatelessWidget {
   Color get _fg => switch (variant) {
     AppButtonVariant.primary => AppColors.accentOn,
     AppButtonVariant.warning => AppColors.warningOn,
+    AppButtonVariant.danger => AppColors.dangerOn,
     AppButtonVariant.secondary => AppColors.textPrimary,
     AppButtonVariant.tonal || AppButtonVariant.link => AppColors.cyan500,
   };
@@ -106,14 +108,16 @@ class AppButton extends StatelessWidget {
     switch (variant) {
       case AppButtonVariant.primary:
       case AppButtonVariant.warning:
+      case AppButtonVariant.danger:
         return _Pressable(
           onPressed: onPressed,
           borderRadius: AppRadii.brBtn,
-          color: _filled
-              ? (variant == AppButtonVariant.primary
-                    ? AppColors.cyan500
-                    : AppColors.amber500)
-              : null,
+          color: switch (variant) {
+            AppButtonVariant.primary => AppColors.cyan500,
+            AppButtonVariant.warning => AppColors.amber500,
+            AppButtonVariant.danger => AppColors.danger,
+            _ => null,
+          },
           child: content,
         );
       case AppButtonVariant.secondary:

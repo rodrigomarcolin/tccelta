@@ -36,13 +36,12 @@ class ConnectedProbeState {
     Set<Obd2Pid>? supported,
     Failure? failure,
     bool clearFailure = false,
-  }) =>
-      ConnectedProbeState(
-        probing: probing ?? this.probing,
-        info: info ?? this.info,
-        supported: supported ?? this.supported,
-        failure: clearFailure ? null : (failure ?? this.failure),
-      );
+  }) => ConnectedProbeState(
+    probing: probing ?? this.probing,
+    info: info ?? this.info,
+    supported: supported ?? this.supported,
+    failure: clearFailure ? null : (failure ?? this.failure),
+  );
 }
 
 /// ViewModel da tela "Conectado": ao montar, sonda o adaptador uma vez
@@ -85,8 +84,8 @@ class ConnectedViewModel extends Notifier<ConnectedProbeState> {
 /// cada vez que a tela "Conectado" é exibida (o cache do repository torna a
 /// reexecução barata).
 final NotifierProvider<ConnectedViewModel, ConnectedProbeState>
-    connectedViewModelProvider =
+connectedViewModelProvider =
     NotifierProvider<ConnectedViewModel, ConnectedProbeState>(
-  ConnectedViewModel.new,
-  isAutoDispose: true,
-);
+      ConnectedViewModel.new,
+      isAutoDispose: true,
+    );

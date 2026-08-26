@@ -51,7 +51,10 @@ enum AppIconData {
   sinal('sinal'),
 
   /// Desconectar (plugue removido) — ação destrutiva.
-  desconectar('desconectar');
+  desconectar('desconectar'),
+
+  /// Cadeado — criptografia/PSK.
+  cadeado('cadeado');
 
   const AppIconData(this._name);
 

@@ -23,10 +23,10 @@ class TelemetryStatusBand extends ConsumerWidget {
     final status = _statusFor(phase, telemetry.failure);
     final info = telemetry.adapterInfo;
     // Junta versão e protocolo (só os presentes) no slot secundário.
-    final detail = [info?.version, info?.protocol]
-        .whereType<String>()
-        .where((s) => s.isNotEmpty)
-        .join(' · ');
+    final detail = [
+      info?.version,
+      info?.protocol,
+    ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
 
     return StatusBand(
       device: device?.displayName ?? 'OBD2Dongle',
@@ -41,21 +41,27 @@ class TelemetryStatusBand extends ConsumerWidget {
   static ({String label, StatusTone tone}) _statusFor(
     BleConnectionPhase phase,
     Failure? failure,
-  ) =>
-      switch (phase) {
-        BleConnectionPhase.ready when failure != null =>
-          (label: 'SEM DADOS', tone: StatusTone.warning),
-        BleConnectionPhase.ready => (label: 'AO VIVO', tone: StatusTone.live),
-        BleConnectionPhase.reconnecting =>
-          (label: 'RECONECTANDO', tone: StatusTone.warning),
-        BleConnectionPhase.connecting ||
-        BleConnectionPhase.optimizingLink ||
-        BleConnectionPhase.discovering ||
-        BleConnectionPhase.enablingNotify =>
-          (label: 'CONECTANDO', tone: StatusTone.warning),
-        BleConnectionPhase.failed || BleConnectionPhase.disconnected =>
-          (label: 'OFFLINE', tone: StatusTone.alert),
-        BleConnectionPhase.idle =>
-          (label: 'AGUARDANDO', tone: StatusTone.warning),
-      };
+  ) => switch (phase) {
+    BleConnectionPhase.ready when failure != null => (
+      label: 'SEM DADOS',
+      tone: StatusTone.warning,
+    ),
+    BleConnectionPhase.ready => (label: 'AO VIVO', tone: StatusTone.live),
+    BleConnectionPhase.reconnecting => (
+      label: 'RECONECTANDO',
+      tone: StatusTone.warning,
+    ),
+    BleConnectionPhase.connecting ||
+    BleConnectionPhase.optimizingLink ||
+    BleConnectionPhase.discovering ||
+    BleConnectionPhase.enablingNotify => (
+      label: 'CONECTANDO',
+      tone: StatusTone.warning,
+    ),
+    BleConnectionPhase.failed || BleConnectionPhase.disconnected => (
+      label: 'OFFLINE',
+      tone: StatusTone.alert,
+    ),
+    BleConnectionPhase.idle => (label: 'AGUARDANDO', tone: StatusTone.warning),
+  };
 }

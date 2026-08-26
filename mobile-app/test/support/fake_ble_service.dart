@@ -124,8 +124,7 @@ class FakeBleService implements BleService {
     required String rxUuid,
     required String txUuid,
     int mtu = 512,
-  }) async =>
-      FakeBleConnection(phases);
+  }) async => FakeBleConnection(phases);
 }
 
 /// Conexão falsa que percorre uma sequência de fases, uma por turno do loop de

@@ -19,6 +19,7 @@ class GaugePainter extends CustomPainter {
     this.weight = Gauge.defaultWeight,
     this.warningThreshold = Gauge.defaultWarningThreshold,
     this.alertThreshold = Gauge.defaultAlertThreshold,
+    this.invertZones = false,
   });
 
   /// Formato do arco.
@@ -38,6 +39,11 @@ class GaugePainter extends CustomPainter {
 
   /// Início da zona de alerta (vermelho) das faixas de [GaugeVariant.arc180].
   final double alertThreshold;
+
+  /// Inverte a ordem das cores das faixas de [GaugeVariant.arc180]: de
+  /// verde→âmbar→vermelho (baixo para alto) para vermelho→âmbar→verde.
+  /// @see [Gauge.invertZones]
+  final bool invertZones;
 
   static const double _vb = 200; // viewBox de referência
 
@@ -150,14 +156,22 @@ class GaugePainter extends CustomPainter {
       ..color = AppColors.track;
     canvas.drawArc(rect, startAngle, sweep, false, trackPaint);
 
-    // Três faixas contíguas: verde até o aviso, âmbar até o alerta, vermelho
-    // até o fim. Cada uma vai do limite da anterior até o seu [upTo], como
-    // fração da varredura.
-    final bands = <(double, Color)>[
-      (warningThreshold, AppColors.green500),
-      (alertThreshold, AppColors.amber500),
-      (1, AppColors.red500),
-    ];
+    // Três faixas contíguas: baixo, âmbar (médio) e alto. Cada uma vai do
+    // limite da anterior até o seu [upTo], como fração da varredura. Sem
+    // inversão, baixo é verde (bom) e alto é vermelho (atenção); com
+    // [invertZones], a ordem se inverte — para PIDs em que um valor alto é
+    // desejável (ex.: nível de combustível).
+    final bands = invertZones
+        ? <(double, Color)>[
+            (warningThreshold, AppColors.red500),
+            (alertThreshold, AppColors.amber500),
+            (1, AppColors.green500),
+          ]
+        : <(double, Color)>[
+            (warningThreshold, AppColors.green500),
+            (alertThreshold, AppColors.amber500),
+            (1, AppColors.red500),
+          ];
     var fromPct = 0.0;
     for (final (upTo, bandColor) in bands) {
       final toPct = upTo.clamp(0.0, 1.0);
@@ -205,5 +219,6 @@ class GaugePainter extends CustomPainter {
       old.variant != variant ||
       old.weight != weight ||
       old.warningThreshold != warningThreshold ||
-      old.alertThreshold != alertThreshold;
+      old.alertThreshold != alertThreshold ||
+      old.invertZones != invertZones;
 }

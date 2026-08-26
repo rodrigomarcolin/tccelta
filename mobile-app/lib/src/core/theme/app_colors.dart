@@ -134,6 +134,9 @@ abstract final class AppColors {
   /// Cor de alerta/erro.
   static const Color danger = red500;
 
+  /// Texto/ícone sobre alerta/erro sólido.
+  static const Color dangerOn = textPrimary;
+
   // ---- Washes translúcidos de acento (cor a NN% de alpha) ----
   /// Ciano a 6%.
   static const Color cyan06 = Color(0x0F22D3EE);

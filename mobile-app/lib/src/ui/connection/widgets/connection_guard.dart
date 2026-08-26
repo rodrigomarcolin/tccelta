@@ -68,6 +68,7 @@ class ConnectionGuard extends HookConsumerWidget {
     AppRoutes.permissions,
     AppRoutes.bluetoothOff,
     AppRoutes.scan,
+    AppRoutes.pskSetup,
     AppRoutes.connecting,
     AppRoutes.connectionLost,
   };
@@ -78,6 +79,7 @@ class ConnectionGuard extends HookConsumerWidget {
     AppRoutes.permissions,
     AppRoutes.bluetoothOff,
     AppRoutes.scan,
+    AppRoutes.pskSetup,
   };
 
   /// Janela para o estado do adaptador assentar antes de decidir por "Conexão
@@ -107,16 +109,19 @@ class ConnectionGuard extends HookConsumerWidget {
     ref
       ..listen(adapterStateProvider, (_, next) {
         if (next.asData?.value != BleAdapterState.off) return;
-        if (!_adapterOffExcludedRoutes
-            .contains(appRouter.state.matchedLocation)) {
+        if (!_adapterOffExcludedRoutes.contains(
+          appRouter.state.matchedLocation,
+        )) {
           appRouter.go(AppRoutes.bluetoothOff);
         }
       })
       // (2) Conexão perdida: só quando o link cai por outra causa que não o BT
       // desligado (esse caso já foi tratado acima).
-      ..listen<BleConnectionPhase>(
-          connectingViewModelProvider.select((s) => s.phase), (_, next) {
-        final dropped = next == BleConnectionPhase.failed ||
+      ..listen<
+        BleConnectionPhase
+      >(connectingViewModelProvider.select((s) => s.phase), (_, next) {
+        final dropped =
+            next == BleConnectionPhase.failed ||
             next == BleConnectionPhase.disconnected;
         if (!dropped) return;
         // Adia a decisão para o estado do adaptador assentar (o `off` corre em

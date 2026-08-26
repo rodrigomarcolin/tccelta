@@ -36,13 +36,12 @@ class ScanState {
     bool? adapterOn,
     Failure? failure,
     bool clearFailure = false,
-  }) =>
-      ScanState(
-        isScanning: isScanning ?? this.isScanning,
-        devices: devices ?? this.devices,
-        adapterOn: adapterOn ?? this.adapterOn,
-        failure: clearFailure ? null : (failure ?? this.failure),
-      );
+  }) => ScanState(
+    isScanning: isScanning ?? this.isScanning,
+    devices: devices ?? this.devices,
+    adapterOn: adapterOn ?? this.adapterOn,
+    failure: clearFailure ? null : (failure ?? this.failure),
+  );
 }
 
 /// ViewModel da busca: dispara/para o scan e acompanha o adaptador. Toda a
@@ -88,37 +87,37 @@ class ScanViewModel extends Notifier<ScanState> {
   /// (~5 scans/30s), que trava os resultados e faz o dongle "sumir". Um novo
   /// scan só começa quando o anterior terminou (timeout) ou foi parado.
   Future<void> startScan() => _enqueue(() async {
-        if (state.isScanning) return;
-        await _scanSub?.cancel();
-        _scanSub = null;
-        state = state.copyWith(
-          isScanning: true,
-          devices: const [],
-          clearFailure: true,
-        );
-        _scanSub = _repo.scan().listen(
-          // Sem nome nem id (HEX) não dá pra rotular o dongle — omite.
-          (devices) => state = state.copyWith(
-            devices: devices
-                .where((d) => d.displayName.isNotEmpty)
-                .toList(growable: false),
-          ),
-          onError: (Object e) => state = state.copyWith(
-            isScanning: false,
-            failure: e is Failure ? e : null,
-          ),
-          onDone: () => state = state.copyWith(isScanning: false),
-        );
-      });
+    if (state.isScanning) return;
+    await _scanSub?.cancel();
+    _scanSub = null;
+    state = state.copyWith(
+      isScanning: true,
+      devices: const [],
+      clearFailure: true,
+    );
+    _scanSub = _repo.scan().listen(
+      // Sem nome nem id (HEX) não dá pra rotular o dongle — omite.
+      (devices) => state = state.copyWith(
+        devices: devices
+            .where((d) => d.displayName.isNotEmpty)
+            .toList(growable: false),
+      ),
+      onError: (Object e) => state = state.copyWith(
+        isScanning: false,
+        failure: e is Failure ? e : null,
+      ),
+      onDone: () => state = state.copyWith(isScanning: false),
+    );
+  });
 
   /// Para a busca (ex.: ao selecionar um dongle). Também serializado, para não
   /// intercalar com um [startScan] em andamento.
   Future<void> stopScan() => _enqueue(() async {
-        await _repo.stopScan();
-        await _scanSub?.cancel();
-        _scanSub = null;
-        state = state.copyWith(isScanning: false);
-      });
+    await _repo.stopScan();
+    await _scanSub?.cancel();
+    _scanSub = null;
+    state = state.copyWith(isScanning: false);
+  });
 }
 
 /// Provider do [ScanViewModel].

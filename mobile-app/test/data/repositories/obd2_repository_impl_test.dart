@@ -15,7 +15,7 @@ import '../../support/scripted_ble_connection.dart';
 /// [Obd2RepositoryImpl] consome). Os demais membros não são exercitados.
 class _FakeDongleRepository implements DongleRepository {
   _FakeDongleRepository(this._conn, {Stream<BleConnectionPhase>? phase})
-      : _phase = phase ?? const Stream.empty();
+    : _phase = phase ?? const Stream.empty();
 
   final BleConnection? _conn;
   final Stream<BleConnectionPhase> _phase;
@@ -35,8 +35,7 @@ class _FakeDongleRepository implements DongleRepository {
   @override
   Stream<List<BleDevice>> scan({
     Duration timeout = const Duration(seconds: 15),
-  }) =>
-      const Stream.empty();
+  }) => const Stream.empty();
 
   @override
   Future<void> stopScan() async {}
@@ -48,7 +47,8 @@ class _FakeDongleRepository implements DongleRepository {
   Future<void> disconnect() async {}
 }
 
-/// Respostas do mock do firmware para os 6 PIDs + init.
+/// Respostas do mock do firmware para os 43 PIDs (6 originais + 37 novos) +
+/// init.
 const Map<String, String> _mockResponses = {
   'ATZ': 'ELM327 v1.5\r>',
   'ATE0': 'OK\r>',
@@ -60,6 +60,43 @@ const Map<String, String> _mockResponses = {
   '010D': '41 0D 3C\r>',
   '010E': '41 0E 94\r>',
   '0111': '41 11 33\r>',
+  '0106': '41 06 86\r>',
+  '0107': '41 07 86\r>',
+  '010A': '41 0A 85\r>',
+  '010B': '41 0B 78\r>',
+  '010F': '41 0F 5A\r>',
+  '0110': '41 10 0F A0\r>',
+  '0114': '41 14 8C\r>',
+  '0115': '41 15 8C\r>',
+  '011F': '41 1F 09 60\r>',
+  '0121': '41 21 00 23\r>',
+  '012C': '41 2C 8C\r>',
+  '012D': '41 2D 84\r>',
+  '012E': '41 2E A6\r>',
+  '012F': '41 2F 4D\r>',
+  '0130': '41 30 23\r>',
+  '0131': '41 31 02 EE\r>',
+  '0132': '41 32 00 DC\r>',
+  '0133': '41 33 64\r>',
+  '013C': '41 3C 19 00\r>',
+  '0142': '41 42 35 E8\r>',
+  '0143': '41 43 00 E6\r>',
+  '0144': '41 44 80 00\r>',
+  '0145': '41 45 8C\r>',
+  '0146': '41 46 4E\r>',
+  '0147': '41 47 8C\r>',
+  '0149': '41 49 8C\r>',
+  '014C': '41 4C 8C\r>',
+  '014D': '41 4D 00 C8\r>',
+  '014E': '41 4E 02 EE\r>',
+  '0152': '41 52 45\r>',
+  '015A': '41 5A 8C\r>',
+  '015C': '41 5C 9B\r>',
+  '015D': '41 5D 75 80\r>',
+  '015E': '41 5E 01 F4\r>',
+  '0161': '41 61 B9\r>',
+  '0162': '41 62 B4\r>',
+  '0163': '41 63 01 C2\r>',
 };
 
 void main() {
@@ -98,7 +135,7 @@ void main() {
 
       final readings = await repo.readAll();
 
-      expect(readings.length, 5);
+      expect(readings.length, Obd2Pid.values.length - 1);
       expect(readings.any((r) => r.pid == Obd2Pid.speed), isFalse);
     });
 
@@ -122,7 +159,7 @@ void main() {
       );
     });
 
-    test('discoverSupported mapeia o bitmask p/ o enum (dropa 0x0F)', () async {
+    test('discoverSupported mapeia o bitmask p/ o enum', () async {
       final conn = ScriptedBleConnection(responses: _mockResponses);
       final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
 
@@ -134,6 +171,7 @@ void main() {
         Obd2Pid.rpm,
         Obd2Pid.speed,
         Obd2Pid.timingAdvance,
+        Obd2Pid.intakeAirTemp,
         Obd2Pid.throttle,
       });
       // Fixa o protocolo (a descoberta faz a 1ª troca OBD).
@@ -147,7 +185,7 @@ void main() {
           'ATE0': 'OK\r>',
           'ATDP': 'ISO 15765-4 (CAN 11/500)\r>',
           '0100': '41 00 00 18 00 01\r>', // rpm+speed, flag de próximo range
-          '0120': '41 20 80 00 00 00\r>', // PID 0x21 (desconhecido) → dropado
+          '0120': '41 20 40 00 00 00\r>', // PID 0x22 (desconhecido) → dropado
         },
       );
       final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
@@ -174,6 +212,31 @@ void main() {
         readings.map((r) => r.pid).toSet(),
         {Obd2Pid.rpm, Obd2Pid.speed},
       );
+    });
+
+    test('readMany lê só os PIDs pedidos, na ordem', () async {
+      final conn = ScriptedBleConnection(responses: _mockResponses);
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final readings = await repo.readMany([Obd2Pid.speed, Obd2Pid.rpm]);
+
+      expect(readings.map((r) => r.pid).toList(), [
+        Obd2Pid.speed,
+        Obd2Pid.rpm,
+      ]);
+      expect(readings[0].value, 60);
+      expect(readings[1].value, 1500);
+    });
+
+    test('readMany omite PID que responde NO DATA', () async {
+      final conn = ScriptedBleConnection(
+        responses: {..._mockResponses, '010D': 'NO DATA\r>'},
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final readings = await repo.readMany([Obd2Pid.speed, Obd2Pid.rpm]);
+
+      expect(readings.map((r) => r.pid).toList(), [Obd2Pid.rpm]);
     });
 
     test('desmonta o cliente proativamente ao cair a conexão', () async {

@@ -6,140 +6,102 @@
 #include "connectivity/IConnectivity.h"
 
 /**
- * Decorador para IConnectivity.
+ * SecureBleConnectivity — Abstract base class for encrypted BLE transport.
  *
- * Encapsula qualquer IConnectivity*, interceptando os métodos sendResponse() e
- * setOnCommandReceivedCallback() para aplicar autenticação ou encriptação
- * de maneira transparente.
+ * Owns all shared FreeRTOS plumbing:
+ *   - A raw-message queue (_rawQueue) fed by the inner transport's BLE callback
+ *   - A dedicated processing task (_taskHandle) that drains the queue and calls
+ *     the protected hook onRawFrameReceived() for each frame
  *
- * Intercepta a mensagem recebida, colocando-a na fila para desencriptação antes de repassar
- * para o callback EML327 registrado.
- * 
- * Intercepta a mensagem a ser enviada, encriptando-a antes do envio.
- * 
+ * Concrete subclasses need only implement two protected virtual hooks:
+ *
+ *   onRawFrameReceived(data, len)
+ *     Called by the processing task for every raw frame arriving from the wire.
+ *     The subclass decrypts/authenticates it and, on success, calls
+ *     deliverPlaintext() to forward the result to the registered user callback.
+ *
+ *   sendSecured(plain, len)
+ *     Called by sendResponse(). The subclass encrypts/frames the plaintext and
+ *     calls sendRaw() to push the result to _inner->sendResponse().
+ *
+ * Architecture:
  *   IConnectivity
- *   ├── BleConnectivity           (transporte puro; já implementado)
- *   └── SecureBleConnectivity     (este arquivo)
+ *   ├── BleConnectivity                    (plain transport)
+ *   └── SecureBleConnectivity              (this file — abstract base)
+ *       ├── SecurePskBleConnectivity       (AES-256-GCM, static PSK)
+ *       └── SecureHandshakeBleConnectivity (PSK handshake — HKDF session key)
  *
- * Como utilizar (na main.cpp):
- *   BleConnectivity       raw("OBD2Dongle");
- *   SecureBleConnectivity secure(&raw);
- *   Elm327Task            task(&secure, &obd2);  // segurança é transparente
- *
- * Fluxo interno:
+ * Internal data flow:
  *   BleConnectivity::onWrite()
- *       └─► _rawQueue          (callback leve, só enfileira)
- *               └─► [_secureTask]  decrypt → _userCallback(plaintext)
- *                                               └─► [Elm327Task queue]
- * 
- * OBS: Este arquivo Header está maior do que deveria. Então é um 
- * TODO separar em .h e .cpp 
+ *       └─► _rawQueue          (lightweight ISR-safe enqueue)
+ *               └─► [_secureTask]
+ *                       └─► onRawFrameReceived()   ← subclass decrypts
+ *                               └─► deliverPlaintext() → _userCallback
+ *                                                           └─► [Elm327Task]
  */
 
-static constexpr size_t kSecureMaxMsgLen   = 512;
-static constexpr size_t kSecureQueueDepth  = 8;
-static constexpr uint32_t kSecureTaskStack = 4096;
+static constexpr size_t      kSecureMaxMsgLen    = 512;
+static constexpr size_t      kSecureQueueDepth   = 8;
+static constexpr uint32_t    kSecureTaskStack    = 4096;
 static constexpr UBaseType_t kSecureTaskPriority = 5;
 
 class SecureBleConnectivity : public IConnectivity {
 public:
-    explicit SecureBleConnectivity(IConnectivity* inner) : _inner(inner) {
-        _rawQueue = xQueueCreate(kSecureQueueDepth, sizeof(RawMessage));
-        configASSERT(_rawQueue);
-    }
+    explicit SecureBleConnectivity(IConnectivity* inner);
+    ~SecureBleConnectivity() override;
+
+    // ── IConnectivity interface ──────────────────────────────────────────────
+    bool begin() override;
+    void setOnCommandReceivedCallback(CommandCallback cb) override;
 
     /**
-     * Chama o begin() da classe interna, então determina o callback
-     * que colocará o comando na fila para ser desencriptado, e cria 
-     * a task de desencriptação.
+     * Encrypts/signs `data` by delegating to sendSecured(), which the subclass
+     * implements. The result is pushed to _inner via sendRaw().
      */
-    bool begin() override {
-        if (!_inner->begin()) return false;
+    void sendResponse(const uint8_t* data, size_t len) override;
 
-        // callback lightweight; copia dados raw e coloca na fila.
-        _inner->setOnCommandReceivedCallback(
-            [this](const uint8_t* data, size_t len) {
-                RawMessage msg;
-                msg.len = (len <= kSecureMaxMsgLen) ? len : kSecureMaxMsgLen;
-                memcpy(msg.buf, data, msg.len);
-                BaseType_t woken = pdFALSE;
-                xQueueSendFromISR(_rawQueue, &msg, &woken);
-                portYIELD_FROM_ISR(woken);
-            }
-        );
+    void* getSessionContext() override;
 
-        xTaskCreate(
-            secureTaskEntry,
-            "SecureTask",
-            kSecureTaskStack,
-            this,
-            kSecureTaskPriority,
-            &_taskHandle
-        );
-        configASSERT(_taskHandle);
-        return true;
-    }
+protected:
+    // ── Hooks for subclasses ─────────────────────────────────────────────────
 
     /**
-     * Armazena o callback registrado (ex. o do Elm327Task).
-     * A task de desencriptar chamará o _userCallback com um plaintext.
+     * Called by the processing task for each raw frame dequeued from _rawQueue.
+     *
+     * The subclass MUST implement this to authenticate/decrypt the frame.
+     * On success, call deliverPlaintext(plain, plainLen).
+     * On failure (auth error, malformed frame), silently drop the frame.
      */
-    void setOnCommandReceivedCallback(CommandCallback cb) override {
-        _userCallback = cb;
-    }
+    virtual void onRawFrameReceived(const uint8_t* data, size_t len) = 0;
 
     /**
-     * Encripta/assina dados antes de encaminhar para o transporte interno
-     * É chamado no contexto de uma task, então pode conter "heavy work"
+     * Called by sendResponse() with the caller's plaintext.
+     *
+     * The subclass MUST implement this to encrypt/frame the data, then call
+     * sendRaw(encData, encLen) to push it to the transport layer.
      */
-    void sendResponse(const uint8_t* data, size_t len) override {
-        // TODO: encrypt / sign data, write result into encBuf / encLen
-        const uint8_t* encBuf = data;
-        size_t         encLen = len;
-        _inner->sendResponse(encBuf, encLen);
-    }
+    virtual void sendSecured(const uint8_t* plain, size_t len) = 0;
 
-    void* getSessionContext() override {
-        // TODO: return a populated SessionContext with auth token / session key
-        return nullptr;
-    }
+    // ── Helpers available to subclasses ──────────────────────────────────────
 
-    ~SecureBleConnectivity() override {
-        if (_taskHandle)  vTaskDelete(_taskHandle);
-        if (_rawQueue)    vQueueDelete(_rawQueue);
-    }
+    /** Forwards plaintext to the user callback (e.g. Elm327Task). */
+    void deliverPlaintext(const uint8_t* plain, size_t len);
+
+    /** Pushes raw (already encrypted) bytes to the inner transport. */
+    void sendRaw(const uint8_t* data, size_t len);
+
+    IConnectivity* _inner;
 
 private:
+    CommandCallback _userCallback;
+    QueueHandle_t   _rawQueue   = nullptr;
+    TaskHandle_t    _taskHandle = nullptr;
+
     struct RawMessage {
         uint8_t buf[kSecureMaxMsgLen];
         size_t  len;
     };
 
-    static void secureTaskEntry(void* arg) {
-        static_cast<SecureBleConnectivity*>(arg)->secureTask();
-    }
-
-    void secureTask() {
-        // Tarefa que reagirá ao enfileiramento de um comando recebido pelo Dongle.
-        // TODO: Renomear e implementar.
-        RawMessage msg;
-        while (true) {
-            if (xQueueReceive(_rawQueue, &msg, portMAX_DELAY) == pdTRUE) {
-                // TODO: decrypt msg.buf / msg.len → plain / plainLen
-                const uint8_t* plain    = msg.buf;
-                size_t         plainLen = msg.len;
-
-                if (_userCallback) {
-                    // Após ter o plaintext e verificar autenticidade, repassa-o para o userCallback registrado
-                    // que, no nosso caso, colocará o plaintext na fila para ser processado pelo ELM327 =)
-                    _userCallback(plain, plainLen);
-                }
-            }
-        }
-    }
-
-    IConnectivity*  _inner;
-    CommandCallback _userCallback;
-    QueueHandle_t   _rawQueue  = nullptr;
-    TaskHandle_t    _taskHandle = nullptr;
+    static void secureTaskEntry(void* arg);
+    void        secureTask();
 };

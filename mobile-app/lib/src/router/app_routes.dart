@@ -24,4 +24,21 @@ abstract final class AppRoutes {
 
   /// Painel de telemetria OBD-II ao vivo (`PainelScreen`).
   static const String painel = '/painel';
+
+  /// Tela de configuração de criptografia (PSK).
+  static const String settings = '/settings';
+
+  /// Tela de opções ("Mais"), aberta pela aba homônima da tab bar.
+  static const String more = '/more';
+
+  /// Configuração da PSK dentro do fluxo de conexão (antes de conectar).
+  static const String pskSetup = '/psk-setup';
+
+  /// Lista de sensores (`SensorPickerScreen`). Dois modos de entrada: o
+  /// botão "Adicionar indicador" do Painel empilha com `context.push` (sem
+  /// `extra`); a aba "Sensores" da tab bar navega com
+  /// `context.go(sensorPicker, extra: true)`, tornando a tela raiz dessa
+  /// aba. A escolha de painel/formato do indicador são bottom sheets
+  /// (`showPanelPickerSheet`/`showIndicatorFormatSheet`), não rotas.
+  static const String sensorPicker = '/sensor-picker';
 }

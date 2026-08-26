@@ -48,6 +48,7 @@ dependencies:
   # depender de Flutter.
   meta: ^1.16.0
   permission_handler: ^12.0.3
+  pointycastle: ^3.9.1
   shared_preferences: ^2.5.5
 
 dev_dependencies:

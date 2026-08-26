@@ -14,16 +14,19 @@ class _FakeObd2Repository implements Obd2Repository {
 
   @override
   Obd2AdapterInfo? get adapterInfo => const Obd2AdapterInfo(
-        version: 'ELM327 v1.5',
-        protocol: 'ISO 15765-4 (CAN 11/500)',
-      );
+    version: 'ELM327 v1.5',
+    protocol: 'ISO 15765-4 (CAN 11/500)',
+  );
 
   @override
   Future<void> initialize() async {}
 
   @override
-  Future<Set<Obd2Pid>> discoverSupported() async =>
-      {Obd2Pid.rpm, Obd2Pid.speed, Obd2Pid.coolantTemp};
+  Future<Set<Obd2Pid>> discoverSupported() async => {
+    Obd2Pid.rpm,
+    Obd2Pid.speed,
+    Obd2Pid.coolantTemp,
+  };
 
   @override
   Future<Obd2Reading> read(Obd2Pid pid) async =>
@@ -31,6 +34,9 @@ class _FakeObd2Repository implements Obd2Repository {
 
   @override
   Future<List<Obd2Reading>> readAll() async => const [];
+
+  @override
+  Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async => const [];
 }
 
 void main() {

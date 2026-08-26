@@ -34,6 +34,9 @@ class _FakeObd2Repository implements Obd2Repository {
 
   @override
   Future<List<Obd2Reading>> readAll() async => const [];
+
+  @override
+  Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async => const [];
 }
 
 void main() {
@@ -69,14 +72,18 @@ void main() {
       // 1ª conexão até concluir a preparação.
       await notifier.connect('1');
       await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(container.read(connectingViewModelProvider).prep,
-          ConnectingPrep.done);
+      expect(
+        container.read(connectingViewModelProvider).prep,
+        ConnectingPrep.done,
+      );
 
       // Reconecta: o estado deve zerar de imediato (prep volta a idle), não
       // ficar preso no `done` da sessão anterior.
       final future = notifier.connect('1');
-      expect(container.read(connectingViewModelProvider).prep,
-          ConnectingPrep.idle);
+      expect(
+        container.read(connectingViewModelProvider).prep,
+        ConnectingPrep.idle,
+      );
 
       // E a preparação reexecuta até done novamente.
       await future;

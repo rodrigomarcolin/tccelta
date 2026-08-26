@@ -11,9 +11,9 @@ import '../../support/fake_ble_service.dart';
 
 void main() {
   Widget wrap(FakeBleService fake) => ProviderScope(
-        overrides: [bleServiceProvider.overrideWithValue(fake)],
-        child: MaterialApp(theme: AppTheme.dark, home: const ScanScreen()),
-      );
+    overrides: [bleServiceProvider.overrideWithValue(fake)],
+    child: MaterialApp(theme: AppTheme.dark, home: const ScanScreen()),
+  );
 
   testWidgets('lista os dongles encontrados', (tester) async {
     await tester.pumpWidget(
@@ -69,8 +69,9 @@ void main() {
     expect(find.text('Nenhum dongle encontrado ainda…'), findsOneWidget);
   });
 
-  testWidgets('reencontra o dongle ao tocar em Procurar novamente',
-      (tester) async {
+  testWidgets('reencontra o dongle ao tocar em Procurar novamente', (
+    tester,
+  ) async {
     final fake = FakeBleService(
       devices: const [BleDevice(id: '1', name: 'OBD2Dongle', rssi: -50)],
     );
@@ -89,8 +90,9 @@ void main() {
     expect(fake.scanCount, 2);
   });
 
-  testWidgets('durante o scan: mostra "Procurando", radar ativo e botão off',
-      (tester) async {
+  testWidgets('durante o scan: mostra "Procurando", radar ativo e botão off', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       wrap(
         FakeBleService(
@@ -112,8 +114,9 @@ void main() {
     expect(find.text('ELM327 · sinal forte'), findsOneWidget);
   });
 
-  testWidgets('atualiza o rótulo de sinal ao vivo quando o RSSI muda',
-      (tester) async {
+  testWidgets('atualiza o rótulo de sinal ao vivo quando o RSSI muda', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       wrap(
         FakeBleService(

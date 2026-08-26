@@ -1,0 +1,232 @@
+import 'package:flutter/widgets.dart';
+import 'package:tccelta_mobile/src/core/theme/theme.dart';
+
+/// Grid de [columns] colunas cujos cards podem ser reposicionados por
+/// arrastar-e-soltar (segurar e arrastar — [LongPressDraggable], para não
+/// competir com o gesto de rolagem vertical da tela que o envolve).
+///
+/// Generalização de `CardGrid` para conteúdo reordenável: cada célula vira um
+/// `DragTarget` que, ao ser sobrevoada por outra sendo arrastada, já chama
+/// [onReorder] — os demais cards se deslocam antes de soltar. O card sendo
+/// arrastado fica com opacidade reduzida em seu lugar original (via
+/// `childWhenDragging`), mas continua sendo reconstruído por [itemBuilder] a
+/// cada chamada — os valores ao vivo não param de atualizar durante o
+/// arrasto. Um único `Wrap` (não uma grade de `Row`s por linha) mantém todas
+/// as células num mesmo pai, para que [keyOf] preserve a identidade de cada
+/// item através das reordenações. Cada célula tem no mínimo [minCellHeight]
+/// (pode crescer além disso — nunca fica menor).
+class ReorderableCardGrid<T extends Object> extends StatelessWidget {
+  /// Cria o grid reordenável.
+  const ReorderableCardGrid({
+    required this.items,
+    required this.itemBuilder,
+    required this.onReorder,
+    required this.keyOf,
+    this.columns = 2,
+    this.gap = AppSpacing.s3,
+    this.minCellHeight = 86,
+    this.spanOf,
+    this.minHeightOf,
+    super.key,
+  });
+
+  /// Itens a exibir, na ordem de exibição.
+  final List<T> items;
+
+  /// Constrói o conteúdo do card de `item` (índice `index` na lista atual).
+  final Widget Function(BuildContext context, T item, int index) itemBuilder;
+
+  /// Chamado ao vivo (antes de soltar) quando um item passa de `oldIndex`
+  /// para `newIndex`.
+  final void Function(int oldIndex, int newIndex) onReorder;
+
+  /// Chave estável por item (ex.: um identificador), preservando o estado do
+  /// `Draggable` de cada célula entre reordenações.
+  final Key Function(T item) keyOf;
+
+  /// Número de colunas. @default 2
+  final int columns;
+
+  /// Espaço horizontal e vertical entre as células. @default [AppSpacing.s3]
+  final double gap;
+
+  /// Altura mínima de cada célula — o card sempre ocupa ao menos uma posição
+  /// inteira do grid, mesmo com conteúdo curto. @default 86
+  final double minCellHeight;
+
+  /// Quantas colunas o item ocupa (1..[columns]). @default sempre 1
+  ///
+  /// Um item com `spanOf(item) == columns` ocupa a linha inteira — como o
+  /// grid é um [Wrap] (não uma grade fixa), ele naturalmente força uma
+  /// quebra de linha antes e depois de si, sem precisar de nenhuma mudança na
+  /// mecânica de arrastar/soltar (que opera sobre índices da lista, não sobre
+  /// geometria).
+  final int Function(T item)? spanOf;
+
+  /// Altura mínima específica do item, no lugar de [minCellHeight] — para um
+  /// item maior (ex.: gauge grande, histórico) precisar de mais espaço
+  /// vertical que uma célula normal. @default [minCellHeight] para todo item
+  final double Function(T item)? minHeightOf;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final singleWidth =
+            (constraints.maxWidth - gap * (columns - 1)) / columns;
+        final rows = _rowsOf();
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var r = 0; r < rows.length; r++) ...[
+              if (r > 0) SizedBox(height: gap),
+              // `IntrinsicHeight` mede a maior altura entre os cards da
+              // linha e a repassa como constraint tight — só assim o `Row`
+              // consegue esticar (`stretch`) os mais curtos até igualá-la,
+              // mesmo numa lista de altura ilimitada (o `ListView` que
+              // envolve o Painel). Sem isso, cada card ficaria só com a
+              // própria altura mínima/intrínseca, deixando vão vazio nos
+              // mais curtos da linha.
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var c = 0; c < rows[r].length; c++) ...[
+                      if (c > 0) SizedBox(width: gap),
+                      _buildCell(context, singleWidth, rows[r][c]),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  /// Agrupa os índices de [items] em linhas, respeitando [spanOf]: uma linha
+  /// acumula itens até [columns]; um item cujo span já preenche a linha (ex.:
+  /// linha inteira) fica sozinho na sua própria linha. Mesma regra de quebra
+  /// que o antigo `Wrap` produzia, só que explícita — para que cada linha
+  /// possa ser um `Row` cujos cards esticam (`stretch`) para a mesma altura.
+  List<List<int>> _rowsOf() {
+    final rows = <List<int>>[];
+    var current = <int>[];
+    var used = 0;
+    for (var i = 0; i < items.length; i++) {
+      final span = (spanOf?.call(items[i]) ?? 1).clamp(1, columns);
+      if (used + span > columns && current.isNotEmpty) {
+        rows.add(current);
+        current = [];
+        used = 0;
+      }
+      current.add(i);
+      used += span;
+    }
+    if (current.isNotEmpty) rows.add(current);
+    return rows;
+  }
+
+  Widget _buildCell(BuildContext context, double singleWidth, int i) {
+    final item = items[i];
+    final span = (spanOf?.call(item) ?? 1).clamp(1, columns);
+    final cellWidth = span * singleWidth + (span - 1) * gap;
+    final minHeight = minHeightOf?.call(item) ?? minCellHeight;
+    return ConstrainedBox(
+      key: keyOf(item),
+      constraints: BoxConstraints(
+        minWidth: cellWidth,
+        maxWidth: cellWidth,
+        minHeight: minHeight,
+      ),
+      child: _Cell<T>(
+        item: item,
+        index: i,
+        items: items,
+        cellWidth: cellWidth,
+        onReorder: onReorder,
+        child: itemBuilder(context, item, i),
+      ),
+    );
+  }
+}
+
+class _Cell<T extends Object> extends StatefulWidget {
+  const _Cell({
+    required this.item,
+    required this.index,
+    required this.items,
+    required this.cellWidth,
+    required this.onReorder,
+    required this.child,
+    super.key,
+  });
+
+  final T item;
+  final int index;
+  final List<T> items;
+  final double cellWidth;
+  final void Function(int oldIndex, int newIndex) onReorder;
+  final Widget child;
+
+  @override
+  State<_Cell<T>> createState() => _CellState<T>();
+}
+
+class _CellState<T extends Object> extends State<_Cell<T>> {
+  /// Chave só do card renderizado (não do `feedback`) — usada para medir seu
+  /// tamanho real e evitar que o `feedback` (fora da árvore normal, dentro do
+  /// `Overlay`) receba constraints diferentes das do grid e estoure.
+  final GlobalKey _measureKey = GlobalKey();
+
+  Size? _measuredSize;
+
+  void _measure(Duration _) {
+    final box = _measureKey.currentContext?.findRenderObject();
+    if (box is RenderBox && box.hasSize) _measuredSize = box.size;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback(_measure);
+
+    return DragTarget<T>(
+      onWillAcceptWithDetails: (details) {
+        final from = widget.items.indexOf(details.data);
+        if (from != -1 && from != widget.index) {
+          widget.onReorder(from, widget.index);
+        }
+        return true;
+      },
+      builder: (context, candidateData, rejectedData) {
+        return LongPressDraggable<T>(
+          data: widget.item,
+          dragAnchorStrategy: pointerDragAnchorStrategy,
+          feedback: SizedBox(
+            width: _measuredSize?.width ?? widget.cellWidth,
+            height: _measuredSize?.height,
+            child: Opacity(
+              opacity: 0.92,
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  borderRadius: AppRadii.brLg,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: widget.child,
+              ),
+            ),
+          ),
+          childWhenDragging: Opacity(opacity: 0.35, child: widget.child),
+          child: KeyedSubtree(key: _measureKey, child: widget.child),
+        );
+      },
+    );
+  }
+}
