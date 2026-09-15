@@ -8,14 +8,17 @@
 // Set exactly ONE of the following flags in your chosen PlatformIO environment
 // (or via platformio_secrets.ini — see README):
 //
-//   -DUSE_SECURE_PSK          AES-256-GCM with a static pre-shared key
-//   -DUSE_SECURE_HANDSHAKE    PSK handshake + HKDF session key (stub)
-//   (none)                    Plain BleConnectivity — no encryption
+//   -DUSE_SECURE_PSK             AES-256-GCM with a static pre-shared key
+//   -DUSE_SECURE_HANDSHAKE       PSK-authenticated handshake + HKDF session key
+//   -DUSE_SECURE_HANDSHAKE_REPLAY  Same handshake + per-direction anti-replay counter
+//   (none)                       Plain BleConnectivity — no encryption
 //
 #if defined(USE_SECURE_PSK)
     #include "connectivity/secure/psk/SecurePskBleConnectivity.h"
 #elif defined(USE_SECURE_HANDSHAKE)
     #include "connectivity/secure/handshake/SecureHandshakeBleConnectivity.h"
+#elif defined(USE_SECURE_HANDSHAKE_REPLAY)
+    #include "connectivity/secure/handshake_replay/SecureHandshakeReplayBleConnectivity.h"
 #endif
 
 // ── Build-time CAN / OBD2 backend selection 
@@ -63,7 +66,12 @@ void setup() {
 #elif defined(USE_SECURE_HANDSHAKE)
     static SecureHandshakeBleConnectivity secureLayer(&raw);
     IConnectivity* ble = &secureLayer;
-    Serial.println("[main] Security     : Handshake (stub)");
+    Serial.println("[main] Security     : Handshake + HKDF session key");
+
+#elif defined(USE_SECURE_HANDSHAKE_REPLAY)
+    static SecureHandshakeReplayBleConnectivity secureLayer(&raw);
+    IConnectivity* ble = &secureLayer;
+    Serial.println("[main] Security     : Handshake + HKDF session key + anti-replay counter");
 
 #else
     IConnectivity* ble = &raw;
