@@ -62,6 +62,9 @@ class MoreScreen extends ConsumerWidget {
         tabs: tabsWithDtcBadge(activeDtcCount),
         onChanged: (key) {
           if (key == 'painel') context.go(AppRoutes.painel);
+          if (key == 'sensores') {
+            context.go(AppRoutes.sensorPicker, extra: true);
+          }
           if (key == 'dtc') context.go(AppRoutes.dtc);
         },
       ),
