@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_code.dart';
-import 'package:tccelta_mobile/src/router/app_routes.dart';
+import 'package:tccelta_mobile/src/router/app_tab_navigation.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/view_model/dtc_view_model.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/widgets/diagnostics_status_band.dart';
@@ -107,13 +106,7 @@ class DtcScreen extends ConsumerWidget {
       bottomNavigationBar: AppTabBar(
         active: 'dtc',
         tabs: tabsWithDtcBadge(dtc.activeCount),
-        onChanged: (key) {
-          if (key == 'painel') context.go(AppRoutes.painel);
-          if (key == 'sensores') {
-            context.go(AppRoutes.sensorPicker, extra: true);
-          }
-          if (key == 'mais') context.go(AppRoutes.more);
-        },
+        onChanged: (key) => goToAppTab(context, key),
       ),
     );
   }

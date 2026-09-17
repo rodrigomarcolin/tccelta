@@ -5,7 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
-import 'package:tccelta_mobile/src/router/app_routes.dart';
+import 'package:tccelta_mobile/src/router/app_tab_navigation.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/view_model/dtc_view_model.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/widgets/dtc_tab_badge.dart';
@@ -157,11 +157,7 @@ class SensorPickerScreen extends HookConsumerWidget {
       bottomNavigationBar: AppTabBar(
         active: 'sensores',
         tabs: tabsWithDtcBadge(activeDtcCount),
-        onChanged: (key) {
-          if (key == 'painel') context.go(AppRoutes.painel);
-          if (key == 'dtc') context.go(AppRoutes.dtc);
-          if (key == 'mais') context.go(AppRoutes.more);
-        },
+        onChanged: (key) => goToAppTab(context, key),
       ),
     );
   }
