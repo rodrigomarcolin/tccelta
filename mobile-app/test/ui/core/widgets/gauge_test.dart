@@ -10,9 +10,11 @@ void main() {
     home: Scaffold(body: Center(child: child)),
   );
 
-  GaugePainter painterOf(WidgetTester tester) =>
-      tester.widget<CustomPaint>(find.byType(CustomPaint).first).painter!
-          as GaugePainter;
+  GaugePainter painterOf(WidgetTester tester) => tester
+      .widgetList<CustomPaint>(find.byType(CustomPaint))
+      .map((w) => w.painter)
+      .whereType<GaugePainter>()
+      .single;
 
   testWidgets('com min negativo, valor abaixo de 0 preenche parte do arco', (
     tester,
