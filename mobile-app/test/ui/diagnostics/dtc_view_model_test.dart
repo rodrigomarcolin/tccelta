@@ -1,17 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/src/core/errors/dtc_failure.dart';
-import 'package:tccelta_mobile/src/domain/obd2/dtc_code.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_catalog.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_component.dart';
-import 'package:tccelta_mobile/src/domain/obd2/dtc_severity.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dtc_repository.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/diagnostics_providers.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/view_model/dtc_view_model.dart';
 
-/// Repository de DTCs fake e determinístico — 1 confirmado (motor), 1
-/// pendente (freios) e 1 inativo (emissões).
+/// Repository de DTCs fake e determinístico — devolve 2 códigos ativos
+/// (P0301, motor, confirmado; C0035, freios, pendente), ambos já presentes
+/// no catálogo real ([dtcCatalog]) — o restante do catálogo fica inativo.
 class _FakeDtcRepository implements DtcRepository {
   _FakeDtcRepository({this.failure});
 
@@ -19,27 +20,9 @@ class _FakeDtcRepository implements DtcRepository {
   int readCalls = 0;
 
   static const _default = DtcSnapshot(
-    codes: [
-      DtcCode(
-        code: 'P0301',
-        component: DtcComponent.engine,
-        name: 'Falha de combustão',
-        severity: DtcSeverity.high,
-        status: DtcStatus.confirmed,
-      ),
-      DtcCode(
-        code: 'C0035',
-        component: DtcComponent.brakes,
-        name: 'Sensor de roda',
-        severity: DtcSeverity.medium,
-        status: DtcStatus.pending,
-      ),
-      DtcCode(
-        code: 'P0442',
-        component: DtcComponent.emissions,
-        name: 'Vazamento EVAP',
-        severity: DtcSeverity.low,
-      ),
+    active: [
+      DtcActiveEntry(code: 'P0301', status: DtcStatus.confirmed),
+      DtcActiveEntry(code: 'C0035', status: DtcStatus.pending),
     ],
     milOn: true,
   );
@@ -68,19 +51,23 @@ void main() {
   DtcViewModel notifier() => container.read(dtcViewModelProvider.notifier);
   DtcState state() => container.read(dtcViewModelProvider);
 
-  test('estado inicial carrega, depois popula códigos/MIL', () async {
-    expect(state().isLoading, isTrue);
-    expect(state().codes, isEmpty);
+  test(
+    'estado inicial carrega, depois popula o catálogo inteiro + MIL',
+    () async {
+      expect(state().isLoading, isTrue);
+      expect(state().codes, isEmpty);
 
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
-    final s = state();
-    expect(s.isLoading, isFalse);
-    expect(s.codes.length, 3);
-    expect(s.milOn, isTrue);
-    expect(s.activeCount, 2); // confirmado + pendente
-    expect(s.totalCount, 3);
-  });
+      final s = state();
+      expect(s.isLoading, isFalse);
+      // O catálogo inteiro sempre aparece — só o status de cada um muda.
+      expect(s.codes.length, dtcCatalog.length);
+      expect(s.milOn, isTrue);
+      expect(s.activeCount, 2); // confirmado + pendente
+      expect(s.totalCount, dtcCatalog.length);
+    },
+  );
 
   test('falha na leitura fica exposta em `failure`', () async {
     final failingRepo = _FakeDtcRepository(

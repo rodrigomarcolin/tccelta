@@ -1,19 +1,23 @@
 import 'package:flutter/foundation.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_component.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_definition.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_freeze_frame_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_severity.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
 
-/// Um código de diagnóstico (DTC) do catálogo do veículo.
+/// Um código de diagnóstico (DTC), pronto para exibição na aba de
+/// Diagnóstico.
 ///
 /// Modelo de domínio puro e imutável — mesmo estilo de `Obd2Reading`/`Panel`:
-/// nenhuma dependência de Flutter além de `@immutable`. Um código pode existir
-/// no catálogo sem estar ativo agora ([status] `null`); [causes] e
-/// [freezeFrame] só vêm preenchidos para os poucos códigos com detalhe rico no
-/// mock — a UI trata listas vazias como "sem essa informação".
+/// nenhuma dependência de Flutter além de `@immutable`. Diferente de
+/// [DtcDefinition] (catálogo, permanente) e [DtcActiveEntry] (leitura, só os
+/// ativos agora), um `DtcCode` é a junção dos dois — construído via
+/// [DtcCode.fromDefinition], nunca devolvido cru por um repository. Um
+/// código pode existir no catálogo sem estar ativo agora ([status] `null`).
 @immutable
 class DtcCode {
-  /// Cria um código de diagnóstico.
+  /// Cria um código de diagnóstico já pronto para exibição.
   const DtcCode({
     required this.code,
     required this.component,
@@ -24,6 +28,24 @@ class DtcCode {
     this.causes = const [],
     this.freezeFrame = const [],
   });
+
+  /// Junta uma entrada do catálogo (dado permanente) com o resultado de uma
+  /// leitura (`DtcRepository.read()`), quando o código está ativo agora —
+  /// é assim que a vista completa do catálogo é "customizada" para destacar
+  /// os DTCs ativos, sem o catálogo em si passar por nenhum repository.
+  factory DtcCode.fromDefinition(
+    DtcDefinition definition, {
+    DtcActiveEntry? active,
+  }) => DtcCode(
+    code: definition.code,
+    component: definition.component,
+    name: definition.name,
+    severity: definition.severity,
+    causes: definition.causes,
+    status: active?.status,
+    detectedLabel: active?.detectedLabel,
+    freezeFrame: active?.freezeFrame ?? const [],
+  );
 
   /// Código no formato padrão OBD-II (ex.: "P0301").
   final String code;

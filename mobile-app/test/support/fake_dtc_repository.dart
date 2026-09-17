@@ -7,7 +7,7 @@ import 'package:tccelta_mobile/src/domain/repositories/dtc_repository.dart';
 /// Diagnóstico em si. Devolve um catálogo vazio por padrão.
 class FakeDtcRepository implements DtcRepository {
   FakeDtcRepository({
-    this.snapshot = const DtcSnapshot(codes: [], milOn: false),
+    this.snapshot = const DtcSnapshot(active: [], milOn: false),
   });
 
   final DtcSnapshot snapshot;

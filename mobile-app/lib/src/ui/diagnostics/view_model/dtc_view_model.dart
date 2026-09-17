@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/core/errors/failure.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_catalog.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_code.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_component.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dtc_repository.dart';
@@ -129,9 +130,17 @@ class DtcViewModel extends Notifier<DtcState> {
   Future<void> _load() async {
     try {
       final snapshot = await _repo.read();
+      final activeByCode = {for (final a in snapshot.active) a.code: a};
+      final codes = [
+        for (final definition in dtcCatalog)
+          DtcCode.fromDefinition(
+            definition,
+            active: activeByCode[definition.code],
+          ),
+      ];
       state = state.copyWith(
         isLoading: false,
-        codes: snapshot.codes,
+        codes: codes,
         milOn: snapshot.milOn,
         clearFailure: true,
       );

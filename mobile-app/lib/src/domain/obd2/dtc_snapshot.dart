@@ -1,19 +1,24 @@
 import 'package:flutter/foundation.dart';
-import 'package:tccelta_mobile/src/domain/obd2/dtc_code.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
 
-/// Resultado de uma leitura de diagnóstico: o catálogo de códigos do veículo
-/// + o estado da luz de injeção (MIL).
+/// Resultado de uma leitura de diagnóstico: os códigos ativos agora no
+/// veículo + o estado da luz de injeção (MIL).
 ///
-/// [milOn] é um campo próprio, não derivado de [codes] — no protocolo real
+/// [active] traz **só** os códigos de fato ativos (confirmados/pendentes) —
+/// nunca o catálogo inteiro: no protocolo real, os Modos 03/07/0A não têm
+/// como devolver "o que existe mas não está ativo". O catálogo completo vem
+/// de `dtcCatalog` (dado de domínio, não desta leitura).
+///
+/// [milOn] é um campo próprio, não derivado de [active] — no protocolo real
 /// ele vem de um PID independente (Modo 01, PID 01), lido separadamente dos
 /// Modos 03/07/0A que trazem os códigos em si.
 @immutable
 class DtcSnapshot {
   /// Cria um retrato de diagnóstico.
-  const DtcSnapshot({required this.codes, required this.milOn});
+  const DtcSnapshot({required this.active, required this.milOn});
 
-  /// Catálogo de códigos do veículo (ativos e inativos).
-  final List<DtcCode> codes;
+  /// Códigos ativos agora (confirmados ou pendentes).
+  final List<DtcActiveEntry> active;
 
   /// `true` quando a luz de injeção (MIL) está acesa.
   final bool milOn;
@@ -22,8 +27,8 @@ class DtcSnapshot {
   bool operator ==(Object other) =>
       other is DtcSnapshot &&
       other.milOn == milOn &&
-      listEquals(other.codes, codes);
+      listEquals(other.active, active);
 
   @override
-  int get hashCode => Object.hash(milOn, Object.hashAll(codes));
+  int get hashCode => Object.hash(milOn, Object.hashAll(active));
 }
