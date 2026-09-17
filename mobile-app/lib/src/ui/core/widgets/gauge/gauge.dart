@@ -30,6 +30,7 @@ class Gauge extends StatelessWidget {
   /// Cria um gauge para [value] sobre [max], no formato [variant].
   const Gauge({
     required this.value,
+    this.min = 0,
     this.max = 8000,
     this.label = 'RPM',
     this.unit = '',
@@ -58,6 +59,9 @@ class Gauge extends StatelessWidget {
 
   /// Valor atual.
   final double value;
+
+  /// Valor de piso da escala. @default 0
+  final double min;
 
   /// Valor de fundo de escala. @default 8000
   final double max;
@@ -143,7 +147,7 @@ class Gauge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final targetPct = (value / max).clamp(0.0, 1.0);
+    final targetPct = ((value - min) / (max - min)).clamp(0.0, 1.0);
     final big = display?.toString() ?? formatPtBr(value);
 
     return SizedBox(
