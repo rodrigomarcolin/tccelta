@@ -29,9 +29,6 @@ enum AppIconData {
   /// Sensores (lista) — aba de PIDs.
   sensores('sensores'),
 
-  /// Terminal (prompt) — aba de comandos.
-  terminal('terminal'),
-
   /// Mais (kebab) — aba de opções.
   mais('mais'),
 
