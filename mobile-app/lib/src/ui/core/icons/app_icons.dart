@@ -54,7 +54,10 @@ enum AppIconData {
   desconectar('desconectar'),
 
   /// Cadeado — criptografia/PSK.
-  cadeado('cadeado');
+  cadeado('cadeado'),
+
+  /// Motor — aba de DTCs / luz de injeção (MIL).
+  motor('motor');
 
   const AppIconData(this._name);
 

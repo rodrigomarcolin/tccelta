@@ -17,6 +17,9 @@ enum StatusTone {
 
   /// Alerta / erro — vermelho.
   alert,
+
+  /// Neutro / inativo — sem significado de cor (ex.: "INATIVO").
+  neutral,
 }
 
 /// Mapeia um [StatusTone] para os tokens de cor do design system.
@@ -30,6 +33,7 @@ extension StatusToneX on StatusTone {
     StatusTone.live || StatusTone.ok => AppColors.cyan500,
     StatusTone.warning => AppColors.amber500,
     StatusTone.alert => AppColors.red500,
+    StatusTone.neutral => AppColors.neutral200,
   };
 
   /// Preenchimento translúcido do tom (fundo de pílula/badge/tile).
@@ -37,6 +41,7 @@ extension StatusToneX on StatusTone {
     StatusTone.live || StatusTone.ok => AppColors.cyan10,
     StatusTone.warning => AppColors.amber08,
     StatusTone.alert => AppColors.red20,
+    StatusTone.neutral => AppColors.neutral800,
   };
 
   /// Borda translúcida do tom (anel de badge/tile/callout).
@@ -44,6 +49,7 @@ extension StatusToneX on StatusTone {
     StatusTone.live || StatusTone.ok => AppColors.cyan28,
     StatusTone.warning => AppColors.amber20,
     StatusTone.alert => AppColors.red32,
+    StatusTone.neutral => AppColors.neutral700,
   };
 
   /// `true` quando o dot do tom deve brilhar (feed ao vivo / ok).

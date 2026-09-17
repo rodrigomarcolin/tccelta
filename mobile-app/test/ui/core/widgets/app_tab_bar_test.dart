@@ -12,11 +12,12 @@ void main() {
         ),
       );
 
-  testWidgets('mostra as quatro abas padrão', (tester) async {
+  testWidgets('mostra as cinco abas padrão', (tester) async {
     await tester.pumpWidget(wrap());
 
     expect(find.text('Painel'), findsOneWidget);
     expect(find.text('Sensores'), findsOneWidget);
+    expect(find.text('DTCs'), findsOneWidget);
     expect(find.text('Terminal'), findsOneWidget);
     expect(find.text('Mais'), findsOneWidget);
   });
@@ -63,13 +64,13 @@ void main() {
   });
 
   testWidgets(
-    'a legenda "EM BREVE" fica sobreposta ao ícone — os ícones das 4 abas '
+    'a legenda "EM BREVE" fica sobreposta ao ícone — os ícones das 5 abas '
     'ficam alinhados na mesma altura',
     (tester) async {
       await tester.pumpWidget(wrap());
 
       final icons = tester.widgetList<AppIcon>(find.byType(AppIcon)).toList();
-      expect(icons, hasLength(4));
+      expect(icons, hasLength(5));
       final tops = icons
           .map((icon) => tester.getTopLeft(find.byWidget(icon)).dy)
           .toSet();

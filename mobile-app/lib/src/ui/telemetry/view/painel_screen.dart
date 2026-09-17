@@ -7,6 +7,8 @@ import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
+import 'package:tccelta_mobile/src/ui/diagnostics/view_model/dtc_view_model.dart';
+import 'package:tccelta_mobile/src/ui/diagnostics/widgets/dtc_tab_badge.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/widgets/indicator_format_sheet.dart';
@@ -42,6 +44,9 @@ class PainelScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final telemetry = ref.watch(telemetryViewModelProvider);
     final panel = ref.watch(panelViewModelProvider);
+    final activeDtcCount = ref.watch(
+      dtcViewModelProvider.select((s) => s.activeCount),
+    );
     final byPid = {for (final r in telemetry.readings) r.pid: r};
     final indicators = panel.indicators;
 
@@ -134,10 +139,12 @@ class PainelScreen extends ConsumerWidget {
         ),
       ),
       bottomNavigationBar: AppTabBar(
+        tabs: tabsWithDtcBadge(activeDtcCount),
         onChanged: (key) {
           if (key == 'sensores') {
             context.go(AppRoutes.sensorPicker, extra: true);
           }
+          if (key == 'dtc') context.go(AppRoutes.dtc);
           if (key == 'mais') context.go(AppRoutes.more);
         },
       ),

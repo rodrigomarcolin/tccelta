@@ -30,6 +30,7 @@ class ConnectionBackground extends StatelessWidget {
     StatusTone.live || StatusTone.ok => const Color(0xFF121A24),
     StatusTone.warning => const Color(0xFF1C1810),
     StatusTone.alert => const Color(0xFF1A1014),
+    StatusTone.neutral => const Color(0xFF161B22),
   };
 
   @override
