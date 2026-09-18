@@ -11,7 +11,7 @@ class AppTab {
     required this.key,
     required this.label,
     required this.icon,
-    this.comingSoon = false,
+    this.badgeCount,
   });
 
   /// Identificador único da aba.
@@ -23,24 +23,25 @@ class AppTab {
   /// Ícone outline da aba.
   final AppIconData icon;
 
-  /// Se `true`, a aba ainda não tem tela — o ícone fica sempre na cor
-  /// inativa (nunca ciano, mesmo se `active` apontar pra ela) e ganha a
-  /// legenda "EM BREVE" sobreposta a ele (não embaixo do rótulo — senão só
-  /// essa coluna cresceria e desalinharia os ícones das demais abas). Não
-  /// desativa o toque em si — a aba simplesmente não reage porque nenhuma
-  /// tela trata essa `key` ainda.
-  /// @default false
-  final bool comingSoon;
+  /// Contagem exibida num círculo vermelho sobreposto ao ícone (ex.: nº de
+  /// DTCs ativos). `null` ou `0` = sem badge.
+  /// @default null
+  final int? badgeCount;
+
+  /// Cópia com [badgeCount] sobrescrito — os demais campos são fixos por
+  /// aba, então não há necessidade de sobrescrevê-los aqui.
+  AppTab withBadgeCount(int? badgeCount) =>
+      AppTab(key: key, label: label, icon: icon, badgeCount: badgeCount);
 }
 
 /// Navegação inferior do shell do app.
 ///
-/// Quatro abas por padrão (Painel, Sensores, Terminal, Mais). A aba ativa é
-/// ciano, as inativas neutral-400; a barra é um escuro translúcido borrado com
-/// um hairline no topo. Fixe-a na base da tela. Espelha o componente `TabBar`.
+/// Quatro abas por padrão (Painel, Sensores, DTCs, Mais). A aba ativa é
+/// ciano, as inativas neutral-400; a barra é um escuro translúcido borrado
+/// com um hairline no topo. Fixe-a na base da tela. Espelha o componente
+/// `TabBar`.
 ///
-/// "Terminal" é `comingSoon` (ver [AppTab.comingSoon]): ainda sem tela, fica
-/// sempre na cor inativa e ganha a legenda "EM BREVE" sobreposta ao ícone.
+/// "DTCs" pode exibir [AppTab.badgeCount] (nº de códigos ativos).
 class AppTabBar extends StatelessWidget {
   /// Cria a tab bar inferior, com [active] indicando a aba selecionada.
   const AppTabBar({
@@ -54,12 +55,7 @@ class AppTabBar extends StatelessWidget {
   static const List<AppTab> defaultTabs = [
     AppTab(key: 'painel', label: 'Painel', icon: AppIconData.painel),
     AppTab(key: 'sensores', label: 'Sensores', icon: AppIconData.sensores),
-    AppTab(
-      key: 'terminal',
-      label: 'Terminal',
-      icon: AppIconData.terminal,
-      comingSoon: true,
-    ),
+    AppTab(key: 'dtc', label: 'DTCs', icon: AppIconData.motor),
     AppTab(key: 'mais', label: 'Mais', icon: AppIconData.mais),
   ];
 
@@ -116,9 +112,7 @@ class _TabItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected && !tab.comingSoon
-        ? AppColors.cyan500
-        : AppColors.neutral400;
+    final color = selected ? AppColors.cyan500 : AppColors.neutral400;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -126,24 +120,15 @@ class _TabItem extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Stack(
+            clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
               AppIcon(tab.icon, color: color),
-              // Sobrepõe a legenda ao ícone (em vez de empilhar embaixo do
-              // rótulo) pra não esticar só esta coluna e desalinhar os
-              // ícones das demais abas na `Row`.
-              if (tab.comingSoon)
-                Text(
-                  'EM BREVE',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.ui(
-                    const TextStyle(
-                      fontSize: 6,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                      color: AppColors.amber500,
-                    ),
-                  ),
+              if ((tab.badgeCount ?? 0) > 0)
+                Positioned(
+                  top: -4,
+                  right: -9,
+                  child: _TabBadge(count: tab.badgeCount!),
                 ),
             ],
           ),
@@ -159,6 +144,39 @@ class _TabItem extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Círculo vermelho com a contagem de [AppTab.badgeCount], sobreposto ao
+/// ícone da aba (ex.: nº de DTCs ativos).
+class _TabBadge extends StatelessWidget {
+  const _TabBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 16),
+      height: 16,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        color: AppColors.red500,
+        borderRadius: AppRadii.brPill,
+      ),
+      child: Text(
+        '$count',
+        style: AppTypography.mono(
+          const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+            height: 1,
+          ),
+        ),
       ),
     );
   }
