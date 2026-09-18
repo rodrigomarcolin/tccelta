@@ -1,3 +1,5 @@
+> **Origem e créditos:** Este diretório é baseado no projeto [ECUSim](https://github.com/sugiuraii/ECUSim), de [sugiuraii](https://github.com/sugiuraii) (usuário `sz2` no aviso de copyright), licenciado sob MIT (ver `LICENSE`). Importado do commit [`5040e47`](https://github.com/sugiuraii/ECUSim/commit/5040e47) (branch `develop`) via `git subtree` e adaptado neste TCC para simular DTCs (Diagnostic Trouble Codes) além dos PIDs originais. O restante deste README é o documento original do projeto.
+
 # ECUSim
  * This is a ecu simulator for OBDII scantool like ELM327.
  * This sketch can respond OBDII CAN message with using MCP2515 CAN controller board.
