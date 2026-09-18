@@ -13,8 +13,8 @@ import 'package:tccelta_mobile/src/core/errors/failure.dart';
 /// contínuo** (o contrato de [decode] é `List<int> -&gt; double`). PIDs de
 /// status/bitmask (ex.: monitor status, fuel system status), categóricos
 /// (ex.: tipo de combustível, padrão OBD), códigos/tabelas compostas (ex.:
-/// freeze frame DTC, curva de torque) ou tetos de calibração (máximos de
-/// fundo de escala) ficam de fora — não cabem nesse contrato.
+/// curva de torque) ou tetos de calibração (máximos de fundo de escala)
+/// ficam de fora — não cabem nesse contrato.
 enum Obd2Pid {
   /// Carga calculada do motor (%). Fórmula: A / 2.55.
   engineLoad(
