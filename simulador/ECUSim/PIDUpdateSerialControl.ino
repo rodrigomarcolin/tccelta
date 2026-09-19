@@ -84,6 +84,14 @@ void parsePIDUPdateMessage()
 
         return;
       }
+
+      if (pidToSet == 0x01)
+      {
+        if (PIDSET_ERROR)
+          Serial.println(F("ERROR: PID 01 is computed from DTC/MIL state; use the DTC control channel instead."));
+
+        return;
+      }
       break;
     default:
       int valToSetIndex = i / 2 - 1;

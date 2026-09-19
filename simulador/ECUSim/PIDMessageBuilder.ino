@@ -2,8 +2,9 @@
 
 void fillValueBytes(byte* const returnBuf, const uint8_t requestedPID, const uint8_t byteOffsetToFill, uint8_t& byteOffsetAfterFill);
 void fillAvailablePIDBytes(byte* const returnBuf, const uint8_t requestedPID, const uint8_t byteOffsetToFill, uint8_t& byteOffsetAfterFill);
+void computeMonitorStatusPID(const EcuState_t& ecuState, byte* const returnBuf, const uint8_t byteOffsetToFill, uint8_t& byteOffsetAfterFill);
 
-int  buildPIDValueMessage(byte* const returnBuf, uint8_t& returnByteCount, const uint8_t* requestedPIDList, const uint8_t requestedPIDCount, const uint8_t returnServiceMode)
+int  buildPIDValueMessage(byte* const returnBuf, uint8_t& returnByteCount, const uint8_t* requestedPIDList, const uint8_t requestedPIDCount, const uint8_t returnServiceMode, const EcuState_t& ecuState)
 {
   returnBuf[0] = returnServiceMode;
   uint8_t byteOffset = 1;
@@ -11,7 +12,9 @@ int  buildPIDValueMessage(byte* const returnBuf, uint8_t& returnByteCount, const
   for(uint8_t i = 0; i < requestedPIDCount; i++)
   {
     const uint8_t requestedPID = requestedPIDList[i];
-    if ((requestedPID % 0x20) == 0) // Return supported PID flag mode (=> get data from PIDAvailableFlagMap in PROGMEM)
+    if (requestedPID == 0x01) // Monitor status: computed from DTC/MIL state, not read from PID_Value_Map
+      computeMonitorStatusPID(ecuState, returnBuf, byteOffset, byteOffset);
+    else if ((requestedPID % 0x20) == 0) // Return supported PID flag mode (=> get data from PIDAvailableFlagMap in PROGMEM)
       fillAvailablePIDBytes(returnBuf, requestedPID, byteOffset, byteOffset);
     else // Return value mode (=> get data from PID_Value_Map in RAM)
       fillValueBytes(returnBuf, requestedPID, byteOffset, byteOffset);
@@ -59,5 +62,18 @@ void fillAvailablePIDBytes(byte* const returnBuf, const uint8_t requestedPID, co
   returnBuf[byteOffsetToFill + 2] = pgm_read_byte(PIDAvailableFlagMap + availableMapOffset + 1);
   returnBuf[byteOffsetToFill + 3] = pgm_read_byte(PIDAvailableFlagMap + availableMapOffset + 2);
   returnBuf[byteOffsetToFill + 4] = pgm_read_byte(PIDAvailableFlagMap + availableMapOffset + 3);
+  byteOffsetAfterFill = byteOffsetToFill + 5;
+}
+
+void computeMonitorStatusPID(const EcuState_t& ecuState, byte* const returnBuf, const uint8_t byteOffsetToFill, uint8_t& byteOffsetAfterFill)
+{
+  returnBuf[byteOffsetToFill] = 0x01;
+
+  const byte milAndCountByte = (ecuState.mil ? 0x80 : 0x00) | (ecuState.confirmedCount & 0x7F);
+  returnBuf[byteOffsetToFill + 1] = milAndCountByte;
+  returnBuf[byteOffsetToFill + 2] = 0x00; // Test availability/completeness bits: not modeled by the simulator yet.
+  returnBuf[byteOffsetToFill + 3] = 0x00;
+  returnBuf[byteOffsetToFill + 4] = 0x00;
+
   byteOffsetAfterFill = byteOffsetToFill + 5;
 }

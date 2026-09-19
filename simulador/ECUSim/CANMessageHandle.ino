@@ -1,11 +1,27 @@
 #include "CANMesasgeHandle.h"
 #include "PIDMessageBuilder.h"
+#include "OBDDispatcher.h"
 #include "AVRFreeRAM.h"
 
 IsoTp isotp(&CAN, 0);
 
 constexpr int RETURN_MSGBUILD_BUF_LENGTH = 128;
-constexpr int PID_LIST_LENGTH = 6;
+
+struct EcuConfig_t
+{
+  unsigned long requestId;
+  unsigned long responseId;
+  EcuState_t*   state;
+};
+
+constexpr uint8_t ECU_COUNT = 2;
+EcuConfig_t ECU_CONFIGS[ECU_COUNT] =
+{
+  { ECM_CAN_ID, ECM_CAN_RESPONSE_ID, &ecmState },
+  { TCM_CAN_ID, TCM_CAN_RESPONSE_ID, &tcmState },
+};
+
+void respondToObdRequest(const EcuConfig_t& ecuConfig, const byte* receivedCANBuf, unsigned long canMsgHandleStartTime);
 
 void initializeCAN()
 {
@@ -79,51 +95,53 @@ void handleCANMessage()
     }
   }
 
-  // Ignore query if the ID do not match with this ECU ID (or 0x7DF(send to all ECU))
-  if((canId != 0x7DF) && (canId != ECU_CAN_ID))
-  {
-    if (CANMSG_DEBUG)
-      Serial.println(F("CAM ID do not match with this ECU's ID."));
-    
-    return;
-  }
-
   // Wait time
   if(ECU_WAIT > 0)
     delay(ECU_WAIT);
 
-  // Get query message length and check service mode.
+  // Match the request against every simulated ECU (0x7DF is a functional broadcast: all ECUs answer).
+  bool matchedAnyEcu = false;
+  for (uint8_t e = 0; e < ECU_COUNT; e++)
+  {
+    if (canId != OBD_BROADCAST_CAN_ID && canId != ECU_CONFIGS[e].requestId)
+      continue;
+
+    matchedAnyEcu = true;
+    respondToObdRequest(ECU_CONFIGS[e], receivedCANBuf, canMsgHandleStartTime);
+  }
+
+  if (!matchedAnyEcu)
+  {
+    if (CANMSG_DEBUG)
+      Serial.println(F("CAN ID do not match with any simulated ECU."));
+
+    return;
+  }
+
+  if(CANMSG_FREERAM_MEAS)
+    display_freeram();
+}
+
+void respondToObdRequest(const EcuConfig_t& ecuConfig, const byte* receivedCANBuf, unsigned long canMsgHandleStartTime)
+{
+  // Get query message length (SID + data bytes).
   const uint8_t queryMessageLength = receivedCANBuf[0];
-  const uint8_t serviceMode = receivedCANBuf[1];
-  if (serviceMode != 0x01)
+
+  if(queryMessageLength < 1 || queryMessageLength > 7)
   {
     if (CANMSG_ERROR)
-      Serial.println(F("ERROR: CAN query service mode needs to be 1 (show current data)."));
+      Serial.println(F("ERROR: CAN query message length needs to be between 1 and 7 (SID + up to 6 data bytes)."));
 
     return;
   }
-
-  if(queryMessageLength < 2 || queryMessageLength > 7)
-  {
-    if (CANMSG_ERROR)
-      Serial.println(F("ERROR: CAN query message length needs to be between 2 and 7 (1 to 6 PIDs)."));
-
-    return;
-  }
-
-  // Get query PID codes
-  uint8_t requestedPIDList[PID_LIST_LENGTH];
-  const uint8_t requestedPIDCount = queryMessageLength - 1; // Exclude service mode from query length
-  for(uint8_t i = 0; i < requestedPIDCount; i++)
-    requestedPIDList[i] = receivedCANBuf[i + 2];
 
   if (CANMSG_DEBUG)
   {
-    Serial.print(F("PID query: "));
-    for(uint8_t i = 0; i < requestedPIDCount; i++)
+    Serial.print(F("OBD request (SID + data): "));
+    for(uint8_t i = 0; i < queryMessageLength; i++)
     {
-      Serial.print(requestedPIDList[i], HEX);
-      if(i == requestedPIDCount - 1)
+      Serial.print(receivedCANBuf[i + 1], HEX);
+      if(i == queryMessageLength - 1)
         Serial.println();
       else
         Serial.print(F(","));
@@ -131,12 +149,11 @@ void handleCANMessage()
   }
 
   // Build up CAN return message
-  const uint8_t returnServiceMode = serviceMode + 0x40;
   byte returnMessageBuf[RETURN_MSGBUILD_BUF_LENGTH];
   uint8_t returnByteCount;
 
-  int pidValMessageResult = buildPIDValueMessage(returnMessageBuf, returnByteCount, requestedPIDList, requestedPIDCount, returnServiceMode);
-  if (pidValMessageResult == PID_NOT_AVAILABLE)
+  int dispatchResult = dispatchOBDRequest(*ecuConfig.state, &receivedCANBuf[1], queryMessageLength, returnMessageBuf, returnByteCount);
+  if (dispatchResult == PID_NOT_AVAILABLE)
   {
     if (CANMSG_ERROR)
       Serial.println(F("ERROR: CAN query PID is not supported."));
@@ -147,8 +164,8 @@ void handleCANMessage()
   struct Message_t txMsg;
   uint8_t sendResult;
   txMsg.len = returnByteCount;
-  txMsg.rx_id = ECU_CAN_ID;
-  txMsg.tx_id = ECU_CAN_RESPONSE_ID;
+  txMsg.rx_id = ecuConfig.requestId;
+  txMsg.tx_id = ecuConfig.responseId;
   txMsg.Buffer = returnMessageBuf;
   sendResult = isotp.send(&txMsg);
 
@@ -180,7 +197,4 @@ void handleCANMessage()
     Serial.print(F("MCP send result code :"));
     Serial.println(sendResult);
   }
-
-  if(CANMSG_FREERAM_MEAS)
-    display_freeram();
 }
