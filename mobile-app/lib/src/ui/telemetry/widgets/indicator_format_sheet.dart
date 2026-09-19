@@ -423,6 +423,7 @@ class _GaugeStyleStep extends StatelessWidget {
         Center(
           child: Gauge(
             value: previewValue,
+            min: display.min,
             max: display.max,
             label: pid.shortLabel,
             unit: pid.unit,
@@ -581,6 +582,7 @@ class _ScaleStep extends StatelessWidget {
     return Center(
       child: Gauge(
         value: previewValue,
+        min: display.min,
         max: display.max,
         label: pid.shortLabel,
         unit: pid.unit,

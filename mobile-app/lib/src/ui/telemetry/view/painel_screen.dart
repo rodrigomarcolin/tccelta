@@ -366,6 +366,7 @@ class _IndicatorCell extends StatelessWidget {
     final large = display.gaugeSize == IndicatorGaugeSize.large;
     final gauge = Gauge(
       value: value ?? display.min,
+      min: display.min,
       max: display.max,
       label: pid.shortLabel,
       unit: pid.unit,
