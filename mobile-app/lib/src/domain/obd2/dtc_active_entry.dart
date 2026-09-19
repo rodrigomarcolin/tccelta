@@ -34,6 +34,20 @@ class DtcActiveEntry {
   /// congelamento disponível (comum em códigos pendentes).
   final List<DtcFreezeFrameEntry> freezeFrame;
 
+  /// Cópia com os campos sobrescritos — usada pelo repository real pra
+  /// anexar o freeze frame (Modo 02) numa entrada já montada, sem refazer a
+  /// leitura dos Modos 03/07/0A.
+  DtcActiveEntry copyWith({
+    DtcStatus? status,
+    String? detectedLabel,
+    List<DtcFreezeFrameEntry>? freezeFrame,
+  }) => DtcActiveEntry(
+    code: code,
+    status: status ?? this.status,
+    detectedLabel: detectedLabel ?? this.detectedLabel,
+    freezeFrame: freezeFrame ?? this.freezeFrame,
+  );
+
   @override
   bool operator ==(Object other) =>
       other is DtcActiveEntry &&

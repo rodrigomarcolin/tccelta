@@ -30,7 +30,7 @@ class DtcCode {
   });
 
   /// Junta uma entrada do catálogo (dado permanente) com o resultado de uma
-  /// leitura (`DtcRepository.read()`), quando o código está ativo agora —
+  /// leitura (`Obd2Repository.readDtc()`), quando o código está ativo agora —
   /// é assim que a vista completa do catálogo é "customizada" para destacar
   /// os DTCs ativos, sem o catálogo em si passar por nenhum repository.
   factory DtcCode.fromDefinition(

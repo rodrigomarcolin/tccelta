@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
 
 /// Resultado de uma leitura de diagnóstico: os códigos ativos agora no
-/// veículo + o estado da luz de injeção (MIL).
+/// veículo + o estado da luz de falha (MIL).
 ///
 /// [active] traz **só** os códigos de fato ativos (confirmados/pendentes) —
 /// nunca o catálogo inteiro: no protocolo real, os Modos 03/07/0A não têm
@@ -20,7 +20,7 @@ class DtcSnapshot {
   /// Códigos ativos agora (confirmados ou pendentes).
   final List<DtcActiveEntry> active;
 
-  /// `true` quando a luz de injeção (MIL) está acesa.
+  /// `true` quando a luz de falha (MIL) está acesa.
   final bool milOn;
 
   @override

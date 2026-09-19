@@ -120,21 +120,13 @@ class DtcDetailSheet extends StatelessWidget {
                           const SizedBox(height: AppSpacing.s3),
                           BulletList(items: dtc.causes),
                         ],
-                        const SizedBox(height: AppSpacing.s7),
-                        Text(
-                          'CONGELAMENTO NO MOMENTO DA FALHA',
-                          style: AppTypography.overline,
-                        ),
-                        const SizedBox(height: AppSpacing.s3),
-                        if (dtc.freezeFrame.isEmpty)
+                        if (dtc.freezeFrame.isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.s7),
                           Text(
-                            'Sem dados congelados — o veículo só grava o '
-                            'quadro da falha quando o código é confirmado.',
-                            style: AppTypography.body.copyWith(
-                              color: AppColors.textTertiary,
-                            ),
-                          )
-                        else
+                            'CONGELAMENTO NO MOMENTO DA FALHA',
+                            style: AppTypography.overline,
+                          ),
+                          const SizedBox(height: AppSpacing.s3),
                           Wrap(
                             spacing: AppSpacing.s2,
                             runSpacing: AppSpacing.s2,
@@ -153,6 +145,7 @@ class DtcDetailSheet extends StatelessWidget {
                                 ),
                             ],
                           ),
+                        ],
                         const SizedBox(height: AppSpacing.s7),
                         AppButton(
                           onPressed: Navigator.of(context).pop,
