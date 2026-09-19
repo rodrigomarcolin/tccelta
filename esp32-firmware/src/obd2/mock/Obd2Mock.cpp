@@ -471,3 +471,8 @@ int Obd2Mock::readDtc(uint8_t service, uint16_t* dtcCodes, size_t maxCount) {
     (void)service; (void)dtcCodes; (void)maxCount;
     return 0;  // veículo mock: 0 DTCs em confirmados/pendentes/permanentes
 }
+
+int Obd2Mock::readFreezeFramePid(uint8_t pid, uint8_t* buf, size_t maxLen) {
+    (void)pid; (void)buf; (void)maxLen;
+    return -1;  // veículo mock: nunca há freeze frame armazenado
+}

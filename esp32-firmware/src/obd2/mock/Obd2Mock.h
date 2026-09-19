@@ -22,4 +22,7 @@ public:
 
     /** Veículo mock é sempre "limpo": nenhum DTC em nenhum dos 3 modos. */
     int  readDtc(uint8_t service, uint16_t* dtcCodes, size_t maxCount) override;
+
+    /** Veículo mock nunca tem freeze frame armazenado (sempre "limpo"). */
+    int  readFreezeFramePid(uint8_t pid, uint8_t* buf, size_t maxLen) override;
 };
