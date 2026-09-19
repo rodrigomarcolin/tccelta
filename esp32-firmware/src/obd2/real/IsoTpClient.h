@@ -39,12 +39,18 @@ enum Result : int {
  * `reqId`, depois aguarda a resposta funcional em [respIdMin, respIdMax]
  * (SF ou FF+CF, gerando o FC de volta).
  *
- * @param outBuf  recebe o payload OBD já reassemblado (SID de resposta +
- *                dados, sem bytes de PCI/ISO-TP)
+ * @param outBuf     recebe o payload OBD já reassemblado (SID de resposta +
+ *                   dados, sem bytes de PCI/ISO-TP)
+ * @param timeoutMs  tempo de espera pela primeira resposta (N_Bs). Default
+ *                   N_BS_MS (1000ms, valor da norma) — chamadores que
+ *                   esperam "NO DATA" com frequência (ex.: varredura de PIDs
+ *                   de telemetria) podem passar um valor menor para não
+ *                   pagar 1s por PID não suportado.
  * @return  nº de bytes escritos em outBuf (>=0), ou um valor de Result (<0)
  */
 int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
             const uint8_t* req, size_t reqLen,
-            uint8_t* outBuf, size_t maxLen);
+            uint8_t* outBuf, size_t maxLen,
+            uint32_t timeoutMs = N_BS_MS);
 
 }  // namespace IsoTp

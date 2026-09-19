@@ -152,7 +152,8 @@ SendOutcome sendSegmented(ICanBus* can, uint32_t txId, uint32_t fcIdMin, uint32_
 
 int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
             const uint8_t* req, size_t reqLen,
-            uint8_t* outBuf, size_t maxLen) {
+            uint8_t* outBuf, size_t maxLen,
+            uint32_t timeoutMs) {
     // Drena qualquer frame que já esteja na fila de recepção antes de mandar
     // esta requisição. O uso deste cliente é sempre síncrono (manda, espera
     // a resposta, só então a próxima chamada manda a próxima requisição) —
@@ -189,7 +190,7 @@ int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax
     uint8_t expectedReplySid = (uint8_t)(req[0] | 0x40u);
 
     // Espera a primeira resposta (SF ou FF) do peer.
-    uint32_t deadline = millis() + N_BS_MS;
+    uint32_t deadline = millis() + timeoutMs;
     CanFrame f;
     while (true) {
         if (millis() >= deadline) return TIMEOUT;
