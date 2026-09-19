@@ -58,9 +58,23 @@ class DtcScreen extends ConsumerWidget {
                       AppButton(
                         variant: AppButtonVariant.tonal,
                         fullWidth: false,
-                        icon: const AppIcon(AppIconData.recarregar, size: 16),
-                        onPressed: notifier.reread,
-                        child: const Text('Reler'),
+                        icon: dtc.isLoading
+                            ? null
+                            : const AppIcon(
+                                AppIconData.recarregar,
+                                size: 16,
+                              ),
+                        onPressed: dtc.isLoading ? null : notifier.reread,
+                        child: dtc.isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.cyan500,
+                                ),
+                              )
+                            : const Text('Reler'),
                       ),
                     ],
                   ),
