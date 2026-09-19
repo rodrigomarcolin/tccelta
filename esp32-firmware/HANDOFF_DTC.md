@@ -6,6 +6,19 @@
 > correspondente aqui no dongle. Não presuma que quem lê isso tem o contexto
 > da conversa que gerou o simulador — está tudo resumido abaixo.
 
+> **Atualização**: Modo 02 (freeze frame, frame 0 — o único suportado; não
+> há histórico de frames antigos, então "frame" nunca é exposto como
+> parâmetro) foi implementado — `IObd2::readFreezeFramePid(pid, buf,
+> maxLen)`, com `Obd2Can` montando a requisição de 3 bytes que o protocolo
+> real exige (`[0x02, pid, 0x00]`) via `IsoTpClient` já existente, e
+> `Elm327` roteando comandos de serviço `0x02` (formato `"SSPP"`, ex.
+> `"0202"`) para um handler dedicado (`processFreezeFrame`/
+> `formatFreezeFrameBytes`), já que a resposta real (`[0x42, PID, frame#,
+> dados...]`, 3 bytes de cabeçalho) difere do Modo 01/09. `Obd2Mock`
+> sempre devolve -1 (veículo mock nunca tem freeze frame). Não testado em
+> hardware real ainda — só compilação (`mock`/`twai`/`mcp2515`, todas
+> limpas).
+
 ## 1. Contexto: o que já existe do lado do simulador
 
 `simulador/ECUSim` é um sketch Arduino (Uno + MCP2515) que simula uma ECU real
