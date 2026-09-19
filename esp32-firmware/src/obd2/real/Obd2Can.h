@@ -21,6 +21,7 @@ public:
     bool begin() override;
     int  readPid(uint8_t service, uint8_t pid,
                  uint8_t* buf, size_t maxLen) override;
+    int  readDtc(uint8_t service, uint16_t* dtcCodes, size_t maxCount) override;
 
 private:
     ICanBus*  _can;
