@@ -153,6 +153,21 @@ SendOutcome sendSegmented(ICanBus* can, uint32_t txId, uint32_t fcIdMin, uint32_
 int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
             const uint8_t* req, size_t reqLen,
             uint8_t* outBuf, size_t maxLen) {
+    // Drena qualquer frame que já esteja na fila de recepção antes de mandar
+    // esta requisição. O uso deste cliente é sempre síncrono (manda, espera
+    // a resposta, só então a próxima chamada manda a próxima requisição) —
+    // então nada deveria estar pendente na fila neste ponto; qualquer coisa
+    // que esteja é, por construção, sobra de uma transação anterior (ex.:
+    // a 2ª ECU que respondeu a um broadcast funcional, cuja resposta não foi
+    // a escolhida). O filtro por SID esperado abaixo já cobre o caso de uma
+    // sobra chegar DURANTE a espera desta transação; mas quando duas
+    // requisições seguidas esperam o MESMO SID de resposta (ex.: várias
+    // leituras de PID do freeze frame, todas com SID 0x42), o filtro por SID
+    // não consegue distinguir a sobra da resposta de verdade — só o dreno
+    // aqui resolve isso.
+    CanFrame stale;
+    while (can->receive(stale)) { /* descarta */ }
+
     if (reqLen <= 7) {
         sendSf(can, reqId, req, (uint8_t)reqLen);
     } else {

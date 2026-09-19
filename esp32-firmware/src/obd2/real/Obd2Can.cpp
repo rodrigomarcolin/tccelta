@@ -73,3 +73,22 @@ int Obd2Can::readDtc(uint8_t service, uint16_t* dtcCodes, size_t maxCount) {
     }
     return (int)toCopy;
 }
+
+int Obd2Can::readFreezeFramePid(uint8_t pid, uint8_t* buf, size_t maxLen) {
+    // Modo 02 real: 3 bytes de requisição (serviço, PID, frame#) — frame#
+    // sempre 0, o único suportado pelo simulador/ECU (não há histórico de
+    // frames antigos). Resposta: [0x42, PID, frame#, dados...] — 3 bytes de
+    // cabeçalho, diferente do Modo 01 (2 bytes: SID+PID).
+    uint8_t req[3] = { 0x02, pid, 0x00 };
+    uint8_t out[7];  // SF payload máximo (7 bytes) já cobre cabeçalho + dado
+
+    int n = IsoTp::request(_can, OBD_REQUEST_ID, OBD_RESPONSE_ID, OBD_RESPONSE_ID_MAX,
+                            req, sizeof(req), out, sizeof(out));
+    if (n < 0) return -1;  // timeout, negative response (NRC 0x31) ou overflow -> "sem dado"
+    if ((size_t)n < 3 || out[0] != 0x42 || out[1] != pid) return -1;
+
+    size_t payloadBytes = (size_t)n - 3;
+    size_t toCopy        = payloadBytes < maxLen ? payloadBytes : maxLen;
+    memcpy(buf, &out[3], toCopy);
+    return (int)toCopy;
+}

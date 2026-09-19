@@ -13,7 +13,15 @@ Uso:
     python hil_dongle_dtc.py --com COM8 --scenario multiframe
     python hil_dongle_dtc.py --com COM8 --scenario multi_ecu
     python hil_dongle_dtc.py --com COM8 --scenario clear    # só limpa, sem consultar o dongle
-    python hil_dongle_dtc.py --ble-only                     # só manda 03/07/0A via BLE
+    python hil_dongle_dtc.py --ble-only                     # reconsulta sem mexer no simulador
+    python hil_dongle_dtc.py --com COM8 --scenario falha_unica --skip-freeze-frame  # só 03/07/0A
+
+Por padrão, toda consulta ao dongle inclui tanto a lista de DTCs (Modo
+03/07/0A) quanto o freeze frame (Modo 02, frame 0 — o único que o
+protocolo real suporta): primeiro `"0202"` para descobrir qual DTC
+originou o congelamento armazenado, depois um comando por PID congelado
+(`"0204"`, `"0205"`, `"020C"`, `"020D"`, `"020F"`, `"0211"`). Use
+`--skip-freeze-frame` para consultar só a lista de DTCs.
 
 Protocolo serial de controle de DTC (DTCUpdateSerialControl.ino, 9 bytes):
     [0] cmd:  S(set)/R(remove)/Z(zera lista)/L(seta MIL)/Q(força freeze frame)
@@ -22,6 +30,21 @@ Protocolo serial de controle de DTC (DTCUpdateSerialControl.ino, 9 bytes):
     [3..6]    DTC em 4 hex chars (ex.: 0301 = P0301)
     [7]       '-' (filler)
     [8]       '\n'
+
+Protocolo ELM327 do freeze frame (Modo 02, dongle): comando `"02"+PID`
+(ex.: `"0202"`), resposta `"42 <PID> 00 <dados...>"` — o byte do meio é o
+número do frame, sempre `00` (não há histórico de frames antigos, nem no
+simulador nem no dongle). `"NO DATA"` quando não há freeze frame
+armazenado (cenário `limpo`) ou o PID não faz parte do conjunto
+congelado.
+
+Regra de prioridade do simulador (`captureFreezeFrame`,
+`ECUStateModel.ino`): um DTC do grupo misfire/combustível (P0301, P0171 —
+ver `DTC_FLAG_MISFIRE_FUEL` em `DTCMap_Definition.h`) sempre sobrescreve o
+freeze frame armazenado; um DTC de prioridade baixa (ex.: P0133) só grava
+se ainda não houver nenhum. No cenário `multiframe` (P0301, P0171, P0133
+confirmados nessa ordem), o freeze frame final é do **P0171** (o último
+de alta prioridade a ser confirmado) — não do P0301.
 """
 
 import argparse
@@ -55,21 +78,53 @@ def clear_all(ser):
 def apply_scenario(ser, scenario):
     clear_all(ser)
     if scenario == "limpo":
-        pass  # já está limpo
+        pass  # já está limpo — freeze frame também deve vir "NO DATA"
     elif scenario == "falha_unica":
-        ser.write(dtc_msg("S", "E", "C", "0301"))  # P0301 confirmado na ECM
+        # P0301 (alta prioridade) confirmado na ECM -> freeze frame capturado,
+        # origem = P0301.
+        ser.write(dtc_msg("S", "E", "C", "0301"))
         time.sleep(0.03)
     elif scenario == "multiframe":
-        for dtc in ("0301", "0171", "0133"):  # 3 DTCs -> força First Frame + CF
+        # 3 DTCs -> força First Frame + CF na leitura da lista. P0301 e P0171
+        # são ambos de alta prioridade (misfire/combustível) e cada um
+        # sobrescreve o freeze frame ao ser confirmado; P0133 é baixa
+        # prioridade e não sobrescreve. Confirmados nesta ordem, o freeze
+        # frame final é do P0171 (o último de alta prioridade), não do P0301.
+        for dtc in ("0301", "0171", "0133"):
             ser.write(dtc_msg("S", "E", "C", dtc))
             time.sleep(0.03)
     elif scenario == "multi_ecu":
+        # ECM e TCM têm freeze frame próprio e independente; o dongle só lê o
+        # que responder primeiro ao broadcast (ECM, na prática) — o freeze
+        # frame do TCM (origem P0700) não é visível nesta consulta.
         ser.write(dtc_msg("S", "E", "C", "0301"))  # ECM
         time.sleep(0.03)
         ser.write(dtc_msg("S", "T", "C", "0700"))  # TCM
         time.sleep(0.03)
     else:
         raise SystemExit(f"Cenário desconhecido: {scenario}")
+
+
+# PIDs congelados pelo simulador no freeze frame (conjunto fixo — ver
+# DTCMap_Definition.h, FREEZE_FRAME_PIDS — não há descoberta via PID 0x00
+# no Modo 02, tem que ser essa lista hardcoded).
+FREEZE_FRAME_PIDS = [
+    ("Carga do motor", "04"),
+    ("Temp. arrefecimento", "05"),
+    ("RPM", "0C"),
+    ("Velocidade", "0D"),
+    ("Temp. ar admissão", "0F"),
+    ("Posição borboleta", "11"),
+]
+
+
+def freeze_frame_commands():
+    """Comandos ELM327 do Modo 02 (frame 0): primeiro descobre o DTC de
+    origem (PID 0x02), depois cada PID congelado."""
+    commands = [("Freeze frame - DTC origem (0202)", "0202")]
+    for label, pid in FREEZE_FRAME_PIDS:
+        commands.append((f"Freeze frame - {label} (02{pid})", f"02{pid}"))
+    return commands
 
 
 # ── Canal BLE de comando do dongle ────────────────────────────────────────
@@ -119,7 +174,7 @@ async def query_dongle(commands):
         await client.start_notify(BLE_TX_UUID, session.on_notify)
         for label, cmd in commands:
             resp = await session.send(client, cmd)
-            print(f"  {label:14s} {cmd!r:6s} -> {resp!r}")
+            print(f"  {label:42s} {cmd!r:8s} -> {resp!r}")
         await client.stop_notify(BLE_TX_UUID)
 
 
@@ -134,7 +189,11 @@ def main():
     )
     parser.add_argument(
         "--ble-only", action="store_true",
-        help="Pula o setup do simulador — só manda 03/07/0A via BLE",
+        help="Pula o setup do simulador — só reconsulta o dongle via BLE",
+    )
+    parser.add_argument(
+        "--skip-freeze-frame", action="store_true",
+        help="Não consulta o freeze frame (Modo 02) — só a lista de DTCs (03/07/0A)",
     )
     args = parser.parse_args()
 
@@ -153,6 +212,8 @@ def main():
             return
 
     commands = [("Confirmados (03)", "03"), ("Pendentes (07)", "07"), ("Permanentes (0A)", "0A")]
+    if not args.skip_freeze_frame:
+        commands += freeze_frame_commands()
     asyncio.run(query_dongle(commands))
 
 

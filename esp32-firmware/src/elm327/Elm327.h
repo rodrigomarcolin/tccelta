@@ -10,9 +10,11 @@
  *
  * Supported AT commands: ATZ, ATI, ATE0/1, ATH0/1, ATL0/1, ATS0/1,
  *   ATSP[0-C], ATDP, ATPC, ATRV, ATD, ATAT[0-2], ATST[hh], AT@1
- * Supported OBD commands: mode 01/02/09 PIDs in "SSPP" hex format
- *   (spaces in the command string are stripped before parsing); mode
- *   03/07/0A (DTC lists, no PID) in "SS" hex format.
+ * Supported OBD commands: mode 01/09 PIDs in "SSPP" hex format (spaces in
+ *   the command string are stripped before parsing); mode 03/07/0A (DTC
+ *   lists, no PID) in "SS" hex format; mode 02 (freeze frame, frame 0 only)
+ *   also in "SSPP" hex format, routed separately since its response layout
+ *   differs from mode 01/09.
  */
 class Elm327 {
 public:
@@ -37,5 +39,7 @@ private:
                            const uint8_t* data, int len);
     String processDtc(uint8_t service);
     String formatDtcBytes(uint8_t service, const uint16_t* codes, int count);
+    String processFreezeFrame(uint8_t pid);
+    String formatFreezeFrameBytes(uint8_t pid, const uint8_t* data, int len);
     String prompt() const;
 };

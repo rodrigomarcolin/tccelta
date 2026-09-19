@@ -71,6 +71,11 @@ String Elm327::process(const String& cmd) {
             if (!parseHexByte(compact, 0, service) ||
                 !parseHexByte(compact, 2, pid)) {
                 response += "?" + prompt();
+            } else if (service == 0x02) {
+                // Mode 02 (freeze frame): resposta tem um layout diferente
+                // (SID+PID+frame# antes do dado, contra SID+PID do Modo
+                // 01/09) — não reaproveita processObd/readPid.
+                response += processFreezeFrame(pid);
             } else {
                 response += processObd(service, pid);
             }
@@ -237,6 +242,52 @@ String Elm327::formatDtcBytes(uint8_t service, const uint16_t* codes, int count)
         out += hex;
         out += sep;
         snprintf(hex, sizeof(hex), "%02X", (uint8_t)(codes[i] & 0xFF));
+        out += hex;
+    }
+
+    return out;
+}
+
+// ── Freeze frame command handler (Mode 02, frame 0 only) ─────────────────
+
+String Elm327::processFreezeFrame(uint8_t pid) {
+    uint8_t buf[7] = {};
+    int len = _obd2->readFreezeFramePid(pid, buf, sizeof(buf));
+
+    if (len <= 0) return "NO DATA" + prompt();
+
+    return formatFreezeFrameBytes(pid, buf, len) + prompt();
+}
+
+String Elm327::formatFreezeFrameBytes(uint8_t pid, const uint8_t* data, int len) {
+    char hex[3];
+    String sep = _spaces ? " " : "";
+    String out;
+
+    if (_headers) {
+        // Mesma simplificação de formatDataBytes/formatDtcBytes — o dongle
+        // não rastreia qual ECU respondeu.
+        out += "7E8";
+        out += sep;
+        snprintf(hex, sizeof(hex), "%02X", (uint8_t)(3 + len));
+        out += hex;
+        out += sep;
+    }
+
+    // SID de resposta do Modo 02 (0x42) + PID + frame# (sempre 0 — único
+    // frame suportado, não há histórico de frames antigos).
+    snprintf(hex, sizeof(hex), "%02X", 0x42);
+    out += hex;
+    out += sep;
+    snprintf(hex, sizeof(hex), "%02X", pid);
+    out += hex;
+    out += sep;
+    snprintf(hex, sizeof(hex), "%02X", 0x00);
+    out += hex;
+
+    for (int i = 0; i < len; i++) {
+        out += sep;
+        snprintf(hex, sizeof(hex), "%02X", data[i]);
         out += hex;
     }
 
