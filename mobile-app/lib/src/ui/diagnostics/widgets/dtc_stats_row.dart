@@ -3,7 +3,7 @@ import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
 /// Os 2 cards de resumo do topo da aba de Diagnóstico: contagem de códigos
-/// ativos e estado da luz de injeção (MIL).
+/// ativos e estado da luz de falha (MIL).
 class DtcStatsRow extends StatelessWidget {
   /// Cria a linha de estatísticas.
   const DtcStatsRow({
@@ -19,7 +19,7 @@ class DtcStatsRow extends StatelessWidget {
   /// Nº total de códigos no catálogo do veículo.
   final int totalCount;
 
-  /// Se a luz de injeção (MIL) está acesa.
+  /// Se a luz de falha (MIL) está acesa.
   final bool milOn;
 
   @override
@@ -74,7 +74,7 @@ class _MilStatusCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('LUZ DE INJEÇÃO', style: AppTypography.overline),
+          Text('MAL FUNCIONAMENTO', style: AppTypography.overline),
           const SizedBox(height: AppSpacing.s2),
           Row(
             children: [

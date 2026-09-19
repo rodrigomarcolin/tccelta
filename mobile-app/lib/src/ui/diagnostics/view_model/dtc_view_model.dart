@@ -35,7 +35,7 @@ class DtcState {
   /// Catálogo de códigos da última leitura (ativos e inativos).
   final List<DtcCode> codes;
 
-  /// Estado da luz de injeção (MIL) na última leitura.
+  /// Estado da luz de falha (MIL) na última leitura.
   final bool milOn;
 
   /// Falha da última leitura, se houver.
