@@ -6,44 +6,30 @@ import 'package:tccelta_mobile/src/domain/obd2/dtc_catalog.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_component.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
-import 'package:tccelta_mobile/src/domain/repositories/dtc_repository.dart';
-import 'package:tccelta_mobile/src/ui/diagnostics/diagnostics_providers.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/view_model/dtc_view_model.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
-/// Repository de DTCs fake e determinístico — devolve 2 códigos ativos
-/// (P0301, motor, confirmado; C0035, freios, pendente), ambos já presentes
-/// no catálogo real ([dtcCatalog]) — o restante do catálogo fica inativo.
-class _FakeDtcRepository implements DtcRepository {
-  _FakeDtcRepository({this.failure});
+import '../../support/fake_obd2_repository.dart';
 
-  final DtcReadFailure? failure;
-  int readCalls = 0;
-
-  static const _default = DtcSnapshot(
-    active: [
-      DtcActiveEntry(code: 'P0301', status: DtcStatus.confirmed),
-      DtcActiveEntry(code: 'C0035', status: DtcStatus.pending),
-    ],
-    milOn: true,
-  );
-
-  @override
-  Future<DtcSnapshot> read() async {
-    readCalls++;
-    final f = failure;
-    if (f != null) throw f;
-    return _default;
-  }
-}
+/// Retrato fake e determinístico — 2 códigos ativos (P0301, motor,
+/// confirmado; C0035, freios, pendente), ambos já presentes no catálogo real
+/// ([dtcCatalog]) — o restante do catálogo fica inativo.
+const _defaultSnapshot = DtcSnapshot(
+  active: [
+    DtcActiveEntry(code: 'P0301', status: DtcStatus.confirmed),
+    DtcActiveEntry(code: 'C0035', status: DtcStatus.pending),
+  ],
+  milOn: true,
+);
 
 void main() {
-  late _FakeDtcRepository repo;
+  late FakeObd2Repository repo;
   late ProviderContainer container;
 
   setUp(() {
-    repo = _FakeDtcRepository();
+    repo = FakeObd2Repository(dtcSnapshot: _defaultSnapshot);
     container = ProviderContainer(
-      overrides: [dtcRepositoryProvider.overrideWithValue(repo)],
+      overrides: [obd2RepositoryProvider.overrideWithValue(repo)],
     );
     addTearDown(container.dispose);
   });
@@ -70,11 +56,11 @@ void main() {
   );
 
   test('falha na leitura fica exposta em `failure`', () async {
-    final failingRepo = _FakeDtcRepository(
+    final failingRepo = FakeObd2Repository(
       failure: const DtcReadFailure('sem conexão'),
     );
     final failingContainer = ProviderContainer(
-      overrides: [dtcRepositoryProvider.overrideWithValue(failingRepo)],
+      overrides: [obd2RepositoryProvider.overrideWithValue(failingRepo)],
     );
     addTearDown(failingContainer.dispose);
 
@@ -89,11 +75,11 @@ void main() {
   test('reread() chama o repositório de novo', () async {
     state(); // dispara o build() (lazy) e a carga inicial.
     await Future<void>.delayed(const Duration(milliseconds: 10));
-    expect(repo.readCalls, 1);
+    expect(repo.readDtcCalls, 1);
 
     await notifier().reread();
 
-    expect(repo.readCalls, 2);
+    expect(repo.readDtcCalls, 2);
   });
 
   test(

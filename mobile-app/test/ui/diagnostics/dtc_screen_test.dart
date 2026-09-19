@@ -5,33 +5,23 @@ import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
-import 'package:tccelta_mobile/src/domain/repositories/dtc_repository.dart';
 import 'package:tccelta_mobile/src/router/app_router.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
-import 'package:tccelta_mobile/src/ui/diagnostics/diagnostics_providers.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
 import '../../support/fake_ble_service.dart';
-
-/// Repository de DTCs fake, com os códigos ativos dados no construtor — os
-/// demais códigos do catálogo real (`dtcCatalog`) ficam inativos.
-class _FakeDtcRepository implements DtcRepository {
-  _FakeDtcRepository(this.active, {this.milOn = false});
-
-  final List<DtcActiveEntry> active;
-  final bool milOn;
-
-  @override
-  Future<DtcSnapshot> read() async => DtcSnapshot(active: active, milOn: milOn);
-}
+import '../../support/fake_obd2_repository.dart';
 
 void main() {
   Widget app(List<DtcActiveEntry> active, {bool milOn = false}) =>
       ProviderScope(
         overrides: [
           bleServiceProvider.overrideWithValue(FakeBleService()),
-          dtcRepositoryProvider.overrideWithValue(
-            _FakeDtcRepository(active, milOn: milOn),
+          obd2RepositoryProvider.overrideWithValue(
+            FakeObd2Repository(
+              dtcSnapshot: DtcSnapshot(active: active, milOn: milOn),
+            ),
           ),
         ],
         child: MaterialApp.router(
@@ -76,7 +66,7 @@ void main() {
     expect(find.text('Motor'), findsWidgets);
     expect(find.text('Emissões'), findsWidgets);
     // Ambos os códigos aparecem, ativo ou não, em suas seções de componente
-    // — o catálogo inteiro (26 códigos) rola além da viewport de teste.
+    // — o catálogo inteiro (27 códigos) rola além da viewport de teste.
     expect(find.text('P0301'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('P0442'),

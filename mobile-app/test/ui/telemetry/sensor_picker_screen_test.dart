@@ -2,48 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
-import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
-import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
 import 'package:tccelta_mobile/src/router/app_router.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
-import 'package:tccelta_mobile/src/ui/diagnostics/diagnostics_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
 import '../../support/fake_ble_service.dart';
-import '../../support/fake_dtc_repository.dart';
-
-/// Repository de telemetria fake que devolve leituras fixas (sem I/O).
-class _FakeObd2Repository implements Obd2Repository {
-  _FakeObd2Repository({this.readings = const []});
-
-  final List<Obd2Reading> readings;
-
-  @override
-  List<Obd2Pid> get pids => Obd2Pid.values;
-
-  @override
-  Obd2AdapterInfo? get adapterInfo => null;
-
-  @override
-  Future<void> initialize() async {}
-
-  @override
-  Future<Set<Obd2Pid>> discoverSupported() async => Obd2Pid.values.toSet();
-
-  @override
-  Future<Obd2Reading> read(Obd2Pid pid) async =>
-      readings.firstWhere((r) => r.pid == pid);
-
-  @override
-  Future<List<Obd2Reading>> readAll() async => readings;
-
-  @override
-  Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async =>
-      readings.where((r) => pids.contains(r.pid)).toList();
-}
+import '../../support/fake_obd2_repository.dart';
 
 void main() {
   // Usa o `appRouter` real (`MaterialApp.router`), não `MaterialApp(home: ...)`
@@ -54,9 +21,8 @@ void main() {
     overrides: [
       bleServiceProvider.overrideWithValue(FakeBleService()),
       obd2RepositoryProvider.overrideWithValue(
-        _FakeObd2Repository(readings: readings),
+        FakeObd2Repository(readings: readings),
       ),
-      dtcRepositoryProvider.overrideWithValue(FakeDtcRepository()),
     ],
     child: MaterialApp.router(theme: AppTheme.dark, routerConfig: appRouter),
   );

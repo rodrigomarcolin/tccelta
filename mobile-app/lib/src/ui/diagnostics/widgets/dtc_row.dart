@@ -36,10 +36,20 @@ class DtcRow extends StatelessWidget {
   }
 }
 
-/// Pílula de status ("CONFIRMADO"/"PENDENTE") para um [DtcCode] ativo —
-/// reaproveita [StatusBadge] (mesma fonte de significado→cor do resto do
-/// app), compartilhada entre [DtcRow] e o sheet de detalhe.
-StatusBadge dtcStatusBadge(DtcStatus status) => StatusBadge(
-  label: status == DtcStatus.confirmed ? 'CONFIRMADO' : 'PENDENTE',
-  tone: status == DtcStatus.confirmed ? StatusTone.alert : StatusTone.warning,
-);
+/// Pílula de status ("CONFIRMADO"/"PENDENTE"/"PERMANENTE") para um [DtcCode]
+/// ativo — reaproveita [StatusBadge] (mesma fonte de significado→cor do
+/// resto do app), compartilhada entre [DtcRow] e o sheet de detalhe.
+StatusBadge dtcStatusBadge(DtcStatus status) => switch (status) {
+  DtcStatus.confirmed => const StatusBadge(
+    label: 'CONFIRMADO',
+    tone: StatusTone.alert,
+  ),
+  DtcStatus.pending => const StatusBadge(
+    label: 'PENDENTE',
+    tone: StatusTone.warning,
+  ),
+  DtcStatus.permanent => const StatusBadge(
+    label: 'PERMANENTE',
+    tone: StatusTone.alert,
+  ),
+};

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
@@ -45,6 +46,10 @@ class _FakeObd2Repository implements Obd2Repository {
     final byPid = {for (final r in await readAll()) r.pid: r};
     return [for (final p in pids) ?byPid[p]];
   }
+
+  @override
+  Future<DtcSnapshot> readDtc() async =>
+      const DtcSnapshot(active: [], milOn: false);
 }
 
 void main() {

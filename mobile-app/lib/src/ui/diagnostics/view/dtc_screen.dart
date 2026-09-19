@@ -20,8 +20,8 @@ import 'package:tccelta_mobile/src/ui/diagnostics/widgets/dtc_tab_badge.dart';
 /// resumo, o alternador de vista e os chips de componente, e o corpo — lista
 /// "Ativos" ou seções "Todos por componente", conforme `state.viewMode`.
 /// Tocar um código abre [showDtcDetailSheet] direto com o `DtcCode` em mãos
-/// (sem passar pelo estado do view model). Leitura mockada — ver
-/// `FakeDtcRepositoryImpl`.
+/// (sem passar pelo estado do view model). Leitura real — ver
+/// `Obd2RepositoryImpl.readDtc`.
 class DtcScreen extends ConsumerWidget {
   /// Cria a tela de Diagnóstico.
   const DtcScreen({super.key});

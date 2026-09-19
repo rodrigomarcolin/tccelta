@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tccelta_mobile/src/core/errors/dtc_failure.dart';
 import 'package:tccelta_mobile/src/core/errors/obd_failure.dart';
 import 'package:tccelta_mobile/src/data/repositories/obd2_repository_impl.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
 
@@ -258,6 +260,141 @@ void main() {
 
       expect(conn.hasIncomingListener, isFalse);
       expect(repo.adapterInfo, isNull);
+    });
+  });
+
+  group('Obd2RepositoryImpl.readDtc', () {
+    test('"43 00"/"47 00"/"4A 00" devolve retrato vazio', () async {
+      final conn = ScriptedBleConnection(
+        responses: {
+          '03': '43 00\r>',
+          '07': '47 00\r>',
+          '0A': '4A 00\r>',
+          '0202': 'NO DATA\r>',
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final snapshot = await repo.readDtc();
+
+      expect(snapshot.active, isEmpty);
+      expect(snapshot.milOn, isFalse);
+    });
+
+    test('1 DTC confirmado decodifica pro código certo e liga o MIL', () async {
+      final conn = ScriptedBleConnection(
+        responses: {
+          '03': '43 01 03 01\r>', // P0301
+          '07': '47 00\r>',
+          '0A': '4A 00\r>',
+          '0202': 'NO DATA\r>',
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final snapshot = await repo.readDtc();
+
+      expect(snapshot.active, hasLength(1));
+      expect(snapshot.active.single.code, 'P0301');
+      expect(snapshot.active.single.status, DtcStatus.confirmed);
+      expect(snapshot.milOn, isTrue);
+    });
+
+    test('multiframe: 3 DTCs confirmados decodificam todos', () async {
+      // Mesmo cenário "multiframe" do hil_dongle_dtc.py: P0301, P0171, P0133.
+      final conn = ScriptedBleConnection(
+        responses: {
+          '03': '43 03 03 01 01 71 01 33\r>',
+          '07': '47 00\r>',
+          '0A': '4A 00\r>',
+          '0202': 'NO DATA\r>',
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final snapshot = await repo.readDtc();
+
+      expect(snapshot.active.map((a) => a.code).toList(), [
+        'P0301',
+        'P0171',
+        'P0133',
+      ]);
+      expect(
+        snapshot.active.every((a) => a.status == DtcStatus.confirmed),
+        isTrue,
+      );
+    });
+
+    test('pendentes e permanentes recebem o status certo', () async {
+      final conn = ScriptedBleConnection(
+        responses: {
+          '03': '43 00\r>',
+          '07': '47 01 04 20\r>', // P0420 pendente
+          '0A': '4A 01 07 00\r>', // P0700 permanente
+          '0202': 'NO DATA\r>',
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final snapshot = await repo.readDtc();
+
+      final byCode = {for (final a in snapshot.active) a.code: a.status};
+      expect(byCode['P0420'], DtcStatus.pending);
+      expect(byCode['P0700'], DtcStatus.permanent);
+      expect(snapshot.milOn, isFalse); // nenhum confirmado
+    });
+
+    test('freeze frame é anexado só no DTC de origem', () async {
+      final conn = ScriptedBleConnection(
+        responses: {
+          '03': '43 02 03 01 04 20\r>', // P0301 + P0420, confirmados
+          '07': '47 00\r>',
+          '0A': '4A 00\r>',
+          '0202': '42 02 00 03 01\r>', // origem: P0301
+          '0204': '42 04 00 66\r>', // carga do motor
+          '0205': '42 05 00 5A\r>', // temp. do líquido
+          '020C': '42 0C 00 17 70\r>', // rotação
+          '020D': '42 0D 00 3C\r>', // velocidade
+          '020F': '42 0F 00 5A\r>', // temp. do ar de admissão
+          '0211': '42 11 00 33\r>', // acelerador
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final snapshot = await repo.readDtc();
+
+      final origin = snapshot.active.firstWhere((a) => a.code == 'P0301');
+      final other = snapshot.active.firstWhere((a) => a.code == 'P0420');
+      expect(origin.freezeFrame, isNotEmpty);
+      expect(
+        origin.freezeFrame.map((f) => f.label),
+        containsAll(['RPM', 'Veloc.']),
+      );
+      expect(other.freezeFrame, isEmpty);
+    });
+
+    test('eco do comando embutido na resposta não quebra o parsing', () async {
+      // O dongle ecoa o comando por padrão (`_echo = true`): a notificação
+      // vem com o comando ecoado embutido antes da resposta de verdade.
+      final conn = ScriptedBleConnection(
+        responses: {
+          '03': '03 43 00 \r>',
+          '07': '07 47 00 \r>',
+          '0A': '0A 4A 00 \r>',
+          '0202': 'NO DATA\r>',
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final snapshot = await repo.readDtc();
+
+      expect(snapshot.active, isEmpty);
+    });
+
+    test('sem conexão pronta lança DtcReadFailure', () async {
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(null));
+
+      await expectLater(repo.readDtc(), throwsA(isA<DtcReadFailure>()));
     });
   });
 }

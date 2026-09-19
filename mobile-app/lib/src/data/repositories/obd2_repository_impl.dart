@@ -1,20 +1,32 @@
 import 'dart:async';
 
+import 'package:tccelta_mobile/src/core/errors/dtc_failure.dart';
 import 'package:tccelta_mobile/src/core/errors/obd_failure.dart';
+import 'package:tccelta_mobile/src/data/datasources/dtc_datasource.dart';
 import 'package:tccelta_mobile/src/data/datasources/elm327_client.dart';
 import 'package:tccelta_mobile/src/data/datasources/obd2_datasource.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_code_codec.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_freeze_frame_entry.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
 import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
 
-/// *Source of truth* da telemetria. Obtém a [BleConnection] viva do
-/// [DongleRepository] e, sobre ela, constrói o [Elm327Client] +
-/// [Obd2Datasource] (que dependem da conexão de runtime, por isso nascem aqui e
-/// não num provider — mesmo motivo do adapter BLE). Decodifica os PIDs via a
-/// fórmula do domínio e mapeia erro cru → [ObdCommandFailure].
+/// *Source of truth* da telemetria e do diagnóstico (DTC) — um único
+/// repository porque os dois falam o mesmo protocolo ELM327 sobre a mesma
+/// conexão. Obtém a [BleConnection] viva do [DongleRepository] e, sobre ela,
+/// constrói o [Elm327Client] + [Obd2Datasource] + [DtcDatasource] (que
+/// dependem da conexão de runtime, por isso nascem aqui e não num provider —
+/// mesmo motivo do adapter BLE), **compartilhando o mesmo [Elm327Client]**
+/// entre os dois datasources: um único cliente serializa os comandos na
+/// conexão, então telemetria e diagnóstico nunca correm o risco de capturar a
+/// resposta um do outro. Decodifica os PIDs via a fórmula do domínio e mapeia
+/// erro cru → [ObdCommandFailure]/[DtcReadFailure].
 class Obd2RepositoryImpl implements Obd2Repository {
   /// Cria o repository sobre o [_dongle] (fonte da conexão ativa) e passa a
   /// observar as fases de conexão para teardown proativo.
@@ -35,10 +47,23 @@ class Obd2RepositoryImpl implements Obd2Repository {
 
   final DongleRepository _dongle;
 
+  /// PIDs congelados pelo Modo 02 (freeze frame) — fixo, sem descoberta via
+  /// PID 0x00 (confirmado no handoff do firmware): carga do motor, temp. do
+  /// líquido, rotação, velocidade, temp. do ar de admissão e acelerador.
+  static const List<Obd2Pid> _freezeFramePids = [
+    Obd2Pid.engineLoad,
+    Obd2Pid.coolantTemp,
+    Obd2Pid.rpm,
+    Obd2Pid.speed,
+    Obd2Pid.intakeAirTemp,
+    Obd2Pid.throttle,
+  ];
+
   StreamSubscription<BleConnectionPhase>? _phaseSub;
   BleConnection? _boundConn;
   Elm327Client? _elm;
   Obd2Datasource? _datasource;
+  DtcDatasource? _dtcDatasource;
   bool _initialized = false;
 
   /// Identidade capturada da conexão atual (versão no init, protocolo após a
@@ -73,6 +98,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
       final elm = Elm327Client(conn);
       _elm = elm;
       _datasource = Obd2Datasource(elm);
+      _dtcDatasource = DtcDatasource(elm);
     }
     return _datasource;
   }
@@ -81,6 +107,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
     _elm?.dispose();
     _elm = null;
     _datasource = null;
+    _dtcDatasource = null;
     _boundConn = null;
     _initialized = false;
     _version = null;
@@ -197,5 +224,98 @@ class Obd2RepositoryImpl implements Obd2Repository {
       _protocol = await ds.describeProtocol();
     }
     return readings;
+  }
+
+  @override
+  Future<DtcSnapshot> readDtc() async {
+    _ensureDatasource();
+    final dtcDs = _dtcDatasource;
+    if (dtcDs == null) {
+      throw const DtcReadFailure('Sem conexão BLE pronta');
+    }
+    try {
+      final confirmedRaw = await dtcDs.readDtcListRaw(0x03) ?? [];
+      final pendingRaw = await dtcDs.readDtcListRaw(0x07) ?? [];
+      final permanentRaw = await dtcDs.readDtcListRaw(0x0A) ?? [];
+
+      final active = [
+        for (final raw in confirmedRaw)
+          DtcActiveEntry(
+            code: dtcCodeFromRaw(raw),
+            status: DtcStatus.confirmed,
+          ),
+        for (final raw in pendingRaw)
+          DtcActiveEntry(code: dtcCodeFromRaw(raw), status: DtcStatus.pending),
+        for (final raw in permanentRaw)
+          DtcActiveEntry(
+            code: dtcCodeFromRaw(raw),
+            status: DtcStatus.permanent,
+          ),
+      ];
+
+      return DtcSnapshot(
+        active: await _attachFreezeFrame(dtcDs, active),
+        milOn: confirmedRaw.isNotEmpty,
+      );
+    } on DtcReadFailure {
+      rethrow;
+    } on Object catch (e) {
+      throw DtcReadFailure('Falha ao ler DTCs', cause: e);
+    }
+  }
+
+  /// Anexa o freeze frame (Modo 02) só no DTC que de fato o originou — o
+  /// protocolo real só guarda um freeze frame por ECU, então os demais
+  /// [active] ficam com `freezeFrame: []`.
+  Future<List<DtcActiveEntry>> _attachFreezeFrame(
+    DtcDatasource dtcDs,
+    List<DtcActiveEntry> active,
+  ) async {
+    final originRaw = await dtcDs.readFreezeFrameOriginDtc();
+    if (originRaw == null) return active;
+
+    final originCode = dtcCodeFromRaw(originRaw);
+    final freezeFrame = <DtcFreezeFrameEntry>[];
+    for (final pid in _freezeFramePids) {
+      try {
+        final data = await dtcDs.readFreezeFramePidRaw(pid);
+        if (data == null || data.isEmpty) continue;
+        final reading = Obd2Reading(pid: pid, value: pid.decode(data));
+        freezeFrame.add(
+          DtcFreezeFrameEntry(
+            label: pid.shortLabel,
+            value: '${_formatNumber(reading.value)} ${pid.unit}'.trim(),
+          ),
+        );
+      } on Object {
+        // PID individual falho é omitido — congelamento parcial é válido.
+      }
+    }
+
+    return [
+      for (final entry in active)
+        entry.code == originCode
+            ? entry.copyWith(freezeFrame: freezeFrame)
+            : entry,
+    ];
+  }
+
+  /// Formata um valor físico pra exibição, com separador de milhar pt-BR
+  /// (ex.: `2480.0` → `"2.480"`, `46.3` → `"46,3"`) — sem depender de `intl`.
+  static String _formatNumber(double value) {
+    final isWhole = value == value.roundToDouble();
+    final rounded = isWhole
+        ? value.round().toString()
+        : value.toStringAsFixed(1);
+    final parts = rounded.split('.');
+    final digits = parts[0].replaceFirst('-', '');
+    final sign = parts[0].startsWith('-') ? '-' : '';
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) buffer.write('.');
+      buffer.write(digits[i]);
+    }
+    final integerPart = '$sign$buffer';
+    return parts.length > 1 ? '$integerPart,${parts[1]}' : integerPart;
   }
 }
