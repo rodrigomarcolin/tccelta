@@ -17,6 +17,8 @@ Este repositório contém um firmware para um Dongle OBD-II baseado em ESP-32 na
 
 Com o PlatformIO devidamente instalado e configurado em seu VSCode, conecte o ESP32 ao seu computador e abra a pasta esp32-firmware com o VSCode. Após isto, é possível abrir a interface da extensão e escolher qual dos perfis, configurados no arquivo `esp32-firmware/platformio.ini`, deve ser utilizado para Build e Upload. Cada perfil irá definir variáveis de ambiente, que são utilizadas em macros no código, as quais decidem quais implementações instanciar.
 
+A pasta `simulador/` contém um simulador de ECU baseado no projeto [ECUSim](https://github.com/sugiuraii/ECUSim) (licença MIT, ver `simulador/LICENSE`), adaptado neste TCC para simular DTCs (Diagnostic Trouble Codes) além dos PIDs originais. Mais detalhes sobre a origem e as adaptações estão em `simulador/README.md`.
+
 
 # Arquitetura [↩](#sumário)
 

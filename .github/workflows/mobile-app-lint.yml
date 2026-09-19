@@ -37,3 +37,6 @@ jobs:
 
       - name: flutter analyze (falha em qualquer apontamento)
         run: flutter analyze
+
+      - name: flutter test (widget tests)
+        run: flutter test

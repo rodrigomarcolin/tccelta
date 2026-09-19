@@ -25,6 +25,9 @@ abstract final class AppRoutes {
   /// Painel de telemetria OBD-II ao vivo (`PainelScreen`).
   static const String painel = '/painel';
 
+  /// Aba de Diagnóstico — códigos de falha (DTCs) do veículo (`DtcScreen`).
+  static const String dtc = '/dtc';
+
   /// Tela de configuração de criptografia (PSK).
   static const String settings = '/settings';
 

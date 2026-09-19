@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/panel.dart';
+import 'package:tccelta_mobile/src/ui/core/widgets/app_chip.dart';
 
 /// Linha horizontal rolável com uma aba por [Panel] do usuário — nome +
 /// contagem de indicadores, destacada em ciano quando ativa — mais um botão
@@ -83,44 +84,12 @@ class _PanelTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = selected ? AppColors.cyan500 : AppColors.textTertiary;
-    return GestureDetector(
+    return AppChip(
+      label: panel.name,
+      trailingCount: '${panel.indicatorIds.length}',
+      selected: selected,
+      height: height,
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        height: height,
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s5),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.cyan14 : AppColors.surfaceList,
-          borderRadius: AppRadii.brMd,
-          border: Border.all(
-            color: selected ? AppColors.cyan28 : AppColors.borderStrong,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              panel.name,
-              style: AppTypography.ui(
-                TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: fg),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.s2),
-            Text(
-              '${panel.indicatorIds.length}',
-              style: AppTypography.mono(
-                TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: fg.withValues(alpha: 0.6),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
