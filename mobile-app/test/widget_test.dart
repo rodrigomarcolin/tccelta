@@ -13,9 +13,12 @@ import 'package:tccelta_mobile/src/domain/repositories/permissions_repository.da
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
+import 'package:tccelta_mobile/src/ui/diagnostics/diagnostics_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
+
+import 'support/fake_dtc_repository.dart';
 
 /// Repository de permissões fake para os testes de widget: controla se a
 /// permissão já foi concedida sem tocar no plugin real.
@@ -155,6 +158,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
+        dtcRepositoryProvider.overrideWithValue(FakeDtcRepository()),
       ],
     );
 
@@ -200,6 +204,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           obd2RepositoryProvider.overrideWithValue(_HangingObd2Repository()),
+          dtcRepositoryProvider.overrideWithValue(FakeDtcRepository()),
         ],
       );
 

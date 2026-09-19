@@ -10,10 +10,12 @@ import 'package:tccelta_mobile/src/router/app_router.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
+import 'package:tccelta_mobile/src/ui/diagnostics/diagnostics_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/widgets/panel_manager_sheet.dart';
 
 import '../../support/fake_ble_service.dart';
+import '../../support/fake_dtc_repository.dart';
 
 /// Repository de telemetria fake que devolve leituras fixas (sem I/O).
 class _FakeObd2Repository implements Obd2Repository {
@@ -55,6 +57,7 @@ void main() {
       obd2RepositoryProvider.overrideWithValue(
         _FakeObd2Repository(readings: readings),
       ),
+      dtcRepositoryProvider.overrideWithValue(FakeDtcRepository()),
     ],
     child: MaterialApp.router(theme: AppTheme.dark, routerConfig: appRouter),
   );
