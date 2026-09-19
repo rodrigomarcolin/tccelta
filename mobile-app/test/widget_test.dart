@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/main.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
@@ -13,12 +14,9 @@ import 'package:tccelta_mobile/src/domain/repositories/permissions_repository.da
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
-import 'package:tccelta_mobile/src/ui/diagnostics/diagnostics_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
-
-import 'support/fake_dtc_repository.dart';
 
 /// Repository de permissões fake para os testes de widget: controla se a
 /// permissão já foi concedida sem tocar no plugin real.
@@ -106,6 +104,10 @@ class _FakeObd2Repository implements Obd2Repository {
   Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async => [
     for (final pid in pids) Obd2Reading(pid: pid, value: _exampleValues[pid]!),
   ];
+
+  @override
+  Future<DtcSnapshot> readDtc() async =>
+      const DtcSnapshot(active: [], milOn: false);
 }
 
 /// Repository que trava (nunca resolve) — mantém o painel na fase inicial, para
@@ -133,6 +135,9 @@ class _HangingObd2Repository implements Obd2Repository {
 
   @override
   Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) => _never.future;
+
+  @override
+  Future<DtcSnapshot> readDtc() => _never.future;
 }
 
 void main() {
@@ -158,7 +163,6 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
-        dtcRepositoryProvider.overrideWithValue(FakeDtcRepository()),
       ],
     );
 
@@ -204,7 +208,6 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           obd2RepositoryProvider.overrideWithValue(_HangingObd2Repository()),
-          dtcRepositoryProvider.overrideWithValue(FakeDtcRepository()),
         ],
       );
 
