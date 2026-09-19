@@ -241,6 +241,43 @@ Nada disso foi implementado — fica como recomendação, complementar ao
 que já está registrado em `HANDOFF_MULTI_ECU_ISOTP.md` (que resolveu só
 a instabilidade/dado obsoleto, não a ausência de endereçamento).
 
+### 3.5 Um detalhe que passa despercebido: mesmo com `requestAll()` perfeito, o app hoje sobrescreveria os dois valores
+
+Vale destacar porque não é óbvio: **corrigir o dreno de fila e coletar
+todas as respostas em ordem correta (item 1 acima) não é suficiente**
+pra ter os dois valores de um PID por-ECU disponíveis ao mesmo tempo — é
+uma correção de transporte, não de modelagem de dado. Isso aparece em
+duas camadas, confirmado lendo o código de cada uma:
+
+- **`IObd2::readPid(service, pid, buf, maxLen)`** (`IObd2.h`) devolve um
+  **único** buffer por chamada — não tem parâmetro nem retorno pra
+  distinguir "veio da ECM" de "veio da TCM". Mesmo com `requestAll()`
+  implementado na camada de baixo (`IsoTpClient`), essa assinatura
+  continuaria só repassando uma das respostas pra cima — o item 2 acima
+  (`Obd2Can`/`IObd2` precisam saber "qual alvo") é pré-requisito não só
+  pra endereçar fisicamente uma ECU, mas também pra sequer **expor** duas
+  respostas de PIDs por-ECU pro chamador.
+- **No app, `TelemetryViewModel._applyReadings()`**
+  (`telemetry_view_model.dart`) funde leituras assim:
+  `merged[r.pid] = r` — uma `Map` chaveada só pelo `Obd2Pid`. E
+  `Obd2Reading` (`obd2_reading.dart`) só carrega `pid` + `value`, sem
+  campo de ECU de origem. Então, mesmo que as duas respostas chegassem
+  certinhas e em ordem, a segunda **sobrescreveria** a primeira nessa
+  `Map` — não por bug de concorrência, mas porque a estrutura de dados
+  não tem onde guardar duas leituras do mesmo PID ao mesmo tempo.
+
+**Isso só é um risco concreto pra PID `0x01`/`0x41` (monitor status/MIL,
+§4.3)** — o único PID onde ECM e TCM respondem de verdade com dados
+diferentes entre si. Os 43 PIDs já implementados e os 5 candidatos "de
+outra ECU" do §6 não sofrem disso, porque por convenção só uma ECU
+responde a cada um (§2.1/§6.1) — não existem duas leituras concorrentes
+pra sobrescrever. Ou seja: implementar MIL corretamente (ver tabela do
+§4.4) exigiria não só o endereçamento físico do §3.2, mas também estender
+`Obd2Reading`/`TelemetryState` com um campo de ECU de origem — o mesmo
+tipo de mudança que o item 4 acima já pede pra `DtcComponent`, só que
+ninguém tinha generalizado explicitamente pra telemetria antes desta
+seção.
+
 ## 4. Referência: DTCs, PIDs e MIL por categoria/ECU, conforme o padrão
 
 Pedido explícito: mapear "todos os DTCs, PIDs e MILs que podem ter em
