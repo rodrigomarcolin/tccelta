@@ -466,3 +466,8 @@ int Obd2Mock::readPid(uint8_t service, uint8_t pid,
 
     return dispatchPid(pid, buf, maxLen, t, wave);
 }
+
+int Obd2Mock::readDtc(uint8_t service, uint16_t* dtcCodes, size_t maxCount) {
+    (void)service; (void)dtcCodes; (void)maxCount;
+    return 0;  // veículo mock: 0 DTCs em confirmados/pendentes/permanentes
+}
