@@ -1,4 +1,5 @@
 import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_freeze_frame_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dtc_repository.dart';
@@ -8,7 +9,7 @@ import 'package:tccelta_mobile/src/domain/repositories/dtc_repository.dart';
 ///
 /// **Placeholder para a leitura real.** Quando o datasource ELM327 existir,
 /// ele lerá os Modos 03 (confirmados)/07 (pendentes)/0A (permanentes) para os
-/// códigos — a troca é só esta classe (e o
+/// códigos e o Modo 02 para o congelamento — a troca é só esta classe (e o
 /// `dtcRepositoryProvider` em `diagnostics_providers.dart`), sem tocar em
 /// domain/view_model/view. Este método **nunca** deve devolver o catálogo
 /// inteiro (isso é `dtcCatalog`, dado de domínio) — só o que está de fato
@@ -33,6 +34,12 @@ class FakeDtcRepositoryImpl implements DtcRepository {
       code: 'P0301',
       status: DtcStatus.confirmed,
       detectedLabel: 'há 2 dias · 3 ciclos',
+      freezeFrame: [
+        DtcFreezeFrameEntry(label: 'Rotação', value: '2.480 rpm'),
+        DtcFreezeFrameEntry(label: 'Velocidade', value: '58 km/h'),
+        DtcFreezeFrameEntry(label: 'Temp. arrefec.', value: '92 °C'),
+        DtcFreezeFrameEntry(label: 'Carga', value: '46 %'),
+      ],
     ),
     DtcActiveEntry(
       code: 'P0171',
@@ -43,11 +50,23 @@ class FakeDtcRepositoryImpl implements DtcRepository {
       code: 'P0420',
       status: DtcStatus.confirmed,
       detectedLabel: 'há 11 dias',
+      freezeFrame: [
+        DtcFreezeFrameEntry(label: 'Rotação', value: '1.960 rpm'),
+        DtcFreezeFrameEntry(label: 'Velocidade', value: '74 km/h'),
+        DtcFreezeFrameEntry(label: 'Temp. arrefec.', value: '95 °C'),
+        DtcFreezeFrameEntry(label: 'Carga', value: '31 %'),
+      ],
     ),
     DtcActiveEntry(
       code: 'U0121',
       status: DtcStatus.confirmed,
       detectedLabel: 'há 4 h',
+      freezeFrame: [
+        DtcFreezeFrameEntry(label: 'Tensão', value: '12,4 V'),
+        DtcFreezeFrameEntry(label: 'Rotação', value: '820 rpm'),
+        DtcFreezeFrameEntry(label: 'Velocidade', value: '0 km/h'),
+        DtcFreezeFrameEntry(label: 'Temp. arrefec.', value: '88 °C'),
+      ],
     ),
     DtcActiveEntry(
       code: 'B1200',

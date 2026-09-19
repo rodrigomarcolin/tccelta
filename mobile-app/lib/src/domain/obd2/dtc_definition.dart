@@ -6,7 +6,7 @@ import 'package:tccelta_mobile/src/domain/obd2/dtc_severity.dart';
 /// vem de nenhuma leitura do veículo.
 ///
 /// Diferente de `DtcCode`, não carrega nenhum estado "desta leitura" (sem
-/// status/detectedLabel): o protocolo OBD-II (Modos 03/07/0A) só
+/// status/detectedLabel/freezeFrame): o protocolo OBD-II (Modos 03/07/0A) só
 /// devolve os códigos ativos agora, nunca um catálogo do que o veículo
 /// suporta — então o catálogo é dado próprio do app, não do datasource, e
 /// sobrevive à troca do repository mockado pelo real.

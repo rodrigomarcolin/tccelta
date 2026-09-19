@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_component.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_definition.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_freeze_frame_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_severity.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
 
@@ -25,6 +26,7 @@ class DtcCode {
     this.status,
     this.detectedLabel,
     this.causes = const [],
+    this.freezeFrame = const [],
   });
 
   /// Junta uma entrada do catálogo (dado permanente) com o resultado de uma
@@ -42,6 +44,7 @@ class DtcCode {
     causes: definition.causes,
     status: active?.status,
     detectedLabel: active?.detectedLabel,
+    freezeFrame: active?.freezeFrame ?? const [],
   );
 
   /// Código no formato padrão OBD-II (ex.: "P0301").
@@ -70,6 +73,10 @@ class DtcCode {
   /// catalogadas para este código.
   final List<String> causes;
 
+  /// Valores congelados no momento da falha (Modo 02). Vazia = sem
+  /// congelamento disponível (comum em códigos pendentes).
+  final List<DtcFreezeFrameEntry> freezeFrame;
+
   /// `true` quando o código está ativo na leitura atual ([status] não nulo).
   bool get isActive => status != null;
 
@@ -82,7 +89,8 @@ class DtcCode {
       other.severity == severity &&
       other.status == status &&
       other.detectedLabel == detectedLabel &&
-      listEquals(other.causes, causes);
+      listEquals(other.causes, causes) &&
+      listEquals(other.freezeFrame, freezeFrame);
 
   @override
   int get hashCode => Object.hash(
@@ -93,6 +101,7 @@ class DtcCode {
     status,
     detectedLabel,
     Object.hashAll(causes),
+    Object.hashAll(freezeFrame),
   );
 
   @override

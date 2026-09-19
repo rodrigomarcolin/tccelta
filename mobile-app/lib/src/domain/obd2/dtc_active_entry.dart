@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_freeze_frame_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
 
 /// Um código ativo agora no veículo — o que uma leitura de diagnóstico (Modos
@@ -14,6 +15,7 @@ class DtcActiveEntry {
     required this.code,
     required this.status,
     this.detectedLabel,
+    this.freezeFrame = const [],
   });
 
   /// Código no formato padrão OBD-II (ex.: "P0301") — casa com
@@ -28,15 +30,21 @@ class DtcActiveEntry {
   /// entre sessões; é só um rótulo de exibição.
   final String? detectedLabel;
 
+  /// Valores congelados no momento da falha (Modo 02). Vazia = sem
+  /// congelamento disponível (comum em códigos pendentes).
+  final List<DtcFreezeFrameEntry> freezeFrame;
+
   @override
   bool operator ==(Object other) =>
       other is DtcActiveEntry &&
       other.code == code &&
       other.status == status &&
-      other.detectedLabel == detectedLabel;
+      other.detectedLabel == detectedLabel &&
+      listEquals(other.freezeFrame, freezeFrame);
 
   @override
-  int get hashCode => Object.hash(code, status, detectedLabel);
+  int get hashCode =>
+      Object.hash(code, status, detectedLabel, Object.hashAll(freezeFrame));
 
   @override
   String toString() => 'DtcActiveEntry($code: $status)';

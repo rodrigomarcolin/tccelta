@@ -5,8 +5,9 @@ import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/dtc_severity_color.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/widgets/dtc_row.dart';
 
-/// Abre o sheet de detalhe de um [DtcCode]: código, status e causas
-/// prováveis.
+/// Abre o sheet de detalhe de um [DtcCode]: código, status, causas prováveis
+/// e o congelamento de dados (freeze frame) no momento da falha, quando
+/// disponível.
 ///
 /// Sem resultado (mesmo padrão de `showPanelManagerSheet`) — o sheet é só
 /// informativo, "Fechar" apenas descarta.
@@ -119,6 +120,39 @@ class DtcDetailSheet extends StatelessWidget {
                           const SizedBox(height: AppSpacing.s3),
                           BulletList(items: dtc.causes),
                         ],
+                        const SizedBox(height: AppSpacing.s7),
+                        Text(
+                          'CONGELAMENTO NO MOMENTO DA FALHA',
+                          style: AppTypography.overline,
+                        ),
+                        const SizedBox(height: AppSpacing.s3),
+                        if (dtc.freezeFrame.isEmpty)
+                          Text(
+                            'Sem dados congelados — o veículo só grava o '
+                            'quadro da falha quando o código é confirmado.',
+                            style: AppTypography.body.copyWith(
+                              color: AppColors.textTertiary,
+                            ),
+                          )
+                        else
+                          Wrap(
+                            spacing: AppSpacing.s2,
+                            runSpacing: AppSpacing.s2,
+                            children: [
+                              for (final f in dtc.freezeFrame)
+                                SizedBox(
+                                  width:
+                                      (MediaQuery.sizeOf(context).width -
+                                          2 * AppSpacing.s7 -
+                                          AppSpacing.s2) /
+                                      2,
+                                  child: StatCard.value(
+                                    label: f.label,
+                                    value: f.value,
+                                  ),
+                                ),
+                            ],
+                          ),
                         const SizedBox(height: AppSpacing.s7),
                         AppButton(
                           onPressed: Navigator.of(context).pop,
