@@ -5,10 +5,10 @@ import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/router/app_router.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
-import 'package:tccelta_mobile/src/ui/diagnostics/diagnostics_providers.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
 import '../../support/fake_ble_service.dart';
-import '../../support/fake_dtc_repository.dart';
+import '../../support/fake_obd2_repository.dart';
 
 void main() {
   // Usa o `appRouter` real (`MaterialApp.router`): a tab bar da tela "Mais"
@@ -17,7 +17,7 @@ void main() {
   Widget app() => ProviderScope(
     overrides: [
       bleServiceProvider.overrideWithValue(FakeBleService()),
-      dtcRepositoryProvider.overrideWithValue(FakeDtcRepository()),
+      obd2RepositoryProvider.overrideWithValue(FakeObd2Repository()),
     ],
     child: MaterialApp.router(theme: AppTheme.dark, routerConfig: appRouter),
   );

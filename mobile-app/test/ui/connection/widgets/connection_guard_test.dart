@@ -7,10 +7,10 @@ import 'package:tccelta_mobile/src/router/app_router.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_guard.dart';
-import 'package:tccelta_mobile/src/ui/diagnostics/diagnostics_providers.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
 import '../../../support/fake_ble_service.dart';
-import '../../../support/fake_dtc_repository.dart';
+import '../../../support/fake_obd2_repository.dart';
 
 /// [PermissionsRepository] falso com resposta fixa de permissão.
 class _FakePermissions implements PermissionsRepository {
@@ -35,7 +35,7 @@ void main() {
       permissionsRepositoryProvider.overrideWithValue(
         _FakePermissions(granted: granted),
       ),
-      dtcRepositoryProvider.overrideWithValue(FakeDtcRepository()),
+      obd2RepositoryProvider.overrideWithValue(FakeObd2Repository()),
     ],
     child: MaterialApp.router(
       theme: AppTheme.dark,

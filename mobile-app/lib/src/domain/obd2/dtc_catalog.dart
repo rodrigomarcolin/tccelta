@@ -9,7 +9,7 @@ import 'package:tccelta_mobile/src/domain/obd2/dtc_severity.dart';
 /// (por isso não é buscado por nenhum repository/datasource), e sobrevive à
 /// troca do repository mockado pelo real — é a partir daqui que a vista
 /// "Todos por componente" é montada, decorada pelo resultado de
-/// `DtcRepository.read()` (ver `DtcCode.fromDefinition`).
+/// `Obd2Repository.readDtc()` (ver `DtcCode.fromDefinition`).
 const List<DtcDefinition> dtcCatalog = [
   DtcDefinition(
     code: 'P0301',
@@ -32,6 +32,12 @@ const List<DtcDefinition> dtcCatalog = [
       'Sonda lambda fora de faixa',
       'Pressão de combustível baixa',
     ],
+  ),
+  DtcDefinition(
+    code: 'P0133',
+    component: DtcComponent.emissions,
+    name: 'Sonda lambda 1 — resposta lenta (banco 1)',
+    severity: DtcSeverity.medium,
   ),
   DtcDefinition(
     code: 'P0420',

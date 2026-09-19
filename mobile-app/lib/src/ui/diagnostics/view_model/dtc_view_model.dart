@@ -5,8 +5,8 @@ import 'package:tccelta_mobile/src/core/errors/failure.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_catalog.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_code.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_component.dart';
-import 'package:tccelta_mobile/src/domain/repositories/dtc_repository.dart';
-import 'package:tccelta_mobile/src/ui/diagnostics/diagnostics_providers.dart';
+import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
 /// Vista escolhida na aba de Diagnóstico.
 enum DtcViewMode {
@@ -114,11 +114,11 @@ class DtcState {
 /// Não `autoDispose`: o retrato sobrevive a idas-e-vindas de aba (mesmo
 /// espírito do `PanelViewModel`) — só o "Reler" força uma nova leitura.
 class DtcViewModel extends Notifier<DtcState> {
-  late final DtcRepository _repo;
+  late final Obd2Repository _repo;
 
   @override
   DtcState build() {
-    _repo = ref.read(dtcRepositoryProvider);
+    _repo = ref.read(obd2RepositoryProvider);
     unawaited(_load());
     return const DtcState();
   }
@@ -129,7 +129,7 @@ class DtcViewModel extends Notifier<DtcState> {
   /// (mesmo cuidado de `TelemetryViewModel._start`).
   Future<void> _load() async {
     try {
-      final snapshot = await _repo.read();
+      final snapshot = await _repo.readDtc();
       final activeByCode = {for (final a in snapshot.active) a.code: a};
       final codes = [
         for (final definition in dtcCatalog)
