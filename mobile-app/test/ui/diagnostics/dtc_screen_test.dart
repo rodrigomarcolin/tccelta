@@ -50,7 +50,7 @@ void main() {
     expect(find.text('P0301'), findsOneWidget);
     expect(find.text('Falha de combustão — cilindro 1'), findsOneWidget);
     expect(find.text('CONFIRMADO'), findsOneWidget);
-    expect(find.text('Acesa'), findsOneWidget); // luz de injeção
+    expect(find.text('Acesa'), findsOneWidget); // luz de falha (MIL)
   });
 
   testWidgets('alternar para "Todos por componente" mostra o catálogo '

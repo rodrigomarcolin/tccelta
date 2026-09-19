@@ -8,7 +8,7 @@
 /// `DtcCode` sem `status` (`null`) está no catálogo do veículo mas não está
 /// ativo na leitura atual.
 enum DtcStatus {
-  /// Confirmado (Modo 03) — acende a luz de injeção quando presente.
+  /// Confirmado (Modo 03) — acende a luz de falha quando presente.
   confirmed,
 
   /// Pendente (Modo 07) — visto neste ciclo, aguardando confirmação.
