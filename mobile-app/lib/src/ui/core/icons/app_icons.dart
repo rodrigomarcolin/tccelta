@@ -29,9 +29,6 @@ enum AppIconData {
   /// Sensores (lista) — aba de PIDs.
   sensores('sensores'),
 
-  /// Terminal (prompt) — aba de comandos.
-  terminal('terminal'),
-
   /// Mais (kebab) — aba de opções.
   mais('mais'),
 
@@ -54,7 +51,10 @@ enum AppIconData {
   desconectar('desconectar'),
 
   /// Cadeado — criptografia/PSK.
-  cadeado('cadeado');
+  cadeado('cadeado'),
+
+  /// Motor — aba de DTCs / luz de falha (MIL).
+  motor('motor');
 
   const AppIconData(this._name);
 

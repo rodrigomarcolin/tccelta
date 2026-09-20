@@ -1,13 +1,20 @@
+import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
 
-/// Contrato de leitura de telemetria OBD-II (interface no domain, impl no
+/// Contrato de leitura OBD-II — telemetria (Serviço 0x01) e diagnóstico
+/// (Modos 03/07/0A/02) num único repository (interface no domain, impl no
 /// data).
 ///
-/// É a *source of truth* das leituras para a UI: fala ELM327 sobre a
-/// `BleConnection` viva, decodifica os PIDs e lança subclasses de `Failure` em
-/// erro. A camada de UI (view_model) nunca toca no transporte de bytes.
+/// Telemetria e DTC são incorporadas na mesma interface porque falam o
+/// *mesmo* protocolo sobre a *mesma* conexão: ambas dependem de um único
+/// `Elm327Client` serializando os comandos, então não faz sentido ter dois
+/// repositories (e dois clientes ELM327 concorrentes na mesma
+/// `BleConnection`). É a *source of truth* das leituras para a UI: fala
+/// ELM327 sobre a `BleConnection` viva, decodifica os PIDs/DTCs e lança
+/// subclasses de `Failure` em erro. A camada de UI (view_model) nunca toca no
+/// transporte de bytes.
 abstract interface class Obd2Repository {
   /// PIDs lidos pelo painel, na ordem de exibição.
   List<Obd2Pid> get pids;
@@ -41,4 +48,9 @@ abstract interface class Obd2Repository {
   /// que consulta apenas os indicadores que o usuário tem exibidos, em vez
   /// de varrer o catálogo inteiro a cada volta.
   Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids);
+
+  /// Lê o retrato atual de diagnóstico (códigos confirmados/pendentes/
+  /// permanentes + MIL), Modos 03/07/0A (+ 02 para congelamento). Lança
+  /// `DtcReadFailure` se não houver conexão pronta ou a leitura falhar.
+  Future<DtcSnapshot> readDtc();
 }

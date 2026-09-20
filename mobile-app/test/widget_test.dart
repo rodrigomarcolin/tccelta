@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/main.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
@@ -103,6 +104,10 @@ class _FakeObd2Repository implements Obd2Repository {
   Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async => [
     for (final pid in pids) Obd2Reading(pid: pid, value: _exampleValues[pid]!),
   ];
+
+  @override
+  Future<DtcSnapshot> readDtc() async =>
+      const DtcSnapshot(active: [], milOn: false);
 }
 
 /// Repository que trava (nunca resolve) — mantém o painel na fase inicial, para
@@ -130,6 +135,9 @@ class _HangingObd2Repository implements Obd2Repository {
 
   @override
   Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) => _never.future;
+
+  @override
+  Future<DtcSnapshot> readDtc() => _never.future;
 }
 
 void main() {

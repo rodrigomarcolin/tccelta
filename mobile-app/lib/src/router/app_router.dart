@@ -6,6 +6,7 @@ import 'package:tccelta_mobile/src/ui/connection/view/connecting_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/connection_lost_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/permissions_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/scan_screen.dart';
+import 'package:tccelta_mobile/src/ui/diagnostics/view/dtc_screen.dart';
 import 'package:tccelta_mobile/src/ui/more/view/more_screen.dart';
 import 'package:tccelta_mobile/src/ui/settings/view/psk_settings_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
@@ -43,6 +44,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.painel,
       builder: (context, state) => const PainelScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.dtc,
+      builder: (context, state) => const DtcScreen(),
     ),
     GoRoute(
       path: AppRoutes.settings,

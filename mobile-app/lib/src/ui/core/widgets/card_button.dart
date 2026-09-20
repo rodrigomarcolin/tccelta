@@ -33,12 +33,14 @@ class CardButton extends StatelessWidget {
     this.leading,
     this.trailing,
     this.titleMono = false,
+    this.titleColor,
     this.subtitleColor,
     this.subtitleMono = true,
     this.showValue = true,
     this.showChevron = true,
     this.selected = false,
     this.dimmed = false,
+    this.accentColor,
     this.onTap,
     super.key,
   });
@@ -71,6 +73,9 @@ class CardButton extends StatelessWidget {
   /// Renderiza o título em mono (nome de dispositivo). @default false
   final bool titleMono;
 
+  /// Cor do título. @default [AppColors.textPrimary]
+  final Color? titleColor;
+
   /// Cor do subtítulo. @default [AppColors.textTertiary]
   final Color? subtitleColor;
 
@@ -88,6 +93,10 @@ class CardButton extends StatelessWidget {
 
   /// Esmaece a linha (item indisponível/fraco). @default false
   final bool dimmed;
+
+  /// Faixa de cor de 3px na borda esquerda (ex.: severidade de um alerta).
+  /// `null` = sem faixa. @default null
+  final Color? accentColor;
 
   /// Toque na linha (abre o detalhe / seleciona).
   final VoidCallback? onTap;
@@ -134,8 +143,34 @@ class CardButton extends StatelessWidget {
         ],
       ),
     );
-    if (!dimmed) return card;
-    return Opacity(opacity: 0.55, child: card);
+    final accented = _withAccent(card);
+    if (!dimmed) return accented;
+    return Opacity(opacity: 0.55, child: accented);
+  }
+
+  /// Sobrepõe a faixa de [accentColor] (3px, altura inteira) à esquerda de
+  /// [card], recortada nos mesmos cantos arredondados. Um `Border` com um
+  /// lado de cor diferente dos outros não pode ser combinado com
+  /// `borderRadius` (o Flutter exige cor uniforme nesse caso) — por isso a
+  /// faixa é uma sobreposição (`Stack`), não parte da borda do [AppCard].
+  Widget _withAccent(Widget card) {
+    final accent = accentColor;
+    if (accent == null) return card;
+    return ClipRRect(
+      borderRadius: AppRadii.brMd,
+      child: Stack(
+        children: [
+          card,
+          Positioned(
+            top: 0,
+            bottom: 0,
+            left: 0,
+            width: 3,
+            child: ColoredBox(color: accent),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _titleAndSubtitle() {
@@ -151,15 +186,12 @@ class CardButton extends StatelessWidget {
   }
 
   Widget _title() {
+    final color = titleColor ?? AppColors.textPrimary;
     final style = titleMono
         ? AppTypography.mono(
-            const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
+            TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: color),
           )
-        : AppTypography.label.copyWith(color: AppColors.textPrimary);
+        : AppTypography.label.copyWith(color: color);
     return Text(title, style: style, overflow: TextOverflow.ellipsis);
   }
 
