@@ -143,12 +143,16 @@ void SecureHandshakeReplayBleConnectivity::handleHello(const char* body, size_t 
     // Accept HELLO in any state — a retried/late HELLO restarts the handshake
     // and invalidates any half-finished or established session (including
     // its counters, so a stale session can never be revived by reusing them).
-    if (bodyLen != kNonceLen * 2 || !hexDecode(body, bodyLen, _appNonce, kNonceLen)) {
+    if (bodyLen != kNonceLen * 2) {
         Serial.println("[HandshakeReplay] Malformed HELLO — ignored");
         return;
     }
 
     resetToIdle();
+    if (!hexDecode(body, bodyLen, _appNonce, kNonceLen)) {
+        Serial.println("[HandshakeReplay] Malformed HELLO — ignored");
+        return;
+    }
 
     esp_fill_random(_dongleNonce, kNonceLen);
 
@@ -177,8 +181,11 @@ void SecureHandshakeReplayBleConnectivity::handlePreProof(const char* body, size
     }
 
     uint8_t expectedProof[kHmacLen];
-    hmacTagged(_psk, sizeof(_psk), "PROOF",
-               _dongleNonce, kNonceLen, _appNonce, kNonceLen,
+    uint8_t proofInput[kNonceLen * 2];
+    memcpy(proofInput, _appNonce, kNonceLen);
+    memcpy(proofInput + kNonceLen, _dongleNonce, kNonceLen);
+    hmacTagged(_psk, sizeof(_psk), "",
+               proofInput, sizeof(proofInput), nullptr, 0,
                expectedProof);
 
     if (!constantTimeEquals(receivedProof, expectedProof, kHmacLen)) {
@@ -188,15 +195,15 @@ void SecureHandshakeReplayBleConnectivity::handlePreProof(const char* body, size
         return;
     }
 
-    deriveSessionKey(_psk, sizeof(_psk), _dongleNonce, _appNonce, _sessionKey);
+    deriveSessionKey(_psk, sizeof(_psk), _appNonce, _dongleNonce, _sessionKey);
     _txCounter = 0;
     _rxCounter = 0;
     _rxCounterInitialized = false;
 
     uint8_t okHmac[kHmacLen];
-    hmacTagged(_psk, sizeof(_psk), "OK",
-               _appNonce, kNonceLen, _dongleNonce, kNonceLen,
-               okHmac);
+    static const uint8_t confirm[] = "confirm";
+    hmacTagged(_sessionKey, sizeof(_sessionKey), "",
+               confirm, sizeof(confirm) - 1, nullptr, 0, okHmac);
 
     char hex[kHmacLen * 2 + 1];
     hexEncode(okHmac, kHmacLen, hex);

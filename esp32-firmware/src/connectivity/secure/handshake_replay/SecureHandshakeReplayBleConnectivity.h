@@ -11,9 +11,9 @@
  * Handshake (identical to SecureHandshakeBleConnectivity):
  *   App    → Dongle:  HELLO  <appNonce:32B hex>
  *   Dongle → App:      CHALLENGE  <dongleNonce:32B hex>
- *   App    → Dongle:  PROOF  <HMAC-SHA256(PSK, "PROOF" ‖ dongleNonce ‖ appNonce):hex>
- *   Dongle → App:      OK  <HMAC-SHA256(PSK, "OK" ‖ appNonce ‖ dongleNonce):hex>
- *   Session key = HKDF-SHA256(PSK, salt = dongleNonce ‖ appNonce, info = "session-key")
+ *   App    → Dongle:  PROOF  <HMAC-SHA256(PSK, appNonce ‖ dongleNonce):hex>
+ *   Dongle → App:      OK  <HMAC-SHA256(sessionKey, "confirm"):hex>
+ *   Session key = HKDF-SHA256(PSK, salt = appNonce ‖ dongleNonce, info = "session-key")
  *
  * Established session (differs from SecureHandshakeBleConnectivity):
  *   Each direction keeps its own 64-bit counter starting at 0:

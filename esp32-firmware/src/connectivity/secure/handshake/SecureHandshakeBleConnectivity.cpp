@@ -2,305 +2,84 @@
 #include <cstring>
 #include <esp_random.h>
 #include <mbedtls/gcm.h>
-#include <mbedtls/md.h>
 #include <mbedtls/hkdf.h>
+#include <mbedtls/md.h>
 #include "SecureHandshakeBleConnectivity.h"
 
-// ── Compile-time key validation (shares SECURE_PSK_HEX with the PSK build) ────
-
 #ifndef SECURE_PSK_HEX
-#  error "SECURE_PSK_HEX is not set. Define it in your secrets.ini build_flags."
+#error "SECURE_PSK_HEX is not set"
 #endif
+#define PSK_STR_I(x) #x
+#define PSK_STR(x) PSK_STR_I(x)
+static const char* kPskHex = PSK_STR(SECURE_PSK_HEX);
+static constexpr size_t IV_LEN = 12, TAG_LEN = 16;
 
-#define _PSK_STR_IMPL(x) #x
-#define _PSK_STR(x)      _PSK_STR_IMPL(x)
-static const char* kPskHex = _PSK_STR(SECURE_PSK_HEX);
-
-// ── Wire constants ──────────────────────────────────────────────────────────
-
-static constexpr size_t kIvLen  = 12;  ///< GCM standard IV length
-static constexpr size_t kTagLen = 16;  ///< AES-GCM authentication tag length
-static constexpr size_t kIvHexLen  = kIvLen  * 2;
-static constexpr size_t kTagHexLen = kTagLen * 2;
-static constexpr size_t kMinWireLen = kIvHexLen + kTagHexLen;
-
-// ── Constructor ─────────────────────────────────────────────────────────────
-
-SecureHandshakeBleConnectivity::SecureHandshakeBleConnectivity(IConnectivity* inner)
-    : SecureBleConnectivity(inner), _state(HandshakeState::IDLE)
-{
-    size_t hexLen = strlen(kPskHex);
-    const char* hex = kPskHex;
-    if (hexLen >= 2 && hex[0] == '"') { hex++; hexLen -= 2; }
-
-    configASSERT(hexLen == 64 &&
-                 "SECURE_PSK_HEX must be exactly 64 hex characters (32 bytes / 256-bit key)");
-
-    bool ok = hexDecode(hex, hexLen, _psk, sizeof(_psk));
-    configASSERT(ok && "SECURE_PSK_HEX contains invalid hex characters");
-
-    Serial.println("[Handshake] Initialised — waiting for HELLO");
+SecureHandshakeBleConnectivity::SecureHandshakeBleConnectivity(IConnectivity* inner) : SecureBleConnectivity(inner) {
+    size_t n = strlen(kPskHex); const char* p = kPskHex;
+    if (n >= 2 && p[0] == '"') { ++p; n -= 2; }
+    configASSERT(n == 64); configASSERT(hexDecode(p, n, _psk, sizeof(_psk)));
+    Serial.println("[Handshake] Initialized — waiting for HELLO");
 }
-
-// ── onRawFrameReceived ───────────────────────────────────────────────────────
 
 void SecureHandshakeBleConnectivity::onRawFrameReceived(const uint8_t* data, size_t len) {
-    // strip trailing newline / CRLF
-    while (len > 0 && (data[len - 1] == '\r' || data[len - 1] == '\n')) {
-        --len;
-    }
-
+    while (len && (data[len-1] == '\r' || data[len-1] == '\n')) --len;
     const char* text = reinterpret_cast<const char*>(data);
-
-    if (_state == HandshakeState::ESTABLISHED) {
-        // ── Encrypted data frame ────────────────────────────────────────────
-        if (len < kMinWireLen || len % 2 != 0) {
-            Serial.println("[Handshake] Malformed data frame — dropped");
-            return;
-        }
-
-        uint8_t iv[kIvLen];
-        uint8_t tag[kTagLen];
-        if (!hexDecode(text, kIvHexLen, iv, kIvLen) ||
-            !hexDecode(text + (len - kTagHexLen), kTagHexLen, tag, kTagLen)) {
-            Serial.println("[Handshake] Bad hex in IV/tag — dropped");
-            return;
-        }
-
-        size_t cipherHexLen = len - kIvHexLen - kTagHexLen;
-        size_t cipherLen    = cipherHexLen / 2;
-        uint8_t cipherBuf[kSecureMaxMsgLen];
-        if (cipherLen > sizeof(cipherBuf)) {
-            Serial.println("[Handshake] Ciphertext too large — dropped");
-            return;
-        }
-        if (cipherLen > 0 && !hexDecode(text + kIvHexLen, cipherHexLen, cipherBuf, cipherLen)) {
-            Serial.println("[Handshake] Bad hex in ciphertext — dropped");
-            return;
-        }
-
-        uint8_t plainBuf[kSecureMaxMsgLen];
-        mbedtls_gcm_context ctx;
-        mbedtls_gcm_init(&ctx);
-        int ret = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, _sessionKey, 256);
-        if (ret == 0) {
-            ret = mbedtls_gcm_auth_decrypt(&ctx, cipherLen, iv, kIvLen, nullptr, 0,
-                                            tag, kTagLen, cipherBuf, plainBuf);
-        }
-        mbedtls_gcm_free(&ctx);
-
-        if (ret != 0) {
-            Serial.printf("[Handshake] GCM auth failed (0x%04X) — dropped\n", (unsigned)(-ret));
-            return;
-        }
-
-        deliverPlaintext(plainBuf, cipherLen);
-        return;
-    }
-
-    // ── Handshake control frames ────────────────────────────────────────────
-    if (len >= 6 && strncmp(text, "HELLO ", 6) == 0) {
-        handleHello(text + 6, len - 6);
-        return;
-    }
-    if (len >= 6 && strncmp(text, "PROOF ", 6) == 0) {
-        handlePreProof(text + 6, len - 6);
-        return;
-    }
-
-    Serial.printf("[Handshake] Unexpected frame in state=%d — ignored\n", (int)_state);
+    if (len >= 6 && strncmp(text, "HELLO ", 6) == 0) { handleHello(text+6, len-6); return; }
+    if (len >= 6 && strncmp(text, "PROOF ", 6) == 0) { handleProof(text+6, len-6); return; }
+    if (_state != HandshakeState::ESTABLISHED || len < 56 || (len & 1)) return;
+    uint8_t iv[IV_LEN], tag[TAG_LEN], cipher[kSecureMaxMsgLen], plain[kSecureMaxMsgLen];
+    size_t cipherHex = len - 24 - 32, cipherLen = cipherHex / 2;
+    if (cipherLen > sizeof(cipher) || !hexDecode(text, 24, iv, IV_LEN) ||
+        !hexDecode(text + len - 32, 32, tag, TAG_LEN) ||
+        (cipherLen && !hexDecode(text + 24, cipherHex, cipher, cipherLen))) return;
+    mbedtls_gcm_context ctx; mbedtls_gcm_init(&ctx);
+    int ret = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, _sessionKey, 256);
+    if (!ret) ret = mbedtls_gcm_auth_decrypt(&ctx, cipherLen, iv, IV_LEN, nullptr, 0, tag, TAG_LEN, cipher, plain);
+    mbedtls_gcm_free(&ctx);
+    if (!ret) deliverPlaintext(plain, cipherLen);
 }
 
-void SecureHandshakeBleConnectivity::handleHello(const char* body, size_t bodyLen) {
-    // Accept HELLO in any state — a retried/late HELLO simply restarts the
-    // handshake, invalidating any half-finished session.
-    if (bodyLen != kNonceLen * 2 || !hexDecode(body, bodyLen, _appNonce, kNonceLen)) {
-        Serial.println("[Handshake] Malformed HELLO — ignored");
-        return;
-    }
-
-    esp_fill_random(_dongleNonce, kNonceLen);
-
-    char hex[kNonceLen * 2 + 1];
-    hexEncode(_dongleNonce, kNonceLen, hex);
-
-    char frame[8 + kNonceLen * 2 + 2];
-    int n = snprintf(frame, sizeof(frame), "CHALLENGE %s\n", hex);
-    sendRaw(reinterpret_cast<const uint8_t*>(frame), n);
-
-    _state = HandshakeState::CHALLENGE_SENT;
-    Serial.println("[Handshake] HELLO received — CHALLENGE sent");
+void SecureHandshakeBleConnectivity::handleHello(const char* body, size_t len) {
+    if (len != 64) return;
+    resetToIdle();
+    if (!hexDecode(body, len, _appNonce, sizeof(_appNonce))) return;
+    esp_fill_random(_dongleNonce, sizeof(_dongleNonce));
+    char nonce[65], frame[75]; hexEncode(_dongleNonce, 32, nonce);
+    int n = snprintf(frame, sizeof(frame), "CHALLENGE %s\n", nonce);
+    sendRaw(reinterpret_cast<const uint8_t*>(frame), n); _state = HandshakeState::CHALLENGE_SENT;
 }
 
-void SecureHandshakeBleConnectivity::handlePreProof(const char* body, size_t bodyLen) {
-    if (_state != HandshakeState::CHALLENGE_SENT) {
-        Serial.println("[Handshake] PROOF received out of order — ignored");
-        return;
-    }
-
-    uint8_t receivedProof[kHmacLen];
-    if (bodyLen != kHmacLen * 2 || !hexDecode(body, bodyLen, receivedProof, kHmacLen)) {
-        Serial.println("[Handshake] Malformed PROOF — resetting");
-        resetToIdle();
-        return;
-    }
-
-    uint8_t expectedProof[kHmacLen];
-    hmacTagged(_psk, sizeof(_psk), "PROOF",
-               _dongleNonce, kNonceLen, _appNonce, kNonceLen,
-               expectedProof);
-
-    if (!constantTimeEquals(receivedProof, expectedProof, kHmacLen)) {
-        Serial.println("[Handshake] PROOF verification failed — ERROR sent");
-        sendRaw(reinterpret_cast<const uint8_t*>("ERROR\n"), 6);
-        resetToIdle();
-        return;
-    }
-
-    deriveSessionKey(_psk, sizeof(_psk), _dongleNonce, _appNonce, _sessionKey);
-
-    uint8_t okHmac[kHmacLen];
-    hmacTagged(_psk, sizeof(_psk), "OK",
-               _appNonce, kNonceLen, _dongleNonce, kNonceLen,
-               okHmac);
-
-    char hex[kHmacLen * 2 + 1];
-    hexEncode(okHmac, kHmacLen, hex);
-
-    char frame[4 + kHmacLen * 2 + 2];
-    int n = snprintf(frame, sizeof(frame), "OK %s\n", hex);
-    sendRaw(reinterpret_cast<const uint8_t*>(frame), n);
-
+void SecureHandshakeBleConnectivity::handleProof(const char* body, size_t len) {
+    if (_state != HandshakeState::CHALLENGE_SENT || len != 64) return;
+    uint8_t got[32], expected[32], salt[64];
+    if (!hexDecode(body, len, got, 32)) return;
+    memcpy(salt, _appNonce, 32); memcpy(salt+32, _dongleNonce, 32);
+    hmac(_psk, 32, salt, sizeof(salt), expected);
+    if (!constantTimeEquals(got, expected, 32)) { sendRaw((const uint8_t*)"ERROR\n", 6); resetToIdle(); return; }
+    static const uint8_t info[] = "session-key";
+    mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), salt, sizeof(salt), _psk, 32, info, sizeof(info)-1, _sessionKey, 32);
+    static const uint8_t label[] = "confirm"; hmac(_sessionKey, 32, label, sizeof(label)-1, expected);
+    char mac[65], frame[70]; hexEncode(expected, 32, mac);
+    int n = snprintf(frame, sizeof(frame), "OK %s\n", mac); sendRaw((const uint8_t*)frame, n);
     _state = HandshakeState::ESTABLISHED;
-    Serial.println("[Handshake] PROOF verified — session ESTABLISHED");
 }
-
-void SecureHandshakeBleConnectivity::resetToIdle() {
-    _state = HandshakeState::IDLE;
-    memset(_appNonce, 0, sizeof(_appNonce));
-    memset(_dongleNonce, 0, sizeof(_dongleNonce));
-    memset(_sessionKey, 0, sizeof(_sessionKey));
-}
-
-// ── sendSecured ──────────────────────────────────────────────────────────────
 
 void SecureHandshakeBleConnectivity::sendSecured(const uint8_t* plain, size_t len) {
-    if (_state != HandshakeState::ESTABLISHED) {
-        Serial.println("[Handshake] sendSecured: no established session — dropped");
-        return;
-    }
-    if (len > kSecureMaxMsgLen) {
-        Serial.println("[Handshake] sendSecured: plaintext too large — dropped");
-        return;
-    }
-
-    uint8_t iv[kIvLen];
-    esp_fill_random(iv, kIvLen);
-
-    uint8_t cipherBuf[kSecureMaxMsgLen];
-    uint8_t tag[kTagLen];
-
-    mbedtls_gcm_context ctx;
-    mbedtls_gcm_init(&ctx);
+    if (_state != HandshakeState::ESTABLISHED || len > kSecureMaxMsgLen) return;
+    uint8_t iv[IV_LEN], cipher[kSecureMaxMsgLen], tag[TAG_LEN]; esp_fill_random(iv, IV_LEN);
+    mbedtls_gcm_context ctx; mbedtls_gcm_init(&ctx);
     int ret = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, _sessionKey, 256);
-    if (ret == 0) {
-        ret = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, len, iv, kIvLen,
-                                         nullptr, 0, plain, cipherBuf, kTagLen, tag);
-    }
-    mbedtls_gcm_free(&ctx);
-
-    if (ret != 0) {
-        Serial.printf("[Handshake] GCM encrypt failed: -0x%04X\n", (unsigned)(-ret));
-        return;
-    }
-
-    size_t outBufSize = kIvHexLen + len * 2 + kTagHexLen + 2;
-    char   outBuf[kIvHexLen + kSecureMaxMsgLen * 2 + kTagHexLen + 2];
-    (void)outBufSize;
-
-    hexEncode(iv, kIvLen, outBuf);
-    hexEncode(cipherBuf, len, outBuf + kIvHexLen);
-    hexEncode(tag, kTagLen, outBuf + kIvHexLen + len * 2);
-
-    size_t wireLen = kIvHexLen + len * 2 + kTagHexLen;
-    outBuf[wireLen]     = '\n';
-    outBuf[wireLen + 1] = '\0';
-
-    sendRaw(reinterpret_cast<const uint8_t*>(outBuf), wireLen + 1);
+    if (!ret) ret = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, len, iv, IV_LEN, nullptr, 0, plain, cipher, TAG_LEN, tag);
+    mbedtls_gcm_free(&ctx); if (ret) return;
+    char out[24 + kSecureMaxMsgLen*2 + 32 + 2]; hexEncode(iv, IV_LEN, out); hexEncode(cipher, len, out+24); hexEncode(tag, TAG_LEN, out+24+len*2);
+    size_t n = 24 + len*2 + 32; out[n++] = '\n'; sendRaw((const uint8_t*)out, n);
 }
 
-// ── Crypto helpers ───────────────────────────────────────────────────────────
-
-void SecureHandshakeBleConnectivity::hmacTagged(const uint8_t* key, size_t keyLen,
-                                                  const char* tag,
-                                                  const uint8_t* a, size_t aLen,
-                                                  const uint8_t* b, size_t bLen,
-                                                  uint8_t* out)
-{
-    const mbedtls_md_info_t* mdInfo = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-    mbedtls_md_context_t ctx;
-    mbedtls_md_init(&ctx);
-    mbedtls_md_setup(&ctx, mdInfo, 1 /* HMAC */);
-    mbedtls_md_hmac_starts(&ctx, key, keyLen);
-    mbedtls_md_hmac_update(&ctx, reinterpret_cast<const uint8_t*>(tag), strlen(tag));
-    mbedtls_md_hmac_update(&ctx, a, aLen);
-    mbedtls_md_hmac_update(&ctx, b, bLen);
-    mbedtls_md_hmac_finish(&ctx, out);
-    mbedtls_md_free(&ctx);
+void SecureHandshakeBleConnectivity::resetToIdle() { _state = HandshakeState::IDLE; memset(_appNonce,0,sizeof(_appNonce)); memset(_dongleNonce,0,sizeof(_dongleNonce)); memset(_sessionKey,0,sizeof(_sessionKey)); }
+void SecureHandshakeBleConnectivity::hmac(const uint8_t* key, size_t keyLen, const uint8_t* data, size_t len, uint8_t* out) {
+    auto* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256); mbedtls_md_context_t ctx; mbedtls_md_init(&ctx); mbedtls_md_setup(&ctx, info, 1); mbedtls_md_hmac_starts(&ctx,key,keyLen); mbedtls_md_hmac_update(&ctx,data,len); mbedtls_md_hmac_finish(&ctx,out); mbedtls_md_free(&ctx);
 }
-
-void SecureHandshakeBleConnectivity::deriveSessionKey(const uint8_t* psk, size_t pskLen,
-                                                        const uint8_t* dongleNonce,
-                                                        const uint8_t* appNonce,
-                                                        uint8_t* out)
-{
-    uint8_t salt[kNonceLen * 2];
-    memcpy(salt, dongleNonce, kNonceLen);
-    memcpy(salt + kNonceLen, appNonce, kNonceLen);
-
-    static const char kInfo[] = "session-key";
-    const mbedtls_md_info_t* mdInfo = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-
-    mbedtls_hkdf(mdInfo, salt, sizeof(salt), psk, pskLen,
-                 reinterpret_cast<const uint8_t*>(kInfo), strlen(kInfo),
-                 out, kKeyLen);
-}
-
-bool SecureHandshakeBleConnectivity::constantTimeEquals(const uint8_t* a, const uint8_t* b, size_t len) {
-    uint8_t diff = 0;
-    for (size_t i = 0; i < len; ++i) {
-        diff |= a[i] ^ b[i];
-    }
-    return diff == 0;
-}
-
-// ── Hex helpers ──────────────────────────────────────────────────────────────
-
-int SecureHandshakeBleConnectivity::hexCharToNibble(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return 10 + c - 'a';
-    if (c >= 'A' && c <= 'F') return 10 + c - 'A';
-    return -1;
-}
-
-bool SecureHandshakeBleConnectivity::hexDecode(const char* hex, size_t hexLen,
-                                                uint8_t* out, size_t outLen)
-{
-    if (hexLen != outLen * 2) return false;
-    for (size_t i = 0; i < outLen; ++i) {
-        int hi = hexCharToNibble(hex[i * 2]);
-        int lo = hexCharToNibble(hex[i * 2 + 1]);
-        if (hi < 0 || lo < 0) return false;
-        out[i] = static_cast<uint8_t>((hi << 4) | lo);
-    }
-    return true;
-}
-
-void SecureHandshakeBleConnectivity::hexEncode(const uint8_t* in, size_t inLen, char* out) {
-    static const char kHex[] = "0123456789abcdef";
-    for (size_t i = 0; i < inLen; ++i) {
-        out[i * 2]     = kHex[in[i] >> 4];
-        out[i * 2 + 1] = kHex[in[i] & 0x0F];
-    }
-    out[inLen * 2] = '\0';
-}
+bool SecureHandshakeBleConnectivity::constantTimeEquals(const uint8_t* a,const uint8_t* b,size_t n){uint8_t d=0;for(size_t i=0;i<n;++i)d|=a[i]^b[i];return d==0;}
+int SecureHandshakeBleConnectivity::hexNibble(char c){if(c>='0'&&c<='9')return c-'0';if(c>='a'&&c<='f')return c-'a'+10;if(c>='A'&&c<='F')return c-'A'+10;return -1;}
+bool SecureHandshakeBleConnectivity::hexDecode(const char* h,size_t n,uint8_t* out,size_t outLen){if(n!=outLen*2)return false;for(size_t i=0;i<outLen;++i){int a=hexNibble(h[i*2]),b=hexNibble(h[i*2+1]);if(a<0||b<0)return false;out[i]=(a<<4)|b;}return true;}
+void SecureHandshakeBleConnectivity::hexEncode(const uint8_t* in,size_t n,char* out){static const char* h="0123456789abcdef";for(size_t i=0;i<n;++i){out[i*2]=h[in[i]>>4];out[i*2+1]=h[in[i]&15];}out[n*2]=0;}
