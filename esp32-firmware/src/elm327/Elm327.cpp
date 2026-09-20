@@ -3,7 +3,6 @@
 static constexpr char CR = '\r';
 static constexpr char LF = '\n';
 
-// TODO: Revisar/Melhorar. Este arquivo foi gerado com IA.
 // ── helpers ───────────────────────────────────────────────────────────────
 
 static uint8_t hexNibble(char c) {
@@ -64,7 +63,10 @@ String Elm327::process(const String& cmd) {
             } else {
                 response += "?" + prompt();
             }
-        } else if (compact.length() < 4) {
+        } else if (compact.length() != 4) {
+            // Only exactly one service/PID pair is accepted. This prevents a
+            // longer malformed command from being partially parsed and sent
+            // to the OBD2 backend.
             response += "?" + prompt();
         } else {
             uint8_t service, pid;
@@ -163,6 +165,8 @@ String Elm327::processAt(const String& upper) {
 // ── OBD command handler ───────────────────────────────────────────────────
 
 String Elm327::processObd(uint8_t service, uint8_t pid) {
+    if (!_whitelist.isAllowed(service, pid)) return "NO DATA" + prompt();
+
     uint8_t buf[7] = {};
     int len = _obd2->readPid(service, pid, buf, sizeof(buf));
 
@@ -208,6 +212,8 @@ String Elm327::formatDataBytes(uint8_t service, uint8_t pid,
 // ── DTC command handler (Mode 03/07/0A) ──────────────────────────────────
 
 String Elm327::processDtc(uint8_t service) {
+    if (!_whitelist.isServiceAllowed(service)) return "NO DATA" + prompt();
+
     static constexpr size_t MAX_DTC = 32;
     uint16_t codes[MAX_DTC];
     int n = _obd2->readDtc(service, codes, MAX_DTC);
@@ -251,6 +257,8 @@ String Elm327::formatDtcBytes(uint8_t service, const uint16_t* codes, int count)
 // ── Freeze frame command handler (Mode 02, frame 0 only) ─────────────────
 
 String Elm327::processFreezeFrame(uint8_t pid) {
+    if (!_whitelist.isAllowed(0x02, pid)) return "NO DATA" + prompt();
+
     uint8_t buf[7] = {};
     int len = _obd2->readFreezeFramePid(pid, buf, sizeof(buf));
 
