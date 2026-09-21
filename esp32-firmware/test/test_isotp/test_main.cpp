@@ -76,6 +76,44 @@ void test_rx_negative_response() {
     TEST_ASSERT_EQUAL_HEX8(0x11, out[1]);  // NRC serviceNotSupported
 }
 
+void test_rx_multi_ecu_single_frame() {
+    FakeCanBus can;
+    can.enqueue(0x7E8, {0x03, 0x41, 0x0C, 0x10});
+    can.enqueue(0x7E9, {0x03, 0x41, 0x0C, 0x20});
+
+    uint8_t req[2] = {0x01, 0x0C};
+    IsoTp::ResponseSet responses;
+    int n = IsoTp::requestAll(&can, 0x7DF, 0x7E8, 0x7EF,
+                              req, sizeof(req), responses, 20, 2);
+
+    TEST_ASSERT_EQUAL_INT(2, n);
+    TEST_ASSERT_EQUAL_UINT32(2, responses.count);
+    TEST_ASSERT_EQUAL_HEX32(0x7E8, responses.items[0].ecuId);
+    TEST_ASSERT_EQUAL_HEX32(0x7E9, responses.items[1].ecuId);
+    TEST_ASSERT_EQUAL_HEX8(0x10, responses.items[0].data[2]);
+    TEST_ASSERT_EQUAL_HEX8(0x20, responses.items[1].data[2]);
+}
+
+void test_rx_multi_ecu_interleaved_multiframe() {
+    FakeCanBus can;
+    can.enqueue(0x7E8, {0x10, 0x08, 0x41, 0x0C, 0x01, 0x02, 0x03, 0x04});
+    can.enqueue(0x7E9, {0x10, 0x08, 0x41, 0x0C, 0x11, 0x12, 0x13, 0x14});
+    can.enqueue(0x7E8, {0x21, 0x05, 0x06});
+    can.enqueue(0x7E9, {0x21, 0x15, 0x16});
+
+    uint8_t req[2] = {0x01, 0x0C};
+    IsoTp::ResponseSet responses;
+    int n = IsoTp::requestAll(&can, 0x7DF, 0x7E8, 0x7EF,
+                              req, sizeof(req), responses, 20, 2);
+
+    TEST_ASSERT_EQUAL_INT(2, n);
+    TEST_ASSERT_EQUAL_UINT32(4, can.sent.size());
+    TEST_ASSERT_EQUAL_HEX32(0x7E0, can.sent[1].id);
+    TEST_ASSERT_EQUAL_HEX32(0x7E1, can.sent[2].id);
+    TEST_ASSERT_EQUAL_HEX8(0x06, responses.items[0].data[7]);
+    TEST_ASSERT_EQUAL_HEX8(0x16, responses.items[1].data[7]);
+}
+
 // Nenhuma resposta chega -> timeout (N_Bs). Único teste que consome tempo
 // real (~1s) — os demais são resolvidos sem esperar prazos.
 void test_rx_timeout() {
@@ -159,6 +197,8 @@ int main(int argc, char** argv) {
     RUN_TEST(test_rx_ff_one_cf);
     RUN_TEST(test_rx_ff_two_cf);
     RUN_TEST(test_rx_negative_response);
+    RUN_TEST(test_rx_multi_ecu_single_frame);
+    RUN_TEST(test_rx_multi_ecu_interleaved_multiframe);
     RUN_TEST(test_rx_timeout);
     RUN_TEST(test_tx_ff_cf_cts);
     RUN_TEST(test_tx_wait_then_cts);
