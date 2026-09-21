@@ -14,6 +14,7 @@ class DtcActiveEntry {
   const DtcActiveEntry({
     required this.code,
     required this.status,
+    this.ecuId,
     this.detectedLabel,
     this.freezeFrame = const [],
   });
@@ -24,6 +25,9 @@ class DtcActiveEntry {
 
   /// Confirmado (Modo 03) ou pendente (Modo 07).
   final DtcStatus status;
+
+  /// CAN response identifier when the DTC response included a header.
+  final int? ecuId;
 
   /// Texto pronto (pt-BR) de quando/como foi detectado (ex.: "há 2 dias · 3
   /// ciclos"). Não é um timestamp real — o firmware não guarda histórico
@@ -39,11 +43,13 @@ class DtcActiveEntry {
   /// leitura dos Modos 03/07/0A.
   DtcActiveEntry copyWith({
     DtcStatus? status,
+    int? ecuId,
     String? detectedLabel,
     List<DtcFreezeFrameEntry>? freezeFrame,
   }) => DtcActiveEntry(
     code: code,
     status: status ?? this.status,
+    ecuId: ecuId ?? this.ecuId,
     detectedLabel: detectedLabel ?? this.detectedLabel,
     freezeFrame: freezeFrame ?? this.freezeFrame,
   );
@@ -53,12 +59,18 @@ class DtcActiveEntry {
       other is DtcActiveEntry &&
       other.code == code &&
       other.status == status &&
+      other.ecuId == ecuId &&
       other.detectedLabel == detectedLabel &&
       listEquals(other.freezeFrame, freezeFrame);
 
   @override
-  int get hashCode =>
-      Object.hash(code, status, detectedLabel, Object.hashAll(freezeFrame));
+  int get hashCode => Object.hash(
+    code,
+    status,
+    ecuId,
+    detectedLabel,
+    Object.hashAll(freezeFrame),
+  );
 
   @override
   String toString() => 'DtcActiveEntry($code: $status)';

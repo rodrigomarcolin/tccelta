@@ -98,12 +98,12 @@ class Elm327Client {
     if (!pending.isCompleted) pending.complete(_stripPrompt(text));
   }
 
-  /// Remove o prompt `>` e o CR/LF que o antecede; deixa echo/espaços intactos
-  /// (a normalização de conteúdo é do `Obd2Datasource`).
+  /// Remove o prompt `>` e preserva quebras de linha entre respostas ECU.
+  /// A normalização de conteúdo é responsabilidade do parser ELM.
   static String _stripPrompt(String text) {
     final end = text.indexOf('>');
     final body = end >= 0 ? text.substring(0, end) : text;
-    return body.replaceAll('\r', '').replaceAll('\n', ' ').trim();
+    return body.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim();
   }
 
   /// Encerra a escuta da TX e cancela qualquer comando pendente.

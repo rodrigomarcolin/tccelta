@@ -168,14 +168,15 @@ class TelemetryViewModel extends Notifier<TelemetryState> {
     _fullTimer = Timer(_fullInterval, () => unawaited(_fullCycle()));
   }
 
-  /// Funde [readings] no estado: cada leitura sobrescreve a anterior do mesmo
-  /// PID, preservando as leituras de PIDs não tocados por este ciclo (os dois
-  /// ciclos — rápido e completo — reportam PIDs potencialmente diferentes a
-  /// cada volta).
+  /// Funde [readings] no estado por PID + ECU. Assim, duas ECUs que respondem
+  /// ao mesmo PID não se sobrescrevem; telas legadas que indexam apenas por PID
+  /// continuam escolhendo explicitamente uma leitura para exibição.
   void _applyReadings(List<Obd2Reading> readings) {
-    final merged = {for (final r in state.readings) r.pid: r};
+    final merged = {
+      for (final r in state.readings) _readingKey(r): r,
+    };
     for (final r in readings) {
-      merged[r.pid] = r;
+      merged[_readingKey(r)] = r;
     }
     state = state.copyWith(
       readings: merged.values.toList(growable: false),
@@ -184,6 +185,9 @@ class TelemetryViewModel extends Notifier<TelemetryState> {
       history: _appendHistory(readings),
     );
   }
+
+  static String _readingKey(Obd2Reading reading) =>
+      '${reading.pid.name}:${reading.ecuId?.toRadixString(16) ?? 'unknown'}';
 
   /// Acrescenta cada leitura de [readings] ao fim do histórico do seu PID,
   /// recortando para no máximo [Obd2ReadingHistory.maxSamples] amostras.

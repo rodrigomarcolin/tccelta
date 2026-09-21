@@ -1,4 +1,6 @@
 import 'package:tccelta_mobile/src/data/datasources/elm327_client.dart';
+import 'package:tccelta_mobile/src/data/datasources/elm_response_parser.dart';
+import 'package:tccelta_mobile/src/domain/obd2/elm_response.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_supported.dart';
 
@@ -12,16 +14,21 @@ class Obd2Datasource {
 
   final Elm327Client _elm;
 
-  /// Prepara o adaptador: reset (`ATZ`) + echo off (`ATE0`) e devolve a
-  /// **identidade** do adaptador (ex.: `ELM327 v1.5`), extraída da resposta do
-  /// `ATZ`, ou `null` se indisponível.
+  /// Prepara o adaptador: reset (`ATZ`) + echo off (`ATE0`) + headers ligados
+  /// (`ATH1`) e devolve a **identidade** do adaptador (ex.: `ELM327 v1.5`),
+  /// extraída da resposta do `ATZ`, ou `null` se indisponível.
+  ///
+  /// `ATH1` vem por último (depois do `ATZ`, que reseta os headers pro
+  /// padrão desligado no firmware) — sem ele, `ElmResponse.ecuId` nunca é
+  /// preenchido e nada que dependa de identificar a ECU de origem (ex.: MIL
+  /// via [readMonitorStatusResponses]) funciona.
   ///
   /// Best-effort: qualquer falha aqui é ignorada (o parser de [readPidRaw] é
   /// tolerante a echo/espaços mesmo sem init), então um `ATZ` lento não trava a
   /// telemetria.
   Future<String?> initialize() async {
     String? version;
-    for (final cmd in const ['ATZ', 'ATE0']) {
+    for (final cmd in const ['ATZ', 'ATE0', 'ATH1']) {
       try {
         final raw = await _elm.command(
           cmd,
@@ -80,6 +87,22 @@ class Obd2Datasource {
   /// é o serviço + 0x40), e converte o restante em pares hex.
   Future<List<int>?> readPidRaw(Obd2Pid pid) => _readServiceBytes(pid.pid);
 
+  /// Reads all ECU responses for [pid], retaining CAN identity when headers
+  /// are enabled by the dongle.
+  Future<List<ElmResponse>> readPidResponses(
+    Obd2Pid pid, {
+    int? expectedResponses,
+  }) async => _readServiceResponses(
+    pid.pid,
+    expectedResponses: expectedResponses,
+  );
+
+  /// Lê o status de monitoramento (PID 0x01) de cada ECU que responder ao
+  /// broadcast — carrega o bit do MIL (byte A, bit 7). Não usa [Obd2Pid]
+  /// porque é um bitmask, fora do contrato de `decode()` pra double.
+  Future<List<ElmResponse>> readMonitorStatusResponses() =>
+      _readServiceResponses(0x01);
+
   /// Descobre os PIDs suportados do Serviço 0x01 lendo o bitmask do PID 0x00 e,
   /// enquanto a flag de próximo range estiver ligada, dos PIDs-meta seguintes
   /// (`0x20`, `0x40`…, teto em `0xC0`). Devolve os números crus suportados —
@@ -99,25 +122,27 @@ class Obd2Datasource {
   /// `41<pid>` e devolve os **data bytes**, ou `null` em `NO DATA`/`?`/
   /// malformado. Todo o parsing byte-a-byte vive aqui.
   Future<List<int>?> _readServiceBytes(int pid) async {
-    final command = _hex(Obd2Pid.mode) + _hex(pid);
-    final raw = (await _elm.command(command)).toUpperCase();
-    if (raw.contains('NO DATA') || raw.contains('NODATA')) return null;
+    final responses = await _readServiceResponses(pid);
+    return responses.isEmpty ? null : responses.first.payload;
+  }
 
-    // Mantém só dígitos hex — remove espaços, echo com CR já removido, etc.
-    final compact = raw.replaceAll(RegExp('[^0-9A-F]'), '');
-
-    // Cabeçalho da resposta: modo (serviço|0x40) + PID, ex.: "410C".
-    final header = _hex(Obd2Pid.responseMode) + _hex(pid);
-    final start = compact.indexOf(header);
-    if (start < 0) return null; // '?' ou resposta de outro PID.
-
-    final dataHex = compact.substring(start + header.length);
-    if (dataHex.isEmpty || dataHex.length.isOdd) return null;
-
-    return [
-      for (var i = 0; i < dataHex.length; i += 2)
-        int.parse(dataHex.substring(i, i + 2), radix: 16),
-    ];
+  Future<List<ElmResponse>> _readServiceResponses(
+    int pid, {
+    int? expectedResponses,
+  }) async {
+    final suffix =
+        expectedResponses != null &&
+            expectedResponses >= 1 &&
+            expectedResponses <= 8
+        ? _hex(expectedResponses)
+        : '';
+    final command = '${_hex(Obd2Pid.mode)}${_hex(pid)}$suffix';
+    final raw = await _elm.command(command);
+    return ElmResponseParser.parse(
+      raw,
+      responseService: Obd2Pid.responseMode,
+      pid: pid,
+    ).responses;
   }
 
   static String _hex(int byte) =>

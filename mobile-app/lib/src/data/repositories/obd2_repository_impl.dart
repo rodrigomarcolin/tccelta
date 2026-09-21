@@ -11,6 +11,9 @@ import 'package:tccelta_mobile/src/domain/obd2/dtc_code_codec.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_freeze_frame_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
+import 'package:tccelta_mobile/src/domain/obd2/ecu_role.dart';
+import 'package:tccelta_mobile/src/domain/obd2/elm_response.dart';
+import 'package:tccelta_mobile/src/domain/obd2/monitor_status.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
@@ -162,11 +165,16 @@ class Obd2RepositoryImpl implements Obd2Repository {
       throw const ObdCommandFailure('Sem conexão BLE pronta');
     }
     try {
-      final data = await ds.readPidRaw(pid);
-      if (data == null) {
+      final responses = await ds.readPidResponses(pid);
+      if (responses.isEmpty || responses.first.payload.isEmpty) {
         throw ObdCommandFailure('Sem dados para ${pid.command}');
       }
-      return Obd2Reading(pid: pid, value: pid.decode(data));
+      final response = responses.first;
+      return Obd2Reading(
+        pid: pid,
+        value: pid.decode(response.payload),
+        ecuId: response.ecuId,
+      );
     } on ObdCommandFailure {
       rethrow;
     } on Object catch (e) {
@@ -210,9 +218,16 @@ class Obd2RepositoryImpl implements Obd2Repository {
     final readings = <Obd2Reading>[];
     for (final pid in toRead) {
       try {
-        final data = await ds.readPidRaw(pid);
-        if (data != null) {
-          readings.add(Obd2Reading(pid: pid, value: pid.decode(data)));
+        final responses = await ds.readPidResponses(pid);
+        for (final response in responses) {
+          if (response.payload.isEmpty) continue;
+          readings.add(
+            Obd2Reading(
+              pid: pid,
+              value: pid.decode(response.payload),
+              ecuId: response.ecuId,
+            ),
+          );
         }
       } on Object {
         // PID individual falho é omitido — leitura parcial é válida.
@@ -228,39 +243,51 @@ class Obd2RepositoryImpl implements Obd2Repository {
 
   @override
   Future<DtcSnapshot> readDtc() async {
-    _ensureDatasource();
+    final ds = _ensureDatasource();
     final dtcDs = _dtcDatasource;
-    if (dtcDs == null) {
+    if (ds == null || dtcDs == null) {
       throw const DtcReadFailure('Sem conexão BLE pronta');
     }
+    if (!_initialized) await initialize();
     try {
-      final confirmedRaw = await dtcDs.readDtcListRaw(0x03) ?? [];
-      final pendingRaw = await dtcDs.readDtcListRaw(0x07) ?? [];
-      final permanentRaw = await dtcDs.readDtcListRaw(0x0A) ?? [];
+      final confirmed = await dtcDs.readDtcResponses(0x03);
+      final pending = await dtcDs.readDtcResponses(0x07);
+      final permanent = await dtcDs.readDtcResponses(0x0A);
 
       final active = [
-        for (final raw in confirmedRaw)
-          DtcActiveEntry(
-            code: dtcCodeFromRaw(raw),
-            status: DtcStatus.confirmed,
-          ),
-        for (final raw in pendingRaw)
-          DtcActiveEntry(code: dtcCodeFromRaw(raw), status: DtcStatus.pending),
-        for (final raw in permanentRaw)
-          DtcActiveEntry(
-            code: dtcCodeFromRaw(raw),
-            status: DtcStatus.permanent,
-          ),
+        ..._dtcEntries(confirmed, DtcStatus.confirmed),
+        ..._dtcEntries(pending, DtcStatus.pending),
+        ..._dtcEntries(permanent, DtcStatus.permanent),
       ];
 
       return DtcSnapshot(
         active: await _attachFreezeFrame(dtcDs, active),
-        milOn: confirmedRaw.isNotEmpty,
+        milOn: await _readMilFromEcus(ds),
       );
     } on DtcReadFailure {
       rethrow;
     } on Object catch (e) {
       throw DtcReadFailure('Falha ao ler DTCs', cause: e);
+    }
+  }
+
+  /// Lê o PID 0x01 (status de monitoramento) nas ECUs de motor (ECM) e câmbio
+  /// (TCM) e considera o MIL aceso se qualquer uma reportar o bit ligado.
+  /// Best-effort: erro na leitura (timeout, ECU ausente) não derruba o
+  /// diagnóstico inteiro — assume MIL apagado, igual às demais leituras
+  /// parciais desta classe.
+  Future<bool> _readMilFromEcus(Obd2Datasource ds) async {
+    try {
+      final responses = await ds.readMonitorStatusResponses();
+      for (final role in EcuRole.values) {
+        final response = _responseForEcu(responses, role.responseId);
+        if (response != null && monitorStatusMilOn(response.payload)) {
+          return true;
+        }
+      }
+      return false;
+    } on Object {
+      return false;
     }
   }
 
@@ -271,33 +298,95 @@ class Obd2RepositoryImpl implements Obd2Repository {
     DtcDatasource dtcDs,
     List<DtcActiveEntry> active,
   ) async {
-    final originRaw = await dtcDs.readFreezeFrameOriginDtc();
-    if (originRaw == null) return active;
-
-    final originCode = dtcCodeFromRaw(originRaw);
-    final freezeFrame = <DtcFreezeFrameEntry>[];
-    for (final pid in _freezeFramePids) {
-      try {
-        final data = await dtcDs.readFreezeFramePidRaw(pid);
-        if (data == null || data.isEmpty) continue;
-        final reading = Obd2Reading(pid: pid, value: pid.decode(data));
-        freezeFrame.add(
-          DtcFreezeFrameEntry(
-            label: pid.shortLabel,
-            value: '${_formatNumber(reading.value)} ${pid.unit}'.trim(),
-          ),
-        );
-      } on Object {
-        // PID individual falho é omitido — congelamento parcial é válido.
+    final originResponses = await dtcDs.readFreezeFrameResponses(0x02);
+    if (originResponses.isEmpty) return active;
+    final freezeFramesByEcu = <int?, List<DtcFreezeFrameEntry>>{};
+    for (final origin in originResponses) {
+      final freezeFrame = <DtcFreezeFrameEntry>[];
+      for (final pid in _freezeFramePids) {
+        try {
+          final responses = await dtcDs.readFreezeFrameResponses(pid.pid);
+          final response = _responseForEcu(responses, origin.ecuId);
+          if (response == null || response.payload.length < 2) continue;
+          final data = response.payload.sublist(1);
+          final reading = Obd2Reading(
+            pid: pid,
+            value: pid.decode(data),
+            ecuId: response.ecuId,
+          );
+          freezeFrame.add(
+            DtcFreezeFrameEntry(
+              label: pid.shortLabel,
+              value: '${_formatNumber(reading.value)} ${pid.unit}'.trim(),
+            ),
+          );
+        } on Object {
+          // PID individual falho — congelamento parcial é válido.
+        }
       }
+      freezeFramesByEcu[origin.ecuId] = freezeFrame;
     }
 
     return [
       for (final entry in active)
-        entry.code == originCode
-            ? entry.copyWith(freezeFrame: freezeFrame)
-            : entry,
+        ..._withFreezeFrame(entry, originResponses, freezeFramesByEcu),
     ];
+  }
+
+  static List<DtcActiveEntry> _dtcEntries(
+    List<ElmResponse> responses,
+    DtcStatus status,
+  ) => [
+    for (final response in responses)
+      for (final raw in _codesFrom(response.payload))
+        DtcActiveEntry(
+          code: dtcCodeFromRaw(raw),
+          status: status,
+          ecuId: response.ecuId,
+        ),
+  ];
+
+  static List<int> _codesFrom(List<int> payload) {
+    if (payload.isEmpty) return const [];
+    final count = payload.first;
+    if (payload.length < 1 + count * 2) return const [];
+    return [
+      for (var i = 0; i < count; i++)
+        (payload[1 + i * 2] << 8) | payload[2 + i * 2],
+    ];
+  }
+
+  static ElmResponse? _responseForEcu(
+    List<ElmResponse> responses,
+    int? ecuId,
+  ) {
+    if (responses.isEmpty) return null;
+    if (ecuId == null) return responses.first;
+    for (final response in responses) {
+      if (response.ecuId == ecuId) return response;
+    }
+    return null;
+  }
+
+  static Iterable<DtcActiveEntry> _withFreezeFrame(
+    DtcActiveEntry entry,
+    List<ElmResponse> origins,
+    Map<int?, List<DtcFreezeFrameEntry>> freezeFramesByEcu,
+  ) sync* {
+    for (final origin in origins) {
+      final originPayload = origin.payload;
+      if (originPayload.length < 3) continue;
+      final originCode = (originPayload[1] << 8) | originPayload[2];
+      if (entry.code != dtcCodeFromRaw(originCode) ||
+          entry.ecuId != origin.ecuId) {
+        continue;
+      }
+      yield entry.copyWith(
+        freezeFrame: freezeFramesByEcu[origin.ecuId] ?? const [],
+      );
+      return;
+    }
+    yield entry;
   }
 
   /// Formata um valor físico pra exibição, com separador de milhar pt-BR
