@@ -24,10 +24,15 @@ static bool parseHexByte(const String& s, int pos, uint8_t& out) {
 // ── Elm327 ────────────────────────────────────────────────────────────────
 
 Elm327::Elm327(IObd2* obd2)
-    : _obd2(obd2), _echo(true), _linefeed(false), _headers(false), _spaces(true) {}
+    : _obd2(obd2), _echo(true), _linefeed(false), _headers(false), _spaces(true),
+      _timeoutMs(200) {}
 
 String Elm327::prompt() const {
     return _linefeed ? "\r\n>" : "\r>";
+}
+
+String Elm327::responseSeparator() const {
+    return _linefeed ? "\r\n" : "\r";
 }
 
 String Elm327::process(const String& cmd) {
@@ -54,16 +59,24 @@ String Elm327::process(const String& cmd) {
         String compact = upper;
         compact.replace(" ", "");
 
-        if (compact.length() == 2) {
+        if (compact.length() == 2 || compact.length() == 3) {
             // Mode 03/07/0A: DTC lists, no PID ("03" alone).
             uint8_t service;
             if (parseHexByte(compact, 0, service) &&
                 (service == 0x03 || service == 0x07 || service == 0x0A)) {
-                response += processDtc(service);
+                uint8_t expected = 0;
+                if (compact.length() == 3) {
+                    expected = hexNibble(compact[2]);
+                    if (expected == 0 || expected > OBD2_MAX_ECU_RESPONSES) {
+                        response += "?" + prompt();
+                        return response;
+                    }
+                }
+                response += processDtc(service, expected);
             } else {
                 response += "?" + prompt();
             }
-        } else if (compact.length() != 4) {
+        } else if (compact.length() != 4 && compact.length() != 5) {
             // Only exactly one service/PID pair is accepted. This prevents a
             // longer malformed command from being partially parsed and sent
             // to the OBD2 backend.
@@ -73,13 +86,24 @@ String Elm327::process(const String& cmd) {
             if (!parseHexByte(compact, 0, service) ||
                 !parseHexByte(compact, 2, pid)) {
                 response += "?" + prompt();
-            } else if (service == 0x02) {
+            } else {
+                size_t expected = 0;
+                if (compact.length() == 5) {
+                    uint8_t count = hexNibble(compact[4]);
+                    if (count == 0 || count > OBD2_MAX_ECU_RESPONSES) {
+                        response += "?" + prompt();
+                        return response;
+                    }
+                    expected = count;
+                }
+                if (service == 0x02) {
                 // Mode 02 (freeze frame): resposta tem um layout diferente
                 // (SID+PID+frame# antes do dado, contra SID+PID do Modo
                 // 01/09) — não reaproveita processObd/readPid.
-                response += processFreezeFrame(pid);
-            } else {
-                response += processObd(service, pid);
+                    response += processFreezeFrame(pid, expected);
+                } else {
+                    response += processObd(service, pid, expected);
+                }
             }
         }
     }
@@ -101,6 +125,8 @@ String Elm327::processAt(const String& upper) {
             _linefeed = false;
             _headers  = false;
             _spaces   = true;
+            _timeoutMs = 200;
+            _obd2->setResponseTimeoutMs(_timeoutMs);
         }
         return "\r\rELM327 v1.5\r\r" + prompt();
     }
@@ -124,39 +150,22 @@ String Elm327::processAt(const String& upper) {
     // ATD — set defaults
     if (sub == "D") {
         _echo = true; _linefeed = false; _headers = false; _spaces = true;
+        _timeoutMs = 200;
+        _obd2->setResponseTimeoutMs(_timeoutMs);
         return "OK" + prompt();
     }
-
-    // ATSP[0-C] — set protocol (ignored; we always use ISO 15765-4)
-    if (sub.startsWith("SP")) return "OK" + prompt();
 
     // ATDP — describe protocol
     if (sub == "DP")  return "ISO 15765-4 (CAN 11/500)" + prompt();
     if (sub == "DPN") return "6" + prompt();  // protocol number
 
-    // ATPC — protocol close
-    if (sub == "PC") return "OK" + prompt();
-
-    // ATRV — read voltage (stub)
-    if (sub == "RV") return "12.0V" + prompt();
-
-    // ATAT[0-2] — adaptive timing
-    if (sub == "AT0" || sub == "AT1" || sub == "AT2") return "OK" + prompt();
-
-    // ATST[hh] — set timeout (accepted, ignored)
-    if (sub.startsWith("ST")) return "OK" + prompt();
-
-    // ATAR — auto receive address
-    if (sub == "AR") return "OK" + prompt();
-
-    // ATAL — allow long messages
-    if (sub == "AL") return "OK" + prompt();
-
-    // ATM0 / ATM1 — memory
-    if (sub == "M0" || sub == "M1") return "OK" + prompt();
-
-    // ATCAF0 / ATCAF1 — CAN auto-formatting
-    if (sub == "CAF0" || sub == "CAF1") return "OK" + prompt();
+    if (sub.length() == 4 && sub.startsWith("ST")) {
+        uint8_t value;
+        if (!parseHexByte(sub, 2, value)) return "?" + prompt();
+        _timeoutMs = static_cast<uint32_t>(value == 0 ? 1 : value) * 4u;
+        _obd2->setResponseTimeoutMs(_timeoutMs);
+        return "OK" + prompt();
+    }
 
     // Unknown AT command
     return "?" + prompt();
@@ -164,26 +173,32 @@ String Elm327::processAt(const String& upper) {
 
 // ── OBD command handler ───────────────────────────────────────────────────
 
-String Elm327::processObd(uint8_t service, uint8_t pid) {
+String Elm327::processObd(uint8_t service, uint8_t pid, size_t expectedResponses) {
     if (!_whitelist.isAllowed(service, pid)) return "NO DATA" + prompt();
 
-    uint8_t buf[7] = {};
-    int len = _obd2->readPid(service, pid, buf, sizeof(buf));
+    Obd2ResponseSet responses;
+    int count = _obd2->readPidAll(service, pid, responses, _timeoutMs, expectedResponses);
+    if (count <= 0) return "NO DATA" + prompt();
 
-    if (len <= 0) return "NO DATA" + prompt();
-
-    return formatDataBytes(service, pid, buf, len) + prompt();
+    String result;
+    for (size_t i = 0; i < responses.count; ++i) {
+        if (i != 0) result += responseSeparator();
+        result += formatDataBytes(service, pid, responses.items[i].data,
+                                  responses.items[i].len, responses.items[i].ecuId);
+    }
+    return result + prompt();
 }
 
 String Elm327::formatDataBytes(uint8_t service, uint8_t pid,
-                               const uint8_t* data, int len) {
+                               const uint8_t* data, int len, uint32_t ecuId) {
     char hex[3];
     String sep = _spaces ? " " : "";
     String out;
 
     if (_headers) {
-        // Minimal single-frame header: "7E8 06 SS+40 PP D0 D1 …"
-        out += "7E8";
+        char id[4];
+        snprintf(id, sizeof(id), "%03lX", static_cast<unsigned long>(ecuId));
+        out += id;
         out += sep;
         snprintf(hex, sizeof(hex), "%02X", (uint8_t)(2 + len));
         out += hex;
@@ -211,29 +226,46 @@ String Elm327::formatDataBytes(uint8_t service, uint8_t pid,
 
 // ── DTC command handler (Mode 03/07/0A) ──────────────────────────────────
 
-String Elm327::processDtc(uint8_t service) {
+String Elm327::processDtc(uint8_t service, size_t expectedResponses) {
     if (!_whitelist.isServiceAllowed(service)) return "NO DATA" + prompt();
 
-    static constexpr size_t MAX_DTC = 32;
-    uint16_t codes[MAX_DTC];
-    int n = _obd2->readDtc(service, codes, MAX_DTC);
+    Obd2ResponseSet responses;
+    int count = _obd2->readDtcAll(service, responses, _timeoutMs, expectedResponses);
+    if (count <= 0) return "NO DATA" + prompt();
 
-    if (n < 0) return "NO DATA" + prompt();
+    String result;
+    for (size_t i = 0; i < responses.count; ++i) {
+        if (i != 0) result += responseSeparator();
+        result += formatDtcResponse(service, responses.items[i].data,
+                                    responses.items[i].len, responses.items[i].ecuId);
+    }
+    return result + prompt();
+}
 
-    return formatDtcBytes(service, codes, n) + prompt();
+String Elm327::formatDtcResponse(uint8_t service, const uint8_t* data,
+                                  size_t len, uint32_t ecuId) {
+    if (len < 2 || data[0] != static_cast<uint8_t>(service | 0x40u)) return "NO DATA";
+    size_t count = data[1];
+    if (2 + count * 2 > len) count = (len - 2) / 2;
+
+    uint16_t codes[OBD2_MAX_RESPONSE_BYTES / 2] = {};
+    for (size_t i = 0; i < count; ++i) {
+        codes[i] = static_cast<uint16_t>((data[2 + i * 2] << 8) |
+                                         data[3 + i * 2]);
+    }
+    String result = formatDtcBytes(service, codes, static_cast<int>(count));
+    if (_headers) {
+        char id[4];
+        snprintf(id, sizeof(id), "%03lX", static_cast<unsigned long>(ecuId));
+        result = String(id) + (_spaces ? " " : "") + result;
+    }
+    return result;
 }
 
 String Elm327::formatDtcBytes(uint8_t service, const uint16_t* codes, int count) {
     char hex[3];
     String sep = _spaces ? " " : "";
     String out;
-
-    if (_headers) {
-        // Mesma simplificação de formatDataBytes: assume que quem respondeu
-        // foi a primeira ECU (0x7E8) — o dongle não rastreia isso hoje.
-        out += "7E8";
-        out += sep;
-    }
 
     // Response service byte (SID + 0x40) e contagem de DTCs.
     snprintf(hex, sizeof(hex), "%02X", (uint8_t)(service | 0x40u));
@@ -256,26 +288,34 @@ String Elm327::formatDtcBytes(uint8_t service, const uint16_t* codes, int count)
 
 // ── Freeze frame command handler (Mode 02, frame 0 only) ─────────────────
 
-String Elm327::processFreezeFrame(uint8_t pid) {
+String Elm327::processFreezeFrame(uint8_t pid, size_t expectedResponses) {
     if (!_whitelist.isAllowed(0x02, pid)) return "NO DATA" + prompt();
 
-    uint8_t buf[7] = {};
-    int len = _obd2->readFreezeFramePid(pid, buf, sizeof(buf));
+    Obd2ResponseSet responses;
+    int count = _obd2->readFreezeFramePidAll(pid, responses, _timeoutMs,
+                                             expectedResponses);
+    if (count <= 0) return "NO DATA" + prompt();
 
-    if (len <= 0) return "NO DATA" + prompt();
-
-    return formatFreezeFrameBytes(pid, buf, len) + prompt();
+    String result;
+    for (size_t i = 0; i < responses.count; ++i) {
+        if (i != 0) result += responseSeparator();
+        result += formatFreezeFrameBytes(pid, responses.items[i].data,
+                                         responses.items[i].len,
+                                         responses.items[i].ecuId);
+    }
+    return result + prompt();
 }
 
-String Elm327::formatFreezeFrameBytes(uint8_t pid, const uint8_t* data, int len) {
+String Elm327::formatFreezeFrameBytes(uint8_t pid, const uint8_t* data, int len,
+                                      uint32_t ecuId) {
     char hex[3];
     String sep = _spaces ? " " : "";
     String out;
 
     if (_headers) {
-        // Mesma simplificação de formatDataBytes/formatDtcBytes — o dongle
-        // não rastreia qual ECU respondeu.
-        out += "7E8";
+        char id[4];
+        snprintf(id, sizeof(id), "%03lX", static_cast<unsigned long>(ecuId));
+        out += id;
         out += sep;
         snprintf(hex, sizeof(hex), "%02X", (uint8_t)(3 + len));
         out += hex;

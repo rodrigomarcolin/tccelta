@@ -18,6 +18,20 @@
  */
 namespace IsoTp {
 
+constexpr size_t MAX_RESPONSES = 8;
+constexpr size_t MAX_RESPONSE_BYTES = 256;
+
+struct Response {
+    uint32_t ecuId = 0;
+    uint8_t data[MAX_RESPONSE_BYTES] = {};
+    size_t len = 0;
+};
+
+struct ResponseSet {
+    Response items[MAX_RESPONSES];
+    size_t count = 0;
+};
+
 // Timeouts de rede, ISO 15765-2 (N_As/N_Bs/N_Cr = 1000ms cada).
 constexpr uint32_t N_AS_MS = 1000;  // emissor: tempo para transmitir 1 frame
 constexpr uint32_t N_BS_MS = 1000;  // emissor: espera pelo próximo FC
@@ -52,5 +66,11 @@ int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax
             const uint8_t* req, size_t reqLen,
             uint8_t* outBuf, size_t maxLen,
             uint32_t timeoutMs = N_BS_MS);
+
+int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
+               const uint8_t* req, size_t reqLen,
+               ResponseSet& responses,
+               uint32_t timeoutMs = N_BS_MS,
+               size_t expectedResponses = 0);
 
 }  // namespace IsoTp

@@ -18,10 +18,21 @@ public:
     explicit Obd2Can(ICanBus* can, uint32_t timeoutMs = 200);
 
     bool begin() override;
+    void setResponseTimeoutMs(uint32_t timeoutMs) override { _timeoutMs = timeoutMs; }
     int  readPid(uint8_t service, uint8_t pid,
                  uint8_t* buf, size_t maxLen) override;
+    int  readPidAll(uint8_t service, uint8_t pid,
+                    Obd2ResponseSet& responses,
+                    uint32_t timeoutMs = 200,
+                    size_t expectedResponses = 0) override;
     int  readDtc(uint8_t service, uint16_t* dtcCodes, size_t maxCount) override;
+    int  readDtcAll(uint8_t service, Obd2ResponseSet& responses,
+                    uint32_t timeoutMs = 200,
+                    size_t expectedResponses = 0) override;
     int  readFreezeFramePid(uint8_t pid, uint8_t* buf, size_t maxLen) override;
+    int  readFreezeFramePidAll(uint8_t pid, Obd2ResponseSet& responses,
+                               uint32_t timeoutMs = 200,
+                               size_t expectedResponses = 0) override;
 
 private:
     ICanBus*  _can;

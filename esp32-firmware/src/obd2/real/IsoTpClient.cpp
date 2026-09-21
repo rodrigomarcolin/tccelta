@@ -150,7 +150,7 @@ SendOutcome sendSegmented(ICanBus* can, uint32_t txId, uint32_t fcIdMin, uint32_
 
 }  // namespace
 
-int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
+static int requestLegacy(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
             const uint8_t* req, size_t reqLen,
             uint8_t* outBuf, size_t maxLen,
             uint32_t timeoutMs) {
@@ -260,6 +260,193 @@ int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax
 
         // FC ou CF fora de contexto (sem FF em andamento): ignora.
     }
+}
+
+int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
+               const uint8_t* req, size_t reqLen,
+               ResponseSet& responses,
+               uint32_t timeoutMs,
+               size_t expectedResponses) {
+    responses.count = 0;
+
+    CanFrame stale;
+    while (can->receive(stale)) {}
+
+    if (reqLen <= 7) {
+        sendSf(can, reqId, req, static_cast<uint8_t>(reqLen));
+    } else {
+        SendOutcome rc = sendSegmented(can, reqId, respIdMin, respIdMax, req, reqLen);
+        if (rc == SendOutcome::OVERFLOW) return OVERFLOW_ABORT;
+        if (rc != SendOutcome::OK) return TIMEOUT;
+    }
+
+    const uint8_t expectedReplySid = static_cast<uint8_t>(req[0] | 0x40u);
+    bool active[MAX_RESPONSES] = {};
+    bool complete[MAX_RESPONSES] = {};
+    uint16_t totalLength[MAX_RESPONSES] = {};
+    size_t assembled[MAX_RESPONSES] = {};
+    uint8_t expectedSequence[MAX_RESPONSES] = {};
+    uint32_t cfDeadline[MAX_RESPONSES] = {};
+    size_t slotCount = 0;
+    size_t completeCount = 0;
+    int negativeService = -1;
+    int negativeNrc = 0;
+    uint32_t quietDeadline = millis() + timeoutMs;
+
+    auto findResponse = [&](uint32_t ecuId) -> int {
+        for (size_t i = 0; i < slotCount; ++i) {
+            if (responses.items[i].ecuId == ecuId) return static_cast<int>(i);
+        }
+        return -1;
+    };
+
+    auto addResponse = [&](uint32_t ecuId, const uint8_t* data, size_t len) -> bool {
+        if (slotCount >= MAX_RESPONSES) return false;
+        Response& response = responses.items[slotCount];
+        response.ecuId = ecuId;
+        response.len = len < MAX_RESPONSE_BYTES ? len : MAX_RESPONSE_BYTES;
+        memcpy(response.data, data, response.len);
+        complete[slotCount] = true;
+        ++slotCount;
+        ++completeCount;
+        return true;
+    };
+
+    auto finalize = [&]() -> int {
+        size_t write = 0;
+        for (size_t i = 0; i < slotCount; ++i) {
+            if (!complete[i]) continue;
+            if (write != i) responses.items[write] = responses.items[i];
+            ++write;
+        }
+        responses.count = write;
+        return static_cast<int>(write);
+    };
+
+    while (true) {
+        uint32_t now = millis();
+        for (size_t i = 0; i < slotCount; ++i) {
+            if (active[i] && now >= cfDeadline[i]) active[i] = false;
+        }
+
+        if (expectedResponses != 0 && completeCount >= expectedResponses) {
+            return finalize();
+        }
+        if (now >= quietDeadline) {
+            if (completeCount > 0) return finalize();
+            if (negativeService >= 0) {
+                if (responses.count == 0 && MAX_RESPONSES > 0) {
+                    responses.items[0].ecuId = 0;
+                    responses.items[0].data[0] = static_cast<uint8_t>(negativeService);
+                    responses.items[0].data[1] = static_cast<uint8_t>(negativeNrc);
+                    responses.items[0].len = 2;
+                    responses.count = 1;
+                }
+                return NEGATIVE_RESPONSE;
+            }
+            return TIMEOUT;
+        }
+
+        CanFrame frame;
+        if (!can->receive(frame)) {
+            taskYIELD();
+            continue;
+        }
+        if (!inRange(frame.id, respIdMin, respIdMax)) continue;
+
+        const uint8_t pciType = frame.data[0] & 0xF0;
+        quietDeadline = millis() + timeoutMs;
+
+        if (pciType == N_PCI_SF) {
+            const uint8_t len = frame.data[0] & 0x0F;
+            if (len == 0 || len > 7) continue;
+            if (frame.data[1] == 0x7F) {
+                negativeService = frame.data[2];
+                negativeNrc = frame.data[3];
+                continue;
+            }
+            if (frame.data[1] != expectedReplySid) continue;
+            if (findResponse(frame.id) < 0) {
+                addResponse(frame.id, &frame.data[1], len);
+            }
+            continue;
+        }
+
+        if (pciType == N_PCI_FF) {
+            if (frame.data[2] != expectedReplySid) continue;
+            const uint16_t total = static_cast<uint16_t>(((frame.data[0] & 0x0F) << 8) |
+                                                         frame.data[1]);
+            if (total < 8) continue;
+
+            int index = findResponse(frame.id);
+            if (index < 0) {
+                if (slotCount >= MAX_RESPONSES) continue;
+                index = static_cast<int>(slotCount++);
+                responses.items[index].ecuId = frame.id;
+                responses.items[index].len = 0;
+            }
+            if (total > MAX_RESPONSE_BYTES) {
+                sendFc(can, physicalRequestIdFor(frame.id), FS_OVERFLOW, 0, 0);
+                active[index] = false;
+                continue;
+            }
+
+            totalLength[index] = total;
+            assembled[index] = 6;
+            responses.items[index].len = 6;
+            memcpy(responses.items[index].data, &frame.data[2], 6);
+            expectedSequence[index] = 1;
+            active[index] = true;
+            cfDeadline[index] = millis() + N_CR_MS;
+            sendFc(can, physicalRequestIdFor(frame.id), FS_CTS, 0, 0);
+            continue;
+        }
+
+        if (pciType != N_PCI_CF) continue;
+        const int index = findResponse(frame.id);
+        if (index < 0 || !active[index]) continue;
+
+        const uint8_t sequence = frame.data[0] & 0x0F;
+        if (sequence != (expectedSequence[index] & 0x0F)) {
+            active[index] = false;
+            continue;
+        }
+
+        const size_t remaining = totalLength[index] - assembled[index];
+        const size_t chunk = remaining < 7 ? remaining : 7;
+        memcpy(responses.items[index].data + assembled[index], &frame.data[1], chunk);
+            assembled[index] += chunk;
+            responses.items[index].len = assembled[index];
+            expectedSequence[index] = static_cast<uint8_t>((expectedSequence[index] + 1) & 0x0F);
+            cfDeadline[index] = millis() + N_CR_MS;
+        if (assembled[index] >= totalLength[index]) {
+            active[index] = false;
+            if (!complete[index]) {
+                complete[index] = true;
+                ++completeCount;
+            }
+        }
+    }
+}
+
+int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
+            const uint8_t* req, size_t reqLen,
+            uint8_t* outBuf, size_t maxLen,
+            uint32_t timeoutMs) {
+    ResponseSet responses;
+    int result = requestAll(can, reqId, respIdMin, respIdMax, req, reqLen,
+                            responses, timeoutMs, 1);
+    if (result < 0) {
+        if (result == NEGATIVE_RESPONSE && responses.count > 0 && maxLen >= 2) {
+            memcpy(outBuf, responses.items[0].data, 2);
+        }
+        return result;
+    }
+    if (responses.count == 0) return TIMEOUT;
+    const size_t length = responses.items[0].len < maxLen
+                              ? responses.items[0].len : maxLen;
+    memcpy(outBuf, responses.items[0].data, length);
+    return static_cast<int>(length);
 }
 
 }  // namespace IsoTp
