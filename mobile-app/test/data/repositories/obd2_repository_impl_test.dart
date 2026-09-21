@@ -49,11 +49,20 @@ class _FakeDongleRepository implements DongleRepository {
   Future<void> disconnect() async {}
 }
 
+/// Respostas de init (`readDtc` também chama `initialize()`, além de
+/// `readAll`/`readMany`/`discoverSupported`).
+const Map<String, String> _initResponses = {
+  'ATZ': 'ELM327 v1.5\r>',
+  'ATE0': 'OK\r>',
+  'ATH1': 'OK\r>',
+};
+
 /// Respostas do mock do firmware para os 43 PIDs (6 originais + 37 novos) +
 /// init.
 const Map<String, String> _mockResponses = {
   'ATZ': 'ELM327 v1.5\r>',
   'ATE0': 'OK\r>',
+  'ATH1': 'OK\r>',
   'ATDP': 'ISO 15765-4 (CAN 11/500)\r>',
   '0100': '41 00 18 1E 80 00\r>',
   '0104': '41 04 66\r>',
@@ -185,6 +194,7 @@ void main() {
         responses: {
           'ATZ': 'ELM327 v1.5\r>',
           'ATE0': 'OK\r>',
+          'ATH1': 'OK\r>',
           'ATDP': 'ISO 15765-4 (CAN 11/500)\r>',
           '0100': '41 00 00 18 00 01\r>', // rpm+speed, flag de próximo range
           '0120': '41 20 40 00 00 00\r>', // PID 0x22 (desconhecido) → dropado
@@ -267,6 +277,7 @@ void main() {
     test('"43 00"/"47 00"/"4A 00" devolve retrato vazio', () async {
       final conn = ScriptedBleConnection(
         responses: {
+          ..._initResponses,
           '03': '43 00\r>',
           '07': '47 00\r>',
           '0A': '4A 00\r>',
@@ -285,6 +296,7 @@ void main() {
     test('milOn vem do PID 0x01 da ECM, não das DTCs confirmadas', () async {
       final conn = ScriptedBleConnection(
         responses: {
+          ..._initResponses,
           '03': '43 01 03 01\r>', // P0301
           '07': '47 00\r>',
           '0A': '4A 00\r>',
@@ -309,6 +321,7 @@ void main() {
         // `active`: ter um DTC confirmado não implica MIL aceso.
         final conn = ScriptedBleConnection(
           responses: {
+            ..._initResponses,
             '03': '43 01 03 01\r>', // P0301, confirmado
             '07': '47 00\r>',
             '0A': '4A 00\r>',
@@ -328,6 +341,7 @@ void main() {
     test('TCM com MIL aceso e ECM apagado também liga o indicador', () async {
       final conn = ScriptedBleConnection(
         responses: {
+          ..._initResponses,
           '03': '43 00\r>',
           '07': '47 00\r>',
           '0A': '4A 00\r>',
@@ -347,6 +361,7 @@ void main() {
       // Mesmo cenário "multiframe" do hil_dongle_dtc.py: P0301, P0171, P0133.
       final conn = ScriptedBleConnection(
         responses: {
+          ..._initResponses,
           '03': '43 03 03 01 01 71 01 33\r>',
           '07': '47 00\r>',
           '0A': '4A 00\r>',
@@ -372,6 +387,7 @@ void main() {
     test('pendentes e permanentes recebem o status certo', () async {
       final conn = ScriptedBleConnection(
         responses: {
+          ..._initResponses,
           '03': '43 00\r>',
           '07': '47 01 04 20\r>', // P0420 pendente
           '0A': '4A 01 07 00\r>', // P0700 permanente
@@ -392,6 +408,7 @@ void main() {
     test('freeze frame é anexado só no DTC de origem', () async {
       final conn = ScriptedBleConnection(
         responses: {
+          ..._initResponses,
           '03': '43 02 03 01 04 20\r>', // P0301 + P0420, confirmados
           '07': '47 00\r>',
           '0A': '4A 00\r>',
@@ -424,6 +441,7 @@ void main() {
       // vem com o comando ecoado embutido antes da resposta de verdade.
       final conn = ScriptedBleConnection(
         responses: {
+          ..._initResponses,
           '03': '03 43 00 \r>',
           '07': '07 47 00 \r>',
           '0A': '0A 4A 00 \r>',
@@ -443,6 +461,7 @@ void main() {
       () async {
         final conn = ScriptedBleConnection(
           responses: {
+            ..._initResponses,
             '03': 'NO DATA\r>',
             '07': '47 00\r>',
             '0A': '4A 00\r>',

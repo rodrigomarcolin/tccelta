@@ -14,16 +14,21 @@ class Obd2Datasource {
 
   final Elm327Client _elm;
 
-  /// Prepara o adaptador: reset (`ATZ`) + echo off (`ATE0`) e devolve a
-  /// **identidade** do adaptador (ex.: `ELM327 v1.5`), extraída da resposta do
-  /// `ATZ`, ou `null` se indisponível.
+  /// Prepara o adaptador: reset (`ATZ`) + echo off (`ATE0`) + headers ligados
+  /// (`ATH1`) e devolve a **identidade** do adaptador (ex.: `ELM327 v1.5`),
+  /// extraída da resposta do `ATZ`, ou `null` se indisponível.
+  ///
+  /// `ATH1` vem por último (depois do `ATZ`, que reseta os headers pro
+  /// padrão desligado no firmware) — sem ele, `ElmResponse.ecuId` nunca é
+  /// preenchido e nada que dependa de identificar a ECU de origem (ex.: MIL
+  /// via [readMonitorStatusResponses]) funciona.
   ///
   /// Best-effort: qualquer falha aqui é ignorada (o parser de [readPidRaw] é
   /// tolerante a echo/espaços mesmo sem init), então um `ATZ` lento não trava a
   /// telemetria.
   Future<String?> initialize() async {
     String? version;
-    for (final cmd in const ['ATZ', 'ATE0']) {
+    for (final cmd in const ['ATZ', 'ATE0', 'ATH1']) {
       try {
         final raw = await _elm.command(
           cmd,

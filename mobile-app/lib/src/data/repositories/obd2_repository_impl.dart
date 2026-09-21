@@ -248,6 +248,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
     if (ds == null || dtcDs == null) {
       throw const DtcReadFailure('Sem conexão BLE pronta');
     }
+    if (!_initialized) await initialize();
     try {
       final confirmed = await dtcDs.readDtcResponses(0x03);
       final pending = await dtcDs.readDtcResponses(0x07);
