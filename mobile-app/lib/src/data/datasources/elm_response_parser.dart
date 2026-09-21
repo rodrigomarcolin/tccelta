@@ -8,6 +8,8 @@ import 'package:tccelta_mobile/src/domain/obd2/elm_response.dart';
 class ElmResponseParser {
   const ElmResponseParser._();
 
+  /// Parses [raw] ELM327 output looking for responses to [responseService]
+  /// (and [pid], when the service carries one).
   static ElmResponseSet parse(
     String raw, {
     required int responseService,

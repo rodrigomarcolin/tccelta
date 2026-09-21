@@ -64,8 +64,13 @@ class DtcActiveEntry {
       listEquals(other.freezeFrame, freezeFrame);
 
   @override
-  int get hashCode =>
-      Object.hash(code, status, ecuId, detectedLabel, Object.hashAll(freezeFrame));
+  int get hashCode => Object.hash(
+    code,
+    status,
+    ecuId,
+    detectedLabel,
+    Object.hashAll(freezeFrame),
+  );
 
   @override
   String toString() => 'DtcActiveEntry($code: $status)';

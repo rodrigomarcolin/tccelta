@@ -36,16 +36,16 @@ class SecureDongleDatasource extends DongleDatasource {
       final psk = PskCipher.fromHex(hex);
       return switch (mode) {
         SecurityMode.staticPsk => EncryptedBleConnection(
-            inner: raw,
-            cipher: psk,
-            mode: mode,
-          ),
-        SecurityMode.handshake || SecurityMode.handshakeReplay =>
-          EncryptedBleConnection(
-            inner: raw,
-            psk: pskKey(psk),
-            mode: mode,
-          ),
+          inner: raw,
+          cipher: psk,
+          mode: mode,
+        ),
+        SecurityMode.handshake ||
+        SecurityMode.handshakeReplay => EncryptedBleConnection(
+          inner: raw,
+          psk: pskKey(psk),
+          mode: mode,
+        ),
       };
     } on BleConnectionFailure {
       rethrow;
@@ -62,4 +62,3 @@ class SecureDongleDatasource extends DongleDatasource {
   /// mutable key state from [PskCipher].
   static Uint8List pskKey(PskCipher cipher) => cipher.keyCopy;
 }
-import 'dart:typed_data';

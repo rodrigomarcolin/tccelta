@@ -131,7 +131,7 @@ class PskSettingsScreen extends HookConsumerWidget {
                 Text('MODO DE SEGURANÇA', style: AppTypography.overline),
                 const SizedBox(height: AppSpacing.s4),
                 DropdownButtonFormField<SecurityMode>(
-                  value: selectedMode,
+                  initialValue: selectedMode,
                   decoration: const InputDecoration(
                     filled: true,
                     fillColor: AppColors.surfaceCard,
@@ -161,7 +161,10 @@ class PskSettingsScreen extends HookConsumerWidget {
                   'Handshake troca nonces e cria uma chave de sessão. '
                   'A opção com contador também rejeita replay na sessão.',
                   style: AppTypography.ui(
-                    const TextStyle(fontSize: 11, color: AppColors.textTertiary),
+                    const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textTertiary,
+                    ),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s7),

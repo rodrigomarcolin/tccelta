@@ -24,7 +24,10 @@ void main() {
         pid: 0x0C,
       );
 
-      expect(result.responses.map((response) => response.ecuId), [0x7E8, 0x7E9]);
+      expect(
+        result.responses.map((response) => response.ecuId),
+        [0x7E8, 0x7E9],
+      );
       expect(result.responses.map((response) => response.payload), [
         [0x17, 0x70],
         [0x18, 0x00],

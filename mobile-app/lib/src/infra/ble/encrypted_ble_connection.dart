@@ -10,24 +10,47 @@ import 'package:tccelta_mobile/src/infra/ble/ble_security_handshake.dart';
 
 /// Secure BLE decorator for the three firmware security variants.
 class EncryptedBleConnection implements BleConnection {
-  EncryptedBleConnection({
+  /// Wraps [inner] with encryption for the selected security [mode].
+  factory EncryptedBleConnection({
     required BleConnection inner,
     Uint8List? psk,
     PskCipher? cipher,
     SecurityMode mode = SecurityMode.handshake,
     Duration handshakeTimeout = const Duration(seconds: 10),
-  })  : _inner = inner,
-        _psk = psk,
-        _cipher = cipher,
-        _mode = mode,
-        _handshakeTimeout = handshakeTimeout {
-    if (_mode == SecurityMode.staticPsk && _cipher == null && _psk == null) {
+  }) {
+    if (mode == SecurityMode.staticPsk && cipher == null && psk == null) {
       throw ArgumentError('Static PSK mode requires a PSK or cipher');
     }
-    _phaseSub = inner.phase.listen(_onInnerPhase);
+    return EncryptedBleConnection._(inner, psk, cipher, mode, handshakeTimeout)
+      .._start();
+  }
+
+  /// Test/compatibility constructor for an already-established cipher. It
+  /// uses replay framing so counter behavior can be exercised directly.
+  factory EncryptedBleConnection.withCipher({
+    required BleConnection inner,
+    required PskCipher cipher,
+  }) => EncryptedBleConnection._(
+    inner,
+    null,
+    cipher,
+    SecurityMode.handshakeReplay,
+    const Duration(seconds: 10),
+  ).._startEstablished();
+
+  EncryptedBleConnection._(
+    this._inner,
+    this._psk,
+    this._cipher,
+    this._mode,
+    this._handshakeTimeout,
+  );
+
+  void _start() {
+    _phaseSub = _inner.phase.listen(_onInnerPhase);
     if (_mode == SecurityMode.staticPsk) _listenEncryptedFrames();
-    if (inner.currentPhase != BleConnectionPhase.ready) {
-      _emit(inner.currentPhase);
+    if (_inner.currentPhase != BleConnectionPhase.ready) {
+      _emit(_inner.currentPhase);
     } else if (_mode == SecurityMode.staticPsk) {
       _established = true;
       _emit(BleConnectionPhase.ready);
@@ -36,31 +59,11 @@ class EncryptedBleConnection implements BleConnection {
     }
   }
 
-  /// Test/compatibility constructor for an already-established cipher. It
-  /// uses replay framing so counter behavior can be exercised directly.
-  factory EncryptedBleConnection.withCipher({
-    required BleConnection inner,
-    required PskCipher cipher,
-  }) =>
-      EncryptedBleConnection._ready(
-        inner: inner,
-        cipher: cipher,
-        mode: SecurityMode.handshakeReplay,
-      );
-
-  EncryptedBleConnection._ready({
-    required BleConnection inner,
-    required PskCipher cipher,
-    required SecurityMode mode,
-  })  : _inner = inner,
-        _psk = null,
-        _cipher = cipher,
-        _mode = mode,
-        _handshakeTimeout = const Duration(seconds: 10),
-        _established = true {
-    _phaseSub = inner.phase.listen(_onInnerPhase);
+  void _startEstablished() {
+    _established = true;
+    _phaseSub = _inner.phase.listen(_onInnerPhase);
     _listenEncryptedFrames();
-    _emit(inner.currentPhase);
+    _emit(_inner.currentPhase);
   }
 
   final BleConnection _inner;
@@ -140,7 +143,7 @@ class EncryptedBleConnection implements BleConnection {
       _established = true;
       _listenEncryptedFrames();
       _emit(BleConnectionPhase.ready);
-    } catch (_) {
+    } on Object {
       _established = false;
       _emit(BleConnectionPhase.failed);
       if (!_disposed) unawaited(_inner.disconnect());
@@ -244,16 +247,19 @@ class EncryptedBleConnection implements BleConnection {
 
   static Uint8List _counterBytes(int value) {
     final bytes = Uint8List(8);
+    var remaining = value;
     for (var i = 7; i >= 0; i--) {
-      bytes[i] = value & 0xff;
-      value >>= 8;
+      bytes[i] = remaining & 0xff;
+      remaining >>= 8;
     }
     return bytes;
   }
 
   static int _counterValue(List<int> bytes) {
     var value = 0;
-    for (final byte in bytes) value = (value << 8) | byte;
+    for (final byte in bytes) {
+      value = (value << 8) | byte;
+    }
     return value;
   }
 

@@ -64,7 +64,8 @@ abstract final class CryptoUtils {
   }
 
   /// Performs a constant-time comparison of two byte lists.
-  /// Returns `true` if and only if both lists are identical in length and content.
+  /// Returns `true` if and only if both lists are identical in length and
+  /// content.
   static bool constantTimeEquals(List<int> a, List<int> b) {
     if (a.length != b.length) {
       return false;

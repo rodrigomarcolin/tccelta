@@ -49,6 +49,7 @@ class SecurityModeNotifier extends AsyncNotifier<SecurityMode> {
   Future<SecurityMode> build() =>
       ref.watch(settingsServiceProvider).getSecurityMode();
 
+  /// Persists [mode] and refreshes state.
   Future<void> save(SecurityMode mode) async {
     await ref.read(settingsServiceProvider).setSecurityMode(mode);
     state = AsyncData(mode);

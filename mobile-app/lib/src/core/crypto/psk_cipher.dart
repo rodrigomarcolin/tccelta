@@ -141,13 +141,19 @@ class PskCipher {
 
 /// The three independently encoded AES-GCM parts used by replay framing.
 class EncryptedParts {
+  /// Creates a set of separately encoded AES-GCM parts.
   const EncryptedParts({
     required this.iv,
     required this.ciphertext,
     required this.tag,
   });
 
+  /// The 12-byte initialization vector (nonce).
   final Uint8List iv;
+
+  /// The encrypted payload, excluding the authentication tag.
   final Uint8List ciphertext;
+
+  /// The 16-byte GCM authentication tag.
   final Uint8List tag;
 }

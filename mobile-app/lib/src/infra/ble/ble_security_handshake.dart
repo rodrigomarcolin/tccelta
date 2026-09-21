@@ -32,24 +32,26 @@ class BleHandshakeException implements Exception {
 ///    Receive `OK <confirmMac:64hex>\n` (or `ERROR\n` on failure).
 ///    Derive session key:
 ///      `sessionKey = HKDF-SHA256(ikm=PSK, salt=salt, info="session-key")`
-///    Compute `expectedConfirmMac = HMAC-SHA256(key=sessionKey, data="confirm")`
+///    Compute
+///      `expectedConfirmMac = HMAC-SHA256(key=sessionKey, data="confirm")`
 ///    Perform constant-time comparison of `confirmMac` & `expectedConfirmMac`.
 ///    If match: returns derived 32-byte `sessionKey`.
 ///    If mismatch or ERROR: throws [BleHandshakeException], wiping memory.
 class BleSecurityHandshake {
-  /// Creates a handshake runner with [psk], write callback [_writeRaw],
-  /// and timeout [_timeout].
-  BleSecurityHandshake({
+  /// Creates a handshake runner with [psk], write callback [writeRaw],
+  /// and [timeout].
+  factory BleSecurityHandshake({
     required Uint8List psk,
     required Future<void> Function(List<int> bytes) writeRaw,
     Duration timeout = const Duration(seconds: 10),
-  })  : _psk = Uint8List.fromList(psk),
-        _writeRaw = writeRaw,
-        _timeout = timeout {
-    if (_psk.length != 32) {
+  }) {
+    if (psk.length != 32) {
       throw ArgumentError('PSK must be exactly 32 bytes');
     }
+    return BleSecurityHandshake._(Uint8List.fromList(psk), writeRaw, timeout);
   }
+
+  BleSecurityHandshake._(this._psk, this._writeRaw, this._timeout);
 
   final Uint8List _psk;
   final Future<void> Function(List<int> bytes) _writeRaw;

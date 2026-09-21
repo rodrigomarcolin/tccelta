@@ -56,7 +56,8 @@ void main() {
 
   group('CryptoUtils.hmacSha256', () {
     test('computes correct HMAC for known vector', () {
-      // RFC 4231 Test Case 2 (Key = "Jefe", Data = "what do ya want for nothing?")
+      // RFC 4231 Test Case 2
+      // (Key = "Jefe", Data = "what do ya want for nothing?")
       final key = Uint8List.fromList(utf8.encode('Jefe'));
       final data = Uint8List.fromList(
         utf8.encode('what do ya want for nothing?'),
