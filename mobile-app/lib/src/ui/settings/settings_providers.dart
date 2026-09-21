@@ -20,7 +20,7 @@ final AsyncNotifierProvider<PskNotifier, String?> pskNotifierProvider =
 
 /// Persisted secure transport mode used by the next dongle connection.
 final AsyncNotifierProvider<SecurityModeNotifier, SecurityMode>
-    securityModeNotifierProvider =
+securityModeNotifierProvider =
     AsyncNotifierProvider<SecurityModeNotifier, SecurityMode>(
       SecurityModeNotifier.new,
     );

@@ -97,59 +97,61 @@ void main() {
       inner = FakeBleConnection();
     });
 
-    test('performs handshake when inner reaches ready and emits ready',
-        () async {
-      final encConn = EncryptedBleConnection(
-        inner: inner,
-        psk: testPsk,
-        handshakeTimeout: const Duration(seconds: 2),
-      );
+    test(
+      'performs handshake when inner reaches ready and emits ready',
+      () async {
+        final encConn = EncryptedBleConnection(
+          inner: inner,
+          psk: testPsk,
+          handshakeTimeout: const Duration(seconds: 2),
+        );
 
-      final phases = <BleConnectionPhase>[];
-      final phaseSub = encConn.phase.listen(phases.add);
+        final phases = <BleConnectionPhase>[];
+        final phaseSub = encConn.phase.listen(phases.add);
 
-      // Inner reaches ready -> triggers handshake
-      inner.emitPhase(BleConnectionPhase.ready);
+        // Inner reaches ready -> triggers handshake
+        inner.emitPhase(BleConnectionPhase.ready);
 
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(inner.written.length, equals(1));
-      final hello = ascii.decode(inner.written[0]);
-      expect(hello.startsWith('HELLO '), isTrue);
-      final clientNonce = _fromHex(hello.substring('HELLO '.length).trim());
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(inner.written.length, equals(1));
+        final hello = ascii.decode(inner.written[0]);
+        expect(hello.startsWith('HELLO '), isTrue);
+        final clientNonce = _fromHex(hello.substring('HELLO '.length).trim());
 
-      // Dongle sends challenge
-      final serverNonce = Uint8List(32);
-      inner.incomingCtrl.add(
-        ascii.encode('CHALLENGE ${_toHex(serverNonce)}\n'),
-      );
+        // Dongle sends challenge
+        final serverNonce = Uint8List(32);
+        inner.incomingCtrl.add(
+          ascii.encode('CHALLENGE ${_toHex(serverNonce)}\n'),
+        );
 
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(inner.written.length, equals(2));
-      final proofMsg = ascii.decode(inner.written[1]);
-      expect(proofMsg.startsWith('PROOF '), isTrue);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(inner.written.length, equals(2));
+        final proofMsg = ascii.decode(inner.written[1]);
+        expect(proofMsg.startsWith('PROOF '), isTrue);
 
-      // Dongle sends OK with valid confirmation MAC
-      final salt = Uint8List(64)
-        ..setRange(0, 32, clientNonce)
-        ..setRange(32, 64, serverNonce);
-      final sessionKey = CryptoUtils.hkdfSha256(
-        ikm: testPsk,
-        salt: salt,
-        info: Uint8List.fromList(ascii.encode('session-key')),
-      );
-      final confirmMac = CryptoUtils.hmacSha256(
-        sessionKey,
-        Uint8List.fromList(ascii.encode('confirm')),
-      );
-      inner.incomingCtrl.add(ascii.encode('OK ${_toHex(confirmMac)}\n'));
+        // Dongle sends OK with valid confirmation MAC
+        final salt = Uint8List(64)
+          ..setRange(0, 32, clientNonce)
+          ..setRange(32, 64, serverNonce);
+        final sessionKey = CryptoUtils.hkdfSha256(
+          ikm: testPsk,
+          salt: salt,
+          info: Uint8List.fromList(ascii.encode('session-key')),
+        );
+        final confirmMac = CryptoUtils.hmacSha256(
+          sessionKey,
+          Uint8List.fromList(ascii.encode('confirm')),
+        );
+        inner.incomingCtrl.add(ascii.encode('OK ${_toHex(confirmMac)}\n'));
 
-      await Future<void>.delayed(const Duration(milliseconds: 30));
-      expect(encConn.isReady, isTrue);
-      expect(encConn.currentPhase, equals(BleConnectionPhase.ready));
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        expect(encConn.isReady, isTrue);
+        expect(encConn.currentPhase, equals(BleConnectionPhase.ready));
 
-      await phaseSub.cancel();
-      await encConn.disconnect();
-    });
+        await phaseSub.cancel();
+        await encConn.disconnect();
+      },
+    );
 
     test('outbound write encrypts with monotonic counter as AAD', () async {
       final cipher = PskCipher(key: testPsk);

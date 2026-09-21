@@ -372,9 +372,7 @@ class _StatusBanner extends StatelessWidget {
                 ),
               ),
               Text(
-                isActive
-                    ? mode.label
-                    : 'Conexões serão recusadas',
+                isActive ? mode.label : 'Conexões serão recusadas',
                 style: AppTypography.ui(
                   const TextStyle(
                     fontSize: 11,

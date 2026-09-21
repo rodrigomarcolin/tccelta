@@ -98,8 +98,9 @@ class BleSecurityHandshake {
           'Expected CHALLENGE frame, got: $challengeLine',
         );
       }
-      final serverNonceHex =
-          challengeLine.substring('CHALLENGE '.length).trim();
+      final serverNonceHex = challengeLine
+          .substring('CHALLENGE '.length)
+          .trim();
       serverNonce = _parseHex(serverNonceHex, expectedLen: _nonceLen);
       if (serverNonce == null) {
         throw BleHandshakeException(

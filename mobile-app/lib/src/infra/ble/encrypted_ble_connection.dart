@@ -263,9 +263,8 @@ class EncryptedBleConnection implements BleConnection {
     return value;
   }
 
-  static String _toHex(List<int> bytes) => bytes
-      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-      .join();
+  static String _toHex(List<int> bytes) =>
+      bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 
   static Uint8List? _fromHex(String hex) {
     if (hex.isEmpty || hex.length.isOdd) return null;

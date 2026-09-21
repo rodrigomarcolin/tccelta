@@ -42,7 +42,8 @@ class DtcDatasource {
     int service, {
     int? expectedResponses,
   }) async {
-    final suffix = expectedResponses != null &&
+    final suffix =
+        expectedResponses != null &&
             expectedResponses >= 1 &&
             expectedResponses <= 8
         ? _hex(expectedResponses)
