@@ -25,6 +25,25 @@ String _toHex(Uint8List bytes) {
   return buf.toString();
 }
 
+/// 8-byte big-endian replay counter, matching the firmware's
+/// `SecureHandshakeReplayBleConnectivity` wire format.
+Uint8List _replayCounterBytes(int value) {
+  final bytes = Uint8List(8);
+  var remaining = value;
+  for (var i = 7; i >= 0; i--) {
+    bytes[i] = remaining & 0xff;
+    remaining >>= 8;
+  }
+  return bytes;
+}
+
+const _dirAppToDongle = 0x00;
+const _dirDongleToApp = 0x01;
+
+/// GCM AAD used by the replay-protected mode: counter(8) ‖ direction(1).
+Uint8List _replayAad(Uint8List counterBytes, int direction) =>
+    Uint8List.fromList([...counterBytes, direction]);
+
 class FakeBleConnection implements BleConnection {
   final StreamController<BleConnectionPhase> phaseCtrl =
       StreamController<BleConnectionPhase>.broadcast();
@@ -140,34 +159,38 @@ void main() {
       );
 
       inner.emitPhase(BleConnectionPhase.ready);
+      // Phase updates are delivered asynchronously over a broadcast stream.
+      await Future<void>.delayed(const Duration(milliseconds: 20));
 
       // Write command 1: "ATZ\r"
       await encConn.write(ascii.encode('ATZ\r'));
       expect(inner.written.length, equals(1));
       final frame1 = ascii.decode(inner.written[0]).trim();
 
-      expect(frame1.length >= 64, isTrue);
-      // Counter for 1st message is 0x00000001 (8 hex chars = "00000001")
-      expect(frame1.substring(0, 8), equals('00000001'));
+      expect(frame1.length >= 72, isTrue);
+      // Counter starts at 0 (post-incremented, matching the firmware's
+      // `uint64_t counter = _txCounter++;`), 16 hex chars = 8-byte
+      // big-endian.
+      expect(frame1.substring(0, 16), equals('0000000000000000'));
 
-      final iv1 = _fromHex(frame1.substring(8, 32));
+      final counterBytes1 = _fromHex(frame1.substring(0, 16));
+      final iv1 = _fromHex(frame1.substring(16, 40));
       final tag1 = _fromHex(frame1.substring(frame1.length - 32));
-      final ct1 = _fromHex(frame1.substring(32, frame1.length - 32));
-      final counterBytes1 = _fromHex(frame1.substring(0, 8));
+      final ct1 = _fromHex(frame1.substring(40, frame1.length - 32));
 
       final decrypted1 = cipher.decryptSeparate(
         iv: iv1,
         ciphertext: ct1,
         tag: tag1,
-        aad: counterBytes1,
+        aad: _replayAad(counterBytes1, _dirAppToDongle),
       );
       expect(ascii.decode(decrypted1!), equals('ATZ\r'));
 
-      // Write command 2: "010C\r" -> counter must be 0x00000002
+      // Write command 2: "010C\r" -> counter must be 1
       await encConn.write(ascii.encode('010C\r'));
       expect(inner.written.length, equals(2));
       final frame2 = ascii.decode(inner.written[1]).trim();
-      expect(frame2.substring(0, 8), equals('00000002'));
+      expect(frame2.substring(0, 16), equals('0000000000000001'));
     });
 
     test('inbound decrypted stream receives valid frame', () async {
@@ -183,9 +206,12 @@ void main() {
       });
 
       // Dongle sends message with counter = 1
-      final counterBytes = Uint8List.fromList([0x00, 0x00, 0x00, 0x01]);
+      final counterBytes = _replayCounterBytes(1);
       final payload = Uint8List.fromList(ascii.encode('41 0C 1A F8\r\n>'));
-      final enc = cipher.encryptSeparate(payload, aad: counterBytes);
+      final enc = cipher.encryptSeparate(
+        payload,
+        aad: _replayAad(counterBytes, _dirDongleToApp),
+      );
 
       final wireFrame =
           '${_toHex(counterBytes)}${_toHex(enc.iv)}'
@@ -213,10 +239,10 @@ void main() {
       });
 
       // 1. Dongle sends message #5
-      final counter5 = Uint8List.fromList([0x00, 0x00, 0x00, 0x05]);
+      final counter5 = _replayCounterBytes(5);
       final enc5 = cipher.encryptSeparate(
         Uint8List.fromList(ascii.encode('RESP 5')),
-        aad: counter5,
+        aad: _replayAad(counter5, _dirDongleToApp),
       );
       final wire5 =
           '${_toHex(counter5)}${_toHex(enc5.iv)}'
@@ -233,10 +259,10 @@ void main() {
       expect(received.length, equals(1)); // No new message
 
       // 3. Replay older message #3 -> Must be rejected
-      final counter3 = Uint8List.fromList([0x00, 0x00, 0x00, 0x03]);
+      final counter3 = _replayCounterBytes(3);
       final enc3 = cipher.encryptSeparate(
         Uint8List.fromList(ascii.encode('RESP 3')),
-        aad: counter3,
+        aad: _replayAad(counter3, _dirDongleToApp),
       );
       final wire3 =
           '${_toHex(counter3)}${_toHex(enc3.iv)}'
@@ -247,10 +273,10 @@ void main() {
       expect(received.length, equals(1));
 
       // 4. Newer message #6 -> Must be accepted
-      final counter6 = Uint8List.fromList([0x00, 0x00, 0x00, 0x06]);
+      final counter6 = _replayCounterBytes(6);
       final enc6 = cipher.encryptSeparate(
         Uint8List.fromList(ascii.encode('RESP 6')),
-        aad: counter6,
+        aad: _replayAad(counter6, _dirDongleToApp),
       );
       final wire6 =
           '${_toHex(counter6)}${_toHex(enc6.iv)}'
@@ -276,10 +302,10 @@ void main() {
         received.add(ascii.decode(bytes));
       });
 
-      final counter1 = Uint8List.fromList([0x00, 0x00, 0x00, 0x01]);
+      final counter1 = _replayCounterBytes(1);
       final enc1 = cipher.encryptSeparate(
         Uint8List.fromList(ascii.encode('GOOD')),
-        aad: counter1,
+        aad: _replayAad(counter1, _dirDongleToApp),
       );
 
       // Tamper ciphertext

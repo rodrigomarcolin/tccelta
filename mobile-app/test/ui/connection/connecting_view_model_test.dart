@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
+import 'package:tccelta_mobile/src/domain/ble/security_mode.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
@@ -13,6 +15,11 @@ import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
 import '../../support/fake_ble_service.dart';
+
+/// PSK de 64 chars hex (32 bytes) só para satisfazer o gate do
+/// `SecureDongleDatasource` nos testes — o valor em si é irrelevante, já que
+/// o [FakeBleService] não fala o protocolo real do dongle.
+String get _fakePskHex => List.filled(32, 'ab').join();
 
 /// Repository OBD-II fake e instantâneo, para não depender de trocas ELM327
 /// reais durante a preparação (Fase 2).
@@ -46,6 +53,19 @@ class _FakeObd2Repository implements Obd2Repository {
 
 void main() {
   group('ConnectingViewModel', () {
+    setUp(() {
+      // SecureDongleDatasource exige uma PSK salva para liberar a conexão
+      // (ver secure_dongle_datasource.dart) — sem isso, todo connect() falha
+      // com "PSK não configurada", mascarando o que estes testes exercitam.
+      // Modo staticPsk dispensa o handshake ELM327 (que o FakeBleService não
+      // simula): a conexão criptografada fica pronta assim que a interna
+      // chega em `ready`.
+      SharedPreferences.setMockInitialValues({
+        'psk_hex': _fakePskHex,
+        'security_mode': SecurityMode.staticPsk.storageValue,
+      });
+    });
+
     test('connect avança BLE + preparação OBD-II até prep done', () async {
       final container = ProviderContainer(
         overrides: [
