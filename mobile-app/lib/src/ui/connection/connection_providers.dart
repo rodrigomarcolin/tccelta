@@ -19,8 +19,8 @@ final Provider<BleService> bleServiceProvider = Provider<BleService>(
 );
 
 /// Datasource específico do dongle, sobre o [bleServiceProvider].
-/// Usa [SecureDongleDatasource] para envolver automaticamente a conexão BLE com
-/// `EncryptedBleConnection` quando uma PSK estiver configurada.
+/// Usa [SecureDongleDatasource] para exigir uma PSK e envolver a conexão BLE
+/// com `EncryptedBleConnection`.
 final Provider<DongleDatasource> dongleDatasourceProvider =
     Provider<DongleDatasource>(
       (ref) => SecureDongleDatasource(

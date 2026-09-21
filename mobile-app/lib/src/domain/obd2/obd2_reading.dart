@@ -8,7 +8,7 @@ import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 @immutable
 class Obd2Reading {
   /// Cria a leitura de [pid] com o [value] já em grandeza física.
-  const Obd2Reading({required this.pid, required this.value});
+  const Obd2Reading({required this.pid, required this.value, this.ecuId});
 
   /// PID de origem (carrega rótulo e unidade).
   final Obd2Pid pid;
@@ -16,12 +16,18 @@ class Obd2Reading {
   /// Valor convertido na unidade do PID (ex.: 1500.0 para RPM).
   final double value;
 
-  @override
-  bool operator ==(Object other) =>
-      other is Obd2Reading && other.pid == pid && other.value == value;
+  /// CAN response identifier when the dongle returned headers, otherwise null.
+  final int? ecuId;
 
   @override
-  int get hashCode => Object.hash(pid, value);
+  bool operator ==(Object other) =>
+      other is Obd2Reading &&
+      other.pid == pid &&
+      other.value == value &&
+      other.ecuId == ecuId;
+
+  @override
+  int get hashCode => Object.hash(pid, value, ecuId);
 
   @override
   String toString() => 'Obd2Reading(${pid.command}: $value ${pid.unit})';

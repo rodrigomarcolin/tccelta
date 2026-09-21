@@ -3,121 +3,271 @@ import 'dart:convert' show ascii;
 import 'dart:typed_data';
 
 import 'package:tccelta_mobile/src/core/crypto/psk_cipher.dart';
+import 'package:tccelta_mobile/src/core/errors/ble_failure.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
+import 'package:tccelta_mobile/src/domain/ble/security_mode.dart';
+import 'package:tccelta_mobile/src/infra/ble/ble_security_handshake.dart';
 
-/// A [BleConnection] decorator that transparently applies AES-256-GCM
-/// encryption/decryption using a [PskCipher].
-///
-/// Wire format (hex-encoded, newline-terminated) matches the dongle's
-/// `SecurePskBleConnectivity`:
-///   OUTBOUND: `<12-byte IV hex><ciphertext hex><16-byte tag hex>\n`
-///   INBOUND:  `<12-byte IV hex><ciphertext hex><16-byte tag hex>\n`
-///
-/// When a received frame fails authentication (wrong key / tampered bytes) it
-/// is silently dropped — the `Elm327Client` above will time-out waiting for a
-/// prompt, which is the same observable behaviour as the dongle discarding a
-/// bad command.
+/// Secure BLE decorator for the three firmware security variants.
 class EncryptedBleConnection implements BleConnection {
-  /// Wraps [inner] so every outgoing/incoming frame is transparently
-  /// encrypted/decrypted with [cipher].
   EncryptedBleConnection({
     required BleConnection inner,
+    Uint8List? psk,
+    PskCipher? cipher,
+    SecurityMode mode = SecurityMode.handshake,
+    Duration handshakeTimeout = const Duration(seconds: 10),
+  })  : _inner = inner,
+        _psk = psk,
+        _cipher = cipher,
+        _mode = mode,
+        _handshakeTimeout = handshakeTimeout {
+    if (_mode == SecurityMode.staticPsk && _cipher == null && _psk == null) {
+      throw ArgumentError('Static PSK mode requires a PSK or cipher');
+    }
+    _phaseSub = inner.phase.listen(_onInnerPhase);
+    if (_mode == SecurityMode.staticPsk) _listenEncryptedFrames();
+    if (inner.currentPhase != BleConnectionPhase.ready) {
+      _emit(inner.currentPhase);
+    } else if (_mode == SecurityMode.staticPsk) {
+      _established = true;
+      _emit(BleConnectionPhase.ready);
+    } else {
+      unawaited(_startSecureSession());
+    }
+  }
+
+  /// Test/compatibility constructor for an already-established cipher. It
+  /// uses replay framing so counter behavior can be exercised directly.
+  factory EncryptedBleConnection.withCipher({
+    required BleConnection inner,
     required PskCipher cipher,
-  }) : _inner = inner,
-       // ignore: prefer_initializing_formals (mantém o rótulo público "cipher:")
-       _cipher = cipher {
-    _decryptedCtrl = StreamController<List<int>>.broadcast();
-    _incomingSub = inner.incoming.listen(
-      _onRawFrame,
-      onDone: _decryptedCtrl.close,
-    );
+  }) =>
+      EncryptedBleConnection._ready(
+        inner: inner,
+        cipher: cipher,
+        mode: SecurityMode.handshakeReplay,
+      );
+
+  EncryptedBleConnection._ready({
+    required BleConnection inner,
+    required PskCipher cipher,
+    required SecurityMode mode,
+  })  : _inner = inner,
+        _psk = null,
+        _cipher = cipher,
+        _mode = mode,
+        _handshakeTimeout = const Duration(seconds: 10),
+        _established = true {
+    _phaseSub = inner.phase.listen(_onInnerPhase);
+    _listenEncryptedFrames();
+    _emit(inner.currentPhase);
   }
 
   final BleConnection _inner;
-  final PskCipher _cipher;
-
-  late final StreamController<List<int>> _decryptedCtrl;
-  late final StreamSubscription<List<int>> _incomingSub;
-
-  // ── BleConnection interface ────────────────────────────────────────────────
+  final Uint8List? _psk;
+  PskCipher? _cipher;
+  final SecurityMode _mode;
+  final Duration _handshakeTimeout;
+  final StreamController<BleConnectionPhase> _phaseCtrl =
+      StreamController<BleConnectionPhase>.broadcast();
+  final StreamController<List<int>> _decryptedCtrl =
+      StreamController<List<int>>.broadcast();
+  late final StreamSubscription<BleConnectionPhase> _phaseSub;
+  StreamSubscription<List<int>>? _incomingSub;
+  final StringBuffer _lineBuffer = StringBuffer();
+  BleConnectionPhase _currentPhase = BleConnectionPhase.idle;
+  bool _established = false;
+  bool _starting = false;
+  bool _disposed = false;
+  int _txCounter = 0;
+  int _rxCounter = 0;
+  bool _rxCounterInitialized = false;
 
   @override
-  Stream<BleConnectionPhase> get phase => _inner.phase;
+  Stream<BleConnectionPhase> get phase => _phaseCtrl.stream;
 
   @override
-  BleConnectionPhase get currentPhase => _inner.currentPhase;
+  BleConnectionPhase get currentPhase => _currentPhase;
 
   @override
-  bool get isReady => _inner.isReady;
+  bool get isReady => _established && _currentPhase == BleConnectionPhase.ready;
 
   @override
   Stream<List<int>> get incoming => _decryptedCtrl.stream;
 
-  /// Encrypts [bytes], hex-encodes the result and appends `\n`, then forwards
-  /// to the inner connection's RX characteristic.
+  void _onInnerPhase(BleConnectionPhase phase) {
+    if (_disposed) return;
+    if (phase != BleConnectionPhase.ready) {
+      _established = false;
+      final incoming = _incomingSub;
+      _incomingSub = null;
+      if (incoming != null) unawaited(incoming.cancel());
+      _emit(phase);
+      return;
+    }
+    if (_established && _cipher != null) {
+      _emit(BleConnectionPhase.ready);
+      return;
+    }
+    if (_mode == SecurityMode.staticPsk) {
+      _established = true;
+      _listenEncryptedFrames();
+      _emit(BleConnectionPhase.ready);
+    } else {
+      unawaited(_startSecureSession());
+    }
+  }
+
+  Future<void> _startSecureSession() async {
+    if (_starting || _disposed || _established) return;
+    _starting = true;
+    _emit(BleConnectionPhase.connecting);
+    try {
+      final psk = _psk;
+      if (psk == null || psk.length != 32) {
+        throw const BleConnectionFailure('PSK inválida para handshake');
+      }
+      final sessionKey = await BleSecurityHandshake(
+        psk: psk,
+        writeRaw: _inner.write,
+        timeout: _handshakeTimeout,
+      ).perform(_inner.incoming);
+      _cipher = PskCipher(key: sessionKey);
+      sessionKey.fillRange(0, sessionKey.length, 0);
+      _txCounter = 0;
+      _rxCounter = 0;
+      _rxCounterInitialized = false;
+      _established = true;
+      _listenEncryptedFrames();
+      _emit(BleConnectionPhase.ready);
+    } catch (_) {
+      _established = false;
+      _emit(BleConnectionPhase.failed);
+      if (!_disposed) unawaited(_inner.disconnect());
+    } finally {
+      _starting = false;
+    }
+  }
+
   @override
   Future<void> write(List<int> bytes) async {
-    final encrypted = _cipher.encrypt(Uint8List.fromList(bytes));
-    final hexFrame = '${_toHex(encrypted)}\n';
-    await _inner.write(ascii.encode(hexFrame));
+    if (!isReady || _cipher == null) {
+      throw const BleConnectionFailure('Canal seguro ainda não está pronto');
+    }
+    final payload = Uint8List.fromList(bytes);
+    final frame = _mode == SecurityMode.handshakeReplay
+        ? _encryptReplay(payload)
+        : _cipher!.encrypt(payload);
+    await _inner.write(ascii.encode('${_toHex(frame)}\n'));
+  }
+
+  Uint8List _encryptReplay(Uint8List payload) {
+    final counter = _counterBytes(_txCounter++);
+    final aad = Uint8List(9)
+      ..setRange(0, 8, counter)
+      ..[8] = 0;
+    final parts = _cipher!.encryptSeparate(payload, aad: aad);
+    return Uint8List.fromList([
+      ...counter,
+      ...parts.iv,
+      ...parts.ciphertext,
+      ...parts.tag,
+    ]);
+  }
+
+  void _onRawFrame(List<int> chunk) {
+    if (_disposed) return;
+    _lineBuffer.write(ascii.decode(chunk, allowInvalid: true));
+    var raw = _lineBuffer.toString();
+    var nl = raw.indexOf('\n');
+    while (nl >= 0) {
+      final line = raw.substring(0, nl).trim();
+      raw = raw.substring(nl + 1);
+      if (line.isNotEmpty) _processLine(line);
+      nl = raw.indexOf('\n');
+    }
+    _lineBuffer
+      ..clear()
+      ..write(raw);
+  }
+
+  void _listenEncryptedFrames() {
+    _incomingSub ??= _inner.incoming.listen(_onRawFrame);
+  }
+
+  void _processLine(String line) {
+    if (!_established || _cipher == null) return;
+    final frame = _fromHex(line);
+    if (frame == null) return;
+    final plain = _mode == SecurityMode.handshakeReplay
+        ? _decryptReplay(frame)
+        : _cipher!.decrypt(frame);
+    if (plain != null && !_decryptedCtrl.isClosed) {
+      _decryptedCtrl.add(plain.toList());
+    }
+  }
+
+  Uint8List? _decryptReplay(Uint8List frame) {
+    if (frame.length < 8 + 12 + 16) return null;
+    final counterBytes = frame.sublist(0, 8);
+    final counter = _counterValue(counterBytes);
+    if (_rxCounterInitialized && counter <= _rxCounter) return null;
+    final aad = Uint8List(9)
+      ..setRange(0, 8, counterBytes)
+      ..[8] = 1;
+    final plain = _cipher!.decryptSeparate(
+      iv: frame.sublist(8, 20),
+      ciphertext: frame.sublist(20, frame.length - 16),
+      tag: frame.sublist(frame.length - 16),
+      aad: aad,
+    );
+    if (plain == null) return null;
+    _rxCounter = counter;
+    _rxCounterInitialized = true;
+    return plain;
+  }
+
+  void _emit(BleConnectionPhase phase) {
+    _currentPhase = phase;
+    if (!_phaseCtrl.isClosed) _phaseCtrl.add(phase);
   }
 
   @override
   Future<void> disconnect() async {
-    await _incomingSub.cancel();
-    if (!_decryptedCtrl.isClosed) await _decryptedCtrl.close();
+    _disposed = true;
+    await _phaseSub.cancel();
+    await _incomingSub?.cancel();
+    await _decryptedCtrl.close();
+    await _phaseCtrl.close();
     await _inner.disconnect();
   }
 
-  // ── Internal helpers ───────────────────────────────────────────────────────
-
-  /// Accumulates incoming bytes until a newline, then decrypts the frame.
-  final StringBuffer _lineBuffer = StringBuffer();
-
-  void _onRawFrame(List<int> chunk) {
-    _lineBuffer.write(ascii.decode(chunk, allowInvalid: true));
-    // The dongle terminates each frame with \n; process all complete lines.
-    var raw = _lineBuffer.toString();
-    var nlIdx = raw.indexOf('\n');
-    while (nlIdx >= 0) {
-      final line = raw.substring(0, nlIdx).trim();
-      raw = raw.substring(nlIdx + 1);
-      nlIdx = raw.indexOf('\n');
-      _processLine(line);
+  static Uint8List _counterBytes(int value) {
+    final bytes = Uint8List(8);
+    for (var i = 7; i >= 0; i--) {
+      bytes[i] = value & 0xff;
+      value >>= 8;
     }
-    _lineBuffer
-      ..clear()
-      ..write(raw); // keep any partial line
+    return bytes;
   }
 
-  void _processLine(String hexLine) {
-    if (hexLine.isEmpty) return;
-    final bytes = _fromHex(hexLine);
-    if (bytes == null) return; // malformed hex
-    final plain = _cipher.decrypt(bytes);
-    if (plain == null) return; // auth failure — silently drop
-    if (!_decryptedCtrl.isClosed) _decryptedCtrl.add(plain.toList());
+  static int _counterValue(List<int> bytes) {
+    var value = 0;
+    for (final byte in bytes) value = (value << 8) | byte;
+    return value;
   }
 
-  // ── Hex helpers ────────────────────────────────────────────────────────────
+  static String _toHex(List<int> bytes) => bytes
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
 
-  static String _toHex(Uint8List bytes) {
-    final buf = StringBuffer();
-    for (final b in bytes) {
-      buf.write(b.toRadixString(16).padLeft(2, '0'));
-    }
-    return buf.toString();
-  }
-
-  /// Returns `null` if [hex] contains non-hex chars or has odd length.
   static Uint8List? _fromHex(String hex) {
-    if (hex.length.isOdd) return null;
+    if (hex.isEmpty || hex.length.isOdd) return null;
     try {
-      final out = Uint8List(hex.length ~/ 2);
-      for (var i = 0; i < out.length; i++) {
-        out[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
-      }
-      return out;
+      return Uint8List.fromList([
+        for (var i = 0; i < hex.length; i += 2)
+          int.parse(hex.substring(i, i + 2), radix: 16),
+      ]);
     } on FormatException {
       return null;
     }

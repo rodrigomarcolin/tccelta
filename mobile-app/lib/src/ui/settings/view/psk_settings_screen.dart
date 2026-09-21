@@ -6,6 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/domain/ble/security_mode.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
@@ -13,10 +14,8 @@ import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
 
 /// Tela de configuração da chave pré-compartilhada (PSK) AES-256-GCM.
 ///
-/// O usuário digita a chave de 64 chars hex (= 32 bytes). Enquanto não houver
-/// chave configurada, a comunicação BLE usa texto puro (modo compatível). Ao
-/// salvar uma chave válida, toda nova conexão passa por
-/// `EncryptedBleConnection`.
+/// O usuário digita a chave de 64 chars hex (= 32 bytes) e escolhe a variante
+/// segura. Sem uma chave válida, novas conexões são recusadas.
 ///
 /// Quando [setupFlow] é `true`, a tela funciona como um passo do fluxo de
 /// conexão (aberta pela `ScanScreen` ao selecionar um dongle): os botões viram
@@ -36,6 +35,7 @@ class PskSettingsScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pskAsync = ref.watch(pskNotifierProvider);
+    final modeAsync = ref.watch(securityModeNotifierProvider);
     final controller = useTextEditingController();
     final formKey = useMemoized(GlobalKey<FormState>.new);
     final obscure = useState(true);
@@ -56,6 +56,7 @@ class PskSettingsScreen extends HookConsumerWidget {
 
     final stored = pskAsync.asData?.value;
     final isActive = stored != null && stored.isNotEmpty;
+    final selectedMode = modeAsync.asData?.value ?? SecurityMode.staticPsk;
 
     Future<void> onSave() async {
       if (!formKey.currentState!.validate()) return;
@@ -64,6 +65,9 @@ class PskSettingsScreen extends HookConsumerWidget {
         await ref
             .read(pskNotifierProvider.notifier)
             .save(controller.text.trim());
+        await ref
+            .read(securityModeNotifierProvider.notifier)
+            .save(selectedMode);
         if (!context.mounted) return;
         if (setupFlow) {
           unawaited(context.push(AppRoutes.connecting));
@@ -81,20 +85,10 @@ class PskSettingsScreen extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Chave removida — nova conexão usará texto puro.'),
+              content: Text('Chave removida — novas conexões serão recusadas.'),
             ),
           );
         }
-      } finally {
-        saving.value = false;
-      }
-    }
-
-    Future<void> onContinueWithoutKey() async {
-      saving.value = true;
-      try {
-        await ref.read(pskNotifierProvider.notifier).clear();
-        if (context.mounted) unawaited(context.push(AppRoutes.connecting));
       } finally {
         saving.value = false;
       }
@@ -131,7 +125,45 @@ class PskSettingsScreen extends HookConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.s7),
               children: [
                 // ── Status badge ─────────────────────────────────────────
-                _StatusBanner(isActive: isActive),
+                _StatusBanner(isActive: isActive, mode: selectedMode),
+                const SizedBox(height: AppSpacing.s7),
+
+                Text('MODO DE SEGURANÇA', style: AppTypography.overline),
+                const SizedBox(height: AppSpacing.s4),
+                DropdownButtonFormField<SecurityMode>(
+                  value: selectedMode,
+                  decoration: const InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.surfaceCard,
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final mode in SecurityMode.values)
+                      DropdownMenuItem(
+                        value: mode,
+                        child: Text(mode.label),
+                      ),
+                  ],
+                  onChanged: saving.value
+                      ? null
+                      : (mode) {
+                          if (mode != null) {
+                            unawaited(
+                              ref
+                                  .read(securityModeNotifierProvider.notifier)
+                                  .save(mode),
+                            );
+                          }
+                        },
+                ),
+                const SizedBox(height: AppSpacing.s2),
+                Text(
+                  'Handshake troca nonces e cria uma chave de sessão. '
+                  'A opção com contador também rejeita replay na sessão.',
+                  style: AppTypography.ui(
+                    const TextStyle(fontSize: 11, color: AppColors.textTertiary),
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.s7),
 
                 // ── Section label ─────────────────────────────────────────
@@ -267,19 +299,12 @@ class PskSettingsScreen extends HookConsumerWidget {
                         )
                       : const Text('Continuar e salvar chave'),
                 ),
-                if (setupFlow) ...[
-                  const SizedBox(height: AppSpacing.s3),
-                  AppButton(
-                    variant: AppButtonVariant.secondary,
-                    onPressed: saving.value ? null : onContinueWithoutKey,
-                    child: const Text('Continuar sem chave'),
-                  ),
-                ] else if (isActive) ...[
+                if (!setupFlow && isActive) ...[
                   const SizedBox(height: AppSpacing.s3),
                   AppButton(
                     variant: AppButtonVariant.secondary,
                     onPressed: saving.value ? null : onClear,
-                    child: const Text('Remover chave (modo texto puro)'),
+                    child: const Text('Remover chave'),
                   ),
                 ],
                 const SizedBox(height: AppSpacing.s7),
@@ -303,9 +328,10 @@ class PskSettingsScreen extends HookConsumerWidget {
 
 /// Badge verde/âmbar mostrando o estado atual da criptografia.
 class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({required this.isActive});
+  const _StatusBanner({required this.isActive, required this.mode});
 
   final bool isActive;
+  final SecurityMode mode;
 
   @override
   Widget build(BuildContext context) {
@@ -333,7 +359,7 @@ class _StatusBanner extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isActive ? 'Criptografia Ativa' : 'Sem Criptografia',
+                isActive ? 'Criptografia Ativa' : 'PSK não configurada',
                 style: AppTypography.ui(
                   TextStyle(
                     fontSize: 13,
@@ -344,8 +370,8 @@ class _StatusBanner extends StatelessWidget {
               ),
               Text(
                 isActive
-                    ? 'AES-256-GCM · chave configurada'
-                    : 'Comunicação em texto puro',
+                    ? mode.label
+                    : 'Conexões serão recusadas',
                 style: AppTypography.ui(
                   const TextStyle(
                     fontSize: 11,

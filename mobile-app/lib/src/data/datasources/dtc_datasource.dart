@@ -1,4 +1,6 @@
 import 'package:tccelta_mobile/src/data/datasources/elm327_client.dart';
+import 'package:tccelta_mobile/src/data/datasources/elm_response_parser.dart';
+import 'package:tccelta_mobile/src/domain/obd2/elm_response.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 
 /// Datasource de diagnóstico: envolve o [Elm327Client] com o que é específico
@@ -24,27 +26,25 @@ class DtcDatasource {
   /// resposta malformada (falha de leitura). Essa distinção importa: 0 DTCs
   /// é sucesso, sem resposta é erro.
   Future<List<int>?> readDtcListRaw(int service) async {
-    final command = _hex(service);
-    final raw = (await _elm.command(command)).toUpperCase();
-    if (raw.contains('NO DATA') || raw.contains('NODATA')) return null;
+    final responses = await readDtcResponses(service);
+    return responses.isEmpty ? null : _codesFrom(responses.first.payload);
+  }
 
-    final compact = raw.replaceAll(RegExp('[^0-9A-F]'), '');
-    final header = _hex(service + 0x40);
-    final start = compact.indexOf(header);
-    if (start < 0) return null;
-
-    var i = start + header.length;
-    if (i + 2 > compact.length) return null;
-    final count = int.parse(compact.substring(i, i + 2), radix: 16);
-    i += 2;
-
-    final codes = <int>[];
-    for (var n = 0; n < count; n++) {
-      if (i + 4 > compact.length) return null;
-      codes.add(int.parse(compact.substring(i, i + 4), radix: 16));
-      i += 4;
-    }
-    return codes;
+  /// Reads all ECU DTC responses, retaining the response header when present.
+  Future<List<ElmResponse>> readDtcResponses(
+    int service, {
+    int? expectedResponses,
+  }) async {
+    final suffix = expectedResponses != null &&
+            expectedResponses >= 1 &&
+            expectedResponses <= 8
+        ? _hex(expectedResponses)
+        : '';
+    final raw = await _elm.command('${_hex(service)}$suffix');
+    return ElmResponseParser.parse(
+      raw,
+      responseService: service + 0x40,
+    ).responses;
   }
 
   /// Descobre qual DTC (se algum) tem freeze frame de verdade, perguntando o
@@ -68,26 +68,33 @@ class DtcDatasource {
   /// byte de frame# (sempre `00` — nem o simulador nem o dongle guardam
   /// histórico de frames antigos), devolvendo só os data bytes.
   Future<List<int>?> _readFreezeFrameBytes(int pid) async {
-    final command = '02${_hex(pid)}';
-    final raw = (await _elm.command(command)).toUpperCase();
-    if (raw.contains('NO DATA') || raw.contains('NODATA')) return null;
-
-    final compact = raw.replaceAll(RegExp('[^0-9A-F]'), '');
-    final header = '42${_hex(pid)}';
-    final start = compact.indexOf(header);
-    if (start < 0) return null;
-
-    final dataHex = compact.substring(start + header.length);
-    if (dataHex.isEmpty || dataHex.length.isOdd) return null;
-
-    final bytes = [
-      for (var i = 0; i < dataHex.length; i += 2)
-        int.parse(dataHex.substring(i, i + 2), radix: 16),
-    ];
+    final responses = await readFreezeFrameResponses(pid);
+    if (responses.isEmpty) return null;
+    final bytes = responses.first.payload;
     // Primeiro byte é o frame# (sempre 0) — descartado, não faz parte do
     // valor.
     if (bytes.isEmpty) return null;
     return bytes.sublist(1);
+  }
+
+  /// Reads all Mode 02 responses for [pid].
+  Future<List<ElmResponse>> readFreezeFrameResponses(int pid) async {
+    final raw = await _elm.command('02${_hex(pid)}');
+    return ElmResponseParser.parse(
+      raw,
+      responseService: 0x42,
+      pid: pid,
+    ).responses;
+  }
+
+  static List<int>? _codesFrom(List<int> payload) {
+    if (payload.isEmpty) return null;
+    final count = payload.first;
+    if (payload.length < 1 + count * 2) return null;
+    return [
+      for (var i = 0; i < count; i++)
+        (payload[1 + i * 2] << 8) | payload[2 + i * 2],
+    ];
   }
 
   static String _hex(int byte) =>

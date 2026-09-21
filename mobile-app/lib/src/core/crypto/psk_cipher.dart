@@ -12,7 +12,7 @@ import 'package:pointycastle/export.dart';
 /// class works purely in raw bytes.
 class PskCipher {
   /// Creates a cipher bound to a raw 32-byte AES-256 [key].
-  PskCipher({required Uint8List key}) : _key = key {
+  PskCipher({required Uint8List key}) : _key = Uint8List.fromList(key) {
     if (key.length != 32) {
       throw ArgumentError(
         'AES-256 key must be exactly 32 bytes, '
@@ -39,21 +39,24 @@ class PskCipher {
 
   final Uint8List _key;
 
+  /// Returns a defensive copy for protocols that use the PSK during a
+  /// handshake. The cipher keeps ownership of its internal key.
+  Uint8List get keyCopy => Uint8List.fromList(_key);
+
   static const int _ivLen = 12;
   static const int _tagLen = 16;
 
   /// Encrypts [plaintext] and returns `IV(12) || CT(n) || TAG(16)`.
   Uint8List encrypt(Uint8List plaintext) {
-    final iv = _randomIv();
-    final gcm = _buildCipher(forEncryption: true, iv: iv);
-
-    // PointyCastle GCM output is CT + TAG concatenated.
-    final ctAndTag = gcm.process(plaintext);
-
-    final out = Uint8List(_ivLen + ctAndTag.length)
-      ..setRange(0, _ivLen, iv)
-      ..setRange(_ivLen, _ivLen + ctAndTag.length, ctAndTag);
-    return out;
+    final parts = encryptSeparate(plaintext);
+    return Uint8List(_ivLen + parts.ciphertext.length + _tagLen)
+      ..setRange(0, _ivLen, parts.iv)
+      ..setRange(_ivLen, _ivLen + parts.ciphertext.length, parts.ciphertext)
+      ..setRange(
+        _ivLen + parts.ciphertext.length,
+        _ivLen + parts.ciphertext.length + parts.tag.length,
+        parts.tag,
+      );
   }
 
   /// Decrypts a `IV(12) || CT(n) || TAG(16)` frame.
@@ -62,16 +65,50 @@ class PskCipher {
   /// the authentication tag does not match (wrong key / tampered ciphertext).
   Uint8List? decrypt(Uint8List frame) {
     if (frame.length < _ivLen + _tagLen) return null;
-    final iv = frame.sublist(0, _ivLen);
-    final ctAndTag = frame.sublist(
-      _ivLen,
-    ); // CT + TAG (PointyCastle expects this)
+    return decryptSeparate(
+      iv: frame.sublist(0, _ivLen),
+      ciphertext: frame.sublist(_ivLen, frame.length - _tagLen),
+      tag: frame.sublist(frame.length - _tagLen),
+    );
+  }
 
+  /// Encrypts with optional authenticated additional data, keeping GCM parts
+  /// separate for the replay-counter wire format.
+  EncryptedParts encryptSeparate(
+    Uint8List plaintext, {
+    Uint8List? aad,
+  }) {
+    final iv = _randomIv();
+    final gcm = _buildCipher(
+      forEncryption: true,
+      iv: iv,
+      aad: aad ?? Uint8List(0),
+    );
+    final ctAndTag = gcm.process(plaintext);
+    return EncryptedParts(
+      iv: iv,
+      ciphertext: Uint8List.sublistView(ctAndTag, 0, ctAndTag.length - _tagLen),
+      tag: Uint8List.sublistView(ctAndTag, ctAndTag.length - _tagLen),
+    );
+  }
+
+  /// Decrypts separate GCM parts with optional authenticated additional data.
+  Uint8List? decryptSeparate({
+    required Uint8List iv,
+    required Uint8List ciphertext,
+    required Uint8List tag,
+    Uint8List? aad,
+  }) {
+    if (iv.length != _ivLen || tag.length != _tagLen) return null;
     try {
-      final gcm = _buildCipher(forEncryption: false, iv: iv);
-      return gcm.process(ctAndTag);
+      final gcm = _buildCipher(
+        forEncryption: false,
+        iv: iv,
+        aad: aad ?? Uint8List(0),
+      );
+      return gcm.process(Uint8List.fromList([...ciphertext, ...tag]));
     } on InvalidCipherTextException {
-      return null; // authentication failure
+      return null;
     } on Object {
       return null;
     }
@@ -80,12 +117,13 @@ class PskCipher {
   GCMBlockCipher _buildCipher({
     required bool forEncryption,
     required Uint8List iv,
+    required Uint8List aad,
   }) {
     final params = AEADParameters(
       KeyParameter(_key),
       _tagLen * 8, // tag size in bits
       iv,
-      Uint8List(0), // no additional authenticated data
+      aad,
     );
     return GCMBlockCipher(AESEngine())..init(forEncryption, params);
   }
@@ -99,4 +137,17 @@ class PskCipher {
     }
     return iv;
   }
+}
+
+/// The three independently encoded AES-GCM parts used by replay framing.
+class EncryptedParts {
+  const EncryptedParts({
+    required this.iv,
+    required this.ciphertext,
+    required this.tag,
+  });
+
+  final Uint8List iv;
+  final Uint8List ciphertext;
+  final Uint8List tag;
 }
