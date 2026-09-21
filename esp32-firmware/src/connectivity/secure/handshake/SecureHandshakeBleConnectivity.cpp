@@ -2,9 +2,9 @@
 #include <cstring>
 #include <esp_random.h>
 #include <mbedtls/gcm.h>
-#include <mbedtls/hkdf.h>
 #include <mbedtls/md.h>
 #include "SecureHandshakeBleConnectivity.h"
+#include "connectivity/secure/HkdfSha256.h"
 
 #ifndef SECURE_PSK_HEX
 #error "SECURE_PSK_HEX is not set"
@@ -24,9 +24,13 @@ SecureHandshakeBleConnectivity::SecureHandshakeBleConnectivity(IConnectivity* in
 void SecureHandshakeBleConnectivity::onRawFrameReceived(const uint8_t* data, size_t len) {
     while (len && (data[len-1] == '\r' || data[len-1] == '\n')) --len;
     const char* text = reinterpret_cast<const char*>(data);
+    Serial.printf("[Handshake] RX frame len=%u state=%d\n", (unsigned)len, (int)_state);
     if (len >= 6 && strncmp(text, "HELLO ", 6) == 0) { handleHello(text+6, len-6); return; }
     if (len >= 6 && strncmp(text, "PROOF ", 6) == 0) { handleProof(text+6, len-6); return; }
-    if (_state != HandshakeState::ESTABLISHED || len < 56 || (len & 1)) return;
+    if (_state != HandshakeState::ESTABLISHED || len < 56 || (len & 1)) {
+        Serial.println("[Handshake] RX frame not HELLO/PROOF and not a valid secured frame — dropped");
+        return;
+    }
     uint8_t iv[IV_LEN], tag[TAG_LEN], cipher[kSecureMaxMsgLen], plain[kSecureMaxMsgLen];
     size_t cipherHex = len - 24 - 32, cipherLen = cipherHex / 2;
     if (cipherLen > sizeof(cipher) || !hexDecode(text, 24, iv, IV_LEN) ||
@@ -40,28 +44,36 @@ void SecureHandshakeBleConnectivity::onRawFrameReceived(const uint8_t* data, siz
 }
 
 void SecureHandshakeBleConnectivity::handleHello(const char* body, size_t len) {
-    if (len != 64) return;
+    Serial.printf("[Handshake] HELLO received, body len=%u (expected 64)\n", (unsigned)len);
+    if (len != 64) { Serial.println("[Handshake] HELLO rejected — wrong nonce length (frame likely truncated, check MTU)"); return; }
     resetToIdle();
-    if (!hexDecode(body, len, _appNonce, sizeof(_appNonce))) return;
+    if (!hexDecode(body, len, _appNonce, sizeof(_appNonce))) { Serial.println("[Handshake] HELLO rejected — invalid hex in nonce"); return; }
     esp_fill_random(_dongleNonce, sizeof(_dongleNonce));
-    char nonce[65], frame[75]; hexEncode(_dongleNonce, 32, nonce);
+    char nonce[65], frame[80]; hexEncode(_dongleNonce, 32, nonce);
     int n = snprintf(frame, sizeof(frame), "CHALLENGE %s\n", nonce);
     sendRaw(reinterpret_cast<const uint8_t*>(frame), n); _state = HandshakeState::CHALLENGE_SENT;
+    Serial.println("[Handshake] CHALLENGE sent");
 }
 
 void SecureHandshakeBleConnectivity::handleProof(const char* body, size_t len) {
-    if (_state != HandshakeState::CHALLENGE_SENT || len != 64) return;
+    Serial.printf("[Handshake] PROOF received, body len=%u, state=%d (expect CHALLENGE_SENT=%d)\n",
+                  (unsigned)len, (int)_state, (int)HandshakeState::CHALLENGE_SENT);
+    if (_state != HandshakeState::CHALLENGE_SENT || len != 64) { Serial.println("[Handshake] PROOF rejected — wrong state or length"); return; }
     uint8_t got[32], expected[32], salt[64];
-    if (!hexDecode(body, len, got, 32)) return;
+    if (!hexDecode(body, len, got, 32)) { Serial.println("[Handshake] PROOF rejected — invalid hex"); return; }
     memcpy(salt, _appNonce, 32); memcpy(salt+32, _dongleNonce, 32);
     hmac(_psk, 32, salt, sizeof(salt), expected);
-    if (!constantTimeEquals(got, expected, 32)) { sendRaw((const uint8_t*)"ERROR\n", 6); resetToIdle(); return; }
+    if (!constantTimeEquals(got, expected, 32)) {
+        Serial.println("[Handshake] PROOF MISMATCH — sending ERROR (check PSK matches app's SECURE_PSK_HEX)");
+        sendRaw((const uint8_t*)"ERROR\n", 6); resetToIdle(); return;
+    }
     static const uint8_t info[] = "session-key";
-    mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), salt, sizeof(salt), _psk, 32, info, sizeof(info)-1, _sessionKey, 32);
+    hkdfSha256(salt, sizeof(salt), _psk, 32, info, sizeof(info)-1, _sessionKey, 32);
     static const uint8_t label[] = "confirm"; hmac(_sessionKey, 32, label, sizeof(label)-1, expected);
     char mac[65], frame[70]; hexEncode(expected, 32, mac);
     int n = snprintf(frame, sizeof(frame), "OK %s\n", mac); sendRaw((const uint8_t*)frame, n);
     _state = HandshakeState::ESTABLISHED;
+    Serial.println("[Handshake] PROOF verified — session established, OK sent");
 }
 
 void SecureHandshakeBleConnectivity::sendSecured(const uint8_t* plain, size_t len) {

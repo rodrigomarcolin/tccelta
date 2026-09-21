@@ -3,8 +3,8 @@
 #include <esp_random.h>
 #include <mbedtls/gcm.h>
 #include <mbedtls/md.h>
-#include <mbedtls/hkdf.h>
 #include "SecureHandshakeReplayBleConnectivity.h"
+#include "connectivity/secure/HkdfSha256.h"
 
 // ── Compile-time key validation (shares SECURE_PSK_HEX with the other builds) ─
 
@@ -159,7 +159,7 @@ void SecureHandshakeReplayBleConnectivity::handleHello(const char* body, size_t 
     char hex[kNonceLen * 2 + 1];
     hexEncode(_dongleNonce, kNonceLen, hex);
 
-    char frame[8 + kNonceLen * 2 + 2];
+    char frame[80];
     int n = snprintf(frame, sizeof(frame), "CHALLENGE %s\n", hex);
     sendRaw(reinterpret_cast<const uint8_t*>(frame), n);
 
@@ -318,11 +318,10 @@ void SecureHandshakeReplayBleConnectivity::deriveSessionKey(const uint8_t* psk, 
     memcpy(salt + kNonceLen, appNonce, kNonceLen);
 
     static const char kInfo[] = "session-key";
-    const mbedtls_md_info_t* mdInfo = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
 
-    mbedtls_hkdf(mdInfo, salt, sizeof(salt), psk, pskLen,
-                 reinterpret_cast<const uint8_t*>(kInfo), strlen(kInfo),
-                 out, kKeyLen);
+    hkdfSha256(salt, sizeof(salt), psk, pskLen,
+               reinterpret_cast<const uint8_t*>(kInfo), strlen(kInfo),
+               out, kKeyLen);
 }
 
 bool SecureHandshakeReplayBleConnectivity::constantTimeEquals(const uint8_t* a, const uint8_t* b, size_t len) {
