@@ -1,0 +1,29 @@
+% \chapter{Aspectos Conceituais} \label{cap:conceitos}
+% \begin{itemize}
+%    \item Definir as seções representativas em função do trabalho.
+%    \item Apresentar os conceitos empregados e a revisão da literatura.
+%    \item Citar os trabalhos consultados no texto.
+% \end{itemize}
+
+\chapter{Aspectos Conceituais} \label{cap:conceitos}
+
+A principal referência bibliográfica deste trabalho é o estudo "Plug-n-pwned", publicado no 29th USENIX Security Symposium por Wen, Chen e Lin \cite{wen2020plugnpwned}. Esta pesquisa realizou uma análise abrangente de 77 dongles OBD-II comerciais e revelou que todos os dispositivos avaliados possuíam vulnerabilidades críticas, caracterizando uma nova superfície de ataque over-the-air no ecossistema de IoT automotiva. O estudo categoriza as ameaças em estágios que vão desde a coleta de informações por broadcast até a injeção direta de mensagens no barramento CAN.
+
+Conforme introduzido anteriormente, as falhas de segurança nesses dispositivos podem ser resumidas em três pilares principais: falta de autenticação, subversão de firmware e injeção de comandos CAN.
+
+O diagrama da \autoref{fig:esquema-geral-cap-conceitos} especifica os principais elementos presentes nesse tipo de aplicação em questão: o dongle funciona como um intermediário para a comunicação entre o companion app e a rede veicular. Assim, o dispositivo é composto por um microcontrolador central juntamente a outros componentes auxiliares necessários a fim de permitir que seja firmada tanto a conexão sem fio quanto a com a porta OBD-II, cada uma com seus respectivos protocolos. Ainda, cabe destacar que a maior parte das vulnerabilidades identificadas se concentram justamente na comunicação remota entre dongle e app, sendo esse o foco do projeto a ser desenvolvido.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{assets/cap2-conceitos/esquema-app-dongle-obd2.png}
+    \caption{Esquema de conexão entre app, dongle e veículo}
+    \label{fig:esquema-geral-cap-conceitos}
+\end{figure}
+
+\section{Conceitos de engenharia}
+
+O projeto explora várias frentes dentro da engenharia, como o desenvolvimento de software embarcado com sistema operacional de tempo real, prática de programação segura, estudo de criptografia para implementação de comunicação segura, interação com um protocolo de comunicação bem definido (OBD-II), utilização de tecnologias de comunicação como BLE e técnicas de IoT para comunicação entre \textit{dongle} e \textit{companion app}. 
+
+O Bluetooth Low Enery (BLE) é essencial para garantir a comunicação entre o \textit{dongle} e \textit{companion app} de maneira eficiente, sendo essencial para um dispositivo que permanecerá ligado por grandes períodos de tempo. \cite{ble_analysis}
+
+Para sistema operacional no sistema embarcado, será utilizado o FreeRTOS. Um sistema operacional de tempo real é fundamental para gerenciar a concorrência entre as tarefas críticas do sistema: a leitura de alta velocidade do barramento CAN, o processamento de algoritmos criptográficos pesados e a manutenção da pilha de comunicação sem fio, garantindo que a latência de monitoramento seja compatível com o tempo real. \cite{rtos_analysis}

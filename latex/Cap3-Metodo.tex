@@ -1,0 +1,20 @@
+\chapter{Método do trabalho} \label{cap:metodo}
+
+%\begin{itemize}
+%    \item Apresentar o processo de desenvolvimento do trabalho, através das suas fases (por exemplo, especificação de requisitos, projeto, implementação, testes). As fases dependem do tipo do trabalho e devem ser definidas com o apoio do orientador.
+%    \item O desenvolvimento das fases e seus resultados devem estar descritos nos capítulos seguintes e não no capítulo de Método do Trabalho.
+%    \item Citar os trabalhos consultados no texto.
+%\end{itemize}
+
+A metodologia adotada neste trabalho consiste no projeto, desenvolvimento e avaliação de um \textit{dongle} OBD-II seguro e de um \textit{companion app} capaz de interagir com ele de maneira confiável. O processo será dividido em quatro etapas principais: revisão bibliográfica e levantamento de requisitos, projeto da arquitetura do sistema, implementação da solução e avaliação de segurança.
+
+Inicialmente será realizada uma revisão da literatura sobre o funcionamento do padrão OBD-II, do barramento CAN e das principais vulnerabilidades identificadas em \textit{dongles} comerciais. Essa etapa permitirá compreender as superfícies de ataque presentes nesses dispositivos e estabelecer os requisitos de segurança que deverão ser considerados no desenvolvimento da solução proposta.
+
+Em seguida será realizado o projeto da arquitetura do sistema. A solução será composta por dois componentes principais: um \textit{dongle} conectado à porta OBD-II do veículo e um \textit{companion app} executado em um dispositivo móvel. O \textit{dongle} será responsável pela comunicação com o barramento CAN do veículo e pela coleta de dados diagnósticos, enquanto o aplicativo móvel será responsável pela visualização e pelo processamento dessas informações. A comunicação entre ambos será realizada por meio de um protocolo sem fio, como Bluetooth ou Wi-Fi.
+
+Durante o projeto da arquitetura serão definidos mecanismos de segurança voltados à mitigação das vulnerabilidades identificadas na literatura. Entre esses mecanismos destacam-se: autenticação entre o \textit{dongle} e o aplicativo móvel, utilização de criptografia para proteção da comunicação e implementação de mecanismos de controle de acesso às mensagens transmitidas ao barramento CAN.
+
+Na etapa de implementação será desenvolvido um protótipo funcional do \textit{dongle}, baseado em um microcontrolador com suporte à comunicação CAN e a interfaces sem fio. Paralelamente será desenvolvido um \textit{companion app} capaz de estabelecer comunicação segura com o dispositivo, realizar a leitura de parâmetros do veículo e apresentar as informações ao usuário.
+
+Por fim, será realizada uma etapa de avaliação de segurança da solução desenvolvida. Nessa fase serão conduzidos testes com o objetivo de verificar se o sistema é capaz de mitigar as vulnerabilidades discutidas na literatura. Para isso serão utilizados testes inspirados nos procedimentos descritos em estudos anteriores, buscando verificar aspectos como autenticação, controle de acesso à comunicação e proteção contra injeção de comandos CAN não autorizados.
+
