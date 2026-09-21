@@ -11,7 +11,9 @@ import 'package:tccelta_mobile/src/domain/obd2/dtc_code_codec.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_freeze_frame_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
+import 'package:tccelta_mobile/src/domain/obd2/ecu_role.dart';
 import 'package:tccelta_mobile/src/domain/obd2/elm_response.dart';
+import 'package:tccelta_mobile/src/domain/obd2/monitor_status.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
@@ -241,9 +243,9 @@ class Obd2RepositoryImpl implements Obd2Repository {
 
   @override
   Future<DtcSnapshot> readDtc() async {
-    _ensureDatasource();
+    final ds = _ensureDatasource();
     final dtcDs = _dtcDatasource;
-    if (dtcDs == null) {
+    if (ds == null || dtcDs == null) {
       throw const DtcReadFailure('Sem conexão BLE pronta');
     }
     try {
@@ -259,12 +261,32 @@ class Obd2RepositoryImpl implements Obd2Repository {
 
       return DtcSnapshot(
         active: await _attachFreezeFrame(dtcDs, active),
-        milOn: active.any((entry) => entry.status == DtcStatus.confirmed),
+        milOn: await _readMilFromEcus(ds),
       );
     } on DtcReadFailure {
       rethrow;
     } on Object catch (e) {
       throw DtcReadFailure('Falha ao ler DTCs', cause: e);
+    }
+  }
+
+  /// Lê o PID 0x01 (status de monitoramento) nas ECUs de motor (ECM) e câmbio
+  /// (TCM) e considera o MIL aceso se qualquer uma reportar o bit ligado.
+  /// Best-effort: erro na leitura (timeout, ECU ausente) não derruba o
+  /// diagnóstico inteiro — assume MIL apagado, igual às demais leituras
+  /// parciais desta classe.
+  Future<bool> _readMilFromEcus(Obd2Datasource ds) async {
+    try {
+      final responses = await ds.readMonitorStatusResponses();
+      for (final role in EcuRole.values) {
+        final response = _responseForEcu(responses, role.responseId);
+        if (response != null && monitorStatusMilOn(response.payload)) {
+          return true;
+        }
+      }
+      return false;
+    } on Object {
+      return false;
     }
   }
 

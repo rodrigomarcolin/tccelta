@@ -197,14 +197,18 @@ class DtcRepositoryImpl implements DtcRepository {
 }
 ```
 
-Nota sobre `milOn`: o handoff do firmware confirma que o PID 0x01 (Modo 01)
-já reflete MIL/contagem real de confirmados — dá pra ler via o
-`Obd2Datasource` que **já existe** (é literalmente `010100` decodificado)
-em vez de inferir de `confirmedRaw.isNotEmpty`, se quiser o dado mais
-fidedigno. Ambas as abordagens são defensáveis; documentando a opção mais
-simples acima, mas vale considerar reusar o datasource de telemetria (a
-`DtcRepositoryImpl` pode receber os dois datasources, ou só o
-`Elm327Client`/conexão e montar ambos internamente).
+Nota sobre `milOn` (**implementado**): a inferência via
+`confirmedRaw.isNotEmpty` mostrada acima era só o esboço mais simples do
+handoff original. A versão real usa o PID 0x01 (Modo 01, status de
+monitoramento) lido separadamente, como o handoff do firmware sempre
+sugeriu — `Obd2RepositoryImpl._readMilFromEcus` consulta
+`Obd2Datasource.readMonitorStatusResponses()` (`010101`... na prática só
+`0101`) e considera o MIL aceso se **qualquer uma** das ECUs de motor (ECM,
+`0x7E8`) ou câmbio (TCM, `0x7E9`) — ver `domain/obd2/ecu_role.dart` —
+reportar o bit 7 do byte A ligado (`domain/obd2/monitor_status.dart`). É
+uma leitura best-effort, independente da varredura de DTCs (Modos
+03/07/0A): falha ou ausência de resposta de uma ECU não derruba o
+diagnóstico, só deixa aquela ECU de fora da checagem do MIL.
 
 ### DI (`ui/diagnostics/diagnostics_providers.dart`)
 

@@ -93,6 +93,12 @@ class Obd2Datasource {
         expectedResponses: expectedResponses,
       );
 
+  /// Lê o status de monitoramento (PID 0x01) de cada ECU que responder ao
+  /// broadcast — carrega o bit do MIL (byte A, bit 7). Não usa [Obd2Pid]
+  /// porque é um bitmask, fora do contrato de `decode()` pra double.
+  Future<List<ElmResponse>> readMonitorStatusResponses() =>
+      _readServiceResponses(0x01);
+
   /// Descobre os PIDs suportados do Serviço 0x01 lendo o bitmask do PID 0x00 e,
   /// enquanto a flag de próximo range estiver ligada, dos PIDs-meta seguintes
   /// (`0x20`, `0x40`…, teto em `0xC0`). Devolve os números crus suportados —

@@ -271,6 +271,7 @@ void main() {
           '07': '47 00\r>',
           '0A': '4A 00\r>',
           '0202': 'NO DATA\r>',
+          '0101': '41 01 00 00 00 00\r>',
         },
       );
       final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
@@ -281,13 +282,14 @@ void main() {
       expect(snapshot.milOn, isFalse);
     });
 
-    test('1 DTC confirmado decodifica pro código certo e liga o MIL', () async {
+    test('milOn vem do PID 0x01 da ECM, não das DTCs confirmadas', () async {
       final conn = ScriptedBleConnection(
         responses: {
           '03': '43 01 03 01\r>', // P0301
           '07': '47 00\r>',
           '0A': '4A 00\r>',
           '0202': 'NO DATA\r>',
+          '0101': '7E8 06 41 01 82 00 00 00\r>', // ECM: bit 7 ligado
         },
       );
       final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
@@ -300,6 +302,47 @@ void main() {
       expect(snapshot.milOn, isTrue);
     });
 
+    test(
+      'DTC confirmado presente mas PID 0x01 diz MIL apagado -> milOn falso',
+      () async {
+        // Documenta o desacoplamento de `DtcSnapshot.milOn` em relação a
+        // `active`: ter um DTC confirmado não implica MIL aceso.
+        final conn = ScriptedBleConnection(
+          responses: {
+            '03': '43 01 03 01\r>', // P0301, confirmado
+            '07': '47 00\r>',
+            '0A': '4A 00\r>',
+            '0202': 'NO DATA\r>',
+            '0101': '7E8 06 41 01 00 00 00 00\r>', // ECM: MIL apagado
+          },
+        );
+        final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+        final snapshot = await repo.readDtc();
+
+        expect(snapshot.active, hasLength(1));
+        expect(snapshot.milOn, isFalse);
+      },
+    );
+
+    test('TCM com MIL aceso e ECM apagado também liga o indicador', () async {
+      final conn = ScriptedBleConnection(
+        responses: {
+          '03': '43 00\r>',
+          '07': '47 00\r>',
+          '0A': '4A 00\r>',
+          '0202': 'NO DATA\r>',
+          '0101': '7E8 06 41 01 00 00 00 00\r'
+              '7E9 06 41 01 82 00 00 00\r>', // ECM off, TCM on
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+      final snapshot = await repo.readDtc();
+
+      expect(snapshot.milOn, isTrue);
+    });
+
     test('multiframe: 3 DTCs confirmados decodificam todos', () async {
       // Mesmo cenário "multiframe" do hil_dongle_dtc.py: P0301, P0171, P0133.
       final conn = ScriptedBleConnection(
@@ -308,6 +351,7 @@ void main() {
           '07': '47 00\r>',
           '0A': '4A 00\r>',
           '0202': 'NO DATA\r>',
+          '0101': '41 01 00 00 00 00\r>',
         },
       );
       final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
@@ -332,6 +376,7 @@ void main() {
           '07': '47 01 04 20\r>', // P0420 pendente
           '0A': '4A 01 07 00\r>', // P0700 permanente
           '0202': 'NO DATA\r>',
+          '0101': '41 01 00 00 00 00\r>',
         },
       );
       final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
@@ -341,7 +386,7 @@ void main() {
       final byCode = {for (final a in snapshot.active) a.code: a.status};
       expect(byCode['P0420'], DtcStatus.pending);
       expect(byCode['P0700'], DtcStatus.permanent);
-      expect(snapshot.milOn, isFalse); // nenhum confirmado
+      expect(snapshot.milOn, isFalse); // PID 0x01 reporta MIL apagado
     });
 
     test('freeze frame é anexado só no DTC de origem', () async {
@@ -357,6 +402,7 @@ void main() {
           '020D': '42 0D 00 3C\r>', // velocidade
           '020F': '42 0F 00 5A\r>', // temp. do ar de admissão
           '0211': '42 11 00 33\r>', // acelerador
+          '0101': '41 01 00 00 00 00\r>',
         },
       );
       final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
@@ -382,6 +428,7 @@ void main() {
           '07': '07 47 00 \r>',
           '0A': '0A 4A 00 \r>',
           '0202': 'NO DATA\r>',
+          '0101': '41 01 00 00 00 00\r>',
         },
       );
       final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
@@ -390,6 +437,24 @@ void main() {
 
       expect(snapshot.active, isEmpty);
     });
+
+    test(
+      'leitura do Modo 03 incompleta vira falha, não "0 DTCs"',
+      () async {
+        final conn = ScriptedBleConnection(
+          responses: {
+            '03': 'NO DATA\r>',
+            '07': '47 00\r>',
+            '0A': '4A 00\r>',
+            '0202': 'NO DATA\r>',
+            '0101': '41 01 00 00 00 00\r>',
+          },
+        );
+        final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+
+        await expectLater(repo.readDtc(), throwsA(isA<DtcReadFailure>()));
+      },
+    );
 
     test('sem conexão pronta lança DtcReadFailure', () async {
       final repo = Obd2RepositoryImpl(_FakeDongleRepository(null));

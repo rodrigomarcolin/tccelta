@@ -50,13 +50,11 @@ class _ActiveCountCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
+    return StatCard.value(
+      label: 'Ativos agora',
+      value: active,
+      unit: 'de $total',
       border: Border.all(color: AppColors.red20),
-      child: StatCard.value(
-        label: 'Ativos agora',
-        value: active,
-        unit: 'de $total',
-      ),
     );
   }
 }
@@ -74,7 +72,7 @@ class _MilStatusCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('MAL FUNCIONAMENTO', style: AppTypography.overline),
+          Text('LUZ DA INJEÇÃO', style: AppTypography.overline),
           const SizedBox(height: AppSpacing.s2),
           Row(
             children: [

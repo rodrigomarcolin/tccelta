@@ -26,6 +26,7 @@ class StatCard extends StatelessWidget {
     this.fullWidth = false,
     this.centered = false,
     this.onTap,
+    this.border,
     super.key,
   });
 
@@ -36,7 +37,9 @@ class StatCard extends StatelessWidget {
   /// um `—` de "sem dado neste ciclo". Com [fullWidth] `true`, troca o layout
   /// vertical padrão pelo horizontal "linha inteira" (rótulo + valor
   /// empilhados à esquerda em ciano, unidade embaixo à direita) — pensado
-  /// para uma célula de grid que ocupa a linha toda.
+  /// para uma célula de grid que ocupa a linha toda. [border] destaca a
+  /// superfície (ex.: um card de alerta) sem precisar embrulhar o card num
+  /// segundo `AppCard` — isso duplicaria a borda hairline padrão por dentro.
   const StatCard.value({
     required String label,
     Object? value,
@@ -45,6 +48,7 @@ class StatCard extends StatelessWidget {
     bool fullWidth = false,
     Widget? cornerAccessory,
     VoidCallback? onTap,
+    BoxBorder? border,
     Key? key,
   }) : this._(
          _Variant.value,
@@ -55,6 +59,7 @@ class StatCard extends StatelessWidget {
          fullWidth: fullWidth,
          cornerAccessory: cornerAccessory,
          onTap: onTap,
+         border: border,
          key: key,
        );
 
@@ -165,10 +170,14 @@ class StatCard extends StatelessWidget {
   /// quando nulo — o card não fica tocável.
   final VoidCallback? onTap;
 
+  /// Borda da superfície. @default hairline (repassado ao `AppCard` interno)
+  final BoxBorder? border;
+
   @override
   Widget build(BuildContext context) {
     return AppCard(
       onTap: onTap,
+      border: border,
       child: switch (_variant) {
         _Variant.info => _info(),
         _Variant.gauge => _gauge(),

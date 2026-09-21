@@ -31,6 +31,13 @@ class DtcDatasource {
   }
 
   /// Reads all ECU DTC responses, retaining the response header when present.
+  ///
+  /// Lança [StateError] quando a troca não termina num `4X <contagem>...`
+  /// válido (NO DATA/rejeitado/malformado) — Modos 03/07/0A sempre respondem
+  /// `4X 00` quando não há DTCs, então qualquer outro desfecho é falha de
+  /// leitura, não "zero DTCs" (ver [ElmCompletionReason]). O repository já
+  /// mapeia qualquer `Object` daqui pra `DtcReadFailure` (catch-all
+  /// existente em `readDtc()`).
   Future<List<ElmResponse>> readDtcResponses(
     int service, {
     int? expectedResponses,
@@ -41,10 +48,17 @@ class DtcDatasource {
         ? _hex(expectedResponses)
         : '';
     final raw = await _elm.command('${_hex(service)}$suffix');
-    return ElmResponseParser.parse(
+    final result = ElmResponseParser.parse(
       raw,
       responseService: service + 0x40,
-    ).responses;
+    );
+    if (result.completion != ElmCompletionReason.prompt) {
+      throw StateError(
+        'Modo ${_hex(service)}: resposta incompleta '
+        '(${result.completion.name})',
+      );
+    }
+    return result.responses;
   }
 
   /// Descobre qual DTC (se algum) tem freeze frame de verdade, perguntando o
