@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include "obd2/IObd2.h"
+#include "elm327/whitelist/Whitelist.h"
 
 /**
  * Processador de comandos compatível com ELM327.
@@ -20,6 +21,8 @@ class Elm327 {
 public:
     explicit Elm327(IObd2* obd2);
 
+    Whitelist& whitelist() { return _whitelist; }
+
     /**
      * Processa uma string de comando e retorna a resposta ELM327 
      * including the trailing prompt character '>'.
@@ -32,6 +35,7 @@ private:
     bool   _linefeed;
     bool   _headers;
     bool   _spaces;
+    Whitelist _whitelist;
 
     String processAt(const String& upper);
     String processObd(uint8_t service, uint8_t pid);

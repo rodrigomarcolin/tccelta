@@ -8,10 +8,11 @@ BLE-based OBD2 dongle firmware for ESP32, built with PlatformIO + FreeRTOS.
 
 ```
 IConnectivity (interface)
-├── BleConnectivity                     plain BLE transport (NUS profile)
-└── SecureBleConnectivity               abstract base (FreeRTOS queue + task)
-    ├── SecurePskBleConnectivity        AES-256-GCM, static PSK  ← USE_SECURE_PSK
-    └── SecureHandshakeBleConnectivity  handshake stub            ← USE_SECURE_HANDSHAKE
+├── BleConnectivity                           plain BLE transport (NUS profile)
+└── SecureBleConnectivity                     abstract base (FreeRTOS queue + task)
+    ├── SecurePskBleConnectivity               AES-256-GCM, static PSK              ← USE_SECURE_PSK
+    ├── SecureHandshakeBleConnectivity         PSK handshake + HKDF session key      ← USE_SECURE_HANDSHAKE
+    └── SecureHandshakeReplayBleConnectivity   same handshake + anti-replay counter  ← USE_SECURE_HANDSHAKE_REPLAY
 
 IObd2 (interface)
 ├── Obd2Can → ICanBus
@@ -44,8 +45,10 @@ Run with: `pio run -e <env>` / `pio run -e <env> -t upload`
 | `mock_psk` | Simulated | AES-256-GCM PSK |
 | `twai_psk` | ESP32 TWAI | AES-256-GCM PSK |
 | `mcp2515_psk` | MCP2515 SPI | AES-256-GCM PSK |
-| `mock_handshake` | Simulated | Handshake stub |
-| `twai_handshake` | ESP32 TWAI | Handshake stub |
+| `mock_handshake` | Simulated | PSK handshake + HKDF session key |
+| `twai_handshake` | ESP32 TWAI | PSK handshake + HKDF session key |
+| `mock_handshake_replay` | Simulated | PSK handshake + HKDF session key + anti-replay counter |
+| `twai_handshake_replay` | ESP32 TWAI | PSK handshake + HKDF session key + anti-replay counter |
 
 ### Quick start (no hardware)
 
@@ -67,11 +70,16 @@ pio device monitor
 
 ## Configuration
 
-### PSK Key (`USE_SECURE_PSK` environments)
+### PSK Key (all `USE_SECURE_*` environments)
 
-The PSK environments in `platformio.ini` ship with a **placeholder key** that
-is NOT safe for production. You **must** replace it before flashing to a real
-device.
+Every secure environment — PSK, handshake, and handshake+replay — is built
+around the same 32-byte pre-shared key (`SECURE_PSK_HEX`). In PSK mode it
+encrypts data directly; in the handshake modes it only authenticates the
+handshake, and a fresh HKDF-derived session key encrypts the data.
+
+All of these environments in `platformio.ini` ship with a **placeholder key**
+that is NOT safe for production. You **must** replace it before flashing to a
+real device.
 
 **Step 1 — Generate a key**
 
@@ -152,6 +160,60 @@ ct, tag = cipher.encrypt_and_digest(b"01 00 0C\r")   # OBD2 command
 frame = (iv + ct + tag).hex() + "\n"
 # Send `frame` via BLE WRITE to the RX characteristic
 ```
+
+---
+
+## Handshake Protocol (`SecureHandshakeBleConnectivity` / `SecureHandshakeReplayBleConnectivity`)
+
+Both handshake variants use the same control exchange to mutually authenticate
+with the PSK and derive a fresh per-session key — they differ only in how the
+established session frames data afterwards.
+
+```
+App    → Dongle:  HELLO  <appNonce:32B hex>
+Dongle → App:      CHALLENGE  <dongleNonce:32B hex>
+App    → Dongle:  PROOF  <HMAC-SHA256(PSK, "PROOF" ‖ dongleNonce ‖ appNonce):hex>
+Dongle → App:      OK  <HMAC-SHA256(PSK, "OK" ‖ appNonce ‖ dongleNonce):hex>
+                   (or ERROR on verification failure)
+
+Session key = HKDF-SHA256(PSK, salt = dongleNonce ‖ appNonce, info = "session-key")
+```
+
+The `"PROOF"`/`"OK"` tags are mixed into each HMAC input so the two proofs
+can never be reflected as one another, even though they cover the same nonce
+pair in swapped order.
+
+A fresh `HELLO` at any time (re-handshake, reconnect) invalidates any
+in-progress or established session and its counters.
+
+### `SecureHandshakeBleConnectivity` — established session
+
+Same wire format as PSK mode, keyed by the derived session key instead of the
+static PSK — a fresh random IV per message, no AAD, **no replay protection**
+beyond what the GCM tag gives you (integrity, not freshness).
+
+```
+<24 hex — IV><variable hex — ciphertext><32 hex — GCM tag>\n
+```
+
+### `SecureHandshakeReplayBleConnectivity` — established session
+
+Adds a 64-bit, big-endian, strictly-increasing counter per direction, bound
+into AES-256-GCM as associated data (AAD = counter ‖ direction byte):
+
+```
+<16 hex — counter><24 hex — IV><variable hex — ciphertext><32 hex — GCM tag>\n
+```
+
+A frame is accepted only if its counter is strictly greater than the last
+counter accepted from that peer; the receive counter only advances after GCM
+authentication succeeds, so a captured valid frame can never be replayed
+within (or after) the same session. A monotonic counter was chosen over
+synchronized clocks: the dongle has no trusted time source (no RTC, no
+network), BLE delivers writes/notifications in order on a single link (so a
+strict counter never false-rejects), and a clock-tolerance window would let
+replays succeed within that window while requiring at least as much receiver
+state as a counter does.
 
 ---
 

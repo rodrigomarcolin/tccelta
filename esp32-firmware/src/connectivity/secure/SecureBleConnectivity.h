@@ -26,10 +26,11 @@
  *
  * Architecture:
  *   IConnectivity
- *   ├── BleConnectivity                    (plain transport)
- *   └── SecureBleConnectivity              (this file — abstract base)
- *       ├── SecurePskBleConnectivity       (AES-256-GCM, static PSK)
- *       └── SecureHandshakeBleConnectivity (PSK handshake — HKDF session key)
+ *   ├── BleConnectivity                          (plain transport)
+ *   └── SecureBleConnectivity                    (this file — abstract base)
+ *       ├── SecurePskBleConnectivity             (AES-256-GCM, static PSK)
+ *       ├── SecureHandshakeBleConnectivity       (PSK handshake — HKDF session key)
+ *       └── SecureHandshakeReplayBleConnectivity (same handshake + anti-replay counter)
  *
  * Internal data flow:
  *   BleConnectivity::onWrite()
