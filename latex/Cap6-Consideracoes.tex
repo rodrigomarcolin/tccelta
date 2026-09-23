@@ -1,0 +1,38 @@
+\chapter{Considerações Finais} \label{cap:consideracoes}
+
+%\section{Conclusões do Projeto de Formatura}
+%Apresentar o balanço do trabalho: resultados atingidos e não atingidos, com justificativas.
+
+\section{Contribuições}
+Além dos resultados práticos do protótipo, este trabalho apresenta três contribuições
+técnicas de caráter mais amplo à comunidade de Engenharia:
+ 
+\subsection{Reprodutibilidade por meio do ESP32}
+ 
+O \textit{dongle} é construído sobre o microcontrolador \textbf{ESP32}, um
+componente amplamente disponível, de baixo custo e bem documentado. Essa escolha
+garante que qualquer pesquisador, estudante ou profissional possa reproduzir,
+adaptar ou estender o hardware sem dependência de componentes proprietários ou de
+difícil aquisição. Todo o esquemático, \textit{layout} de PCB e código-fonte do
+firmware serão disponibilizados publicamente, tornando o trabalho integralmente
+reprodutível.
+ 
+\subsection{Entregável \textit{Open Source} como Base para Pesquisas Futuras}
+ 
+O \textit{dongle} desenvolvido será publicado como projeto \textit{open source}
+(hardware e software), servindo como plataforma de referência para pesquisas que
+demandem coleta de dados veiculares confiáveis. Trabalhos nas áreas de
+\textit{driver behavior}, manutenção preditiva, controle de frotas e detecção de
+anomalias em barramentos CAN poderão utilizar o entregável como ponto de partida,
+sem precisar lidar com as vulnerabilidades presentes nos \textit{dongles} comerciais
+atualmente disponíveis.
+ 
+\subsection{Protocolo Padronizado e Seguro de Comunicação OBD-II}
+ 
+A principal lacuna identificada na literatura é a ausência de um protocolo
+padronizado de comunicação entre \textit{dongles} OBD-II e \textit{companion apps}
+que incorpore requisitos de segurança desde a sua concepção. Este trabalho irá implementar um protocolo baseado no existente ELM-327 \cite{elm327datasheet}, porém com considerações de segurança que atendam os serviços de integridade, confidencialidade e autenticidade.
+
+ 
+%\section{Perspectivas de Continuidade}
+%Descrever os trabalhos que podem ser realizados como continuação do projeto de formatura.
