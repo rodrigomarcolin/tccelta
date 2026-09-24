@@ -8,6 +8,7 @@ import 'package:tccelta_mobile/src/ui/connection/view/connection_lost_screen.dar
 import 'package:tccelta_mobile/src/ui/connection/view/scan_screen.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/view/dtc_screen.dart';
 import 'package:tccelta_mobile/src/ui/more/view/more_screen.dart';
+import 'package:tccelta_mobile/src/ui/settings/view/camera_permissions_screen.dart';
 import 'package:tccelta_mobile/src/ui/settings/view/psk_settings_screen.dart';
 import 'package:tccelta_mobile/src/ui/settings/view/qr_scan_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
@@ -61,6 +62,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.pskSetup,
       builder: (context, state) => const PskSettingsScreen(setupFlow: true),
+    ),
+    GoRoute(
+      path: AppRoutes.cameraPermissions,
+      builder: (context, state) => const CameraPermissionsScreen(),
     ),
     GoRoute(
       path: AppRoutes.pskScanQr,

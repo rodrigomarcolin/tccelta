@@ -1,23 +1,22 @@
 import 'dart:async';
 
-import 'package:app_settings/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
-import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
-import 'package:tccelta_mobile/src/ui/connection/widgets/connection_state_view.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/settings/view_model/qr_scan_view_model.dart';
 
-/// Leitura do QR code exibido/impresso no dongle com a chave PSK (64
-/// caracteres hex).
+/// Câmera ao vivo lendo o QR code exibido/impresso no dongle com a chave PSK
+/// (64 caracteres hex).
 ///
-/// Empilhada por `PskSettingsScreen` via `context.push<String>`: devolve o
-/// hex lido através de `context.pop`, nunca salva a PSK sozinha — quem
-/// confirma "Continuar e salvar chave" é sempre a tela de origem.
+/// Só é alcançada com a permissão de câmera já concedida —
+/// `CameraPermissionsScreen` é quem garante isso e empilha esta tela por cima
+/// de si (ver o `push` + `pop` relay em `CameraPermissionsScreen._advance`).
+/// Devolve o hex lido via `context.pop`; nunca salva a PSK sozinha — quem
+/// confirma "Continuar e salvar chave" é sempre a `PskSettingsScreen`.
 class QrScanScreen extends HookConsumerWidget {
   /// Cria a tela de leitura de QR code.
   const QrScanScreen({super.key});
@@ -47,83 +46,6 @@ class QrScanScreen extends HookConsumerWidget {
       }
     });
 
-    final state = ref.watch(qrScanViewModelProvider);
-
-    return switch (state.permission) {
-      QrPermissionPhase.checking => const ConnectionBackground(
-        child: Center(
-          child: CircularProgressIndicator(color: AppColors.cyan500),
-        ),
-      ),
-      QrPermissionPhase.granted => _ScannerView(controller: controller),
-      QrPermissionPhase.idle ||
-      QrPermissionPhase.denied ||
-      QrPermissionPhase.permanentlyDenied => _PermissionRequest(
-        locked: state.permission == QrPermissionPhase.permanentlyDenied,
-        onRequest: () => ref.read(qrScanViewModelProvider.notifier).request(),
-      ),
-    };
-  }
-}
-
-/// UI de pedido de permissão de câmera — mesma composição
-/// (`ConnectionStateView`) usada pelo pedido de permissão de Bluetooth.
-class _PermissionRequest extends StatelessWidget {
-  const _PermissionRequest({required this.locked, required this.onRequest});
-
-  /// `true` quando a permissão foi negada permanentemente: o diálogo do
-  /// sistema não aparece mais, só os ajustes do app resolvem.
-  final bool locked;
-
-  final VoidCallback onRequest;
-
-  Future<void> _openAppSettings(BuildContext context) async {
-    try {
-      await AppSettings.openAppSettings(asAnotherTask: true);
-    } on Object {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Abra os ajustes do app.')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ConnectionStateView(
-      tone: StatusTone.warning,
-      icon: AppIconData.cadeado,
-      title: 'Permitir câmera',
-      description:
-          'O app usa a câmera só para ler o QR code com a chave PSK do '
-          'dongle.',
-      primaryAction: locked
-          ? AppButton(
-              variant: AppButtonVariant.warning,
-              onPressed: () => _openAppSettings(context),
-              child: const Text('Abrir ajustes do app'),
-            )
-          : AppButton(
-              onPressed: onRequest,
-              child: const Text('Permitir'),
-            ),
-      secondaryAction: AppButton(
-        variant: AppButtonVariant.link,
-        onPressed: () => context.pop(),
-        child: const Text('Digitar a chave manualmente'),
-      ),
-    );
-  }
-}
-
-/// Câmera ao vivo + viewfinder, montada só quando a permissão está concedida.
-class _ScannerView extends HookConsumerWidget {
-  const _ScannerView({required this.controller});
-
-  final MobileScannerController controller;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(

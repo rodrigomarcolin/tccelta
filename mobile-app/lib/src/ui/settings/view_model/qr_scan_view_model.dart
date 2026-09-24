@@ -1,40 +1,13 @@
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/core/crypto/psk_cipher.dart';
-import 'package:tccelta_mobile/src/domain/repositories/camera_permissions_repository.dart';
-import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
 
-/// Fase da permissão de câmera no fluxo de leitura de QR code da PSK.
-enum QrPermissionPhase {
-  /// Verificando se a permissão já foi concedida (estado inicial, silencioso).
-  checking,
-
-  /// Ainda não pedido.
-  idle,
-
-  /// Negado — mostrar orientação/repetir.
-  denied,
-
-  /// Negado permanentemente — só os ajustes do app resolvem.
-  permanentlyDenied,
-
-  /// Concedido — pode mostrar a câmera.
-  granted,
-}
-
-/// Estado do fluxo de leitura de QR code da PSK: a fase da permissão de
-/// câmera + o resultado (ou erro) da decodificação.
+/// Estado do fluxo de leitura de QR code da PSK: o resultado (ou erro) da
+/// decodificação. A permissão de câmera já foi resolvida por
+/// `CameraPermissionsScreen` antes desta tela ser alcançada — este estado não
+/// lida com permissão nenhuma.
 class QrScanState {
   /// Cria o estado.
-  const QrScanState({
-    this.permission = QrPermissionPhase.checking,
-    this.errorMessage,
-    this.resultHex,
-  });
-
-  /// Fase da permissão de câmera.
-  final QrPermissionPhase permission;
+  const QrScanState({this.errorMessage, this.resultHex});
 
   /// Feedback transitório de QR inválido (não é a chave, nunca ecoa o texto
   /// lido — ver nota de segurança em [QrScanViewModel.onDetected]).
@@ -47,12 +20,10 @@ class QrScanState {
   /// Cópia com campos sobrescritos. `clearError: true` zera [errorMessage]
   /// mesmo passando `null` (que por si só significa "sem mudança").
   QrScanState copyWith({
-    QrPermissionPhase? permission,
     String? errorMessage,
     bool clearError = false,
     String? resultHex,
   }) => QrScanState(
-    permission: permission ?? this.permission,
     errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     resultHex: resultHex ?? this.resultHex,
   );
@@ -60,45 +31,14 @@ class QrScanState {
 
 /// ViewModel do fluxo de leitura de QR code da PSK.
 ///
-/// Não importa `package:mobile_scanner` — só conhece a fase da permissão de
-/// câmera e a string bruta que a tela extrai de cada frame decodificado. É
-/// esse isolamento que torna a lógica testável sem câmera real (ver
-/// `qr_scan_view_model_test.dart`).
+/// Não importa `package:mobile_scanner` — só conhece a string bruta que a
+/// tela extrai de cada frame decodificado. É esse isolamento que torna a
+/// lógica testável sem câmera real (ver `qr_scan_view_model_test.dart`).
 class QrScanViewModel extends Notifier<QrScanState> {
-  CameraPermissionsRepository get _repo =>
-      ref.read(cameraPermissionsRepositoryProvider);
-
   DateTime? _lastInvalidAt;
 
   @override
-  QrScanState build() {
-    unawaited(_check());
-    return const QrScanState();
-  }
-
-  Future<void> _check() async {
-    final has = await _repo.hasCameraPermission();
-    state = state.copyWith(
-      permission: has ? QrPermissionPhase.granted : QrPermissionPhase.idle,
-    );
-  }
-
-  /// Pede acesso à câmera. Se negado, distingue negação simples de negação
-  /// permanente (a UI troca "Permitir" por "Abrir ajustes do app" nesse
-  /// segundo caso).
-  Future<void> request() async {
-    final granted = await _repo.requestCameraPermission();
-    if (granted) {
-      state = state.copyWith(permission: QrPermissionPhase.granted);
-      return;
-    }
-    final locked = await _repo.isPermanentlyDenied();
-    state = state.copyWith(
-      permission: locked
-          ? QrPermissionPhase.permanentlyDenied
-          : QrPermissionPhase.denied,
-    );
-  }
+  QrScanState build() => const QrScanState();
 
   /// Processa o texto bruto decodificado de um frame de câmera.
   ///
@@ -131,7 +71,8 @@ class QrScanViewModel extends Notifier<QrScanState> {
 /// Provider do [QrScanViewModel].
 ///
 /// `autoDispose`: o estado não deve sobreviver à presença da tela — a cada
-/// entrada em `/psk-setup/scan-qr` a permissão é re-checada do zero.
+/// entrada em `/psk-setup/scan-qr` o resultado/erro de uma leitura anterior é
+/// zerado.
 final NotifierProvider<QrScanViewModel, QrScanState> qrScanViewModelProvider =
     NotifierProvider<QrScanViewModel, QrScanState>(
       QrScanViewModel.new,

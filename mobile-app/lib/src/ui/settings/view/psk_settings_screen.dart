@@ -242,7 +242,7 @@ class PskSettingsScreen extends HookConsumerWidget {
                           tooltip: 'Escanear QR code',
                           onPressed: () async {
                             final result = await context.push<String>(
-                              AppRoutes.pskScanQr,
+                              AppRoutes.cameraPermissions,
                             );
                             if (result != null) controller.text = result;
                           },

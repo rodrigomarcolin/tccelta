@@ -10,10 +10,13 @@ import 'package:tccelta_mobile/src/ui/settings/view/psk_settings_screen.dart';
 const _validHex =
     'aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899';
 
-/// Substitui a `QrScanScreen` real nesses testes: dois botões devolvem, via
-/// `context.pop`, o resultado que a tela de origem (`PskSettingsScreen`)
-/// receberia de um scan real bem-sucedido ou de um usuário que voltou sem
-/// escanear.
+/// Substitui todo o fluxo de permissão de câmera + `QrScanScreen` real nesses
+/// testes: dois botões devolvem, via `context.pop`, o resultado que a tela de
+/// origem (`PskSettingsScreen`) receberia de um scan real bem-sucedido ou de
+/// um usuário que voltou sem escanear. `PskSettingsScreen` só conhece
+/// `AppRoutes.cameraPermissions` (o ponto de entrada do fluxo) — o que
+/// acontece atrás dele (pedir permissão, abrir a câmera) é encapsulado, então
+/// o stub pode substituir a cadeia inteira por essa única rota.
 class _StubScanScreen extends StatelessWidget {
   const _StubScanScreen();
 
@@ -50,7 +53,7 @@ void main() {
           builder: (_, _) => const PskSettingsScreen(),
         ),
         GoRoute(
-          path: AppRoutes.pskScanQr,
+          path: AppRoutes.cameraPermissions,
           builder: (_, _) => const _StubScanScreen(),
         ),
       ],

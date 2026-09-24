@@ -37,8 +37,12 @@ abstract final class AppRoutes {
   /// Configuração da PSK dentro do fluxo de conexão (antes de conectar).
   static const String pskSetup = '/psk-setup';
 
-  /// Leitura do QR code da PSK (`QrScanScreen`), empilhada pela tela de
-  /// configuração da PSK.
+  /// Pedir permissão de câmera antes do scanner de QR da PSK
+  /// (`CameraPermissionsScreen`), empilhada pela tela de configuração da PSK.
+  static const String cameraPermissions = '/psk-setup/scan-qr/permissions';
+
+  /// Leitura do QR code da PSK (`QrScanScreen`), alcançada só depois de
+  /// [cameraPermissions] conceder a câmera.
   static const String pskScanQr = '/psk-setup/scan-qr';
 
   /// Lista de sensores (`SensorPickerScreen`). Dois modos de entrada: o
