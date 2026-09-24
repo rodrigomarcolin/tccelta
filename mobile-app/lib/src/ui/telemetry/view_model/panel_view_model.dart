@@ -256,5 +256,6 @@ class PanelViewModel extends AsyncNotifier<PanelsState> {
 /// persistido é o mesmo entre reentradas — só é recarregado ao reiniciar o
 /// app.
 final AsyncNotifierProvider<PanelViewModel, PanelsState>
-panelViewModelProvider =
-    AsyncNotifierProvider<PanelViewModel, PanelsState>(PanelViewModel.new);
+panelViewModelProvider = AsyncNotifierProvider<PanelViewModel, PanelsState>(
+  PanelViewModel.new,
+);

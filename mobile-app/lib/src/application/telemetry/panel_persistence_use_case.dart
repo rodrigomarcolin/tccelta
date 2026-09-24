@@ -48,15 +48,17 @@ class PanelPersistenceUseCase {
   /// aponta para um painel que de fato existe.
   PanelsState _sanitize(PanelsState loaded) {
     final validPidNames = Obd2Pid.values.map((p) => p.name).toSet();
-    final panels = loaded.panels.map((panel) {
-      final ids = panel.indicatorIds
-          .where(validPidNames.contains)
-          .toList(growable: false);
-      final displays = Map.fromEntries(
-        panel.displays.entries.where((e) => validPidNames.contains(e.key)),
-      );
-      return panel.copyWith(indicatorIds: ids, displays: displays);
-    }).toList(growable: false);
+    final panels = loaded.panels
+        .map((panel) {
+          final ids = panel.indicatorIds
+              .where(validPidNames.contains)
+              .toList(growable: false);
+          final displays = Map.fromEntries(
+            panel.displays.entries.where((e) => validPidNames.contains(e.key)),
+          );
+          return panel.copyWith(indicatorIds: ids, displays: displays);
+        })
+        .toList(growable: false);
 
     final activeId = panels.any((p) => p.id == loaded.activeId)
         ? loaded.activeId
