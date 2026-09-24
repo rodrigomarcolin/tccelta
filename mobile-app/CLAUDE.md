@@ -76,6 +76,16 @@ Sempre que você construir qualquer coisa — um elemento de UI, um layout, um t
 
 O objetivo: o código permanece uma camada fina de composição de features sobre uma rica biblioteca de componentes e tokens que é fonte única da verdade.
 
+## Comentários: doc genérica, não específica da implementação
+
+Comentários e doc comments (`///`) descrevem o contrato/comportamento do código em si — nunca a tarefa que motivou a mudança, quem chama o código hoje, ou uma comparação detalhada com uma classe/tela irmã. Esse tipo de referência apodrece: quem chama muda, a tarefa passa, mas o comentário fica.
+
+Evite:
+- Referenciar arquivos específicos fora do próprio arquivo (`"ver app_router.dart"`).
+- Narrar diferenças de design comparando com uma implementação irmã — se a diferença importa, explique só o "porquê" do código atual, sem comparação.
+
+Ao implementar ou editar qualquer coisa, se você notar um comentário (novo ou pré-existente) que foge dessa regra, corrija-o para a versão genérica antes de seguir.
+
 ## Estrutura de pastas
  
 Mapa 1:1 com o projeto React Native do time:
