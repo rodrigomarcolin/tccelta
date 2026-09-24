@@ -243,6 +243,7 @@ class PskSettingsScreen extends HookConsumerWidget {
                           onPressed: () async {
                             final result = await context.push<String>(
                               AppRoutes.cameraPermissions,
+                              extra: AppRoutes.pskScanQr,
                             );
                             if (result != null) controller.text = result;
                           },

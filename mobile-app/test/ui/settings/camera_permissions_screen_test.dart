@@ -39,10 +39,12 @@ void main() {
   ) {
     final router = GoRouter(
       initialLocation: AppRoutes.cameraPermissions,
+      initialExtra: AppRoutes.pskScanQr,
       routes: [
         GoRoute(
           path: AppRoutes.cameraPermissions,
-          builder: (_, _) => const CameraPermissionsScreen(),
+          builder: (context, state) =>
+              CameraPermissionsScreen(destination: state.extra! as String),
         ),
         GoRoute(
           path: AppRoutes.pskScanQr,
@@ -79,6 +81,50 @@ void main() {
     expect(find.text('TELA DE SCANNER'), findsOneWidget);
     expect(find.text('Permitir câmera'), findsNothing);
   });
+
+  testWidgets(
+    'destino é o que foi passado via extra, não uma rota fixa',
+    (tester) async {
+      final router = GoRouter(
+        initialLocation: AppRoutes.cameraPermissions,
+        initialExtra: '/outro-destino',
+        routes: [
+          GoRoute(
+            path: AppRoutes.cameraPermissions,
+            builder: (context, state) =>
+                CameraPermissionsScreen(destination: state.extra! as String),
+          ),
+          GoRoute(
+            path: '/outro-destino',
+            builder: (_, _) => const Text('OUTRO DESTINO'),
+          ),
+          GoRoute(
+            path: AppRoutes.pskScanQr,
+            builder: (_, _) => const Text('TELA DE SCANNER'),
+          ),
+        ],
+      );
+      final container = ProviderContainer(
+        overrides: [
+          cameraPermissionsRepositoryProvider.overrideWithValue(
+            _FakeCameraPermissionsRepository(has: true),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('OUTRO DESTINO'), findsOneWidget);
+      expect(find.text('TELA DE SCANNER'), findsNothing);
+    },
+  );
 
   testWidgets('sem permissão: pedir e conceder avança pro scanner', (
     tester,
@@ -128,6 +174,7 @@ void main() {
                   onPressed: () async {
                     poppedWith = await context.push<String>(
                       AppRoutes.cameraPermissions,
+                      extra: AppRoutes.pskScanQr,
                     );
                   },
                   child: const Text('abrir permissão'),
@@ -137,7 +184,8 @@ void main() {
           ),
           GoRoute(
             path: AppRoutes.cameraPermissions,
-            builder: (_, _) => const CameraPermissionsScreen(),
+            builder: (context, state) =>
+                CameraPermissionsScreen(destination: state.extra! as String),
           ),
           GoRoute(
             path: AppRoutes.pskScanQr,

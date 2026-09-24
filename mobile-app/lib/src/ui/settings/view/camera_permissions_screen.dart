@@ -5,34 +5,42 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
-import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_state_view.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/settings/view_model/camera_permissions_view_model.dart';
 
-/// Pedir permissão de câmera antes de abrir o scanner de QR code da PSK.
+/// Pedir permissão de câmera antes de abrir [destination].
 ///
 /// Espelha a `BlePermissionsScreen`: ao iniciar, o view model verifica se a
 /// permissão já foi concedida — se sim, a tela é pulada e o fluxo avança
-/// direto pra `QrScanScreen`. Só quando ainda não há permissão a UI é
+/// direto pra [destination]. Só quando ainda não há permissão a UI é
 /// renderizada; "Permitir" dispara o pedido real e, concedido, segue adiante.
 ///
-/// Empilhada por `PskSettingsScreen` via `context.push<String>`. Como quem
-/// abre o scanner de fato é esta tela (não quem a empilhou), o resultado do
-/// scan (a PSK lida, ou `null` se o usuário voltou) é repassado explicitamente
-/// em [_advance] — diferente da `BlePermissionsScreen`, que usa
-/// `pushReplacement` e não precisa devolver nada pra trás.
+/// Não conhece nem amarra a nenhuma rota específica — hoje é empilhada por
+/// `PskSettingsScreen` passando `AppRoutes.pskScanQr` como [destination] (via
+/// `extra` na rota, ver `app_router.dart`), mas qualquer outra tela que
+/// precise de câmera pode empilhar esta mesma gate apontando pra outro lugar.
+///
+/// Quem empilha esta tela usa `context.push<String>`. Como quem abre o
+/// destino de fato é esta tela (não quem a empilhou), o resultado do destino
+/// é repassado explicitamente em [_advance] — diferente da
+/// `BlePermissionsScreen`, que usa `pushReplacement` e não precisa devolver
+/// nada pra trás.
 class CameraPermissionsScreen extends ConsumerWidget {
-  /// Cria a tela de permissão de câmera.
-  const CameraPermissionsScreen({super.key});
+  /// Cria a tela de permissão de câmera, avançando para [destination]
+  /// quando concedida.
+  const CameraPermissionsScreen({required this.destination, super.key});
 
-  /// Abre o scanner de verdade e repassa o resultado (hex lido ou `null`)
-  /// pra quem empilhou esta tela — o scanner sempre fica por cima desta tela
-  /// na pilha (não `pushReplacement`) justamente para que este `await`
-  /// capture o `pop` dele.
+  /// Rota aberta assim que a câmera é concedida.
+  final String destination;
+
+  /// Abre [destination] de verdade e repassa o resultado dele pra quem
+  /// empilhou esta tela — [destination] sempre fica por cima desta tela na
+  /// pilha (não `pushReplacement`) justamente para que este `await` capture
+  /// o `pop` dele.
   Future<void> _advance(BuildContext context) async {
-    final result = await context.push<String>(AppRoutes.pskScanQr);
+    final result = await context.push<String>(destination);
     if (context.mounted) context.pop(result);
   }
 

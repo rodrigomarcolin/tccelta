@@ -65,7 +65,10 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.cameraPermissions,
-      builder: (context, state) => const CameraPermissionsScreen(),
+      // `extra` é a rota de destino uma vez concedida a câmera — quem
+      // empilha esta rota decide pra onde ir (ver `CameraPermissionsScreen`).
+      builder: (context, state) =>
+          CameraPermissionsScreen(destination: state.extra! as String),
     ),
     GoRoute(
       path: AppRoutes.pskScanQr,
