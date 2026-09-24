@@ -200,6 +200,7 @@ class StatusBand extends StatelessWidget {
     this.statusLabel = 'AO VIVO',
     this.statusTone = StatusTone.live,
     this.pulse = true,
+    this.onTap,
     super.key,
   });
 
@@ -219,10 +220,21 @@ class StatusBand extends StatelessWidget {
   /// Se o dot do badge deve "respirar" (feed ao vivo). @default true
   final bool pulse;
 
+  /// Toque na faixa (ex.: abrir a confirmação de "Esquecer dispositivo").
+  /// `null` = faixa não reage a toque. @default null
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final detail = this.detail;
     final hasDetail = detail != null && detail.isNotEmpty;
+    final band = _band(detail, hasDetail);
+    final onTap = this.onTap;
+    if (onTap == null) return band;
+    return GestureDetector(onTap: onTap, child: band);
+  }
+
+  Widget _band(String? detail, bool hasDetail) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.s5,
