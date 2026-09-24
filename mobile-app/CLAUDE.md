@@ -53,9 +53,6 @@ antes de dar por concluída qualquer edição em `mobile-app/`, nesta ordem:
 2. `fvm flutter analyze` — deve devolver "No issues found!".
 3. `fvm flutter test` — toda a suíte deve passar.
 
-Pular esse checklist foi a causa de um PR já ter ido para revisão com o
-lint de formatação quebrado — o `dart format` nunca tinha sido rodado.
-
 ## Arquitetura
 
 Em camadas, sob `lib/src/`, com `main.dart` como bootstrap fino. `main.dart` já monta `ProviderScope` + `MaterialApp.router` (go_router via `src/router/app_router.dart`) e entra pelo fluxo de conexão; um `ConnectionGuard` de escopo global é montado no `builder` do `MaterialApp`. A rota `/painel` abre a `PainelScreen` (feature `telemetry`) — o painel de telemetria OBD-II ao vivo.
