@@ -12,21 +12,13 @@ import 'package:tccelta_mobile/src/ui/settings/view_model/camera_permissions_vie
 
 /// Pedir permissão de câmera antes de abrir [destination].
 ///
-/// Espelha a `BlePermissionsScreen`: ao iniciar, o view model verifica se a
-/// permissão já foi concedida — se sim, a tela é pulada e o fluxo avança
-/// direto pra [destination]. Só quando ainda não há permissão a UI é
-/// renderizada; "Permitir" dispara o pedido real e, concedido, segue adiante.
+/// Ao iniciar, verifica se a permissão já foi concedida — se sim, a tela é
+/// pulada e o fluxo avança direto para [destination]. Só quando ainda não há
+/// permissão a UI é renderizada; "Permitir" dispara o pedido real e,
+/// concedido, segue adiante.
 ///
-/// Não conhece nem amarra a nenhuma rota específica — hoje é empilhada por
-/// `PskSettingsScreen` passando `AppRoutes.pskScanQr` como [destination] (via
-/// `extra` na rota, ver `app_router.dart`), mas qualquer outra tela que
-/// precise de câmera pode empilhar esta mesma gate apontando pra outro lugar.
-///
-/// Quem empilha esta tela usa `context.push<String>`. Como quem abre o
-/// destino de fato é esta tela (não quem a empilhou), o resultado do destino
-/// é repassado explicitamente em [_advance] — diferente da
-/// `BlePermissionsScreen`, que usa `pushReplacement` e não precisa devolver
-/// nada pra trás.
+/// Quem empilha esta tela usa `context.push<String>` e recebe de volta o
+/// resultado devolvido por [destination] quando ele for fechado.
 class CameraPermissionsScreen extends ConsumerWidget {
   /// Cria a tela de permissão de câmera, avançando para [destination]
   /// quando concedida.
@@ -35,10 +27,8 @@ class CameraPermissionsScreen extends ConsumerWidget {
   /// Rota aberta assim que a câmera é concedida.
   final String destination;
 
-  /// Abre [destination] de verdade e repassa o resultado dele pra quem
-  /// empilhou esta tela — [destination] sempre fica por cima desta tela na
-  /// pilha (não `pushReplacement`) justamente para que este `await` capture
-  /// o `pop` dele.
+  /// Abre [destination] e repassa o resultado devolvido por ele para quem
+  /// empilhou esta tela.
   Future<void> _advance(BuildContext context) async {
     final result = await context.push<String>(destination);
     if (context.mounted) context.pop(result);
