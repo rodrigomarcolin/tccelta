@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:tccelta_mobile/src/core/crypto/psk_cipher.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/ble/security_mode.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
@@ -231,6 +232,21 @@ class PskSettingsScreen extends HookConsumerWidget {
                     suffixIcon: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // QR scan button
+                        IconButton(
+                          icon: const Icon(
+                            Icons.qr_code_scanner_rounded,
+                            size: 18,
+                          ),
+                          color: AppColors.textSecondary,
+                          tooltip: 'Escanear QR code',
+                          onPressed: () async {
+                            final result = await context.push<String>(
+                              AppRoutes.pskScanQr,
+                            );
+                            if (result != null) controller.text = result;
+                          },
+                        ),
                         // Paste button
                         IconButton(
                           icon: const Icon(
@@ -269,7 +285,7 @@ class PskSettingsScreen extends HookConsumerWidget {
                   validator: (v) {
                     final t = v?.trim() ?? '';
                     if (t.isEmpty) return null; // empty = clear intent
-                    if (t.length != _hexLen) {
+                    if (!PskCipher.isValidHex(t)) {
                       return 'A chave deve ter exatamente $_hexLen caracteres hex (${t.length}/$_hexLen)';
                     }
                     return null;

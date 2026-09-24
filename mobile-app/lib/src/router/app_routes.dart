@@ -5,7 +5,7 @@
 /// `GoRouter` e criar ciclo de imports.
 abstract final class AppRoutes {
   /// Pedir permissões de Bluetooth (rota inicial).
-  static const String permissions = '/permissions';
+  static const String blePermissions = '/permissions';
 
   /// Bluetooth do telefone desligado.
   static const String bluetoothOff = '/bluetooth-off';
@@ -36,6 +36,10 @@ abstract final class AppRoutes {
 
   /// Configuração da PSK dentro do fluxo de conexão (antes de conectar).
   static const String pskSetup = '/psk-setup';
+
+  /// Leitura do QR code da PSK (`QrScanScreen`), empilhada pela tela de
+  /// configuração da PSK.
+  static const String pskScanQr = '/psk-setup/scan-qr';
 
   /// Lista de sensores (`SensorPickerScreen`). Dois modos de entrada: o
   /// botão "Adicionar indicador" do Painel empilha com `context.push` (sem

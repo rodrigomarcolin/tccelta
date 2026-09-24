@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tccelta_mobile/src/data/datasources/camera_permissions_datasource.dart';
+import 'package:tccelta_mobile/src/data/repositories/camera_permissions_repository_impl.dart';
 import 'package:tccelta_mobile/src/domain/ble/security_mode.dart';
+import 'package:tccelta_mobile/src/domain/repositories/camera_permissions_repository.dart';
 import 'package:tccelta_mobile/src/services/settings/settings_service.dart';
 
 /// Shared, lazily-instantiated [SettingsService].
@@ -24,6 +27,22 @@ securityModeNotifierProvider =
     AsyncNotifierProvider<SecurityModeNotifier, SecurityMode>(
       SecurityModeNotifier.new,
     );
+
+/// Datasource da permissão de câmera, sobre o plugin `permission_handler` —
+/// usada só pelo scanner de QR code da PSK.
+final Provider<CameraPermissionsDatasource>
+cameraPermissionsDatasourceProvider = Provider<CameraPermissionsDatasource>(
+  (_) => const CameraPermissionsDatasource(),
+);
+
+/// Repository = *source of truth* da permissão de câmera. O view model fala
+/// com este provider, nunca com o datasource.
+final Provider<CameraPermissionsRepository>
+cameraPermissionsRepositoryProvider = Provider<CameraPermissionsRepository>(
+  (ref) => CameraPermissionsRepositoryImpl(
+    ref.read(cameraPermissionsDatasourceProvider),
+  ),
+);
 
 /// Manages reading / writing the PSK.
 class PskNotifier extends AsyncNotifier<String?> {

@@ -17,7 +17,7 @@ class ConnectionLostScreen extends ConsumerWidget {
 
   Future<void> _forget(BuildContext context, WidgetRef ref) async {
     await forgetDongle(ref);
-    if (context.mounted) context.go(AppRoutes.permissions);
+    if (context.mounted) context.go(AppRoutes.blePermissions);
   }
 
   @override

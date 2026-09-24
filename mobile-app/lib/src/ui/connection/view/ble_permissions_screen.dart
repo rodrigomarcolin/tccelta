@@ -9,7 +9,7 @@ import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
-import 'package:tccelta_mobile/src/ui/connection/view_model/permissions_view_model.dart';
+import 'package:tccelta_mobile/src/ui/connection/view_model/ble_permissions_view_model.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_state_view.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
@@ -20,9 +20,9 @@ import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 /// tela é pulada e o fluxo avança direto (busca ou "BT desligado", conforme o
 /// adaptador). Só quando ainda não há permissão a UI é renderizada; "Permitir"
 /// dispara o pedido real e, concedido, segue adiante.
-class PermissionsScreen extends ConsumerWidget {
+class BlePermissionsScreen extends ConsumerWidget {
   /// Cria a tela de permissões.
-  const PermissionsScreen({super.key});
+  const BlePermissionsScreen({super.key});
 
   /// Avança para a busca, para "BT desligado" ou direto para "Conectando"
   /// conforme o estado atual do adaptador e a existência de um dongle salvo
@@ -54,7 +54,7 @@ class PermissionsScreen extends ConsumerWidget {
 
   Future<void> _onAllow(BuildContext context, WidgetRef ref) async {
     final granted = await ref
-        .read(permissionsViewModelProvider.notifier)
+        .read(blePermissionsViewModelProvider.notifier)
         .request();
     if (!context.mounted) return;
     if (!granted) {
@@ -70,19 +70,22 @@ class PermissionsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(permissionsViewModelProvider);
+    final state = ref.watch(blePermissionsViewModelProvider);
 
     // Concedido (pela checagem inicial ou após o pedido) => avança e sai.
-    ref.listen<PermissionFlowState>(permissionsViewModelProvider, (_, next) {
-      if (next == PermissionFlowState.granted) {
+    ref.listen<BlePermissionFlowState>(blePermissionsViewModelProvider, (
+      _,
+      next,
+    ) {
+      if (next == BlePermissionFlowState.granted) {
         unawaited(_advance(context, ref));
       }
     });
 
     // Enquanto verifica (ou já concedeu, aguardando o avanço) não mostramos a
     // UI de permissão — evita "piscar" a tela para quem já concedeu.
-    if (state == PermissionFlowState.checking ||
-        state == PermissionFlowState.granted) {
+    if (state == BlePermissionFlowState.checking ||
+        state == BlePermissionFlowState.granted) {
       return const ConnectionBackground(
         child: Center(
           child: CircularProgressIndicator(color: AppColors.cyan500),
@@ -90,7 +93,7 @@ class PermissionsScreen extends ConsumerWidget {
       );
     }
 
-    final requesting = state == PermissionFlowState.requesting;
+    final requesting = state == BlePermissionFlowState.requesting;
 
     return ConnectionStateView(
       icon: AppIconData.bluetooth,

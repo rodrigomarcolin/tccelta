@@ -9,8 +9,8 @@ import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_reading.dart';
+import 'package:tccelta_mobile/src/domain/repositories/ble_permissions_repository.dart';
 import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
-import 'package:tccelta_mobile/src/domain/repositories/permissions_repository.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
@@ -22,7 +22,7 @@ import 'support/fake_panel_repository.dart';
 
 /// Repository de permissões fake para os testes de widget: controla se a
 /// permissão já foi concedida sem tocar no plugin real.
-class _FakePermissionsRepository implements PermissionsRepository {
+class _FakeBlePermissionsRepository implements BlePermissionsRepository {
   @override
   Future<bool> hasBluetoothPermission() async => false;
 
@@ -149,8 +149,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          permissionsRepositoryProvider.overrideWithValue(
-            _FakePermissionsRepository(),
+          blePermissionsRepositoryProvider.overrideWithValue(
+            _FakeBlePermissionsRepository(),
           ),
         ],
         child: const TcceltaApp(),

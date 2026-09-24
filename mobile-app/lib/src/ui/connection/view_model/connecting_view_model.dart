@@ -114,7 +114,7 @@ class ConnectingViewModel extends Notifier<ConnectingState> {
   }
 
   /// Grava o dongle selecionado como o último conectado com sucesso, para a
-  /// próxima abertura do app reconectar sozinha (`PermissionsScreen`).
+  /// próxima abertura do app reconectar sozinha (`BlePermissionsScreen`).
   /// Best-effort: uma falha ao salvar não deve derrubar o handshake, que já
   /// está `ready`.
   void _rememberDevice() {
