@@ -11,6 +11,7 @@ import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
 import '../../support/fake_ble_service.dart';
 import '../../support/fake_obd2_repository.dart';
+import '../../support/fake_panel_repository.dart';
 
 void main() {
   // Usa o `appRouter` real (`MaterialApp.router`), não `MaterialApp(home: ...)`
@@ -23,6 +24,7 @@ void main() {
       obd2RepositoryProvider.overrideWithValue(
         FakeObd2Repository(readings: readings),
       ),
+      panelRepositoryProvider.overrideWithValue(FakePanelRepository()),
     ],
     child: MaterialApp.router(theme: AppTheme.dark, routerConfig: appRouter),
   );

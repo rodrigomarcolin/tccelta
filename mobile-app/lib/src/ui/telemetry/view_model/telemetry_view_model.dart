@@ -130,7 +130,8 @@ class TelemetryViewModel extends Notifier<TelemetryState> {
   /// loop. Painel vazio pula a leitura mas mantém o cadenciamento.
   Future<void> _fastCycle() async {
     if (_stopped) return;
-    final panelPids = ref.read(panelViewModelProvider).indicators;
+    final panelPids =
+        ref.read(panelViewModelProvider).value?.indicators ?? const [];
     if (panelPids.isEmpty) {
       _fastTimer = Timer(_fastInterval, () => unawaited(_fastCycle()));
       return;

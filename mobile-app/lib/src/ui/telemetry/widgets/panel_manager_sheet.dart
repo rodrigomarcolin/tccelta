@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/panel.dart';
+import 'package:tccelta_mobile/src/domain/telemetry/panel_collection.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/widgets/new_panel_row.dart';
@@ -31,7 +32,9 @@ class PanelManagerSheet extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final editingId = useState<String?>(null);
-    final panels = ref.watch(panelViewModelProvider);
+    // Este sheet só é aberto a partir da `PainelScreen`, que já garantiu que
+    // os painéis salvos terminaram de carregar.
+    final panels = ref.watch(panelViewModelProvider).requireValue;
     final notifier = ref.read(panelViewModelProvider.notifier);
 
     // Empurra o sheet para cima do teclado — sem isso, o campo de renomear

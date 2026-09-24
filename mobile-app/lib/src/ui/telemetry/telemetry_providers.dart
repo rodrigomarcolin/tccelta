@@ -1,6 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tccelta_mobile/src/application/telemetry/panel_persistence_use_case.dart';
+import 'package:tccelta_mobile/src/data/datasources/panel_datasource.dart';
 import 'package:tccelta_mobile/src/data/repositories/obd2_repository_impl.dart';
+import 'package:tccelta_mobile/src/data/repositories/panel_repository_impl.dart';
 import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
+import 'package:tccelta_mobile/src/domain/repositories/panel_repository.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 
 /// Repository = *source of truth* da telemetria OBD-II. Consome o
@@ -12,3 +17,36 @@ final Provider<Obd2Repository> obd2RepositoryProvider =
       ref.onDispose(repo.dispose);
       return repo;
     });
+
+/// Instância resolvida de [SharedPreferences] — sobrescrita em `main()` com
+/// a instância assíncrona real antes do `runApp`. Único consumidor hoje é a
+/// persistência de painéis; se outro recurso precisar dela, subir para
+/// `core/`.
+final Provider<SharedPreferences> sharedPreferencesProvider =
+    Provider<SharedPreferences>(
+      (ref) => throw UnimplementedError(
+        'sharedPreferencesProvider deve ser sobrescrito em main()',
+      ),
+    );
+
+/// Datasource da persistência local dos painéis, sobre
+/// [sharedPreferencesProvider].
+final Provider<PanelDatasource> panelDatasourceProvider =
+    Provider<PanelDatasource>(
+      (ref) => PanelDatasource(ref.read(sharedPreferencesProvider)),
+    );
+
+/// Repository = *source of truth* dos painéis salvos. Indiferente a local
+/// vs. remoto: trocar de storage local para um backend futuro é só trocar
+/// esta wiring, sem tocar em domain/application/ui.
+final Provider<PanelRepository> panelRepositoryProvider =
+    Provider<PanelRepository>(
+      (ref) => PanelRepositoryImpl(ref.read(panelDatasourceProvider)),
+    );
+
+/// Use case que carrega/grava os painéis, reconciliando dado obsoleto e
+/// garantindo que sempre há ao menos um painel.
+final Provider<PanelPersistenceUseCase> panelPersistenceUseCaseProvider =
+    Provider<PanelPersistenceUseCase>(
+      (ref) => PanelPersistenceUseCase(ref.read(panelRepositoryProvider)),
+    );

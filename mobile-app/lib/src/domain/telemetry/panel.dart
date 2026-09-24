@@ -32,6 +32,18 @@ class Panel {
     this.displays = const {},
   });
 
+  /// Reconstrói um [Panel] a partir de [json] (mesmo formato produzido por
+  /// [toJson]).
+  factory Panel.fromJson(Map<String, dynamic> json) => Panel(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    indicatorIds: (json['indicatorIds'] as List<dynamic>).cast<String>(),
+    displays: (json['displays'] as Map<String, dynamic>).map(
+      (id, d) =>
+          MapEntry(id, IndicatorDisplay.fromJson(d as Map<String, dynamic>)),
+    ),
+  );
+
   /// Identidade estável do painel, gerada ao criá-lo. Não muda via
   /// [copyWith].
   final String id;

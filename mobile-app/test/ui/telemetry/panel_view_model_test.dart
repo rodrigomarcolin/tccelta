@@ -3,18 +3,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/indicator_display.dart';
 import 'package:tccelta_mobile/src/domain/telemetry/panel.dart';
+import 'package:tccelta_mobile/src/domain/telemetry/panel_collection.dart';
+import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
+
+import '../../support/fake_panel_repository.dart';
 
 void main() {
   late ProviderContainer container;
+  late FakePanelRepository repository;
 
-  setUp(() {
-    container = ProviderContainer();
+  setUp(() async {
+    repository = FakePanelRepository();
+    container = ProviderContainer(
+      overrides: [panelRepositoryProvider.overrideWithValue(repository)],
+    );
     addTearDown(container.dispose);
+    // Deixa o `build()` assíncrono do AsyncNotifier assentar antes de cada
+    // teste — idioma padrão do Riverpod para aguardar o load inicial.
+    await container.read(panelViewModelProvider.future);
   });
 
   PanelViewModel notifier() => container.read(panelViewModelProvider.notifier);
-  PanelsState state() => container.read(panelViewModelProvider);
+  PanelsState state() => container.read(panelViewModelProvider).requireValue;
   IndicatorDisplay display(Obd2Pid pid) => IndicatorDisplay.defaultFor(pid);
 
   test('painel começa vazio', () {
@@ -372,5 +383,58 @@ void main() {
       expect(state().panels, hasLength(1));
       expect(state().indicators, isEmpty);
     });
+  });
+
+  group('persistência', () {
+    test('build() carrega o estado salvo no repository', () async {
+      const saved = PanelsState(
+        panels: [Panel(id: 'panel_9', name: 'Salvo')],
+        activeId: 'panel_9',
+      );
+      final repo = FakePanelRepository(initial: saved);
+      final c = ProviderContainer(
+        overrides: [panelRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(c.dispose);
+
+      final loaded = await c.read(panelViewModelProvider.future);
+
+      expect(loaded.active.name, 'Salvo');
+    });
+
+    test('mutações persistem o novo estado no repository', () {
+      notifier().createPanel();
+
+      expect(repository.saveCalls, greaterThan(0));
+      expect(repository.lastSaved?.panels, hasLength(2));
+    });
+
+    test(
+      'ids de novos painéis não colidem após restaurar painéis salvos',
+      () async {
+        const saved = PanelsState(
+          panels: [
+            Panel(id: 'panel_1', name: 'A'),
+            Panel(id: 'panel_5', name: 'B'),
+          ],
+          activeId: 'panel_1',
+        );
+        final repo = FakePanelRepository(initial: saved);
+        final c = ProviderContainer(
+          overrides: [panelRepositoryProvider.overrideWithValue(repo)],
+        );
+        addTearDown(c.dispose);
+        await c.read(panelViewModelProvider.future);
+
+        c.read(panelViewModelProvider.notifier).createPanel();
+
+        final ids = c
+            .read(panelViewModelProvider)
+            .requireValue
+            .panels
+            .map((p) => p.id);
+        expect(ids, contains('panel_6'));
+      },
+    );
   });
 }

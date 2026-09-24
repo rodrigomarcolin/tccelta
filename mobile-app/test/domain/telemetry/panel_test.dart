@@ -76,5 +76,33 @@ void main() {
       expect(json['indicatorIds'], ['rpm']);
       expect(json['displays'], {'rpm': display.toJson()});
     });
+
+    test('fromJson reconstrói um Panel equivalente ao original', () {
+      final display = IndicatorDisplay.defaultFor(
+        Obd2Pid.rpm,
+      ).copyWith(format: IndicatorFormat.gauge);
+      final panel = Panel(
+        id: 'p1',
+        name: 'Uso diário',
+        indicatorIds: const ['rpm'],
+        displays: {'rpm': display},
+      );
+
+      final rebuilt = Panel.fromJson(panel.toJson());
+
+      expect(rebuilt.id, panel.id);
+      expect(rebuilt.name, panel.name);
+      expect(rebuilt.indicatorIds, panel.indicatorIds);
+      expect(rebuilt.displayFor(Obd2Pid.rpm), display);
+    });
+
+    test('fromJson de um painel sem indicadores', () {
+      const panel = Panel(id: 'p1', name: 'Vazio');
+
+      final rebuilt = Panel.fromJson(panel.toJson());
+
+      expect(rebuilt.indicatorIds, isEmpty);
+      expect(rebuilt.displays, isEmpty);
+    });
   });
 }

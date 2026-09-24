@@ -43,7 +43,10 @@ class PanelPickerSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final panels = ref.watch(panelViewModelProvider);
+    // Este sheet só é aberto a partir de telas que já garantiram que os
+    // painéis salvos terminaram de carregar (ver `PainelScreen`/
+    // `SensorPickerScreen`).
+    final panels = ref.watch(panelViewModelProvider).requireValue;
     final notifier = ref.read(panelViewModelProvider.notifier);
 
     return DecoratedBox(
@@ -98,7 +101,12 @@ class PanelPickerSheet extends ConsumerWidget {
                             notifier.createPanel();
                             Navigator.of(
                               context,
-                            ).pop(ref.read(panelViewModelProvider).activeId);
+                            ).pop(
+                              ref
+                                  .read(panelViewModelProvider)
+                                  .requireValue
+                                  .activeId,
+                            );
                           },
                         ),
                       ],

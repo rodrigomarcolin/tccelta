@@ -10,6 +10,8 @@ import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/telemetry_view_model.dart';
 
+import '../../support/fake_panel_repository.dart';
+
 /// Repository de telemetria fake que devolve leituras fixas e registra as
 /// chamadas de [readMany] (para asserir quais PIDs o ciclo rápido pediu).
 class _FakeObd2Repository implements Obd2Repository {
@@ -57,6 +59,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
+        panelRepositoryProvider.overrideWithValue(FakePanelRepository()),
       ],
     );
     addTearDown(container.dispose);
@@ -80,7 +83,10 @@ void main() {
   test('painel vazio: o ciclo rápido não chama readMany', () async {
     final repo = _FakeObd2Repository();
     final container = ProviderContainer(
-      overrides: [obd2RepositoryProvider.overrideWithValue(repo)],
+      overrides: [
+        obd2RepositoryProvider.overrideWithValue(repo),
+        panelRepositoryProvider.overrideWithValue(FakePanelRepository()),
+      ],
     );
     addTearDown(container.dispose);
 
@@ -93,10 +99,17 @@ void main() {
   test('ciclo rápido lê só os indicadores do Painel', () async {
     final repo = _FakeObd2Repository();
     final container = ProviderContainer(
-      overrides: [obd2RepositoryProvider.overrideWithValue(repo)],
+      overrides: [
+        obd2RepositoryProvider.overrideWithValue(repo),
+        panelRepositoryProvider.overrideWithValue(FakePanelRepository()),
+      ],
     );
     addTearDown(container.dispose);
 
+    // Deixa o `build()` assíncrono do PanelViewModel assentar antes de
+    // adicionar o indicador — senão a mutação é um no-op silencioso (estado
+    // ainda carregando).
+    await container.read(panelViewModelProvider.future);
     container
         .read(panelViewModelProvider.notifier)
         .addIndicator(Obd2Pid.rpm, IndicatorDisplay.defaultFor(Obd2Pid.rpm));
