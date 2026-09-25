@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tccelta_mobile/src/domain/repositories/permissions_repository.dart';
+import 'package:tccelta_mobile/src/domain/repositories/ble_permissions_repository.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 
 /// Fase do fluxo de pedido de permissões.
-enum PermissionFlowState {
+enum BlePermissionFlowState {
   /// Verificando se a permissão já foi concedida (estado inicial, silencioso).
   checking,
 
@@ -25,30 +25,31 @@ enum PermissionFlowState {
 /// ViewModel das permissões de BLE. Ao iniciar, verifica se a permissão já foi
 /// concedida (para que a tela seja pulada nesse caso) e, quando pedido, dispara
 /// o diálogo do sistema; a tela observa e navega conforme o estado.
-class PermissionsViewModel extends Notifier<PermissionFlowState> {
-  PermissionsRepository get _repo => ref.read(permissionsRepositoryProvider);
+class BlePermissionsViewModel extends Notifier<BlePermissionFlowState> {
+  BlePermissionsRepository get _repo =>
+      ref.read(blePermissionsRepositoryProvider);
 
   @override
-  PermissionFlowState build() {
+  BlePermissionFlowState build() {
     unawaited(_check());
-    return PermissionFlowState.checking;
+    return BlePermissionFlowState.checking;
   }
 
   Future<void> _check() async {
     final has = await _repo.hasBluetoothPermission();
-    state = has ? PermissionFlowState.granted : PermissionFlowState.idle;
+    state = has ? BlePermissionFlowState.granted : BlePermissionFlowState.idle;
   }
 
   /// Pede acesso ao BLE. Retorna `true` se concedido.
   Future<bool> request() async {
-    state = PermissionFlowState.requesting;
+    state = BlePermissionFlowState.requesting;
     final ok = await _repo.requestBluetoothPermission();
-    state = ok ? PermissionFlowState.granted : PermissionFlowState.denied;
+    state = ok ? BlePermissionFlowState.granted : BlePermissionFlowState.denied;
     return ok;
   }
 }
 
-/// Provider do [PermissionsViewModel].
+/// Provider do [BlePermissionsViewModel].
 ///
 /// `autoDispose`: o estado NÃO deve sobreviver à presença da tela. Ao sair de
 /// `/permissions` (o `pushReplacement` para a busca), o provider é descartado;
@@ -56,9 +57,9 @@ class PermissionsViewModel extends Notifier<PermissionFlowState> {
 /// re-checa a permissão — reproduzindo a transição `checking -> granted` que a
 /// tela observa para avançar (sem isso, um estado `granted` remanescente
 /// deixaria a tela presa no loading).
-final NotifierProvider<PermissionsViewModel, PermissionFlowState>
-permissionsViewModelProvider =
-    NotifierProvider<PermissionsViewModel, PermissionFlowState>(
-      PermissionsViewModel.new,
+final NotifierProvider<BlePermissionsViewModel, BlePermissionFlowState>
+blePermissionsViewModelProvider =
+    NotifierProvider<BlePermissionsViewModel, BlePermissionFlowState>(
+      BlePermissionsViewModel.new,
       isAutoDispose: true,
     );

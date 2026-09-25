@@ -3,16 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/domain/ble/last_dongle.dart';
+import 'package:tccelta_mobile/src/domain/repositories/ble_permissions_repository.dart';
 import 'package:tccelta_mobile/src/domain/repositories/last_dongle_repository.dart';
-import 'package:tccelta_mobile/src/domain/repositories/permissions_repository.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
-import 'package:tccelta_mobile/src/ui/connection/view/permissions_screen.dart';
+import 'package:tccelta_mobile/src/ui/connection/view/ble_permissions_screen.dart';
 
 import '../../support/fake_ble_service.dart';
 
 /// Permissão sempre concedida: converge direto para `granted` sem UI.
-class _AlwaysGrantedPermissionsRepository implements PermissionsRepository {
+class _AlwaysGrantedBlePermissionsRepository
+    implements BlePermissionsRepository {
   @override
   Future<bool> hasBluetoothPermission() async => true;
 
@@ -41,11 +42,11 @@ void main() {
     required LastDongle? saved,
   }) {
     final router = GoRouter(
-      initialLocation: AppRoutes.permissions,
+      initialLocation: AppRoutes.blePermissions,
       routes: [
         GoRoute(
-          path: AppRoutes.permissions,
-          builder: (_, _) => const PermissionsScreen(),
+          path: AppRoutes.blePermissions,
+          builder: (_, _) => const BlePermissionsScreen(),
         ),
         GoRoute(
           path: AppRoutes.scan,
@@ -64,8 +65,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         bleServiceProvider.overrideWithValue(FakeBleService()),
-        permissionsRepositoryProvider.overrideWithValue(
-          _AlwaysGrantedPermissionsRepository(),
+        blePermissionsRepositoryProvider.overrideWithValue(
+          _AlwaysGrantedBlePermissionsRepository(),
         ),
         lastDongleRepositoryProvider.overrideWithValue(
           _FakeLastDongleRepository(saved),

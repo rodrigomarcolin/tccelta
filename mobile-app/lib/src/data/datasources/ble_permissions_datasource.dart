@@ -9,9 +9,9 @@ import 'package:permission_handler/permission_handler.dart';
 /// `neverForLocation`, então não pedimos localização). Em Android ≤11 essas
 /// permissões são de instalação e o scan exige localização — declarada no
 /// manifest com `maxSdkVersion=30`.
-class PermissionsDatasource {
+class BlePermissionsDatasource {
   /// Cria o datasource.
-  const PermissionsDatasource();
+  const BlePermissionsDatasource();
 
   /// Permissão de Bluetooth já concedida? Lê o `status` atual **sem** abrir o
   /// diálogo do sistema.

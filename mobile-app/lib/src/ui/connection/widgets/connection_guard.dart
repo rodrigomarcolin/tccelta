@@ -20,7 +20,7 @@ import 'package:tccelta_mobile/src/ui/core/hooks/hooks.dart';
 /// 1. **Bluetooth desligado** — quando o adaptador vira `off`, vai para
 ///    [AppRoutes.bluetoothOff], EXCETO nas telas pré-conexão que já tratam o
 ///    adaptador por conta própria ([_adapterOffExcludedRoutes]): `bluetoothOff`
-///    (já estamos lá), `permissions` (o gating de permissão vem primeiro) e
+///    (já estamos lá), `blePermissions` (o gating de permissão vem primeiro) e
 ///    `scan` (renderiza um aviso inline "ligue o Bluetooth"). É a causa de
 ///    maior prioridade: desligar o BT também derruba a sessão, então precisa
 ///    VENCER o redirecionamento de "Conexão perdida" abaixo — do contrário o
@@ -43,7 +43,8 @@ import 'package:tccelta_mobile/src/ui/core/hooks/hooks.dart';
 ///      distinguir handshake de reconexão só pela fase; a rota atual resolve;
 ///    - `connectionLost`: já estamos lá (o "Esquecer dispositivo" segue para
 ///      permissões sem voltar para cá);
-///    - `permissions`/`bluetoothOff`/`scan`: pré-conexão, sem sessão a perder.
+///    - `blePermissions`/`bluetoothOff`/`scan`: pré-conexão, sem sessão a
+///      perder.
 ///
 /// Como ambas são listas de EXCLUSÃO, qualquer tela pós-conexão futura (além de
 /// `connected`/`painel`) já fica coberta automaticamente.
@@ -65,7 +66,7 @@ class ConnectionGuard extends HookConsumerWidget {
   /// Rotas do fluxo de conexão onde o redirecionamento de "Conexão perdida"
   /// NÃO se aplica.
   static const Set<String> _flowRoutes = {
-    AppRoutes.permissions,
+    AppRoutes.blePermissions,
     AppRoutes.bluetoothOff,
     AppRoutes.scan,
     AppRoutes.pskSetup,
@@ -76,7 +77,7 @@ class ConnectionGuard extends HookConsumerWidget {
   /// Rotas onde o redirecionamento de "Bluetooth desligado" NÃO se aplica —
   /// telas pré-conexão que já lidam com o adaptador por conta própria.
   static const Set<String> _adapterOffExcludedRoutes = {
-    AppRoutes.permissions,
+    AppRoutes.blePermissions,
     AppRoutes.bluetoothOff,
     AppRoutes.scan,
     AppRoutes.pskSetup,
@@ -96,12 +97,12 @@ class ConnectionGuard extends HookConsumerWidget {
     useOnAppResume(() async {
       // Só as telas pós-conexão têm sessão a proteger.
       if (_flowRoutes.contains(appRouter.state.matchedLocation)) return;
-      final permissions = ref.read(permissionsRepositoryProvider);
+      final permissions = ref.read(blePermissionsRepositoryProvider);
       if (await permissions.hasBluetoothPermission()) return;
       await ref.read(dongleRepositoryProvider).disconnect();
       // Reconfirma a rota após o await (o usuário pode ter navegado no meio).
       if (_flowRoutes.contains(appRouter.state.matchedLocation)) return;
-      appRouter.go(AppRoutes.permissions);
+      appRouter.go(AppRoutes.blePermissions);
     });
 
     // (1) Bluetooth desligado: leva direto para a tela de BT desligado, de

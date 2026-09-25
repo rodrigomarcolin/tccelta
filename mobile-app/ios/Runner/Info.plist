@@ -8,6 +8,8 @@
 	<string>O app usa Bluetooth para encontrar e conversar com o seu dongle OBD2.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>O app usa Bluetooth para encontrar e conversar com o seu dongle OBD2.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>O app usa a câmera para ler o QR code com a chave PSK do dongle.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

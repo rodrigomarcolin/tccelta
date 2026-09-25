@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
-import 'package:tccelta_mobile/src/domain/repositories/permissions_repository.dart';
+import 'package:tccelta_mobile/src/domain/repositories/ble_permissions_repository.dart';
 import 'package:tccelta_mobile/src/router/app_router.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
@@ -12,9 +12,9 @@ import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import '../../../support/fake_ble_service.dart';
 import '../../../support/fake_obd2_repository.dart';
 
-/// [PermissionsRepository] falso com resposta fixa de permissão.
-class _FakePermissions implements PermissionsRepository {
-  _FakePermissions({required this.granted});
+/// [BlePermissionsRepository] falso com resposta fixa de permissão.
+class _FakeBlePermissions implements BlePermissionsRepository {
+  _FakeBlePermissions({required this.granted});
 
   final bool granted;
 
@@ -32,8 +32,8 @@ void main() {
   Widget app({required bool granted}) => ProviderScope(
     overrides: [
       bleServiceProvider.overrideWithValue(FakeBleService()),
-      permissionsRepositoryProvider.overrideWithValue(
-        _FakePermissions(granted: granted),
+      blePermissionsRepositoryProvider.overrideWithValue(
+        _FakeBlePermissions(granted: granted),
       ),
       obd2RepositoryProvider.overrideWithValue(FakeObd2Repository()),
     ],
@@ -57,7 +57,7 @@ void main() {
   }
 
   testWidgets(
-    'permissão revogada no resume, estando no painel -> permissions',
+    'permissão revogada no resume, estando no painel -> blePermissions',
     (tester) async {
       appRouter.go(AppRoutes.painel);
       await tester.pumpWidget(app(granted: false));
@@ -66,7 +66,7 @@ void main() {
 
       await resumeApp(tester);
 
-      expect(appRouter.state.matchedLocation, AppRoutes.permissions);
+      expect(appRouter.state.matchedLocation, AppRoutes.blePermissions);
     },
   );
 

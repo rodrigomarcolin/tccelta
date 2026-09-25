@@ -30,6 +30,33 @@ void main() {
     });
   });
 
+  group('PskCipher.isValidHex', () {
+    test('accepts a valid 64-char hex string', () {
+      expect(PskCipher.isValidHex(testKeyHex), isTrue);
+    });
+
+    test('accepts uppercase hex', () {
+      expect(PskCipher.isValidHex(testKeyHex.toUpperCase()), isTrue);
+    });
+
+    test('rejects a 63-char string', () {
+      expect(PskCipher.isValidHex(testKeyHex.substring(1)), isFalse);
+    });
+
+    test('rejects a 65-char string', () {
+      expect(PskCipher.isValidHex('${testKeyHex}a'), isFalse);
+    });
+
+    test('rejects a non-hex char', () {
+      final bad = '${testKeyHex.substring(0, 62)}ZZ';
+      expect(PskCipher.isValidHex(bad), isFalse);
+    });
+
+    test('rejects an empty string', () {
+      expect(PskCipher.isValidHex(''), isFalse);
+    });
+  });
+
   group('PskCipher encrypt/decrypt', () {
     late PskCipher cipher;
 

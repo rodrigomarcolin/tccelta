@@ -1,18 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:tccelta_mobile/src/data/datasources/permissions_datasource.dart';
-import 'package:tccelta_mobile/src/data/repositories/permissions_repository_impl.dart';
+import 'package:tccelta_mobile/src/data/datasources/ble_permissions_datasource.dart';
+import 'package:tccelta_mobile/src/data/repositories/ble_permissions_repository_impl.dart';
 
-class _MockPermissionsDatasource extends Mock
-    implements PermissionsDatasource {}
+class _MockBlePermissionsDatasource extends Mock
+    implements BlePermissionsDatasource {}
 
 void main() {
-  late _MockPermissionsDatasource ds;
-  late PermissionsRepositoryImpl repo;
+  late _MockBlePermissionsDatasource ds;
+  late BlePermissionsRepositoryImpl repo;
 
   setUp(() {
-    ds = _MockPermissionsDatasource();
-    repo = PermissionsRepositoryImpl(ds);
+    ds = _MockBlePermissionsDatasource();
+    repo = BlePermissionsRepositoryImpl(ds);
   });
 
   test('hasBluetoothPermission delega ao datasource', () async {

@@ -27,5 +27,5 @@ Future<void> confirmAndForgetDongle(BuildContext context, WidgetRef ref) async {
   );
   if (confirmed != true) return;
   await forgetDongle(ref);
-  if (context.mounted) context.go(AppRoutes.permissions);
+  if (context.mounted) context.go(AppRoutes.blePermissions);
 }

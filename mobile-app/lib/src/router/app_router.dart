@@ -1,25 +1,27 @@
 import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
+import 'package:tccelta_mobile/src/ui/connection/view/ble_permissions_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/bluetooth_off_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/connected_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/connecting_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/connection_lost_screen.dart';
-import 'package:tccelta_mobile/src/ui/connection/view/permissions_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/scan_screen.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/view/dtc_screen.dart';
 import 'package:tccelta_mobile/src/ui/more/view/more_screen.dart';
+import 'package:tccelta_mobile/src/ui/settings/view/camera_permissions_screen.dart';
 import 'package:tccelta_mobile/src/ui/settings/view/psk_settings_screen.dart';
+import 'package:tccelta_mobile/src/ui/settings/view/qr_scan_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/sensor_picker_screen.dart';
 
 /// Roteador do app. O fluxo de conexão (`01 FLUXO DE CONEXÃO`) é a entrada;
 /// `/painel` abre o painel de telemetria OBD-II (`PainelScreen`).
 final GoRouter appRouter = GoRouter(
-  initialLocation: AppRoutes.permissions,
+  initialLocation: AppRoutes.blePermissions,
   routes: [
     GoRoute(
-      path: AppRoutes.permissions,
-      builder: (context, state) => const PermissionsScreen(),
+      path: AppRoutes.blePermissions,
+      builder: (context, state) => const BlePermissionsScreen(),
     ),
     GoRoute(
       path: AppRoutes.bluetoothOff,
@@ -60,6 +62,15 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.pskSetup,
       builder: (context, state) => const PskSettingsScreen(setupFlow: true),
+    ),
+    GoRoute(
+      path: AppRoutes.cameraPermissions,
+      builder: (context, state) =>
+          CameraPermissionsScreen(destination: state.extra! as String),
+    ),
+    GoRoute(
+      path: AppRoutes.pskScanQr,
+      builder: (context, state) => const QrScanScreen(),
     ),
     GoRoute(
       path: AppRoutes.sensorPicker,
