@@ -39,11 +39,17 @@ class SensorPickerScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final query = useState('');
     final telemetry = ref.watch(telemetryViewModelProvider);
-    final panels = ref.watch(panelViewModelProvider);
+    final panels = ref.watch(panelViewModelProvider).value;
     final activeDtcCount = ref.watch(
       dtcViewModelProvider.select((s) => s.activeCount),
     );
     final byPid = {for (final r in telemetry.readings) r.pid: r};
+
+    // `panels` só é nulo no brevíssimo instante entre o primeiro frame e o
+    // carregamento dos painéis salvos.
+    if (panels == null) {
+      return const Scaffold(body: SizedBox.shrink());
+    }
 
     final results = _filter(Obd2Pid.values, query.value);
 
@@ -223,6 +229,7 @@ class SensorPickerScreen extends HookConsumerWidget {
     if (panelId == null || !context.mounted) return;
     final panel = ref
         .read(panelViewModelProvider)
+        .requireValue
         .panels
         .firstWhere((p) => p.id == panelId);
     final already = panel.contains(pid);

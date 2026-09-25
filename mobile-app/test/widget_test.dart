@@ -18,6 +18,8 @@ import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 
+import 'support/fake_panel_repository.dart';
+
 /// Repository de permissões fake para os testes de widget: controla se a
 /// permissão já foi concedida sem tocar no plugin real.
 class _FakePermissionsRepository implements PermissionsRepository {
@@ -163,6 +165,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
+        panelRepositoryProvider.overrideWithValue(FakePanelRepository()),
       ],
     );
 
@@ -208,6 +211,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           obd2RepositoryProvider.overrideWithValue(_HangingObd2Repository()),
+          panelRepositoryProvider.overrideWithValue(FakePanelRepository()),
         ],
       );
 

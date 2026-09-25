@@ -44,11 +44,19 @@ class PainelScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final telemetry = ref.watch(telemetryViewModelProvider);
-    final panel = ref.watch(panelViewModelProvider);
+    final panel = ref.watch(panelViewModelProvider).value;
     final activeDtcCount = ref.watch(
       dtcViewModelProvider.select((s) => s.activeCount),
     );
     final byPid = {for (final r in telemetry.readings) r.pid: r};
+
+    // `panel` só é nulo no brevíssimo instante entre o primeiro frame e o
+    // carregamento dos painéis salvos (armazenamento local, tipicamente
+    // poucos ms) — nesse meio-tempo a tela renderiza vazia.
+    if (panel == null) {
+      return const Scaffold(body: SizedBox.shrink());
+    }
+
     final indicators = panel.indicators;
 
     return Scaffold(

@@ -26,14 +26,32 @@ Os payloads são texto ASCII sobre BLE — não JSON/protobuf. A fila de comando
 
 ## Comandos
 
-Rodar a partir de `mobile-app/`:
+Rodar a partir de `mobile-app/`, **sempre via `fvm`** (nunca `flutter`/`dart`
+crus): a versão do Flutter é pinada em `.fvmrc` (`3.44.0`) e é essa mesma
+versão que o CI usa (`.github/workflows/mobile-app-lint.yml`). Rodar com o
+SDK do sistema em vez do pinado pode formatar/analisar diferente do CI e
+gerar um PR verde localmente que falha no lint remoto.
 
-- `flutter pub get` — baixar dependências
-- `flutter run` — iniciar em um dispositivo/emulador conectado (`--release` para release)
-- `flutter analyze` — lint (estrito; ver abaixo)
-- `flutter test` — rodar todos os widget tests
-- `flutter test test/widget_test.dart --plain-name "painel mostra os valores de exemplo dos PIDs"` — rodar um único teste pelo nome
-- `dart run build_runner build --delete-conflicting-outputs` — regerar código após editar models freezed/json_serializable (ainda não existe nenhum, mas a toolchain está montada)
+- `fvm flutter pub get` — baixar dependências
+- `fvm flutter run` — iniciar em um dispositivo/emulador conectado (`--release` para release)
+- `fvm flutter analyze` — lint (estrito; ver abaixo)
+- `fvm flutter test` — rodar todos os widget tests
+- `fvm flutter test test/widget_test.dart --plain-name "painel mostra os valores de exemplo dos PIDs"` — rodar um único teste pelo nome
+- `fvm dart format --output=none --set-exit-if-changed .` — checa formatação sem escrever (mesmo comando do CI); `fvm dart format .` aplica a formatação
+- `fvm dart run build_runner build --delete-conflicting-outputs` — regerar código após editar models freezed/json_serializable (ainda não existe nenhum, mas a toolchain está montada)
+
+### Antes de considerar qualquer mudança pronta
+
+O CI (`mobile-app-lint.yml`) roda, nesta ordem, exatamente estes três
+passos sobre todo o diretório — e falha o PR se qualquer um apontar algo:
+`dart format --output=none --set-exit-if-changed .`, `flutter analyze`,
+`flutter test`. Sempre rodar os três localmente (com `fvm`, ver acima)
+antes de dar por concluída qualquer edição em `mobile-app/`, nesta ordem:
+
+1. `fvm dart format .` — aplica a formatação (rodar sem `--set-exit-if-changed`
+   para já corrigir, não só detectar).
+2. `fvm flutter analyze` — deve devolver "No issues found!".
+3. `fvm flutter test` — toda a suíte deve passar.
 
 ## Arquitetura
 

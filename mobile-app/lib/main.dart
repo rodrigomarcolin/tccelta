@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tccelta_mobile/src/core/persistence/shared_preferences_provider.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/router/app_router.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_guard.dart';
 
-void main() {
-  runApp(const ProviderScope(child: TcceltaApp()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  runApp(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      child: const TcceltaApp(),
+    ),
+  );
 }
 
 /// Raiz do app. Aplica o tema do OBD2 Cockpit design system e entra pelo fluxo

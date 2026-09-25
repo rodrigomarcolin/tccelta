@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/core/errors/failure.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
+import 'package:tccelta_mobile/src/ui/connection/actions/forget_dongle_action.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/view_model/connecting_view_model.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
@@ -34,6 +35,7 @@ class TelemetryStatusBand extends ConsumerWidget {
       statusLabel: status.label,
       statusTone: status.tone,
       pulse: status.tone == StatusTone.live,
+      onTap: () => confirmAndForgetDongle(context, ref),
     );
   }
 

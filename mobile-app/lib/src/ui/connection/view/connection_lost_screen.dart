@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
-import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
+import 'package:tccelta_mobile/src/ui/connection/actions/forget_dongle_action.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_state_view.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
@@ -16,8 +16,7 @@ class ConnectionLostScreen extends ConsumerWidget {
   const ConnectionLostScreen({super.key});
 
   Future<void> _forget(BuildContext context, WidgetRef ref) async {
-    ref.read(selectedDongleProvider.notifier).clear();
-    await ref.read(dongleRepositoryProvider).disconnect();
+    await forgetDongle(ref);
     if (context.mounted) context.go(AppRoutes.permissions);
   }
 
