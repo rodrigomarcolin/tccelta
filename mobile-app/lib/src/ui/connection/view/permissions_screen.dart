@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/view_model/permissions_view_model.dart';
@@ -23,15 +24,32 @@ class PermissionsScreen extends ConsumerWidget {
   /// Cria a tela de permissões.
   const PermissionsScreen({super.key});
 
-  /// Avança para a busca ou para "BT desligado" conforme o estado atual do
-  /// adaptador. Usa `pushReplacement` para não deixar a tela de permissão na
-  /// pilha (a permissão já foi resolvida).
+  /// Avança para a busca, para "BT desligado" ou direto para "Conectando"
+  /// conforme o estado atual do adaptador e a existência de um dongle salvo
+  /// de um handshake anterior (reconexão automática). Usa `pushReplacement`
+  /// para não deixar a tela de permissão na pilha (a permissão já foi
+  /// resolvida).
   Future<void> _advance(BuildContext context, WidgetRef ref) async {
     final adapter = await ref.read(dongleRepositoryProvider).adapterState.first;
     if (!context.mounted) return;
-    context.pushReplacement(
-      adapter == BleAdapterState.on ? AppRoutes.scan : AppRoutes.bluetoothOff,
-    );
+    if (adapter != BleAdapterState.on) {
+      context.pushReplacement(AppRoutes.bluetoothOff);
+      return;
+    }
+
+    final last = await ref.read(lastDongleRepositoryProvider).load();
+    if (!context.mounted) return;
+    if (last != null) {
+      // Popula a seleção como se o usuário tivesse escolhido na busca — a
+      // PSK (se houver) já está salva e é lida direto pelo
+      // `SecureDongleDatasource`, então a tela de PSK Setup é pulada também.
+      ref
+          .read(selectedDongleProvider.notifier)
+          .select(BleDevice(id: last.id, name: last.name, rssi: 0));
+      context.pushReplacement(AppRoutes.connecting);
+    } else {
+      context.pushReplacement(AppRoutes.scan);
+    }
   }
 
   Future<void> _onAllow(BuildContext context, WidgetRef ref) async {

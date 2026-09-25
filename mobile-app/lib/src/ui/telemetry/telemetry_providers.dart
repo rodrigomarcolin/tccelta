@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tccelta_mobile/src/application/telemetry/panel_persistence_use_case.dart';
+import 'package:tccelta_mobile/src/core/persistence/shared_preferences_provider.dart';
 import 'package:tccelta_mobile/src/data/datasources/panel_datasource.dart';
 import 'package:tccelta_mobile/src/data/repositories/obd2_repository_impl.dart';
 import 'package:tccelta_mobile/src/data/repositories/panel_repository_impl.dart';
@@ -17,17 +17,6 @@ final Provider<Obd2Repository> obd2RepositoryProvider =
       ref.onDispose(repo.dispose);
       return repo;
     });
-
-/// Instância resolvida de [SharedPreferences] — sobrescrita em `main()` com
-/// a instância assíncrona real antes do `runApp`. Único consumidor hoje é a
-/// persistência de painéis; se outro recurso precisar dela, subir para
-/// `core/`.
-final Provider<SharedPreferences> sharedPreferencesProvider =
-    Provider<SharedPreferences>(
-      (ref) => throw UnimplementedError(
-        'sharedPreferencesProvider deve ser sobrescrito em main()',
-      ),
-    );
 
 /// Datasource da persistência local dos painéis, sobre
 /// [sharedPreferencesProvider].

@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tccelta_mobile/src/core/persistence/shared_preferences_provider.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
 import 'package:tccelta_mobile/src/domain/ble/security_mode.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
@@ -136,6 +138,36 @@ void main() {
       expect(state.phase, BleConnectionPhase.failed);
       expect(state.prep, ConnectingPrep.idle);
     });
+
+    test(
+      'ao ficar ready, grava o dongle selecionado como o último conectado',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'psk_hex': _fakePskHex,
+          'security_mode': SecurityMode.staticPsk.storageValue,
+        });
+        final container = ProviderContainer(
+          overrides: [
+            bleServiceProvider.overrideWithValue(FakeBleService()),
+            obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
+            sharedPreferencesProvider.overrideWithValue(
+              await SharedPreferences.getInstance(),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        container
+            .read(selectedDongleProvider.notifier)
+            .select(const BleDevice(id: '1', name: 'OBD2Dongle', rssi: -50));
+
+        await container.read(connectingViewModelProvider.notifier).connect('1');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        final saved = await container.read(lastDongleRepositoryProvider).load();
+        expect(saved?.id, '1');
+        expect(saved?.name, 'OBD2Dongle');
+      },
+    );
   });
 
   group('connectingStepsFor', () {

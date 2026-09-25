@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/router/app_tab_navigation.dart';
+import 'package:tccelta_mobile/src/ui/connection/actions/forget_dongle_action.dart';
+import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/view_model/dtc_view_model.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/widgets/dtc_tab_badge.dart';
@@ -54,6 +56,18 @@ class MoreScreen extends ConsumerWidget {
                   : 'Comunicação em texto puro',
               showValue: false,
               onTap: () => context.push(AppRoutes.settings),
+            ),
+            const SizedBox(height: AppSpacing.s3),
+            CardButton(
+              icon: AppIconData.desconectar,
+              iconColor: AppColors.red500,
+              title: 'Esquecer dispositivo',
+              subtitle:
+                  ref.watch(selectedDongleProvider)?.displayName ??
+                  'Nenhum dispositivo',
+              subtitleMono: false,
+              showValue: false,
+              onTap: () => confirmAndForgetDongle(context, ref),
             ),
           ],
         ),

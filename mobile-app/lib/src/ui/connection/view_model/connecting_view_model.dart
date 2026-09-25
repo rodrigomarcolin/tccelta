@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/core/errors/failure.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
+import 'package:tccelta_mobile/src/domain/ble/last_dongle.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
 import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
@@ -77,10 +78,14 @@ class ConnectingViewModel extends Notifier<ConnectingState> {
     await _sub?.cancel();
     _sub = _repo.connectionPhase.listen(
       (p) {
+        final wasReady = state.phase == BleConnectionPhase.ready;
         state = state.copyWith(phase: p);
         if (p == BleConnectionPhase.ready &&
             state.prep == ConnectingPrep.idle) {
           unawaited(_prepare());
+        }
+        if (p == BleConnectionPhase.ready && !wasReady) {
+          _rememberDevice();
         }
       },
       onError: (_) => state = state.copyWith(phase: BleConnectionPhase.failed),
@@ -106,6 +111,21 @@ class ConnectingViewModel extends Notifier<ConnectingState> {
       // Best-effort: segue mesmo assim.
     }
     state = state.copyWith(prep: ConnectingPrep.done);
+  }
+
+  /// Grava o dongle selecionado como o último conectado com sucesso, para a
+  /// próxima abertura do app reconectar sozinha (`PermissionsScreen`).
+  /// Best-effort: uma falha ao salvar não deve derrubar o handshake, que já
+  /// está `ready`.
+  void _rememberDevice() {
+    final device = ref.read(selectedDongleProvider);
+    if (device == null) return;
+    unawaited(
+      ref
+          .read(lastDongleRepositoryProvider)
+          .save(LastDongle(id: device.id, name: device.name))
+          .catchError((_) {}),
+    );
   }
 
   /// Cancela/encerra a conexão em andamento.
