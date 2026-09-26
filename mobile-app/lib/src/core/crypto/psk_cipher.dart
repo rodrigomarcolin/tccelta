@@ -37,6 +37,11 @@ class PskCipher {
     return PskCipher(key: key);
   }
 
+  /// `true` iff [hex] is exactly 64 hex chars (case-insensitive) — the same
+  /// rule [PskCipher.fromHex] enforces, but as a non-throwing predicate.
+  static bool isValidHex(String hex) =>
+      RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(hex.trim());
+
   final Uint8List _key;
 
   /// Returns a defensive copy for protocols that use the PSK during a

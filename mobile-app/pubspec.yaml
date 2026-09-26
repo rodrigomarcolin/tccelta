@@ -47,6 +47,7 @@ dependencies:
   # Anotações puras de Dart (@immutable, etc.) para a camada domain, sem
   # depender de Flutter.
   meta: ^1.16.0
+  mobile_scanner: ^7.4.2
   permission_handler: ^12.0.3
   pointycastle: ^3.9.1
   shared_preferences: ^2.5.5

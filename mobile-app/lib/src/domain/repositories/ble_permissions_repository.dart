@@ -3,7 +3,7 @@
 ///
 /// É a *source of truth* das permissões para a camada de UI: o view model
 /// consome esta interface, nunca o datasource nem o plugin direto.
-abstract interface class PermissionsRepository {
+abstract interface class BlePermissionsRepository {
   /// Permissão de Bluetooth já concedida? Não abre o diálogo do sistema.
   Future<bool> hasBluetoothPermission();
 

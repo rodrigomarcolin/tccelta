@@ -76,6 +76,16 @@ Sempre que você construir qualquer coisa — um elemento de UI, um layout, um t
 
 O objetivo: o código permanece uma camada fina de composição de features sobre uma rica biblioteca de componentes e tokens que é fonte única da verdade.
 
+## Comentários: doc genérica, não específica da implementação
+
+Comentários e doc comments (`///`) descrevem o contrato/comportamento do código em si — nunca a tarefa que motivou a mudança, quem chama o código hoje, ou uma comparação detalhada com uma classe/tela irmã. Esse tipo de referência apodrece: quem chama muda, a tarefa passa, mas o comentário fica.
+
+Evite:
+- Referenciar arquivos específicos fora do próprio arquivo (`"ver app_router.dart"`).
+- Narrar diferenças de design comparando com uma implementação irmã — se a diferença importa, explique só o "porquê" do código atual, sem comparação.
+
+Ao implementar ou editar qualquer coisa, se você notar um comentário (novo ou pré-existente) que foge dessa regra, corrija-o para a versão genérica antes de seguir.
+
 ## Estrutura de pastas
  
 Mapa 1:1 com o projeto React Native do time:
@@ -127,12 +137,12 @@ A fatia vertical que **fecha a arquitetura ponta a ponta já existe e está impl
  
 Peças da slice (todas já no código):
 - `domain/ble/{ble_device,ble_adapter_state,ble_connection}.dart` — modelos de domínio PUROS (só `meta`, `@immutable`). **Sem freezed/json_serializable e sem DTO**: o transporte é texto ASCII sobre BLE, não JSON, então não há camada de DTO/`fromJson` aqui.
-- `domain/repositories/{dongle,permissions}_repository.dart` — interfaces no `domain`.
+- `domain/repositories/{dongle,ble_permissions}_repository.dart` — interfaces no `domain`.
 - `services/ble/ble_service.dart` — **port** BLE abstrato (BLE puro, sem "dongle").
 - `infra/ble/ble_plus.dart` — **adapter** concreto sobre `flutter_blue_plus`; única camada que conhece a lib. Trocar de lib BLE = reescrever só aqui + trocar 1 provider.
-- `data/datasources/{dongle,permissions}_datasource.dart` — envolvem o port/plugins.
-- `data/repositories/{dongle,permissions}_repository_impl.dart` — impls; *source of truth* da conexão/permissões; mapeiam erro cru → `Failure`/`BleFailure` (`src/core/errors/`).
-- `ui/connection/view_model/*.dart` — ViewModels `Notifier<Estado>`: `ScanViewModel` (estado `ScanState` imutável + `copyWith`), `ConnectingViewModel` (fase `BleConnectionPhase`), `PermissionsViewModel` (fase `PermissionFlowState`). **Toda a lógica vive aqui.**
+- `data/datasources/{dongle,ble_permissions}_datasource.dart` — envolvem o port/plugins.
+- `data/repositories/{dongle,ble_permissions}_repository_impl.dart` — impls; *source of truth* da conexão/permissões; mapeiam erro cru → `Failure`/`BleFailure` (`src/core/errors/`).
+- `ui/connection/view_model/*.dart` — ViewModels `Notifier<Estado>`: `ScanViewModel` (estado `ScanState` imutável + `copyWith`), `ConnectingViewModel` (fase `BleConnectionPhase`), `BlePermissionsViewModel` (fase `BlePermissionFlowState`). **Toda a lógica vive aqui.** O prefixo `Ble`/`ble_` existe porque a feature `settings` (PSK) tem seu próprio par irmão `CameraPermissions*` para a permissão de câmera do scanner de QR — sem o prefixo os dois "permissions" seriam ambíguos.
 - `ui/connection/view/*.dart` — 6 telas `ConsumerWidget`/`ConsumerStatefulWidget` "burras" (só `ref.watch` + render).
 - `ui/connection/widgets/*.dart` — componentes específicos do módulo (`ConnectionGuard`, `ConnectionBackground`, `ConnectionStateView`).
 - `ui/connection/connection_providers.dart` — toda a DI via Riverpod (port → adapter, datasource → repository → view_model).
@@ -152,16 +162,16 @@ Regra prática: comece com `view_model → repository` — a camada `repository`
 - o `view_model` está inchando de orquestração.
 Não criar use case "passthrough" (uma linha que só repassa pro repository) — isso é boilerplate sem ganho. **Atenção:** esta regra do passthrough vale APENAS para a camada `application/` (use cases). Ela NÃO autoriza pular o repository: o `view_model` fala com o repository, nunca com o datasource, mesmo que o repository pareça um simples repasse (datasource → repository → view_model é sempre a cadeia mínima).
  
-Na feature `connection` isto **ainda não ocorre**: cada view_model fala direto com um repository (`ScanViewModel`/`ConnectingViewModel` → `DongleRepository`; `PermissionsViewModel` → `PermissionsRepository`), e está correto — nenhum orquestra dois repositories nem repete regra. Portanto `connection` hoje NÃO tem camada `application/`.
+Na feature `connection` isto **ainda não ocorre**: cada view_model fala direto com um repository (`ScanViewModel`/`ConnectingViewModel` → `DongleRepository`; `BlePermissionsViewModel` → `BlePermissionsRepository`), e está correto — nenhum orquestra dois repositories nem repete regra. Portanto `connection` hoje NÃO tem camada `application/`.
 
-Onde um use case entraria neste domínio: a sequência *checar permissão → confirmar adaptador ligado → iniciar conexão* hoje está dividida entre `PermissionsScreen`, `ConnectionGuard` e os view_models. Se ela precisar ser reusada por mais de um view_model (ou inchar), sobe para `application/connection/prepare_connection_use_case.dart`, combinando `PermissionsRepository` + `DongleRepository`:
+Onde um use case entraria neste domínio: a sequência *checar permissão → confirmar adaptador ligado → iniciar conexão* hoje está dividida entre `BlePermissionsScreen`, `ConnectionGuard` e os view_models. Se ela precisar ser reusada por mais de um view_model (ou inchar), sobe para `application/connection/prepare_connection_use_case.dart`, combinando `BlePermissionsRepository` + `DongleRepository`:
  
 ```dart
 // application/connection/prepare_connection_use_case.dart
 class PrepareConnectionUseCase {
   PrepareConnectionUseCase(this._permissions, this._dongle);
-  final PermissionsRepository _permissions; // orquestra repositories,
-  final DongleRepository _dongle;            // nunca datasources
+  final BlePermissionsRepository _permissions; // orquestra repositories,
+  final DongleRepository _dongle;               // nunca datasources
  
   Future<void> call(String deviceId) async {
     if (!await _permissions.hasBluetoothPermission()) {
@@ -174,7 +184,7 @@ class PrepareConnectionUseCase {
 // provider (DI via Riverpod)
 final prepareConnectionUseCaseProvider = Provider(
   (ref) => PrepareConnectionUseCase(
-    ref.read(permissionsRepositoryProvider),
+    ref.read(blePermissionsRepositoryProvider),
     ref.read(dongleRepositoryProvider),
   ),
 );
@@ -183,8 +193,8 @@ final prepareConnectionUseCaseProvider = Provider(
 ## 6. Testes (definição mínima)
  
 A costura de teste é o **port `BleService`**: um `FakeBleService` (`test/support/fake_ble_service.dart`) substitui a lib BLE, e as camadas reais rodam por cima. Cobertura existente (espelha `lib/src/`):
-- `DongleRepositoryImpl` sobre um `DongleDatasource(FakeBleService)`: `scan` emite os dongles vistos, erro cru vira `BleScanFailure`, e `connect` progride até `ready` expondo a conexão. (`PermissionsRepositoryImpl` tem teste análogo, com `mocktail` disponível para mockar dependências.)
-- ViewModels via `ProviderContainer` sobrescrevendo `bleServiceProvider` pelo `FakeBleService`: `ScanViewModel` (popula `devices`; toques em rajada coalescem sem reiniciar o scan), `ConnectingViewModel` (progressão de fases → `ready`/`failed`) e `PermissionsViewModel` (`checking → granted/denied`).
+- `DongleRepositoryImpl` sobre um `DongleDatasource(FakeBleService)`: `scan` emite os dongles vistos, erro cru vira `BleScanFailure`, e `connect` progride até `ready` expondo a conexão. (`BlePermissionsRepositoryImpl` tem teste análogo, com `mocktail` disponível para mockar dependências.)
+- ViewModels via `ProviderContainer` sobrescrevendo `bleServiceProvider` pelo `FakeBleService`: `ScanViewModel` (popula `devices`; toques em rajada coalescem sem reiniciar o scan), `ConnectingViewModel` (progressão de fases → `ready`/`failed`) e `BlePermissionsViewModel` (`checking → granted/denied`).
 - 1 widget test da `ScanScreen` (`test/ui/connection/scan_screen_test.dart`) renderizando os estados de busca.
 
 ## Stack e convenções
