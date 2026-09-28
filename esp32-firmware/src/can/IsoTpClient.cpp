@@ -1,4 +1,4 @@
-#include "IsoTpClient.h"
+#include "can/IsoTpClient.h"
 #include <cstring>
 
 // Plataforma: no ESP32 (Arduino) usa millis()/delay()/taskYIELD() nativos.
@@ -33,15 +33,6 @@ constexpr uint8_t N_PCI_FC = 0x30;
 constexpr uint8_t FS_CTS      = 0x00;
 constexpr uint8_t FS_WAIT     = 0x01;
 constexpr uint8_t FS_OVERFLOW = 0x02;
-
-// Convenção padrão de endereçamento OBD-II 11-bit (também usada no
-// simulador, ver simulador/ECUSim/ECUSim.h): ID de resposta física = ID de
-// requisição física + 8 (0x7E0/0x7E8, 0x7E1/0x7E9, ...). O Flow Control é
-// sempre endereçado à ECU especifica que mandou o First Frame, nunca ao
-// broadcast funcional (0x7DF) usado para a requisição original.
-constexpr uint32_t physicalRequestIdFor(uint32_t physicalResponseId) {
-    return physicalResponseId - 0x008;
-}
 
 bool inRange(uint32_t id, uint32_t lo, uint32_t hi) { return id >= lo && id <= hi; }
 
@@ -150,125 +141,27 @@ SendOutcome sendSegmented(ICanBus* can, uint32_t txId, uint32_t fcIdMin, uint32_
 
 }  // namespace
 
-static int requestLegacy(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
-            const uint8_t* req, size_t reqLen,
-            uint8_t* outBuf, size_t maxLen,
-            uint32_t timeoutMs) {
+int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
+               const uint8_t* req, size_t reqLen,
+               uint8_t expectedReplyMarker, uint8_t negativeResponseMarker,
+               int32_t fcIdOffset,
+               ResponseSet& responses,
+               uint32_t timeoutMs,
+               size_t expectedResponses) {
+    responses.count = 0;
+
     // Drena qualquer frame que já esteja na fila de recepção antes de mandar
     // esta requisição. O uso deste cliente é sempre síncrono (manda, espera
     // a resposta, só então a próxima chamada manda a próxima requisição) —
     // então nada deveria estar pendente na fila neste ponto; qualquer coisa
     // que esteja é, por construção, sobra de uma transação anterior (ex.:
     // a 2ª ECU que respondeu a um broadcast funcional, cuja resposta não foi
-    // a escolhida). O filtro por SID esperado abaixo já cobre o caso de uma
-    // sobra chegar DURANTE a espera desta transação; mas quando duas
-    // requisições seguidas esperam o MESMO SID de resposta (ex.: várias
-    // leituras de PID do freeze frame, todas com SID 0x42), o filtro por SID
-    // não consegue distinguir a sobra da resposta de verdade — só o dreno
-    // aqui resolve isso.
-    CanFrame stale;
-    while (can->receive(stale)) { /* descarta */ }
-
-    if (reqLen <= 7) {
-        sendSf(can, reqId, req, (uint8_t)reqLen);
-    } else {
-        SendOutcome rc = sendSegmented(can, reqId, respIdMin, respIdMax, req, reqLen);
-        if (rc == SendOutcome::OVERFLOW) return OVERFLOW_ABORT;
-        if (rc != SendOutcome::OK)       return TIMEOUT;
-    }
-
-    // SID de resposta esperado por convenção OBD-II/SAE-J1979 (camada acima do
-    // ISO-TP): positiva = SID da requisição | 0x40; negativa = sempre 0x7F.
-    // Requisições funcionais (broadcast 0x7DF) recebem resposta de CADA ECU
-    // que "escutou" o pedido — inclusive para serviços de outro request feito
-    // um instante antes, se aquela resposta ainda não tiver sido drenada da
-    // fila. Sem checar o SID aqui, a primeira ECU a responder a uma
-    // transação anterior (ainda não lida) seria confundida com a resposta
-    // da transação atual. Descartar e continuar esperando (dentro do
-    // timeout) drena esses frames obsoletos até achar o que realmente
-    // corresponde a este pedido.
-    uint8_t expectedReplySid = (uint8_t)(req[0] | 0x40u);
-
-    // Espera a primeira resposta (SF ou FF) do peer.
-    uint32_t deadline = millis() + timeoutMs;
-    CanFrame f;
-    while (true) {
-        if (millis() >= deadline) return TIMEOUT;
-        if (!can->receive(f)) { taskYIELD(); continue; }
-        if (!inRange(f.id, respIdMin, respIdMax)) continue;
-
-        uint8_t pciType = f.data[0] & 0xF0;
-
-        if (pciType == N_PCI_SF) {
-            uint8_t len = f.data[0] & 0x0F;
-            if (len == 0) continue;  // SF vazio: ignora e continua esperando
-            if (f.data[1] == 0x7F) {
-                if (maxLen < 2) return TIMEOUT;
-                outBuf[0] = f.data[2];  // origService
-                outBuf[1] = f.data[3];  // NRC
-                return NEGATIVE_RESPONSE;
-            }
-            if (f.data[1] != expectedReplySid) continue;  // resposta de outra transação: ignora
-            size_t toCopy = (size_t)len < maxLen ? (size_t)len : maxLen;
-            memcpy(outBuf, &f.data[1], toCopy);
-            return (int)toCopy;
-        }
-
-        if (pciType == N_PCI_FF) {
-            if (f.data[2] != expectedReplySid) continue;  // idem, resposta de outra transação
-
-            uint32_t rxId    = f.id;
-            uint32_t fcTargetId = physicalRequestIdFor(rxId);
-            uint16_t totalLen = (uint16_t)(((f.data[0] & 0x0F) << 8) | f.data[1]);
-            if (totalLen < 8) return TIMEOUT;  // FF malformado
-
-            size_t toCopyFirst = (size_t)6 < maxLen ? 6 : maxLen;
-            memcpy(outBuf, &f.data[2], toCopyFirst);
-            size_t assembled = 6;
-
-            sendFc(can, fcTargetId, FS_CTS, /*bs=*/0, /*stmin=*/0);
-
-            uint8_t expectedSeq = 1;
-            while (assembled < totalLen) {
-                uint32_t cfDeadline = millis() + N_CR_MS;
-                CanFrame cf;
-                bool     got = false;
-                while (millis() < cfDeadline) {
-                    if (!can->receive(cf)) { taskYIELD(); continue; }
-                    if (cf.id != rxId) continue;
-                    if ((cf.data[0] & 0xF0) != N_PCI_CF) continue;
-                    got = true;
-                    break;
-                }
-                if (!got) return TIMEOUT;
-
-                uint8_t seq = cf.data[0] & 0x0F;
-                if (seq != (expectedSeq & 0x0F)) return TIMEOUT;
-
-                size_t  remaining = totalLen - assembled;
-                uint8_t chunk     = (uint8_t)(remaining < 7 ? remaining : 7);
-                if (assembled < maxLen) {
-                    size_t toCopy = (assembled + chunk <= maxLen) ? chunk : (maxLen - assembled);
-                    memcpy(outBuf + assembled, &cf.data[1], toCopy);
-                }
-                assembled  += chunk;
-                expectedSeq = (uint8_t)((expectedSeq + 1) & 0x0F);
-            }
-
-            return (int)((size_t)totalLen < maxLen ? totalLen : maxLen);
-        }
-
-        // FC ou CF fora de contexto (sem FF em andamento): ignora.
-    }
-}
-
-int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
-               const uint8_t* req, size_t reqLen,
-               ResponseSet& responses,
-               uint32_t timeoutMs,
-               size_t expectedResponses) {
-    responses.count = 0;
-
+    // a escolhida). O filtro por `expectedReplyMarker` abaixo já cobre o caso
+    // de uma sobra chegar DURANTE a espera desta transação; mas quando duas
+    // requisições seguidas esperam o MESMO marcador de resposta (ex.: várias
+    // leituras de PID do freeze frame, todas com o mesmo SID), o filtro não
+    // consegue distinguir a sobra da resposta de verdade — só o dreno aqui
+    // resolve isso.
     CanFrame stale;
     while (can->receive(stale)) {}
 
@@ -280,7 +173,6 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
         if (rc != SendOutcome::OK) return TIMEOUT;
     }
 
-    const uint8_t expectedReplySid = static_cast<uint8_t>(req[0] | 0x40u);
     bool active[MAX_RESPONSES] = {};
     bool complete[MAX_RESPONSES] = {};
     uint16_t totalLength[MAX_RESPONSES] = {};
@@ -360,12 +252,12 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
         if (pciType == N_PCI_SF) {
             const uint8_t len = frame.data[0] & 0x0F;
             if (len == 0 || len > 7) continue;
-            if (frame.data[1] == 0x7F) {
+            if (frame.data[1] == negativeResponseMarker) {
                 negativeService = frame.data[2];
                 negativeNrc = frame.data[3];
                 continue;
             }
-            if (frame.data[1] != expectedReplySid) continue;
+            if (frame.data[1] != expectedReplyMarker) continue;
             if (findResponse(frame.id) < 0) {
                 addResponse(frame.id, &frame.data[1], len);
             }
@@ -373,7 +265,7 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
         }
 
         if (pciType == N_PCI_FF) {
-            if (frame.data[2] != expectedReplySid) continue;
+            if (frame.data[2] != expectedReplyMarker) continue;
             const uint16_t total = static_cast<uint16_t>(((frame.data[0] & 0x0F) << 8) |
                                                          frame.data[1]);
             if (total < 8) continue;
@@ -385,8 +277,10 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
                 responses.items[index].ecuId = frame.id;
                 responses.items[index].len = 0;
             }
+            const uint32_t fcTargetId = static_cast<uint32_t>(
+                static_cast<int64_t>(frame.id) + fcIdOffset);
             if (total > MAX_RESPONSE_BYTES) {
-                sendFc(can, physicalRequestIdFor(frame.id), FS_OVERFLOW, 0, 0);
+                sendFc(can, fcTargetId, FS_OVERFLOW, 0, 0);
                 active[index] = false;
                 continue;
             }
@@ -398,7 +292,7 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
             expectedSequence[index] = 1;
             active[index] = true;
             cfDeadline[index] = millis() + N_CR_MS;
-            sendFc(can, physicalRequestIdFor(frame.id), FS_CTS, 0, 0);
+            sendFc(can, fcTargetId, FS_CTS, 0, 0);
             continue;
         }
 
@@ -431,10 +325,13 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
 
 int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
             const uint8_t* req, size_t reqLen,
+            uint8_t expectedReplyMarker, uint8_t negativeResponseMarker,
+            int32_t fcIdOffset,
             uint8_t* outBuf, size_t maxLen,
             uint32_t timeoutMs) {
     ResponseSet responses;
     int result = requestAll(can, reqId, respIdMin, respIdMax, req, reqLen,
+                            expectedReplyMarker, negativeResponseMarker, fcIdOffset,
                             responses, timeoutMs, 1);
     if (result < 0) {
         if (result == NEGATIVE_RESPONSE && responses.count > 0 && maxLen >= 2) {

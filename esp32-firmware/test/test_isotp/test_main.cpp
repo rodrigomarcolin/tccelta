@@ -1,6 +1,13 @@
 #include <unity.h>
-#include "obd2/real/IsoTpClient.h"
+#include "can/IsoTpClient.h"
 #include "FakeCanBus.h"
+
+// Convenções OBD-II/SAE-J1979 usadas nestes testes (o IsoTpClient em si não
+// as conhece mais — são passadas explicitamente por quem chama, como faria
+// `Obd2Can` em produção). Ver `can/IsoTpClient.h` para o que cada parâmetro
+// significa.
+constexpr uint8_t NEGATIVE_RESPONSE_SID = 0x7F;
+constexpr int32_t FC_ID_OFFSET = -8;  // ID físico = ID de resposta - 8
 
 void setUp() {}
 void tearDown() {}
@@ -14,7 +21,8 @@ void test_rx_sf_clean() {
 
     uint8_t req[1] = {0x03};
     uint8_t out[32];
-    int n = IsoTp::request(&can, 0x7DF, 0x7E8, 0x7EF, req, 1, out, sizeof(out));
+    int n = IsoTp::request(&can, 0x7DF, 0x7E8, 0x7EF, req, 1,
+                            0x43, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET, out, sizeof(out));
 
     TEST_ASSERT_EQUAL_INT(2, n);
     TEST_ASSERT_EQUAL_HEX8(0x43, out[0]);
@@ -30,7 +38,8 @@ void test_rx_ff_one_cf() {
 
     uint8_t req[1] = {0x03};
     uint8_t out[32];
-    int n = IsoTp::request(&can, 0x7DF, 0x7E8, 0x7EF, req, 1, out, sizeof(out));
+    int n = IsoTp::request(&can, 0x7DF, 0x7E8, 0x7EF, req, 1,
+                            0x43, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET, out, sizeof(out));
 
     TEST_ASSERT_EQUAL_INT(8, n);
     uint8_t expected[8] = {0x43, 0x03, 0x03, 0x01, 0x04, 0x20, 0x07, 0x00};
@@ -54,7 +63,8 @@ void test_rx_ff_two_cf() {
 
     uint8_t req[1] = {0x03};
     uint8_t out[32];
-    int n = IsoTp::request(&can, 0x7DF, 0x7E8, 0x7EF, req, 1, out, sizeof(out));
+    int n = IsoTp::request(&can, 0x7DF, 0x7E8, 0x7EF, req, 1,
+                            0x43, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET, out, sizeof(out));
 
     TEST_ASSERT_EQUAL_INT(14, n);
     uint8_t expected[14] = {0x43, 0x06, 0x03, 0x01, 0x01, 0x71, 0x04, 0x20,
@@ -69,7 +79,8 @@ void test_rx_negative_response() {
 
     uint8_t req[1] = {0x03};
     uint8_t out[32];
-    int n = IsoTp::request(&can, 0x7DF, 0x7E8, 0x7EF, req, 1, out, sizeof(out));
+    int n = IsoTp::request(&can, 0x7DF, 0x7E8, 0x7EF, req, 1,
+                            0x43, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET, out, sizeof(out));
 
     TEST_ASSERT_EQUAL_INT(IsoTp::NEGATIVE_RESPONSE, n);
     TEST_ASSERT_EQUAL_HEX8(0x03, out[0]);  // origService
@@ -83,8 +94,9 @@ void test_rx_multi_ecu_single_frame() {
 
     uint8_t req[2] = {0x01, 0x0C};
     IsoTp::ResponseSet responses;
-    int n = IsoTp::requestAll(&can, 0x7DF, 0x7E8, 0x7EF,
-                              req, sizeof(req), responses, 20, 2);
+    int n = IsoTp::requestAll(&can, 0x7DF, 0x7E8, 0x7EF, req, sizeof(req),
+                              0x41, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET,
+                              responses, 20, 2);
 
     TEST_ASSERT_EQUAL_INT(2, n);
     TEST_ASSERT_EQUAL_UINT32(2, responses.count);
@@ -103,8 +115,9 @@ void test_rx_multi_ecu_interleaved_multiframe() {
 
     uint8_t req[2] = {0x01, 0x0C};
     IsoTp::ResponseSet responses;
-    int n = IsoTp::requestAll(&can, 0x7DF, 0x7E8, 0x7EF,
-                              req, sizeof(req), responses, 20, 2);
+    int n = IsoTp::requestAll(&can, 0x7DF, 0x7E8, 0x7EF, req, sizeof(req),
+                              0x41, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET,
+                              responses, 20, 2);
 
     TEST_ASSERT_EQUAL_INT(2, n);
     TEST_ASSERT_EQUAL_UINT32(4, can.sent.size());
@@ -121,7 +134,8 @@ void test_rx_timeout() {
 
     uint8_t req[1] = {0x03};
     uint8_t out[32];
-    int n = IsoTp::request(&can, 0x7DF, 0x7E8, 0x7EF, req, 1, out, sizeof(out));
+    int n = IsoTp::request(&can, 0x7DF, 0x7E8, 0x7EF, req, 1,
+                            0x43, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET, out, sizeof(out));
 
     TEST_ASSERT_EQUAL_INT(IsoTp::TIMEOUT, n);
 }
@@ -138,7 +152,8 @@ void test_tx_ff_cf_cts() {
 
     uint8_t req[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     uint8_t out[16];
-    int n = IsoTp::request(&can, 0x7E0, 0x7E8, 0x7E8, req, sizeof(req), out, sizeof(out));
+    int n = IsoTp::request(&can, 0x7E0, 0x7E8, 0x7E8, req, sizeof(req),
+                            0x40, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET, out, sizeof(out));
 
     TEST_ASSERT_EQUAL_INT(2, n);
     TEST_ASSERT_EQUAL_UINT32(2, can.sent.size());  // FF + 1 CF
@@ -154,7 +169,8 @@ void test_tx_wait_then_cts() {
 
     uint8_t req[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     uint8_t out[16];
-    int n = IsoTp::request(&can, 0x7E0, 0x7E8, 0x7E8, req, sizeof(req), out, sizeof(out));
+    int n = IsoTp::request(&can, 0x7E0, 0x7E8, 0x7E8, req, sizeof(req),
+                            0x40, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET, out, sizeof(out));
 
     TEST_ASSERT_EQUAL_INT(2, n);
     TEST_ASSERT_EQUAL_UINT32(2, can.sent.size());  // FF + 1 CF (Wait não reenvia FF)
@@ -166,7 +182,8 @@ void test_tx_overflow() {
 
     uint8_t req[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     uint8_t out[16];
-    int n = IsoTp::request(&can, 0x7E0, 0x7E8, 0x7E8, req, sizeof(req), out, sizeof(out));
+    int n = IsoTp::request(&can, 0x7E0, 0x7E8, 0x7E8, req, sizeof(req),
+                            0x40, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET, out, sizeof(out));
 
     TEST_ASSERT_EQUAL_INT(IsoTp::OVERFLOW_ABORT, n);
     TEST_ASSERT_EQUAL_UINT32(1, can.sent.size());  // só o FF, nenhum CF
@@ -182,7 +199,8 @@ void test_tx_block_size() {
     uint8_t req[20];
     for (int i = 0; i < 20; i++) req[i] = (uint8_t)i;
     uint8_t out[16];
-    int n = IsoTp::request(&can, 0x7E0, 0x7E8, 0x7E8, req, sizeof(req), out, sizeof(out));
+    int n = IsoTp::request(&can, 0x7E0, 0x7E8, 0x7E8, req, sizeof(req),
+                            0x40, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET, out, sizeof(out));
 
     TEST_ASSERT_EQUAL_INT(2, n);
     TEST_ASSERT_EQUAL_UINT32(3, can.sent.size());  // FF + CF(seq1) + CF(seq2)

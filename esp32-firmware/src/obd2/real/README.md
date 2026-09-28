@@ -1,8 +1,11 @@
 # Real OBD-II over CAN
 
 `Obd2Can` maps the ELM327 OBD operations to functional request ID `0x7DF` and
-response IDs `0x7E8`–`0x7EF`. `IsoTpClient` owns ISO-TP framing and collects
-responses independently by ECU ID.
+response IDs `0x7E8`–`0x7EF`. `IsoTpClient` (`src/can/IsoTpClient.{h,cpp}`) owns
+ISO-TP framing and collects responses independently by ECU ID — it is fully
+generic, with no knowledge of OBD-II/UDS: `Obd2Can` passes in the expected
+reply SID, the negative-response marker (`0x7F`) and the physical-addressing
+offset used to target Flow Control frames (`-8`, per ISO 15765-4).
 
 ```mermaid
 sequenceDiagram
@@ -11,7 +14,7 @@ sequenceDiagram
     participant CAN as ICanBus
     participant E1 as ECU 7E8
     participant E2 as ECU 7E9
-    OBD->>ISO: requestAll(service, pid, timeout, expected)
+    OBD->>ISO: requestAll(service, pid, expectedReplySid, 0x7F, -8, timeout, expected)
     ISO->>CAN: functional request 7DF
     CAN->>E1: request
     CAN->>E2: request

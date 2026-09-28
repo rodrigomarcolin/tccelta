@@ -10,6 +10,13 @@
  * `altelch/iso-tp` usada no simulador (acoplada a `MCP_CAN*`), este cliente
  * funciona com qualquer ICanBus (MCP2515, TWAI, ou um fake em teste).
  *
+ * Também não depende de nenhuma convenção de protocolo de diagnóstico: quem
+ * chama fornece `expectedReplyMarker`/`negativeResponseMarker` (para
+ * correlacionar resposta ↔ requisição e reconhecer erro) e `fcIdOffset` (para
+ * endereçar o Flow Control ao peer certo). Essas convenções são de quem usa
+ * ISO-TP por cima (ex.: OBD-II/UDS), não do transporte em si — ver
+ * `Obd2Can`, que preenche esses parâmetros com os valores da SAE J1979.
+ *
  * Implementa emissão e recepção completas (Single Frame, First Frame,
  * Consecutive Frame, Flow Control), incluindo interpretação de FlowStatus
  * (CTS/Wait/Overflow), Block Size e STmin do lado emissor. O lado receptor
@@ -53,7 +60,16 @@ enum Result : int {
  * `reqId`, depois aguarda a resposta funcional em [respIdMin, respIdMax]
  * (SF ou FF+CF, gerando o FC de volta).
  *
- * @param outBuf     recebe o payload OBD já reassemblado (SID de resposta +
+ * @param expectedReplyMarker    byte que a resposta deve ter na posição do
+ *                               SID para ser aceita como desta transação
+ *                               (descarta sobras de transações anteriores).
+ * @param negativeResponseMarker byte que sinaliza resposta negativa/erro; ao
+ *                               bater, retorna `NEGATIVE_RESPONSE` com
+ *                               `outBuf = [origService, NRC]`.
+ * @param fcIdOffset             deslocamento somado ao ID da resposta para
+ *                               achar o ID físico ao qual endereçar o Flow
+ *                               Control.
+ * @param outBuf     recebe o payload já reassemblado (SID de resposta +
  *                   dados, sem bytes de PCI/ISO-TP)
  * @param timeoutMs  tempo de espera pela primeira resposta (N_Bs). Default
  *                   N_BS_MS (1000ms, valor da norma) — chamadores que
@@ -64,11 +80,15 @@ enum Result : int {
  */
 int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
             const uint8_t* req, size_t reqLen,
+            uint8_t expectedReplyMarker, uint8_t negativeResponseMarker,
+            int32_t fcIdOffset,
             uint8_t* outBuf, size_t maxLen,
             uint32_t timeoutMs = N_BS_MS);
 
 int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
                const uint8_t* req, size_t reqLen,
+               uint8_t expectedReplyMarker, uint8_t negativeResponseMarker,
+               int32_t fcIdOffset,
                ResponseSet& responses,
                uint32_t timeoutMs = N_BS_MS,
                size_t expectedResponses = 0);
