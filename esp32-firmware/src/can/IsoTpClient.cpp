@@ -141,13 +141,12 @@ SendOutcome sendSegmented(ICanBus* can, uint32_t txId, uint32_t fcIdMin, uint32_
 
 }  // namespace
 
-int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
-               const uint8_t* req, size_t reqLen,
-               uint8_t expectedReplyMarker, uint8_t negativeResponseMarker,
-               int32_t fcIdOffset,
-               ResponseSet& responses,
-               uint32_t timeoutMs,
-               size_t expectedResponses) {
+int Client::requestAll(uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
+                        const uint8_t* req, size_t reqLen,
+                        uint8_t expectedReplyMarker,
+                        ResponseSet& responses,
+                        uint32_t timeoutMs,
+                        size_t expectedResponses) {
     responses.count = 0;
 
     // Drena qualquer frame que já esteja na fila de recepção antes de mandar
@@ -163,12 +162,12 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
     // consegue distinguir a sobra da resposta de verdade — só o dreno aqui
     // resolve isso.
     CanFrame stale;
-    while (can->receive(stale)) {}
+    while (_can->receive(stale)) {}
 
     if (reqLen <= 7) {
-        sendSf(can, reqId, req, static_cast<uint8_t>(reqLen));
+        sendSf(_can, reqId, req, static_cast<uint8_t>(reqLen));
     } else {
-        SendOutcome rc = sendSegmented(can, reqId, respIdMin, respIdMax, req, reqLen);
+        SendOutcome rc = sendSegmented(_can, reqId, respIdMin, respIdMax, req, reqLen);
         if (rc == SendOutcome::OVERFLOW) return OVERFLOW_ABORT;
         if (rc != SendOutcome::OK) return TIMEOUT;
     }
@@ -240,7 +239,7 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
         }
 
         CanFrame frame;
-        if (!can->receive(frame)) {
+        if (!_can->receive(frame)) {
             taskYIELD();
             continue;
         }
@@ -252,7 +251,7 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
         if (pciType == N_PCI_SF) {
             const uint8_t len = frame.data[0] & 0x0F;
             if (len == 0 || len > 7) continue;
-            if (frame.data[1] == negativeResponseMarker) {
+            if (frame.data[1] == _negativeResponseMarker) {
                 negativeService = frame.data[2];
                 negativeNrc = frame.data[3];
                 continue;
@@ -278,9 +277,9 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
                 responses.items[index].len = 0;
             }
             const uint32_t fcTargetId = static_cast<uint32_t>(
-                static_cast<int64_t>(frame.id) + fcIdOffset);
+                static_cast<int64_t>(frame.id) + _fcIdOffset);
             if (total > MAX_RESPONSE_BYTES) {
-                sendFc(can, fcTargetId, FS_OVERFLOW, 0, 0);
+                sendFc(_can, fcTargetId, FS_OVERFLOW, 0, 0);
                 active[index] = false;
                 continue;
             }
@@ -292,7 +291,7 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
             expectedSequence[index] = 1;
             active[index] = true;
             cfDeadline[index] = millis() + N_CR_MS;
-            sendFc(can, fcTargetId, FS_CTS, 0, 0);
+            sendFc(_can, fcTargetId, FS_CTS, 0, 0);
             continue;
         }
 
@@ -323,16 +322,14 @@ int requestAll(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respId
     }
 }
 
-int request(ICanBus* can, uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
-            const uint8_t* req, size_t reqLen,
-            uint8_t expectedReplyMarker, uint8_t negativeResponseMarker,
-            int32_t fcIdOffset,
-            uint8_t* outBuf, size_t maxLen,
-            uint32_t timeoutMs) {
+int Client::request(uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
+                     const uint8_t* req, size_t reqLen,
+                     uint8_t expectedReplyMarker,
+                     uint8_t* outBuf, size_t maxLen,
+                     uint32_t timeoutMs) {
     ResponseSet responses;
-    int result = requestAll(can, reqId, respIdMin, respIdMax, req, reqLen,
-                            expectedReplyMarker, negativeResponseMarker, fcIdOffset,
-                            responses, timeoutMs, 1);
+    int result = requestAll(reqId, respIdMin, respIdMax, req, reqLen,
+                            expectedReplyMarker, responses, timeoutMs, 1);
     if (result < 0) {
         if (result == NEGATIVE_RESPONSE && responses.count > 0 && maxLen >= 2) {
             memcpy(outBuf, responses.items[0].data, 2);
