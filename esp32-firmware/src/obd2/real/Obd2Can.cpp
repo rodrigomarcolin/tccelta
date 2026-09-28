@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include "Obd2Can.h"
-#include "can/IsoTpClient.h"
+#include "can/isotp/IsoTpClient.h"
 #include <cstring>
 
 // OBD-II CAN IDs (11-bit)

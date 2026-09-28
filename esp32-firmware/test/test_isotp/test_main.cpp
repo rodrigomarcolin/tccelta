@@ -1,10 +1,10 @@
 #include <unity.h>
-#include "can/IsoTpClient.h"
+#include "can/isotp/IsoTpClient.h"
 #include "FakeCanBus.h"
 
 // Convenções OBD-II/SAE-J1979 usadas nestes testes (o IsoTpClient em si não
 // as conhece mais — são passadas explicitamente por quem chama, como faria
-// `Obd2Can` em produção). Ver `can/IsoTpClient.h` para o que cada parâmetro
+// `Obd2Can` em produção). Ver `can/isotp/IsoTpClient.h` para o que cada parâmetro
 // significa.
 constexpr uint8_t NEGATIVE_RESPONSE_SID = 0x7F;
 constexpr int32_t FC_ID_OFFSET = -8;  // ID físico = ID de resposta - 8

@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include "obd2/IObd2.h"
 #include "can/ICanBus.h"
-#include "can/IsoTpClient.h"
+#include "can/isotp/IsoTpClient.h"
 
 /**
  * Implementação IObd2 que se comunica com uma ECU real via CAN
