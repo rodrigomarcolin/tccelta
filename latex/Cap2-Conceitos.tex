@@ -1,29 +1,101 @@
-% \chapter{Aspectos Conceituais} \label{cap:conceitos}
-% \begin{itemize}
-%    \item Definir as seções representativas em função do trabalho.
-%    \item Apresentar os conceitos empregados e a revisão da literatura.
-%    \item Citar os trabalhos consultados no texto.
-% \end{itemize}
-
 \chapter{Aspectos Conceituais} \label{cap:conceitos}
 
-A principal referência bibliográfica deste trabalho é o estudo "Plug-n-pwned", publicado no 29th USENIX Security Symposium por Wen, Chen e Lin \cite{wen2020plugnpwned}. Esta pesquisa realizou uma análise abrangente de 77 dongles OBD-II comerciais e revelou que todos os dispositivos avaliados possuíam vulnerabilidades críticas, caracterizando uma nova superfície de ataque over-the-air no ecossistema de IoT automotiva. O estudo categoriza as ameaças em estágios que vão desde a coleta de informações por broadcast até a injeção direta de mensagens no barramento CAN.
+Para realizar a ambição de desenvolver um \textit{dongle} seguro, é necessário entender, primeiramente, o contexto no qual este dispositivo atuará; as especificações às quais ele deve sujeitar-se; e as possibilidades que fornecerá ao seu usuário.
 
-Conforme introduzido anteriormente, as falhas de segurança nesses dispositivos podem ser resumidas em três pilares principais: falta de autenticação, subversão de firmware e injeção de comandos CAN.
+A coleta dos dados é possibilitada pela existência da rede CAN, uma rede veicular que toma a forma de um barramento de dois fios, pelos quais trafegam as mensagens trocadas entre as ECUs. Ela será devidamente detalhada na seção \autoref{sec:CAN}; presentemente basta identificar que a rede CAN define somente as camadas física e de dados. Um protocolo de alto nível é necessário para gerenciar a comunicação e padronizar as mensagens.
 
-O diagrama da \autoref{fig:esquema-geral-cap-conceitos} especifica os principais elementos presentes nesse tipo de aplicação em questão: o dongle funciona como um intermediário para a comunicação entre o companion app e a rede veicular. Assim, o dispositivo é composto por um microcontrolador central juntamente a outros componentes auxiliares necessários a fim de permitir que seja firmada tanto a conexão sem fio quanto a com a porta OBD-II, cada uma com seus respectivos protocolos. Ainda, cabe destacar que a maior parte das vulnerabilidades identificadas se concentram justamente na comunicação remota entre dongle e app, sendo esse o foco do projeto a ser desenvolvido.
+Neste contexto, o protocolo OBD-II é adotado. Ele especifica, entre outros, a forma da comunicação, que ocorre no modelo requisição-resposta, e o formato das mensagens e dos dados nelas contidos. Também será oportunamente detalhado na \autoref{sec:OBD}. 
+
+Nota-se que um dispositivo que deseje participar de comunicação OBD-II com um automóvel deve conectar-se à rede CAN do carro e saber modular suas mensagens nos dois fios que compõem o barramento, bem como identificar neles a resposta à sua requisição. Este é um processo trabalhoso e convidativo à abstração. Isto levou ao surgimento do ELM327, um \textit{dongle} que se conecta à porta OBD-II e fornece uma interface serial para um cliente, comumente um PC, que pode enviar e receber mensagens ASCII, as quais serão traduzidas para o formato das mensagens OBD-II. 
+
+A implementação do \textit{dongle} proposto tomará, como modelo, o ELM327, cuja inspiração materializar-se-á em uma camada responsável por receber e enviar caracteres, processar comandos AT de autoconfiguração, e filtrar mensagens. Os pontos relevantes do ELM327 serão detalhados na seção \autoref{sec:ELM}.
+
+O ESP32 é um microcontrolador (...) e será utilizado para implementação do \textit{dongle} proposto. Para possibilitar a integração do \textit{dongle} com um aplicativo móvel, optou-se pela utilização do Bluetooth Low Energy. Para a programação do ESP32, optou-se pela utilização do PlatformIO e freetros  
+
+O microcontrolador escolhido para a implementação do \textit{dongle} proposto 
+é o ESP32, um sistema em chip (SoC) que integra, entre outros periféricos, 
+um controlador CAN e um módulo de comunicação Bluetooth, tornando-o adequado 
+para os requisitos do projeto. Para possibilitar a integração do 
+\textit{dongle} com um aplicativo móvel, optou-se pela utilização do 
+Bluetooth Low Energy. Já para a programação do ESP32, optou-se pela 
+utilização do FreeRTOS, um sistema operacional de tempo real que permitirá 
+a organização do firmware em tarefas concorrentes, e do PlatformIO, ambiente 
+de desenvolvimento que facilita o gerenciamento de dependências e a 
+compilação do projeto.
+
+// ADICIONAR PEQUENO PARAGRAFO SOBRE DART E APP
+
+Com isso, estão dispostas todas as camadas que compõem o cenário do projeto, e cujo entendimento será indispensável para sua implementação. As seções seguintes, portanto, dedicar-se-ão ao detalhamento de cada uma delas.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\linewidth]{assets/cap2-conceitos/esquema-app-dongle-obd2.png}
-    \caption{Esquema de conexão entre app, dongle e veículo}
-    \label{fig:esquema-geral-cap-conceitos}
+    \includegraphics[width=0.6\textwidth]{assets/cap2-conceitos/camadas.png}
+    \caption{Camadas que compõem o cenário do projeto}
+    \label{fig:camadas}
+    \fonte{Os autores (2026)}
 \end{figure}
 
-\section{Conceitos de engenharia}
 
-O projeto explora várias frentes dentro da engenharia, como o desenvolvimento de software embarcado com sistema operacional de tempo real, prática de programação segura, estudo de criptografia para implementação de comunicação segura, interação com um protocolo de comunicação bem definido (OBD-II), utilização de tecnologias de comunicação como BLE e técnicas de IoT para comunicação entre \textit{dongle} e \textit{companion app}. 
+\section{Rede CAN} \label{sec:CAN}
 
-O Bluetooth Low Enery (BLE) é essencial para garantir a comunicação entre o \textit{dongle} e \textit{companion app} de maneira eficiente, sendo essencial para um dispositivo que permanecerá ligado por grandes períodos de tempo. \cite{ble_analysis}
+A rede CAN foi especificada pela Bosch na década de 80 (TODO: MELHORAR), e é utilizada em veículos para permitir a comunicação confiável entre as suas unidades controladoras eletrônicas (ECUs). Ela especifica a camada física e a camada de dados.
 
-Para sistema operacional no sistema embarcado, será utilizado o FreeRTOS. Um sistema operacional de tempo real é fundamental para gerenciar a concorrência entre as tarefas críticas do sistema: a leitura de alta velocidade do barramento CAN, o processamento de algoritmos criptográficos pesados e a manutenção da pilha de comunicação sem fio, garantindo que a latência de monitoramento seja compatível com o tempo real. \cite{rtos_analysis}
+DIAGRAMA DO BARRAMENTO CAN
+
+EXPLICAÇÃO PREOCUPAÇÕES CAN - RELIABILITY; DETECÇÃO DE ERRO; DETECÇÃO DE COLLISÃO; ARBITRAGEM NÃO DESTRUTIVA 
+
+EXPLICAÇÃO CONTROLADOR CAN - ADESÃO AO  PROTOCOLO CAN; ENCODING; ERROR DETECTION; ARBITRAGEM; SELF-DISCONNECT AO IDENTIFICAR MAU FUNCIONAMENTO PARA EVITAR ATRAPALHAR O BARRAMENTO; ETC
+
+EXPLICAÇÃO TRANSCEIVER CAN - CONVERTE SINAIS LÓGICOS ÀS TENSÕES FÍSICAS NAS DUAS LINHAS DO BARRAMENTO
+
+EXPLICAÇÃO FORMATOS DE UMA MENSAGEM CAN; DESTAQUE AO CAMPO "DATA", QUE CONTERÁ AS MENSAGENS OBD-II
+
+\section{Protocolo OBD-II} \label{sec:OBD}
+
+OBD-II REQUER QUE A CAMADA FÍSICA SUBJACENTE SEJA CAN; PODE SER 250 Kbits OU 500 kbits; O CAMPO CAN ID PODE TER 11 bits OU 29 bits; CAN IDS ESPECÍFICOS SÃO UTILIZADOS PARA REQUISIÇÕES E RESPOSTAS OBD; AS RESPOSTAS PODEM CABER EM UMA ÚNICA MENSAGEM (SINGLE FRAME) OU SERÃO DIVIDIDAS EM MÚLTIPLAS (MULTI-FRAME; ISO TP) 
+
+OBD-II DEFINE CONECTOR; PINOS; EXPLICITAR QUE UM DOS PINOS É 12V, QUE É DA BATERIA DO CARRO
+
+DIAGRAMA DOS CAMPOS DE UMA MENSAGEM OBD-II
+
+EXPLICAÇÃO OBD-2 DEFINE SERVIÇOS (MODOS) E PIDS; EXPLICAÇÃO DOS PIDS PADRONIZADOS; PIDS DE DISCOVERY; ETC
+
+TABELA COM PIDS PADRONIZADOS 
+
+EXEMPLO DE UM CICLO REQUISIÇÃO-RESPOSTA OBD-II
+
+EXPLICAÇÃO QUE UMA REQ PODE SER ATENDIDA POR MAIS DE UMA ECU
+
+DIAGRAMA DE EXEMPLO DE UMA COMUNICAÇÃO ATENDIDA POR MAIS DE UMA ECU, COM FIRST FRAME, FLOW CONTROL, CONSECUTIVE FRAME
+
+RESUMO DO QUE PODE SER CONSULTADO VIA OBD-II
+
+\section{ELM327} \label{sec:ELM}
+
+EXPLICAR QUE ELM-327 ORIGINALMENTE POSSIBILITA ASCII, MAS EXPLICITAR QUE SUA PREOCUPAÇÃO RESTRINGE-SE SOMENTE À TRADUÇÃO, CONFORME DOC:
+
+""One must keep in mind that the ELM327 is a protocol interpreter that makes no attempt to assess the OBD messages for validity – it only ensures that hexadecimal digits were received, combined into bytes, then sent out the OBD port, and it does not know if a message sent to the vehicle was in error.""
+
+EXPLICAR QUE PODE RECEBER COMANDOS AT PARA CONFIGURAÇÃO PRÓPRIA; EXEMPLOS DE COMANDOS AT. 
+
+EXEMPLO DE COMUNICAÇÃO: ENVIA UM PID EM ASCII (EX. 010C ), RECEBE DADOS HEXADECIMAIS NA SAÍDA; CONVERTE ELES
+
+COM ISTO DEVERÁ FICAR CLARO A COMUNICAÇÃO PONTA-A-PONTA.
+
+
+\section{Bluetooth Low-Energy} \label{sec:BLE}
+
+EXPLICAR O QUE É BLUETOOTH LOW ENERGY; DIFERENÇA AO CONVENCIONAL; GATT, SERVER, CLIENT, SERVICES, CHARACTERISTICS, GAP. SERIAL-OVER-BLE. NORDIC UUIDS PARA RX E TX.
+
+
+\section{FreeRTOS e Arduino}
+
+PARA QUE SERVE O FREERTOS; CONCEITOS BÁSICOS; TASKS; FILAS. 
+
+\section{PlatformIO}
+
+PLATFORMIO; VARIÁVEIS DE AMBIENTE; PERFIS DE COMPILAÇÃO
+
+\section{Ataques}
+
+MODELAGEM DE ATAQUES POSSÍVEIS
