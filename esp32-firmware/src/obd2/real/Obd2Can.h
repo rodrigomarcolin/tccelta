@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "obd2/IObd2.h"
 #include "can/ICanBus.h"
+#include "can/isotp/IsoTpClient.h"
 
 /**
  * Implementação IObd2 que se comunica com uma ECU real via CAN
@@ -35,6 +36,7 @@ public:
                                size_t expectedResponses = 0) override;
 
 private:
-    ICanBus*  _can;
-    uint32_t  _timeoutMs;
+    ICanBus*      _can;
+    uint32_t      _timeoutMs;
+    IsoTp::Client _isoTp;
 };

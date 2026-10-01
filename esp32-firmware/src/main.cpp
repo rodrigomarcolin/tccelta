@@ -23,10 +23,10 @@
 
 // ── Build-time CAN / OBD2 backend selection 
 #if defined(USE_MCP2515)
-    #include "can/mcp2515/Mcp2515Can.h"
+    #include "can/bus/mcp2515/Mcp2515Can.h"
     #include "obd2/real/Obd2Can.h"
 #elif defined(USE_TWAI)
-    #include "can/twai/TwaiCan.h"
+    #include "can/bus/twai/TwaiCan.h"
     #include "obd2/real/Obd2Can.h"
 #elif defined(USE_MOCK)
     #include "obd2/mock/Obd2Mock.h"
