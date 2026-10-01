@@ -8,7 +8,7 @@ Neste contexto, o protocolo OBD-II é adotado. Ele especifica, entre outros, a f
 
 Nota-se que um dispositivo que deseje participar de comunicação OBD-II com um automóvel deve conectar-se à rede CAN do carro e saber modular suas mensagens nos dois fios que compõem o barramento, bem como identificar neles a resposta à sua requisição. Este é um processo trabalhoso e convidativo à abstração. Isto levou ao surgimento do ELM327, um \textit{dongle} que se conecta à porta OBD-II e fornece uma interface serial para um cliente, comumente um PC, que pode enviar e receber mensagens ASCII, as quais serão traduzidas para o formato das mensagens OBD-II. 
 
-A implementação do \textit{dongle} proposto tomará, como modelo, o ELM327, cuja inspiração materializar-se-á em uma camada responsável por receber e enviar caracteres, processar comandos AT de autoconfiguração, e filtrar mensagens. Os pontos relevantes do ELM327 serão detalhados na seção \autoref{sec:ELM}.
+A implementação do \textit{dongle} proposto tomará, como modelo, o ELM327, contando com uma camada responsável por receber e enviar caracteres, processar comandos de autoconfiguração, e filtrar mensagens. Os pontos relevantes do ELM327 serão detalhados na seção \autoref{sec:ELM}.
 
 O ESP32 é um microcontrolador (...) e será utilizado para implementação do \textit{dongle} proposto. Para possibilitar a integração do \textit{dongle} com um aplicativo móvel, optou-se pela utilização do Bluetooth Low Energy. Para a programação do ESP32, optou-se pela utilização do PlatformIO e freetros  
 
