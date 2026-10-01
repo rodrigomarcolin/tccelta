@@ -1,14 +1,11 @@
 
 \chapter{Introdução} \label{cap:intro}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Motivação}
-
 Veículos modernos são compostos por uma variedade de sistemas eletrônicos responsáveis pelo monitoramento e pelo controle de diversos subsistemas do automóvel \cite{sonko2024embedded}. Nesse contexto, destaca-se o sistema On-Board Diagnostics II (OBD-II), um padrão de diagnóstico embarcado que permite o monitoramento de parâmetros do veículo e a identificação de falhas nos seus componentes eletrônicos e mecânicos \cite{csselectronics_obd2_intro}. 
 
 O OBD-II foi inicialmente desenvolvido com o objetivo de facilitar a detecção de falhas relacionadas às emissões de poluentes, permitindo um diagnóstico mais rápido e preciso \cite{sonko2024embedded}.  Ao longo do tempo, tornou-se um componente essencial na arquitetura de veículos modernos, sendo utilizado para monitoramento de sensores e leitura de códigos de erros \cite{csselectronics_obd2_intro}. No Brasil, a adoção deste sistema tornou-se obrigatória para todos os veículos leves a combustão produzidos ou importados a partir de 2011 por meio da Resolução CONAMA nº 354/2004 \cite{conama354_2004}, o que evidencia sua prevalência e sua importância.
 
-Com a popularização do OBD-II, surgiram dispositivos conhecidos como \textit{dongles} OBD-II, que são pequenos adaptadores que se conectam à porta de diagnóstico do veículo. Esses sistemas permitem acessar dados do veículo em tempo real e transmiti-los para outros sistemas, normalmente através de comunicações sem fio como o Bluetooth ou o Wi-fi \cite{wen2020plugnpwned}. Frequentemente, estes \textit{dongles} são utilizados em conjunto com aplicativos móveis, conhecidos como \textit{companion apps}, que permitem analisar, visualizar e processar os dados coletados, ou até mesmo enviar mensagens ao barramento CAN \cite{companionapps2024security}.
+Com a popularização do OBD-II, surgiram dispositivos conhecidos como \textit{dongles} OBD-II, que se conectam à porta de diagnóstico do veículo. Esses sistemas podem coletar dados do veículo em tempo real e transmiti-los para outros sistemas, normalmente através de comunicações sem fio como o Bluetooth ou o Wi-fi \cite{wen2020plugnpwned}. Frequentemente, estes \textit{dongles} são utilizados em conjunto com aplicativos móveis, conhecidos como \textit{companion apps}, que permitem analisar, visualizar e processar os dados coletados, ou até mesmo enviar mensagens ao barramento CAN \cite{companionapps2024security}.
 
 Esta combinação de \textit{dongles} e \textit{companion apps} abriu espaço para o desenvolvimento de diversas aplicações no contexto automotivo. Com a coleta de dados através de \textit{dongles} conectados à porta OBD-II, constróem-se sistemas de gerenciamento de frotas, estabelecendo-se um monitoramento operacional e logístico  \cite{malekian2017fleet}; sistemas de identificação de motorista, que classificam os motoristas em perfis de condução baseados em sua “agressividade” \cite{barreto2018perfis}, o que por sua vez abre espaço para a oferta de seguros com prêmio personalizado \cite{michailidis2025mlobd}; e técnicas de manutenção preventiva  \cite{errezgouny2025predictive}.
 
@@ -17,7 +14,7 @@ A maioria destas aplicações pressupõe que o \textit{dongle} permaneça conect
 %%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Objetivos}
 
-Diante deste cenário, o presente trabalho propõe o projeto e a implementação de um \textit{dongle} OBD-II e de
+O presente trabalho propõe o projeto e a implementação de um \textit{dongle} OBD-II e de
 um \textit{companion app} com foco em segurança. O objetivo é desenvolver uma solução
 que mantenha a funcionalidade esperada (leitura de parâmetros e DTCs) ao mesmo
 tempo em que incorpore mecanismos robustos de autenticação, criptografia, proteção de
@@ -25,75 +22,18 @@ firmware e controle de acesso ao barramento CAN, mitigando as vulnerabilidades
 catalogadas pelo \textit{Donglescope} \cite{wen2020plugnpwned}, e habilitando a utilização segura
 do OBD-II para diferentes aplicações, como gerenciamento de frotas \cite{malekian2017fleet}, identificação do perfil do motorista \cite{barreto2018perfis}, personalização de seguro \cite{michailidis2025mlobd}, e técnicas de manutenção preventiva  \cite{errezgouny2025predictive}.
 
-
-Espera-se que o desenvolvimento deste trabalho resulte em um protótipo funcional de um \textit{dongle} OBD-II e de um \textit{companion app} projetados com foco em segurança. A solução deverá ser capaz de realizar a leitura de parâmetros do veículo obtidos por meio da interface OBD-II, tais como dados de sensores e variáveis operacionais do motor, incluindo rotação do motor, velocidade do veículo, temperatura do líquido de arrefecimento e posição do acelerador. Esses dados serão acessados por meio de \textit{Parameter IDs} (PIDs) definidos pelo padrão OBD-II. 
+Almeja-se um protótipo funcional de um \textit{dongle} OBD-II e de um \textit{companion app} projetados com foco em segurança. A solução deverá ser capaz de realizar a leitura de parâmetros padronizados do veículo obtidos por meio da interface OBD-II, tais como códigos de erro (DTCs) gerados pelo sistema de autodiagnóstico do carro e dados de sensores e variáveis operacionais do motor, incluindo rotação do motor, velocidade do veículo, temperatura do líquido de arrefecimento e posição do acelerador. Esses dados serão acessados por meio de \textit{Parameter IDs} (PIDs) definidos pelo padrão OBD-II. 
 
 Do ponto de vista de segurança, espera-se que a solução proposta incorpore mecanismos capazes de mitigar as vulnerabilidades identificadas em dispositivos comerciais. Entre os resultados esperados estão a implementação de autenticação entre o \textit{dongle} e o aplicativo móvel, proteção criptográfica da comunicação sem fio e controle de acesso às mensagens enviadas ao barramento CAN. Para isso, pretende-se avaliar o sistema por meio de testes de segurança inspirados nos métodos utilizados em trabalhos da literatura, verificando se as principais vulnerabilidades descritas são mitigadas pela arquitetura proposta.
 
 Por fim, espera-se que este trabalho contribua para o avanço da segurança em dispositivos automotivos conectados, fornecendo uma referência de arquitetura e de boas práticas para o desenvolvimento de \textit{dongles} OBD-II e aplicações associadas com maior nível de proteção contra ataques.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%
-% \section{Justificativa}
-% \begin{itemize}
-%     \item Apresentar porque o trabalho desenvolvido é importante (importância e necessidade para a sociedade, comparação com trabalhos relevantes consultados etc.).
-%     \item Citar os trabalhos consultados no texto.
-%     \item Por que o trabalho é importante?
-% \end{itemize}
-%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\section{Análise das vulnerabilidades}
-
-%\begin{itemize}
-%    \item Definir as seções representativas em função do trabalho.
-%    \item Apresentar os conceitos empregados e a revisão da literatura.
-%    \item Citar os trabalhos consultados no texto.
-%\end{itemize}
-
-Um estudo conduzido por pesquisadores e publicado na USENIX Security Symposium analisou 77 \textit{dongles} OBD-II disponíveis comercialmente e identificou vulnerabilidades de segurança em todos os dispositivos avaliados \cite{wen2020plugnpwned}. 
-
-As vulnerabilidades têm como ponto central a comunicação sem fio que os \textit{dongles} exercem com o que são chamados de \textit{companion apps}, ou seja, as aplicações a partir das quais o usuário poderá interagir com o \textit{dongle}, seja lendo os dados coletados ou até recebendo comandos que serão transmitidos pela CAN. Nesse contexto, um ataque pode acontecer a partir de vulnerabilidades em três estágios diferentes \cite{wen2020plugnpwned}:
-
-\begin{enumerate}
-    \item Coleta de informação por \textit{broadcast};
-    \item Conexão com o \textit{dongle};
-    \item Comunicação: leitura de dados OBD-II e injeção de comandos.
-\end{enumerate}
-
-A primeira etapa consiste em identificar \textit{dongles} disponíveis em uma determinada área a partir da interceptação da comunicação sem fio realizada por eles, que pode ser por meio de Bluetooth, Wi-Fi ou BLE. Nessa etapa, em alguns \textit{dongles} já é possível inclusive identificar vulnerabilidades. 
-
-A segunda etapa é quando o atacante tenta estabelecer uma conexão com o \textit{dongle} na rede a fim de trocar informação. 
-
-Por fim, a terceira e última etapa consiste no envio de mensagens CAN não autorizadas do atacante para o veículo. Há níveis de ameaça dependendo se o \textit{dongle} realiza algum tipo de filtro para permitir que sejam executadas somente mensagens CAN pré-definidas, pois, como o \textit{dongle} no geral executa funções puramente diagnósticas, esse filtro impediria o atacante de ameaçar de maneira crítica a segurança do veículo ao poder enviar mensagens não diagnósticas.
-
-Nas seções seguintes, serão explicadas algumas das principais vulnerabilidades identificadas por \cite{wen2020plugnpwned}
-
-\subsection{Falta de autenticação na camada de rede}
-Mais de 92\% dos \textit{dongles} permitem que qualquer dispositivo próximo possa se conectar, sem nenhum tipo de verificação ou autenticação, o que gera o risco de ataques de \textit{Denial Of Service}, comprometendo a disponibilidade do sistema. Há duas formas principais para resolver esse problema: geração de uma chave criptográfica para comunicação a partir de uma senha, ou um botão físico que quando apertado libera a possibilidade de conexão de \textbf{um dispositivo} por um período determinado de tempo
-
-\subsection{Subversão de update do \textit{firmware}}
-Constatou-se que, em 3 dos 4 \textit{dongles} que suportam \textit{upgrade} de \textit{firmware}, seria possível injetar código a partir da manipulação de \textit{over-the-air updates}. Como os \textit{dongles} não suportam redes celulares para realizar o download de um novo \textit{firmware}, eles dependem da atuação dos \textit{companion apps} como \textit{gateway} para transmitir o novo código, entrando em modo de \textit{boot loader} para recebê-lo. Como o aparelho \textit{mobile} era o responsável por engatilhar o \textit{update} e enviar o novo código, um atacante poderia manipular o código a ser gravado no \textit{dongle}, assumindo controle total do seu comportamento.
-
-\subsection{Injeção de comandos CAN arbitrários}
-Mais de 65\% dos \textit{dongles} não apresentam um filtro para mensagens CAN arbitrárias, o que permite que um atacante que se conecte ao \textit{dongle} possa enviar mensagens não diagnósticas à CAN, principalmente se o padrão interno de comunicação do fabricante for conhecido. Assim, pontos chave do comportamento de veículo, como resfriamento, frenagem, transmissão e etc. poderiam ser influenciados pelo atacante, colocando em risco a vida dos ocupantes do automóvel.
-
-
-\section{Implicações}
-
-Tais vulnerabilidades podem permitir que um atacante próximo ao veículo ou conectado à mesma rede explore o \textit{dongle} como ponto de entrada para a rede interna do automóvel. Considerando que o barramento CAN interliga diversos subsistemas críticos, a exploração dessas falhas pode resultar em riscos significativos à privacidade, à integridade dos dados e potencialmente à segurança do veículo.
-
-Nas aplicações estudadas, a falta de segurança no OBD-II envolve riscos evidentes: no controle de frota, a falta de disponibilidade devido a \textit{DoS} pode causar grandes prejuízos operacionais e financeiros; na personalização de seguro, a manipulação de dados devido a falta de autenticação leva ao aumento da possibilidade de fraudes; manipulações propositais em diagnósticos mecânicos ou a injeção de comandos CAN em subsistemas críticos do veículo podem causar consequências fatais.
-
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Organização do Trabalho}
 
-No \autoref{cap:intro}, é feita a introdução do tema, explicando os conceitos principais que serão importantes para o trabalho, como CAN e OBD-II. Além disso, é evidenciada a importância da segurança dentro do contexto estudado, sendo explicadas as principais vulnerabilidades encontradas na arquitetura e suas possíveis implicações em diversos contextos. Por fim, a partir de todos esses aspectos, também é justificada a importância do trabalho.  
+A \autoref{cap:intro} explica como o OBD-II possibilita a coleta de dados do automóvel em tempo real, que por sua vez ensejam uma miríade de aplicações. Explicitam-se os objetivos de projeto e desenvolvimento de um \textit{dongle} e de um \textit{companion app} seguros.
 
-No \autoref{cap:conceitos}, são apresentandos elementos conceituais relacionados ao trabalho, sendo analisadas as principais referências da literatura utilizadas e também os conceitos de engenharia mais importantes aplicados no projeto.
-
-Entendidas as vulnerabilidades, no \autoref{cap:metodo} o objetivo é descrever qual metodologia será adotada para o desenvolvimento do trabalho, descrevendo-se o passo a passo do trabalho para alcançar os objetivos evidenciados nesta intrução.
+\autoref{cap:conceitos} apresenta elementos conceituais relacionados ao trabalho, e analisa as principais referências da literatura utilizadas e também os conceitos de engenharia mais importantes aplicados no projeto. Preocupa-se também com a modelagem dos ataques.
 
 No \autoref{cap:especificacao}, de especificação, são descritos de maneira técnicas e completa todos os requisitos funcionais e não funcionais que foram planejados para o \textit{dongle}  e para o \textit{companion app}  que serão desenvolvidos no trabalho.  Nele, também é introduzida a arquitetura do sistema.
 
