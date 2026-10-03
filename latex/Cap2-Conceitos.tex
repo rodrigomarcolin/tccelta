@@ -2,15 +2,13 @@
 
 Para desenvolver um \textit{dongle} seguro, é necessário entender, primeiramente, o contexto no qual este dispositivo atuará, as especificações às quais ele deve sujeitar-se e as possibilidades que fornecerá ao seu usuário.
 
-A coleta dos dados é possibilitada pela existência da rede CAN, uma rede veicular que toma a forma de um barramento de dois fios, pelos quais trafegam as mensagens trocadas entre as ECUs. Ela será devidamente detalhada na seção \autoref{sec:CAN}; presentemente basta identificar que a rede CAN define somente as camadas física e de dados. Um protocolo de alto nível é necessário para gerenciar a comunicação e padronizar as mensagens.
+A coleta dos dados é possibilitada pela existência da rede CAN, uma rede veicular que toma a forma de um barramento de dois fios, pelos quais trafegam as mensagens trocadas entre as ECUs. Ela será devidamente detalhada na \autoref{sec:CAN}; presentemente basta identificar que a rede CAN define somente as camadas física e de dados. Um protocolo de alto nível é necessário para gerenciar a comunicação e padronizar as mensagens.
 
 Neste contexto, o protocolo OBD-II é adotado. Ele especifica, entre outros, a forma da comunicação, que ocorre no modelo requisição-resposta, e o formato das mensagens e dos dados nelas contidos. Também será oportunamente detalhado na \autoref{sec:OBD}. 
 
 Nota-se que um dispositivo que deseje participar de comunicação OBD-II com um automóvel deve conectar-se à rede CAN do carro e saber modular suas mensagens nos dois fios que compõem o barramento, bem como identificar neles a resposta à sua requisição. Este é um processo trabalhoso e convidativo à abstração. Isto levou ao surgimento do ELM327, um \textit{dongle} que se conecta à porta OBD-II e fornece uma interface serial para um cliente, comumente um PC, que pode enviar e receber mensagens ASCII, as quais serão traduzidas para o formato das mensagens OBD-II. 
 
-A implementação do \textit{dongle} proposto tomará, como modelo, o ELM327, contando com uma camada responsável por receber e enviar caracteres, processar comandos de autoconfiguração, e filtrar mensagens. Os pontos relevantes do ELM327 serão detalhados na seção \autoref{sec:ELM}.
-
-O ESP32 é um microcontrolador (...) e será utilizado para implementação do \textit{dongle} proposto. Para possibilitar a integração do \textit{dongle} com um aplicativo móvel, optou-se pela utilização do Bluetooth Low Energy. Para a programação do ESP32, optou-se pela utilização do PlatformIO e freetros  
+A implementação do \textit{dongle} proposto tomará, como modelo, o ELM327, contando com uma camada responsável por receber e enviar caracteres, processar comandos de autoconfiguração, e filtrar mensagens. Os pontos relevantes do ELM327 serão detalhados na \autoref{sec:ELM}.
 
 O microcontrolador escolhido para a implementação do \textit{dongle} proposto 
 é o ESP32, um sistema em chip (SoC) que integra, entre outros periféricos, 
@@ -25,6 +23,8 @@ compilação do projeto.
 
 // ADICIONAR PEQUENO PARAGRAFO SOBRE DART E APP
 
+Além disso, para facilitar o desenvolvimento em bancada, optou-se pelo desenvolvimento de um simulador de ECU baseado em Arduino, que fará as vezes de um veículo: fornecerá um barramento CAN e responderá às requisições OBD-II enviadas pelo \textit{dongle}, assim possibilitando o teste da comunicação e das principais funcionalidades.
+
 Com isso, estão dispostas todas as camadas que compõem o cenário do projeto, e cujo entendimento será indispensável para sua implementação. As seções seguintes, portanto, dedicar-se-ão ao detalhamento de cada uma delas.
 
 \begin{figure}[H]
@@ -36,21 +36,89 @@ Com isso, estão dispostas todas as camadas que compõem o cenário do projeto, 
 \end{figure}
 
 
-\section{Rede CAN} \label{sec:CAN}
+\section{Controller Area Network (CAN)} \label{sec:CAN}
 
-A rede CAN foi especificada pela Bosch na década de 80 (TODO: MELHORAR), e é utilizada em veículos para permitir a comunicação confiável entre as suas unidades controladoras eletrônicas (ECUs). Ela especifica a camada física e a camada de dados.
 
-DIAGRAMA DO BARRAMENTO CAN
+\subsection{Visão geral}
+A rede CAN é um sistema de comunicação serial com topologia em barramento, inicialmente especificada pela BOSCH na década de 80. É utilizada em veículos com o intuito de permitir que unidades de controle eletrônico (ECUs, do inglês \textit{Electronic Control Units}) comuniquem-se umas com as outras, sem a necessidade de um computador central \cite{csselectronics_can_intro}.
 
-EXPLICAÇÃO PREOCUPAÇÕES CAN - RELIABILITY; DETECÇÃO DE ERRO; DETECÇÃO DE COLLISÃO; ARBITRAGEM NÃO DESTRUTIVA 
+Foi desenvolvida com um grande foco em confiabilidade, oferecendo vantagens como: resistência a ruídos e a interferências eletromagnéticas; autodiagnósitco; detecção de erros e retransmissão automática; e arbitragem não destrutiva \cite{Bozdal2020CAN}.
 
-EXPLICAÇÃO CONTROLADOR CAN - ADESÃO AO  PROTOCOLO CAN; ENCODING; ERROR DETECTION; ARBITRAGEM; SELF-DISCONNECT AO IDENTIFICAR MAU FUNCIONAMENTO PARA EVITAR ATRAPALHAR O BARRAMENTO; ETC
+Há algumas variantes do CAN, nomeadamente: o CAN clássico e o CAN FD (\textit{Flexible Data-rate}), ambos definidos na ISO 11898-1; o CAN de alta velocidade, definido na ISO 11898-2; e o CAN de baixa velocidade, definido na ISO 11898-3 \cite{boland2021overview}. O presente trabalho restringe-se às variantes adotadas em veículos de passeio para diagnóstico OBD-II: o CAN clássico de alta velocidade, conforme as normas ISO 11898-1 e ISO 11898-2.
 
-EXPLICAÇÃO TRANSCEIVER CAN - CONVERTE SINAIS LÓGICOS ÀS TENSÕES FÍSICAS NAS DUAS LINHAS DO BARRAMENTO
+\subsection{Funcionamento da comunicação}
 
-EXPLICAÇÃO FORMATOS DE UMA MENSAGEM CAN; DESTAQUE AO CAMPO "DATA", QUE CONTERÁ AS MENSAGENS OBD-II
+Fisicamente, o barramento CAN conta com dois fios, o CAN\_H e o CAN\_L, que compõem um par trançado com sinalização diferencial. Deste modo, o valor lógico em um determinado momento não é ditado pelo valor absoluto da tensão em relação a um terra, mas sim pela diferença na tensão entre o CAN\_H e o CAN\_L \cite{Bozdal2020CAN}.  
+
+A comunicação é orientada a mensagens, que tomam forma de quadros no barramento. Neste contexto, a ISO 11898-1 define a camada de dados (\textit{Data Link Layer}), que especifica: os tipos de quadros (de dados, de erro, remotos e de \textit{overload}); os métodos de detecção e tratamento de erros; e técnicas de arbitragem para evitar colisões \cite{csselectronics_can_intro}.
+
+Um quadro de dados possui os campos listados abaixo e explicitados na imagem \autoref{fig:sinalizacao-diferencial}) \cite{Bozdal2020CAN}.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/quadro-dados.png}
+    \caption{Campos de um quadro de dados CAN.}
+    \label{fig:sinalizacao-diferencial}
+    \fonte{Adaptado de \cite{csselectronics_can_intro}}
+\end{figure}
+
+
+\begin{itemize}
+    \item \textbf{SOF} (\textit{Start Of Frame}): sinaliza o início da transmissão;
+    \item \textbf{ID} (\textit{Identifier}): define a prioridade do quadro (valores menores representam prioridade maior) e o tipo de mensagem. Possui 11 bits no formato padrão (CAN 2.0A) ou 29 bits no formato extendido (CAN 2.0B);
+    \item \textbf{RTR} (\textit{Remote Transmission Request}): distingue um quadro de dados de um quadro de transmissão remota;
+    \item \textbf{Control}: possui o bit de identificador de extensão (IDE, do inglês \textit{Identifier Extension}), que é '0' se ID é de 11 bits. Também possui o código de tamanho de dados (DLC, do inglês \textit{Data Length Code}), que possui 4 bits e especifica a quantidade de bytes de dados sendo transmitidos (de 0 a 8); 
+    \item \textbf{Data}: contém os bytes de dados;
+    \item \textbf{CRC} (\textit{Cyclic Redundancy Check}): utilizado para verificar a integridade dos dados;
+    \item \textbf{ACK}: indica se o nó reconheceu e recebeu os dados corretamente;
+    \item \textbf{EOF}: indica o fim do quadro.
+\end{itemize}
+
+
+Uma ECU conectada ao barramento consiste em 3 elementos principais: um microcontrolador; um controlador CAN; e um transceptor CAN. O microcontrolador interpreta mensagens CAN recebidas e decide quais transmitir, baseado em sua programação. O controlador CAN remove complexidade do microcontrolador ao dedicar-se à garantia de que a comunicação seja aderente ao protocolo, e suas responsabilidades incluem, mas não se limitam, a: codificação e decodificação de quadros; cálculo do CRC; confirmação (ACK); detecção de erros; e arbitragem. Por sua vez, o transceptor CAN conecta-se ao barramento CAN, e é responsável por receber os dados do controlador e convertê-los aos sinais diferenciais do barramento, e vice-versa. \cite{csselectronics_can_intro}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/diagrama-barramento-can.png}
+    \caption{Diagrama de um barramento CAN com ECUs}
+    \label{fig:barramento-can}
+    \fonte{Adaptado de \cite{Bozdal2020CAN}}
+\end{figure}
+
+Com isto, são conhecidos os mecanismos que permitem a uma ECU colocar um quadro no barramento, e receber os que nele são transmitidos. Nota-se, entretanto, que o CAN especiffica \textit{como} um quadro trafega, mas o significado dos bytes do campo DATA, os IDs utilizados, e as regras da troca de mensagens precisam ser especificadas por um protocolo de camada superior \cite{csselectronics_can_intro}. No contexto do diagnóstico veicular, este papel é desempenhado pelo OBD-II, cuja apresentação encontra-se na próxima seção.
+
+\subsection{Implicações para o projeto}
+
+// todo: add referencias que justifiquem o que está sendo dito acerca do esp, do arduino, e do mcp2515. especificar exatamente sobre qual versão do esp e do arduino estamos falando
+    
+O \textit{dongle} deverá se conectar ao barramento CAN; logo, estará sujeito ao funcionamento descrito anteriormente, e deverá possuir tanto um controlador CAN quanto um transceptor CAN. 
+
+O ESP32 possui um controlador CAN embutido, o TWAI (Two-Wire Automotive Interface), mas não gera um sinal físico por si só, sendo necessária a utilização de um transceptor CAN. 
+
+O Arduino não possui um controlador CAN embutido. Para sua utilização como simulador de ECU, necessitar-se-á da utilização tanto de um controlador CAN quanto de um transceptor CAN. Para isto, utiliza-se o módulo MCP2515, componente que possui ambos, e expõe uma interface SPI para comunicar-se com o Arduino.
+
+Essas preocupações explicitar-se-ão na seção de desenvolvimento, na qual será descrita a implementação das regras.
 
 \section{Protocolo OBD-II} \label{sec:OBD}
+
+\subsection{Visão geral}
+O OBD-II é um protocolo padronizado de autodiagnóstico para veículos, que permite a extração de códigos de diagnóstico de problemas (DTCs, do inglês \textit{Diagnostic Trouble Codes}) e a leitura de dados em tempo real através do conector OBD-II \cite{csselectronics_obd2_intro}. Tornou-se obrigatório no Brasil para todos os veículos leves fabricados a partir de 2010 \cite{conama354_2004}.
+
+O protocolo especifica: que o conector físico é o SAE J1962 (ISO 15031-3); que o protocolo de baixo nível deve ser o CAN (ISO 15765); o bitrate e o tamanho do campo ID dos quadros CAN (ISO 15765-4); quais são os identificadores de parâmetros OBD-II padronizados (PIDs, do inglês \textit{Parameter Ids}); o modelo requisição-resposta; o formato de mensagens, inclusive para respostas que demandam mais de uma mensagem; os IDs CAN utilizados pelos quadros; entre outros. \cite{csselectronics_obd2_intro}
+
+A presente seção trará exemplos de como ocorre a comunicação no contexto de um \textit{dongle} OBD-II.
+
+\subsection{Conector SAE J1962}
+O conector físico utilizado é especificado no padrão SAE J1962 / ISO 15031-3, e possui dois tipos: o tipo A, utilizado em veículos leves, e o tipo B, comumente utilizado em veículos pesados. O presente trabalho considerará somente o conector do tipo A para veículos leves. Ele possui em 16 pinos, entre eles: CAN\_H; CAN\_L; terra; e +12V (conectado à bateria).
+
+\subsection{Mensagens OBD-II}
+
+O protocolo OBD-II define um modelo requisição-resposta. 
+Nota-se que o CAN é o protocolo de baixo nível utilizado pelo OBD-II. Nesse sentido,  
+\subsection{}
+
+
 
 OBD-II REQUER QUE A CAMADA FÍSICA SUBJACENTE SEJA CAN; PODE SER 250 Kbits OU 500 kbits; O CAMPO CAN ID PODE TER 11 bits OU 29 bits; CAN IDS ESPECÍFICOS SÃO UTILIZADOS PARA REQUISIÇÕES E RESPOSTAS OBD; AS RESPOSTAS PODEM CABER EM UMA ÚNICA MENSAGEM (SINGLE FRAME) OU SERÃO DIVIDIDAS EM MÚLTIPLAS (MULTI-FRAME; ISO TP) 
 
