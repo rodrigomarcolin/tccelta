@@ -105,39 +105,200 @@ Essas preocupações explicitar-se-ão na seção de desenvolvimento, na qual se
 \subsection{Visão geral}
 O OBD-II é um protocolo padronizado de autodiagnóstico para veículos, que permite a extração de códigos de diagnóstico de problemas (DTCs, do inglês \textit{Diagnostic Trouble Codes}) e a leitura de dados em tempo real através do conector OBD-II \cite{csselectronics_obd2_intro}. Tornou-se obrigatório no Brasil para todos os veículos leves fabricados a partir de 2010 \cite{conama354_2004}.
 
-O protocolo especifica: que o conector físico é o SAE J1962 (ISO 15031-3); que o protocolo de baixo nível deve ser o CAN (ISO 15765); o bitrate e o tamanho do campo ID dos quadros CAN (ISO 15765-4); quais são os identificadores de parâmetros OBD-II padronizados (PIDs, do inglês \textit{Parameter Ids}); o modelo requisição-resposta; o formato de mensagens, inclusive para respostas que demandam mais de uma mensagem; os IDs CAN utilizados pelos quadros; entre outros. \cite{csselectronics_obd2_intro}
-
-A presente seção trará exemplos de como ocorre a comunicação no contexto de um \textit{dongle} OBD-II.
+Ele que especifica o diagnóstico veicular em diferentes camadas. O conector físico é o definido pela SAE J1962 (ISO 15031-3). Quanto à comunicação, o OBD-II admite diferentes protocolos de camada inferior, dentre os quais o CAN, conforme a ISO 15765-4, que fixa a taxa de transmissão em 250 ou 500~kbit/s, o tamanho do identificador em 11 ou 29 bits e os identificadores CAN utilizados nas requisições e respostas. A troca de mensagens segue o modelo requisição-resposta, com formato definido tanto para mensagens que cabem em um único quadro quanto para aquelas que exigem vários, por meio do protocolo de transporte ISO-TP (ISO 15765-2). Por fim, a SAE J1979 (ISO 15031-5) define os serviços e os identificadores de parâmetros (PIDs, do inglês \textit{Parameter IDs}) padronizados, entre outros aspectos \cite{csselectronics_obd2_intro}.
 
 \subsection{Conector SAE J1962}
 O conector físico utilizado é especificado no padrão SAE J1962 / ISO 15031-3, e possui dois tipos: o tipo A, utilizado em veículos leves, e o tipo B, comumente utilizado em veículos pesados. O presente trabalho considerará somente o conector do tipo A para veículos leves. Ele possui em 16 pinos, entre eles: CAN\_H; CAN\_L; terra; e +12V (conectado à bateria).
 
+
+// IMAGEM CONECTOR
+
 \subsection{Mensagens OBD-II}
 
-O protocolo OBD-II define um modelo requisição-resposta. 
-Nota-se que o CAN é o protocolo de baixo nível utilizado pelo OBD-II. Nesse sentido,  
-\subsection{}
+O OBD-II define um modelo requisição-resposta. Um equipamento de diagnóstico, chamado cliente (no nosso caso, o \textit{dongle}), coloca no barramento uma requisição, e as ECUs que dispõem das informações solicitadas respondem \cite{csselectronics_obd2_intro}. Tanto as requisições e as respostas trafegam como quadros de dados CAN (\autoref{sec:CAN}); o que o OBD-II define é o conteúdo dos campos ID e data desses quadros.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/quadros-can-campos-obd2.png}
+    \caption{Campos CAN especificados pelo OBD-II}
+    \fonte{Os Autores}
+\end{figure}
+
+\subsubsection{Campo CAN ID} \label{subsub:can-id}
+
+A ISO 15765-4 fixa os identificadores CAN utilizados pelas mensagens OBD-II. A requisição pode ser funcional, quando dirigida a todas as ECUs ao mesmo tempo, ou física, quando dirigida a uma ECU específica. Cada ECU responde com um identificador próprio, que, no formato de 11 bits, é o da requisição física correspondente acrescido de 8 (por exemplo, a ECU cujo ID físico é 0x7E0 responde com 0x7E8) \cite{csselectronics_obd2_intro}. A \autoref{tab:ids-obd} resume os identificadores utilizados.
+
+\begin{table}[H]
+    \centering
+    \caption{Identificadores CAN utilizados no OBD-II}
+    \label{tab:ids-obd}
+    \begin{tabular}{|l|c|c|}
+        \hline
+        \textbf{Mensagem} & \textbf{ID de 11 bits} & \textbf{ID de 29 bits} \\
+        \hline
+        Requisição funcional & 0x7DF & 0x18DB33F1 \\
+        \hline
+        Requisição física & 0x7E0 a 0x7E7 & 0x18DA\textbf{xx}F1 \\
+        \hline
+        Resposta & 0x7E8 a 0x7EF & 0x18DAF1\textbf{xx} \\
+        \hline
+    \end{tabular}
+    \fonte{Elaborado pelos autores (2026), com base em \cite{csselectronics_obd2_intro}}
+    \nota{\textbf{xx} representa o endereço, em hexadecimal, da ECU
+destinatária da requisição física ou da ECU que envia a resposta.}
+\end{table}
+
+\subsubsection{Campo de dados e tipos de mensagens}
+
+Conforme a ISO 15765-4, os quadros CAN de diagnóstico devem utilizar um campo de dados de 8 bytes. Estes 8 bytes contém informações de controle do transporte e os dados da mensagem de diagnóstico.
+
+O protocolo ISO-TP, definido pela ISO 15765-2, permite transmitir mensagens que não cabem em um único quadro CAN. Para isso, define quatro tipos de quadro, identificados pelos quatro bits mais significativos do primeiro byte do campo de dados: \textit{Single Frame} (0), \textit{First Frame} (1), \textit{Consecutive Frame} (2) e \textit{Flow Control Frame} (3). O significado dos demais bits desse primeiro byte depende do tipo de quadro.
+
+// TODO: ADAPTAR
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/isotp-campos.png}
+    \caption{Tipos de Mensagem ISO-TP}
+    \fonte{CSS Electronics}
+    \label{fig:iso-tp-msg-kinds}
+\end{figure}
 
 
 
-OBD-II REQUER QUE A CAMADA FÍSICA SUBJACENTE SEJA CAN; PODE SER 250 Kbits OU 500 kbits; O CAMPO CAN ID PODE TER 11 bits OU 29 bits; CAN IDS ESPECÍFICOS SÃO UTILIZADOS PARA REQUISIÇÕES E RESPOSTAS OBD; AS RESPOSTAS PODEM CABER EM UMA ÚNICA MENSAGEM (SINGLE FRAME) OU SERÃO DIVIDIDAS EM MÚLTIPLAS (MULTI-FRAME; ISO TP) 
+\subsubsection{Estrutura das requisições OBD-II} \label{subsub:reqs-obd2}
 
-OBD-II DEFINE CONECTOR; PINOS; EXPLICITAR QUE UM DOS PINOS É 12V, QUE É DA BATERIA DO CARRO
+Uma requisição OBD-II sempre cabe em uma mensagem \textit{Single Frame}. Os 8 bytes do campo DATA do quadro CAN são organizados de acordo com a Figura~\ref{fig:mensagem-obd2-can}.
 
-DIAGRAMA DOS CAMPOS DE UMA MENSAGEM OBD-II
 
-EXPLICAÇÃO OBD-2 DEFINE SERVIÇOS (MODOS) E PIDS; EXPLICAÇÃO DOS PIDS PADRONIZADOS; PIDS DE DISCOVERY; ETC
+// TODO: ADAPTAR
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/obs2oncan.png}
+    \caption{Mensagem OBD-II no CAN}
+    \fonte{CSS Electronics}
+    \label{fig:mensagem-obd2-can}
+\end{figure}
 
-TABELA COM PIDS PADRONIZADOS 
+O OBD-II define 10 serviços padronizados, também chamados de "modos". O serviço 0x01, por exemplo, representa dados em tempo real. Cada serviço possui PIDs (\textit{Parameter IDs}). O PID 0x0D do serviço 0x01, por exemplo, solicita a leitura da velocidade do veículo naquele instante. Na Figura~\ref{fig:exemplo-obd2-req}, encontra-se um exemplo de requisição.
 
-EXEMPLO DE UM CICLO REQUISIÇÃO-RESPOSTA OBD-II
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/example-obd2-req.png}
+    \caption{Exemplo de Requisição OBD-II}
+    \fonte{Adaptado de CSS Electronics}
+    \label{fig:exemplo-obd2-req}
+\end{figure}
 
-EXPLICAÇÃO QUE UMA REQ PODE SER ATENDIDA POR MAIS DE UMA ECU
+\begin{itemize}
+    \item \textbf{Code}: 0, especificando \textit{Single Frame};
+    \item \textbf{Size}: 2, abrangendo o \textit{Service} e o \textit{PID};
+    \item \textbf{Service}: 0x01, solicitando dados em tempo real;
+    \item \textbf{PID}: 0x0D, solicitando a velocidade do veículo;
+    \item o resto é \textit{padding}.
+\end{itemize}
 
-DIAGRAMA DE EXEMPLO DE UMA COMUNICAÇÃO ATENDIDA POR MAIS DE UMA ECU, COM FIRST FRAME, FLOW CONTROL, CONSECUTIVE FRAME
 
-RESUMO DO QUE PODE SER CONSULTADO VIA OBD-II
+\subsubsection{Estrutura das Respostas OBD-II} \label{subsub:isotp}
 
+Uma ECU, ao identificar uma requisição OBD-II que pode responder, gera uma resposta. Se ela couber em um único quadro, a resposta será contida em um quadro do tipo \textit{Single Frame}. Nesse caso, o ID CAN será como descrito na \autoref{subsub:can-id}. 
+
+Tomando o exemplo da requisição na Figura~\ref{fig:exemplo-obd2-req}, será apresentada uma possível resposta, que ilustrará o funcionamento padrão para respostas \textit{Single Frame}, na Figura~\ref{fig:exemplo-obd2-resp}.
+
+No caso de um ID CAN de tamanho de 11 bits, nas respostas, o ID CAN é o ID da requisição da ECU somado a 8. A ECU do motor, por exemplo, recebe requisições endereçadas em \texttt{0x7E0} e responde em \texttt{0x7E8}, e as demais respondem até \texttt{0x7EF}.
+
+Além disso, o \textit{Service} das respostas é 0x40 + o valor do \textit{Service} das requisições. 
+
+Os bytes de dados das respostas, a partir do quarto byte do campo DATA, são nomeados A, B, C, e D. Cada PID terá sua regra de interpretação desses bytes. O PID 0D, por exemplo, representa a velocidade em km/h, e utiliza apenas o \textit{byte} A, sendo a velocidade dada diretamente por
+
+\begin{equation}
+v = A \text{ km/h}.
+\end{equation}
+
+
+Com essas informações, é possível ter o seguinte entendimento da resposta na Figura~\ref{fig:exemplo-obd2-resp}:
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/example-obd2-resp.png}
+    \caption{Exemplo de Resposta OBD-II}
+    \fonte{Adaptado de CSS Electronics}
+    \label{fig:exemplo-obd2-resp}
+\end{figure}
+
+\begin{itemize}
+    \item \textbf{Code}: 0, especificando \textit{Single Frame};
+    \item \textbf{Size}: 3, abrangendo o \textit{Service}, o \textit{PID}, e o byte A, utilizado na interpretação da resposta;
+    \item \textbf{Service}: 0x41, indicando que é uma resposta a uma requisição ao \textit{Service} 0x01;
+    \item \textbf{PID}: 0x0D, repetindo o \textit{PID} solicitado na requisição;
+    \item \textbf{A}: 0x3C, que equivale a 60 em decimal; logo, a velocidade do veículo é de 60 km/h;
+    \item \textbf{B, C, D e \textit{byte} não utilizado}: \textit{padding}, sem
+significado e ignorados na interpretação.
+\end{itemize}
+
+Mas também pode ocorrer de uma resposta não caber em um único quadro, já que o campo de dados do CAN clássico possui, no máximo, 8 bytes. Isto acontece, por exemplo, quando o cliente solicita DTCs. Neste caso, o ISO-TP (ISO 15765-2) define o procedimento ilustrado no diagrama de sequência Figura ~\autoref{fig:isotp-seq}, e explicado de maneira simplificada a seguir.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{assets/cap2-conceitos/isotp-single-ecu.png}
+    \caption{Troca de quadros ISO-TP com uma ECU}
+    \fonte{Elaborado pelo autor}
+    \label{fig:isotp-seq}
+\end{figure}
+
+
+A primeira resposta será um \textit{First Frame}, de código 1, que conterá um campo com o tamanho total da mensagem, em \textit{bytes}, e os seis primeiros \textit{bytes} de dados, de acordo com a Figura~\ref{fig:iso-tp-msg-kinds}. O cliente, por sua vez, ao identificar que recebeu um \textit{First Frame}, deve enviar um \textit{Flow Control}, de código 3, ao ID de requisição da ECU (por exemplo, \texttt{0x7E0} para a ECU que respondeu em \texttt {0x7E8}). Esse quadro autoriza a ECU a continuar a transmissão e define seus parâmetros: o \textit{Block Size}, que é a quantidade de \textit{Consecutive Frames} que a ECU pode enviar antes de aguardar novo \textit{Flow Control} (0 indica que pode enviar todos), e o \textit{STmin}, que é o tempo mínimo entre dois \textit{Consecutive Frames}. Em seguida, a ECU enviará \textit{Consecutive Frames}, de código 2, que possuem um campo de índice de sequência (de 4 bits, iniciando em 1 e voltando a 0 após F) e até sete \textit{bytes} de dados cada. O cliente concatena os dados recebidos até atingir o tamanho total informado no \textit{First Frame}.
+
+Se mais de uma ECU responder, o cliente receberá mais de um \textit{First Frame}, e deve enviar um \textit{Flow Control} para cada um deles. Também deve armazenar o ID de cada \textit{First Frame}, para reconstruir a mensagem de cada ECU a partir dos seus \textit{Consecutive Frames}, que podem chegar intercalados. Este caso é ilustrado no diagrama de sequência da \autoref{fig:isotp-seq-multi}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{assets/cap2-conceitos/isotp-multi-ecu.png}
+    \caption{Troca de quadros ISO-TP com múltiplas ECUs}
+    \fonte{Elaborado pelo autor}
+    \label{fig:isotp-seq-multi}
+\end{figure}
+
+Um algoritmo em pseudocódigo para lidar com múltiplas respostas ISO-TP é dado
+a seguir:
+
+\begin{verbatim}
+mensagens = {}
+
+para cada quadro recebido:
+    se quadro e Single Frame:
+        entrega(quadro.dados)
+
+    senao se quadro e First Frame:
+        mensagens[quadro.id] = {
+            tamanho: quadro.tamanho,
+            dados:   quadro.dados,
+            proximo: 1
+        }
+        envia Flow Control para (quadro.id - 8)
+
+    senao se quadro e Consecutive Frame e quadro.id em mensagens:
+        m = mensagens[quadro.id]
+        se quadro.indice != m.proximo:
+            descarta mensagens[quadro.id]      # quadro perdido
+        senao:
+            m.dados += quadro.dados
+            m.proximo = (m.proximo + 1) mod 16
+            se tamanho(m.dados) >= m.tamanho:
+                entrega(m.dados[0 : m.tamanho])  # remove padding
+                remove mensagens[quadro.id]
+\end{verbatim}
+
+\subsection{Implicações para o projeto}
+
+DONGLE DEVERÁ DETECTAR KBPS E TAMANHO DO CAN ID DO BARRAMENTO CAN SUBJACENTE
+
+DONGLE DEVERÁ SABER MONTAR REQUISIÇÕES OBD2
+
+DONGLE DEVERÁ SABER IDENTIFICAR RESPOSTAS ÀS SUAS REQUISIÇÕES OBD2, SEJAM ELAS: PROVENIENTES DE UMA UNICA ECU; PROVENIENTES DE MÚLTIPLAS ECUS; CONTIDA EM UM ÚNICO QUADRO; OU CONTIDA EM MÚLTIPLOS QUADROS. 
+
+EM CONTRAPARTIDA, O SIMULADOR DEVERÁ SABER OUVIR AS REQUISIÇÕES E GERAR AS RESPOSTAS, TANTO SINGLE FRAME, QUANTO MULTI FRAME. DEVE RESPONDER A PIDS
 \section{ELM327} \label{sec:ELM}
 
 EXPLICAR QUE ELM-327 ORIGINALMENTE POSSIBILITA ASCII, MAS EXPLICITAR QUE SUA PREOCUPAÇÃO RESTRINGE-SE SOMENTE À TRADUÇÃO, CONFORME DOC:
