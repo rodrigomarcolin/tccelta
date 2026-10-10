@@ -364,6 +364,7 @@ PARA QUE SERVE O FREERTOS; CONCEITOS BÁSICOS; TASKS; FILAS.
 
 \section{PlatformIO} \label{sec:PLATFOMIO}
 
+\subsection{Visão geral}
 O PlatformIO é um ecossistema de código aberto para o desenvolvimento de sistemas embarcados, que reúne gerenciamento de dependências, \textit{toolchains} de compilação e ferramentas de linha de comando em uma interface única, independente do editor de código utilizado (CITAÇÃO). Ele suporta diversas plataformas de hardware e \textit{frameworks}, como Arduino e ESP-IDF, e os baixa e instala automaticamente conforme a configuração do projeto. COm isso, o desenvolvedor não precisa instalar manualmente compiladores, SDKs ou bibliotecas, e o ambiente de compilação pode ser reproduzido a partir dos arquivos do projeto.
 
 Toda a configuração é feita no arquito \texttt{platformio.ini}, que declara a plataforma, o \textit{framework}, a placa-alvo e as bibliotecas utilizadas. Esse arquivo é organizado em ambientes (\textit{environments}), e cada ambiente representa um perfil de compilação com suas próprias opções, como \textit{flags} do compilador e definições de pré-processador (\texttt{-D}). Isto permite gerar variantes distintas do mesmo código-fonte, como versões de depuração, de produção, com \textit{mockadas} ou diferentes implementações, apenas escolhendo o ambiente na hora de compilar. 
