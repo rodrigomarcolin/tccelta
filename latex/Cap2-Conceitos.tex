@@ -168,7 +168,7 @@ O protocolo ISO-TP, definido pela ISO 15765-2, permite transmitir mensagens que 
 
 \subsubsection{Estrutura das requisições OBD-II} \label{subsub:reqs-obd2}
 
-Uma requisição OBD-II sempre cabe em uma mensagem \textit{Single Frame}. Os 8 bytes do campo DATA do quadro CAN são organizados de acordo com a Figura~\ref{fig:mensagem-obd2-can}.
+Uma requisição OBD-II sempre cabe em uma mensagem \textit{Single Frame}. Os 8 bytes do campo DATA do quadro CAN são organizados de acordo com a \autoref{fig:mensagem-obd2-can}.
 
 
 // TODO: ADAPTAR
@@ -180,7 +180,7 @@ Uma requisição OBD-II sempre cabe em uma mensagem \textit{Single Frame}. Os 8 
     \label{fig:mensagem-obd2-can}
 \end{figure}
 
-O OBD-II define 10 serviços padronizados, também chamados de "modos". O serviço 0x01, por exemplo, representa dados em tempo real. Cada serviço possui PIDs (\textit{Parameter IDs}). O PID 0x0D do serviço 0x01, por exemplo, solicita a leitura da velocidade do veículo naquele instante. Na Figura~\ref{fig:exemplo-obd2-req}, encontra-se um exemplo de requisição.
+O OBD-II define 10 serviços padronizados, também chamados de "modos". O serviço 0x01, por exemplo, representa dados em tempo real. Cada serviço possui PIDs (\textit{Parameter IDs}). O PID 0x0D do serviço 0x01, por exemplo, solicita a leitura da velocidade do veículo naquele instante. Na \autoref{fig:exemplo-obd2-req}, encontra-se um exemplo de requisição.
 
 \begin{figure}[H]
     \centering
@@ -203,7 +203,7 @@ O OBD-II define 10 serviços padronizados, também chamados de "modos". O servi�
 
 Uma ECU, ao identificar uma requisição OBD-II que pode responder, gera uma resposta. Se ela couber em um único quadro, a resposta será contida em um quadro do tipo \textit{Single Frame}. Nesse caso, o ID CAN será como descrito na \autoref{subsub:can-id}. 
 
-Tomando o exemplo da requisição na Figura~\ref{fig:exemplo-obd2-req}, será apresentada uma possível resposta, que ilustrará o funcionamento padrão para respostas \textit{Single Frame}, na Figura~\ref{fig:exemplo-obd2-resp}.
+Tomando o exemplo da requisição na \autoref{fig:exemplo-obd2-req}, será apresentada uma possível resposta, que ilustrará o funcionamento padrão para respostas \textit{Single Frame}, na \autoref{fig:exemplo-obd2-resp}.
 
 No caso de um ID CAN de tamanho de 11 bits, nas respostas, o ID CAN é o ID da requisição da ECU somado a 8. A ECU do motor, por exemplo, recebe requisições endereçadas em \texttt{0x7E0} e responde em \texttt{0x7E8}, e as demais respondem até \texttt{0x7EF}.
 
@@ -216,7 +216,7 @@ v = A \text{ km/h}.
 \end{equation}
 
 
-Com essas informações, é possível ter o seguinte entendimento da resposta na Figura~\ref{fig:exemplo-obd2-resp}:
+Com essas informações, é possível ter o seguinte entendimento da resposta na \autoref{fig:exemplo-obd2-resp}:
 
 
 \begin{figure}[H]
@@ -248,7 +248,7 @@ Mas também pode ocorrer de uma resposta não caber em um único quadro, já que
 \end{figure}
 
 
-A primeira resposta será um \textit{First Frame}, de código 1, que conterá um campo com o tamanho total da mensagem, em \textit{bytes}, e os seis primeiros \textit{bytes} de dados, de acordo com a Figura~\ref{fig:iso-tp-msg-kinds}. O cliente, por sua vez, ao identificar que recebeu um \textit{First Frame}, deve enviar um \textit{Flow Control}, de código 3, ao ID de requisição da ECU (por exemplo, \texttt{0x7E0} para a ECU que respondeu em \texttt {0x7E8}). Esse quadro autoriza a ECU a continuar a transmissão e define seus parâmetros: o \textit{Block Size}, que é a quantidade de \textit{Consecutive Frames} que a ECU pode enviar antes de aguardar novo \textit{Flow Control} (0 indica que pode enviar todos), e o \textit{STmin}, que é o tempo mínimo entre dois \textit{Consecutive Frames}. Em seguida, a ECU enviará \textit{Consecutive Frames}, de código 2, que possuem um campo de índice de sequência (de 4 bits, iniciando em 1 e voltando a 0 após F) e até sete \textit{bytes} de dados cada. O cliente concatena os dados recebidos até atingir o tamanho total informado no \textit{First Frame}.
+A primeira resposta será um \textit{First Frame}, de código 1, que conterá um campo com o tamanho total da mensagem, em \textit{bytes}, e os seis primeiros \textit{bytes} de dados, de acordo com a \autoref{fig:iso-tp-msg-kinds}. O cliente, por sua vez, ao identificar que recebeu um \textit{First Frame}, deve enviar um \textit{Flow Control}, de código 3, ao ID de requisição da ECU (por exemplo, \texttt{0x7E0} para a ECU que respondeu em \texttt {0x7E8}). Esse quadro autoriza a ECU a continuar a transmissão e define seus parâmetros: o \textit{Block Size}, que é a quantidade de \textit{Consecutive Frames} que a ECU pode enviar antes de aguardar novo \textit{Flow Control} (0 indica que pode enviar todos), e o \textit{STmin}, que é o tempo mínimo entre dois \textit{Consecutive Frames}. Em seguida, a ECU enviará \textit{Consecutive Frames}, de código 2, que possuem um campo de índice de sequência (de 4 bits, iniciando em 1 e voltando a 0 após F) e até sete \textit{bytes} de dados cada. O cliente concatena os dados recebidos até atingir o tamanho total informado no \textit{First Frame}.
 
 Se mais de uma ECU responder, o cliente receberá mais de um \textit{First Frame}, e deve enviar um \textit{Flow Control} para cada um deles. Também deve armazenar o ID de cada \textit{First Frame}, para reconstruir a mensagem de cada ECU a partir dos seus \textit{Consecutive Frames}, que podem chegar intercalados. Este caso é ilustrado no diagrama de sequência da \autoref{fig:isotp-seq-multi}.
 
@@ -292,38 +292,103 @@ para cada quadro recebido:
 
 \subsection{Implicações para o projeto}
 
-DONGLE DEVERÁ DETECTAR KBPS E TAMANHO DO CAN ID DO BARRAMENTO CAN SUBJACENTE
+Conforme exposto, a ISO 15765-4 determina que a taxa de transmissão do barramento CAN deve ser ou de 250 ou de 500~kbit/s, e o tamanho do identificador deve ser ou 11 ou 29 bits. Há, portanto, 4 combinações possíveis. Ao se conectar na porta OBD-II, o \textit{dongle} deverá realizar uma rotina de inicialização que determine qual configuração utilizar.
 
-DONGLE DEVERÁ SABER MONTAR REQUISIÇÕES OBD2
+Além disso, ao receber um pedido para ler um parâmetro, o \textit{dongle} deverá ser capaz de montar corretamente a requisição OBD-II e colocá-la no barramento. Por conseguinte, também deverá ser capaz de ler e enviar, ao cliente, a resposta, seja ela: contida em um único quadro, ou em vários; proveniente de uma única ECU, ou de múltiplas.
 
-DONGLE DEVERÁ SABER IDENTIFICAR RESPOSTAS ÀS SUAS REQUISIÇÕES OBD2, SEJAM ELAS: PROVENIENTES DE UMA UNICA ECU; PROVENIENTES DE MÚLTIPLAS ECUS; CONTIDA EM UM ÚNICO QUADRO; OU CONTIDA EM MÚLTIPLOS QUADROS. 
+Em contrapartida, o simulador deverá ser capaz de ouvir as requisições e gerar as respostas, tanto as \textit{Single Frame}, quanto as \textit{Multi Frame}, simulando mais de uma ECU.
 
-EM CONTRAPARTIDA, O SIMULADOR DEVERÁ SABER OUVIR AS REQUISIÇÕES E GERAR AS RESPOSTAS, TANTO SINGLE FRAME, QUANTO MULTI FRAME. DEVE RESPONDER A PIDS
 \section{ELM327} \label{sec:ELM}
 
-EXPLICAR QUE ELM-327 ORIGINALMENTE POSSIBILITA ASCII, MAS EXPLICITAR QUE SUA PREOCUPAÇÃO RESTRINGE-SE SOMENTE À TRADUÇÃO, CONFORME DOC:
+\subsection{Visão geral}
+O padrão OBD-II (\autoref{sec:OBD}) define como um dispositivo externo (\textit{dongle}) comunica-se com a rede interna do carro. No entanto, ele não determina como este dispositivo deve se comunicar com o cliente final, como um aplicativo em smartphone ou computador. Há diferentes maneiras de se implementar uma interface para o cliente final.
 
-""One must keep in mind that the ELM327 is a protocol interpreter that makes no attempt to assess the OBD messages for validity – it only ensures that hexadecimal digits were received, combined into bytes, then sent out the OBD port, and it does not know if a message sent to the vehicle was in error.""
+O ELM327 é um circuito integrado desenvolvido pela ELM Electronics que atua como interpretador de protocolos OBD-II. Seu padrão de comunicação foi tão amplamente replicado que a maioria dos \textit{dongles} disponíveis no mercado (mais de 90\%) adota este padrão ou é compatível com ele \cite{wen2020plugnpwned}. Por este motivo, o padrão ELM327 será a referência para implementação do presente projeto.
 
-EXPLICAR QUE PODE RECEBER COMANDOS AT PARA CONFIGURAÇÃO PRÓPRIA; EXEMPLOS DE COMANDOS AT. 
+Para o cliente, o ELM327 expõe uma interface serial baseada em texto ASCII. O cliente envia comandos como cadeias de caracteres terminadas em \texttt{\textbackslash r} e o dispositivo responde, também em ASCII, terminando sua resposta com \texttt{>}, o que indica que ele está pronto para receber o próximo comando \cite{elm327datasheet}.
 
-EXEMPLO DE COMUNICAÇÃO: ENVIA UM PID EM ASCII (EX. 010C ), RECEBE DADOS HEXADECIMAIS NA SAÍDA; CONVERTE ELES
+Importante destacar que o ELM327 é um tradutor, garantindo apenas que os dígitos recebidos são agrupados corretamente e transmitidos pela porta OBD-II. A interpretação semântica das mensagens, como verificar se um PID é válido ou converter uma resposta hexadecimal para seu valor em grandeza física é de inteira responsabilidade do aplicativo cliente \cite{elm327datasheet}.
 
-COM ISTO DEVERÁ FICAR CLARO A COMUNICAÇÃO PONTA-A-PONTA.
+Se a mensagem recebida inicia-se com AT, o comando é interpretado como de configuração própria, não sendo enviados para a rede veicular. Exemplos incluem: \texttt{ATZ}, que reinicializa o dispositivo; \texttt{ATE0}, que desativa o eco dos comandos enviados, e \texttt{ATE1}, que os ativa; \texttt{ATH1}, que inclui os cabeçalhos das mensagens nas respostas, e \texttt{ATH0}, que os exclui; entre outros \cite{elm327datasheet}.
 
+Caso a mensagem não se inicie com AT, ela será interpretada como o \textit{payload} de uma mensagem OBD-II, e o CAN ID será definido por um protocolo. Por exemplo: tendo identificado que o barramento CAN subjacente utiliza 11 bits, ao receber, na serial, a mensagem \texttt{010D}, a requisição gerada e transmitida no barramento pelo ELM327 será como a da \autoref{fig:exemplo-obd2-req}.
+
+Ao identificar a resposta, como, por exemplo, a da \autoref{fig:exemplo-obd2-resp}, o ELM327 retornará de acordo com sua configuração interna. Caso esteja com \texttt{ATH0} (sem headers), \texttt{ATE0} (sem eco), e \texttt{ATS0} (sem espaçamento), um exemplo de resposta baseado na leitura de um quadro CAN como o da \autoref{fig:exemplo-obd2-resp} seria: \texttt{410D3C}.
+
+\subsection{Implicações para o projeto}
+
+O \textit{dongle} deverá fornecer, ao cliente final, uma interface simplificada, inspirada no padrão ELM327, por meio da qual será possível enviar requisições OBD-II como texto, e receber as mensagens do veículo como caracteres que representam hexadecimal, assim livrando o cliente de lidar com os detalhes de implementação do barramento CAN.
+
+O \textit{dongle} deverá, ainda, implementar um subconjunto dos comandos AT, suficiente para permitir a configuração do dispositivo. Os comandos selecionados e os critérios da escolha são apresentados na \autoref{cap:desenvolvimento}. 
 
 \section{Bluetooth Low-Energy} \label{sec:BLE}
 
-EXPLICAR O QUE É BLUETOOTH LOW ENERGY; DIFERENÇA AO CONVENCIONAL; GATT, SERVER, CLIENT, SERVICES, CHARACTERISTICS, GAP. SERIAL-OVER-BLE. NORDIC UUIDS PARA RX E TX.
+\subsection{Visão geral}
+O BLE (Bluetooth Low-Energy) é uma tecnologia de comunicação sem fio de curto alcance, introduzida na versão 4.0 da tecnologia Bluetooth e projetada para dispositivos de baixo consumo, que trocam pequenas quantidades de dados de forma esporádica (CITAÇÃO). 
+
+Dois protocolos organizam a interação entre os dispositivos BLE. O \textit{Generic Access Profile} (GAP) define como os dispositivos se descobrem e estabelecem conexão. Uma vez conectados, o \textit{Generic Attribute Profile} (GATT) define como os dados são organizados e trocados. 
+
+No GATT, o dispositivo que armazena os dados é o servidor(\textit{server}), e o que os acessa, o cliente (\textit{client}). Os dados de funcionalidades relacionadas são agrupados em serviços (\textit{services}), que contém características (\textit{characteristics}), que são os valores efetivamente lidos e escritos.
+
+Cada serviço e cada característica são identificados por UUIDs, e cada característica define as operações que suporta, como: leitura (\textit{read}), escrita (\textit{write}), e notificação (\textit{notify}). Na notificação, o servidor envia proativamente o novo valor da característica ao cliente quando ela é atualizada, sem que este precise consultá-lo. 
+
+O BLE não define um perfil padronizado para troca de dados seriais. Na prática, emula-se o comportamento de uma serial através da técnica \textit{Serial-over-BLE}. Ela preconiza que um serviço conterá duas características: uma em que o cliente escreve para enviar dados ao periférico, simulando a entrada serial ()\texttt{RX}); e outra na qual o periférico notifica, para enviar dados aos clientes (\texttt{TX}). 
+
+O serviço mais difundido para \textit{Serial-over-BLE} é o \textit{Nordic UART Service} (NUS), definido pela Nordic Semiconductor, cujos UUIDs, apresentados na \autoref{tab:nus}, tornou-se um padrão, sendo reconhecido por diversos aplicativos e bibliotecas.
+
+Os nomes RX e TX são dados de acordo com a perspectiva do periférico: RX é a característica através da qual ele recebe dados, e na qual o cliente escreve; e TX é a característica através da qual ele escreve, e da qual o cliente recebe.
+
+\begin{table}[htb]
+\centering
+\caption{UUIDs do \textit{Nordic UART Service}}
+\label{tab:nus}
+\begin{tabular}{llll}
+\hline
+Elemento & UUID & Propriedade & Sentido \\ \hline
+Serviço & \texttt{6E400001-B5A3-F393-E0A9-E50E24DCCA9E} & --- & --- \\
+RX & \texttt{6E400002-B5A3-F393-E0A9-E50E24DCCA9E} & \textit{Write} & cliente $\rightarrow$ dongle \\
+TX & \texttt{6E400003-B5A3-F393-E0A9-E50E24DCCA9E} & \textit{Notify} & dongle $\rightarrow$ cliente \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Implicações para o projeto}
+
+O \textit{dongle} atuará como periférico GAP e servidor GATT, expondo o NUS, enquanto o cliente atuará como cliente GATT. Os UUIDS do NUS serão adotados por serem amplamente reconhecidos. 
+
+Cada escrita na característica RX será encaminhada ao interpretador de comandos compatível com o ELM327 (\autoref{sec:ELM}), e cada resposta será enviada ao cliente por meio de uma notificação da característica TX.
 
 
 \section{FreeRTOS e Arduino}
 
 PARA QUE SERVE O FREERTOS; CONCEITOS BÁSICOS; TASKS; FILAS. 
 
-\section{PlatformIO}
+\section{PlatformIO} \label{sec:PLATFOMIO}
 
-PLATFORMIO; VARIÁVEIS DE AMBIENTE; PERFIS DE COMPILAÇÃO
+O PlatformIO é um ecossistema de código aberto para o desenvolvimento de sistemas embarcados, que reúne gerenciamento de dependências, \textit{toolchains} de compilação e ferramentas de linha de comando em uma interface única, independente do editor de código utilizado (CITAÇÃO). Ele suporta diversas plataformas de hardware e \textit{frameworks}, como Arduino e ESP-IDF, e os baixa e instala automaticamente conforme a configuração do projeto. COm isso, o desenvolvedor não precisa instalar manualmente compiladores, SDKs ou bibliotecas, e o ambiente de compilação pode ser reproduzido a partir dos arquivos do projeto.
+
+Toda a configuração é feita no arquito \texttt{platformio.ini}, que declara a plataforma, o \textit{framework}, a placa-alvo e as bibliotecas utilizadas. Esse arquivo é organizado em ambientes (\textit{environments}), e cada ambiente representa um perfil de compilação com suas próprias opções, como \textit{flags} do compilador e definições de pré-processador (\texttt{-D}). Isto permite gerar variantes distintas do mesmo código-fonte, como versões de depuração, de produção, com \textit{mockadas} ou diferentes implementações, apenas escolhendo o ambiente na hora de compilar. 
+
+
+O PlatformIO também oferece uma interface de linha de comando (\texttt{pio}) com comandos simples para as etapas do ciclo de desenvolvimento, apresentados na \autoref{tab:pio}.
+
+\begin{table}[htb]
+\centering
+\caption{Principais comandos do PlatformIO utilizados no projeto}
+\label{tab:pio}
+\begin{tabular}{ll}
+\hline
+Comando & Função \\ \hline
+\texttt{pio run} & Compila o projeto no ambiente selecionado \\
+\texttt{pio run -t upload} & Compila e grava o \textit{firmware} na placa \\
+\texttt{pio check} & Executa análise estática do código \\
+\texttt{pio test} & Executa os testes automatizados \\
+\texttt{pio device monitor} & Abre o monitor serial para depuração \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Implicações para o projeto}
+
+O presente projeto utilizará o PlatformIO para automatizar a configuração do ambiente de desenvolvimento e de compilação do \textit{firmware} do \textit{dongle}. Os ambientes do PlatformIO serão utilizados como perfis de compilação. Os comandos de compilação e gravação serão utilizados pela CLI do PlatformIO.
 
 \section{Ataques}
 
