@@ -1,0 +1,39 @@
+' Fronteiras de confiança entre dongle, app e servidor
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:fronteiras-confianca)
+' Gerar PNG (Git Bash): ./generate.sh fronteiras-confianca.puml
+@startuml fronteiras-confianca
+skinparam componentStyle rectangle
+skinparam defaultFontSize 14
+skinparam defaultTextAlignment center
+skinparam dpi 200
+skinparam nodesep 15
+left to right direction
+
+rectangle "Confiável" #E6F4EA {
+  component "Dongle" as dongle
+}
+
+rectangle "Não confiável" #FDE7E7 {
+  component "App mobile" as app
+}
+
+rectangle "Confiável " #E6F4EA {
+  component "Servidor" as server
+}
+
+dongle --> app : BLE\n(elance não confiável)
+app --> server : Internet\n(enlace não confiável)
+
+' Enlace lógico fim a fim com o texto ABAIXO da linha.
+' O Graphviz sempre põe o rótulo de uma aresta acima dela, então a aresta
+' tracejada passa por um nó intermediário (cadeado) e o texto é um nó
+' separado, empilhado abaixo dele por arestas ocultas.
+label "<color:#2E7D32><&lock-locked*2></color>" as mid
+label "enlace lógico fim a fim\n(deve ser confiável)" as lbl
+dongle .. mid
+mid ..> server
+dongle -[hidden]-> lbl
+lbl -[hidden]-> server
+app -[hidden]right- mid
+mid -[hidden]right- lbl
+@enduml
