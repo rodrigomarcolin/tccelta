@@ -11,16 +11,18 @@
 class TwaiCan : public ICanBus {
 public:
     /**
-     * @param txPin GPIO connected to SN65HVD230 TXD (default 21)
-     * @param rxPin GPIO connected to SN65HVD230 RXD (default 22)
+     * @param bitrate taxa do barramento (ISO 15765-4: 250 ou 500 kbps)
+     * @param txPin   GPIO connected to SN65HVD230 TXD (default 21)
+     * @param rxPin   GPIO connected to SN65HVD230 RXD (default 22)
      */
-    explicit TwaiCan(int txPin = 21, int rxPin = 22);
+    explicit TwaiCan(CanBitrate bitrate = CanBitrate::Kbps500, int txPin = 21, int rxPin = 22);
 
     bool begin()   override;
     bool send(const CanFrame& frame)    override;
     bool receive(CanFrame& frame)       override;
 
 private:
+    CanBitrate _bitrate;
     int _txPin;
     int _rxPin;
 };

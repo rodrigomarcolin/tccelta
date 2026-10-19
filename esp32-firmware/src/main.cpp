@@ -34,10 +34,48 @@
     #error "No CAN backend defined. Use: pio run -e mcp2515|twai|mock (or a variant like mock_psk)"
 #endif
 
+#if defined(USE_COLLECTOR)
+    #include "app/CollectorApp.h"
+
+// Backend no protocolo configurado (AT SP): taxa e tamanho de ID vêm da config.
+static IObd2& makeCollectorBus(const collector::CollectorConfig& config) {
+#if defined(USE_MOCK)
+    (void)config;
+    static Obd2Mock obd2;
+#else
+    const CanBitrate bitrate = collector::uses500Kbps(config.protocol) ? CanBitrate::Kbps500
+                                                                        : CanBitrate::Kbps250;
+    const ObdAddressing addressing = collector::usesExtendedIds(config.protocol)
+                                         ? ObdAddressing::extended29Bit()
+                                         : ObdAddressing::standard11Bit();
+  #if defined(USE_MCP2515)
+    static Mcp2515Can can(bitrate);
+  #else
+    static TwaiCan can(bitrate);
+  #endif
+    static Obd2Can obd2(&can, addressing);
+#endif
+    return obd2;
+}
+
+static void halt(const char* reason) {
+    Serial.printf("[main] %s — halting\n", reason);
+    while (true) delay(1000);
+}
+#endif
+
 void setup() {
     Serial.begin(115200);
     delay(200);
     Serial.println("\n=== OBD2 Dongle ===");
+
+#if defined(USE_COLLECTOR)
+    // Coleta de telemetria: a configuração do CAN vem da NVS.
+    static BleConnectivity collectorBle("TCCeltaDongle");
+    if (!app::startCollector(makeCollectorBus, collectorBle)) halt("Collector init failed");
+    Serial.println("[main] Collector started");
+    return;
+#endif
 
     // ── CAN / OBD2 backend ───────────────────────────────────────────────────
 #if defined(USE_MCP2515)
@@ -46,7 +84,7 @@ void setup() {
     Serial.println("[main] CAN backend : MCP2515 (SPI)");
 
 #elif defined(USE_TWAI)
-    static TwaiCan     can;
+    static TwaiCan     can(CanBitrate::Kbps250);
     static Obd2Can     obd2(&can);
     Serial.println("[main] CAN backend : TWAI (native)");
 

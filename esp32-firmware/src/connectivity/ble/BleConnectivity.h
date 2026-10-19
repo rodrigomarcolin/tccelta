@@ -32,9 +32,13 @@ public:
     void sendResponse(const uint8_t* data, size_t len) override;
     void setOnCommandReceivedCallback(CommandCallback cb) override;
 
+    /** Chamado com true ao conectar e false ao desconectar. */
+    void setConnectionCallback(std::function<void(bool)> cb) { _onConnection = std::move(cb); }
+
 private:
     const char*           _deviceName;
     CommandCallback       _callback;
+    std::function<void(bool)> _onConnection;
     NimBLECharacteristic* _txChar = nullptr;
 
     // NimBLECharacteristicCallbacks

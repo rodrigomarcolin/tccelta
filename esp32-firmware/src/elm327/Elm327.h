@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "obd2/IObd2.h"
 #include "elm327/whitelist/Whitelist.h"
+#include "collector/ICollectorControl.h"
 
 /**
  * Processador de comandos compatível com ELM327.
@@ -10,7 +11,10 @@
  * para ser enviada de volta ao Client.
  *
  * Supported AT commands: ATZ, ATI, ATE0/1, ATH0/1, ATL0/1, ATS0/1,
- *   ATDP, ATDPN, ATD, ATST[hh], AT@1
+ *   ATDP, ATDPN, ATD, ATST[hh], AT@1 (espaços entre as partes são ignorados).
+ *   Com coleta (`control` não nulo): ATSPh e os comandos AT# do projeto, e
+ *   fora do modo diagnóstico os PIDs coletados são respondidos com o último
+ *   valor lido, sem usar o barramento; qualquer outro pedido responde "?".
  * Supported OBD commands: mode 01/09 PIDs in "SSPP" hex format (spaces in
  *   the command string are stripped before parsing); mode 03/07/0A (DTC
  *   lists, no PID) in "SS" hex format; mode 02 (freeze frame, frame 0 only)
@@ -19,7 +23,7 @@
  */
 class Elm327 {
 public:
-    explicit Elm327(IObd2* obd2);
+    explicit Elm327(IObd2* obd2, collector::ICollectorControl* control = nullptr);
 
     Whitelist& whitelist() { return _whitelist; }
 
@@ -31,6 +35,7 @@ public:
 
 private:
     IObd2* _obd2;
+    collector::ICollectorControl* _control;
     bool   _echo;
     bool   _linefeed;
     bool   _headers;
@@ -38,6 +43,12 @@ private:
     Whitelist _whitelist;
 
     String processAt(const String& upper);
+    String processAtHash(const String& upper);
+    String processSetTimeout(uint8_t value);
+    String processCollectorPid(uint8_t service, uint8_t pid);
+    String formatTmaxReport(const collector::TmaxReport& report) const;
+    String formatList() const;
+    bool   collectorMode() const { return _control && !_control->diagMode(); }
     String processObd(uint8_t service, uint8_t pid, size_t expectedResponses);
     String formatDataBytes(uint8_t service, uint8_t pid,
                            const uint8_t* data, int len, uint32_t ecuId);

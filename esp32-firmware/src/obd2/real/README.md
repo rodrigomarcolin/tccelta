@@ -4,10 +4,15 @@
 response IDs `0x7E8`–`0x7EF`. `IsoTp::Client` owns ISO-TP framing and collects
 responses independently by ECU ID — it is fully generic, with no knowledge of
 OBD-II/UDS. `Obd2Can` holds one `IsoTp::Client` instance (member `_isoTp`),
-constructed once with the negative-response marker (`0x7F`) and the
-physical-addressing offset used to target Flow Control frames (`-8`, per
-ISO 15765-4) — both fixed for the session. Only the expected reply SID varies
-per call, since it depends on the service being read.
+constructed once with the negative-response marker (`0x7F`), the function
+that targets Flow Control frames and the identifier size — all taken from
+`ObdAddressing` (11 or 29 bits). Only the expected reply prefix varies per
+call: SID + PID for modes 01/02, so a late reply to a previous PID is skipped
+instead of ending the wait; SID alone for DTC services.
+
+Diagnostics use the functional request ID. The collector uses
+`readEnginePid`, a physical request to the engine ECU (`0x7E0` / `0x18DA10F1`),
+so only one ECU answers.
 
 ```mermaid
 sequenceDiagram

@@ -72,9 +72,11 @@ void BleConnectivity::onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connI
 
 void BleConnectivity::onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) {
     Serial.println("[BLE] Client connected");
+    if (_onConnection) _onConnection(true);
 }
 
 void BleConnectivity::onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) {
     Serial.println("[BLE] Client disconnected — restarting advertising");
+    if (_onConnection) _onConnection(false);
     NimBLEDevice::startAdvertising();
 }

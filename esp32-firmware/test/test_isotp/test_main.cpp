@@ -7,7 +7,7 @@
 // `Obd2Can` em produção). Ver `can/isotp/IsoTpClient.h` para o que cada parâmetro
 // significa.
 constexpr uint8_t NEGATIVE_RESPONSE_SID = 0x7F;
-constexpr int32_t FC_ID_OFFSET = -8;  // ID físico = ID de resposta - 8
+constexpr IsoTp::FcTargetFn FC_TARGET = IsoTp::fcTargetByOffset<-8>;  // ID físico = ID de resposta - 8
 
 void setUp() {}
 void tearDown() {}
@@ -19,7 +19,7 @@ void test_rx_sf_clean() {
     FakeCanBus can;
     can.enqueue(0x7E8, {0x02, 0x43, 0x00});
 
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t req[1] = {0x03};
     uint8_t out[32];
     int n = client.request(0x7DF, 0x7E8, 0x7EF, req, 1, 0x43, out, sizeof(out));
@@ -36,7 +36,7 @@ void test_rx_ff_one_cf() {
     can.enqueue(0x7E8, {0x10, 0x08, 0x43, 0x03, 0x03, 0x01, 0x04, 0x20});
     can.enqueue(0x7E8, {0x21, 0x07, 0x00});
 
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t req[1] = {0x03};
     uint8_t out[32];
     int n = client.request(0x7DF, 0x7E8, 0x7EF, req, 1, 0x43, out, sizeof(out));
@@ -61,7 +61,7 @@ void test_rx_ff_two_cf() {
     can.enqueue(0x7E8, {0x21, 0x04, 0x20, 0x07, 0x00, 0x08, 0x30, 0x0A});
     can.enqueue(0x7E8, {0x22, 0x00});
 
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t req[1] = {0x03};
     uint8_t out[32];
     int n = client.request(0x7DF, 0x7E8, 0x7EF, req, 1, 0x43, out, sizeof(out));
@@ -77,7 +77,7 @@ void test_rx_negative_response() {
     FakeCanBus can;
     can.enqueue(0x7E8, {0x03, 0x7F, 0x03, 0x11});
 
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t req[1] = {0x03};
     uint8_t out[32];
     int n = client.request(0x7DF, 0x7E8, 0x7EF, req, 1, 0x43, out, sizeof(out));
@@ -92,7 +92,7 @@ void test_rx_multi_ecu_single_frame() {
     can.enqueue(0x7E8, {0x03, 0x41, 0x0C, 0x10});
     can.enqueue(0x7E9, {0x03, 0x41, 0x0C, 0x20});
 
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t req[2] = {0x01, 0x0C};
     IsoTp::ResponseSet responses;
     int n = client.requestAll(0x7DF, 0x7E8, 0x7EF, req, sizeof(req), 0x41, responses, 20, 2);
@@ -112,17 +112,73 @@ void test_rx_multi_ecu_interleaved_multiframe() {
     can.enqueue(0x7E8, {0x21, 0x05, 0x06});
     can.enqueue(0x7E9, {0x21, 0x15, 0x16});
 
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t req[2] = {0x01, 0x0C};
     IsoTp::ResponseSet responses;
     int n = client.requestAll(0x7DF, 0x7E8, 0x7EF, req, sizeof(req), 0x41, responses, 20, 2);
 
     TEST_ASSERT_EQUAL_INT(2, n);
-    TEST_ASSERT_EQUAL_UINT32(4, can.sent.size());
+    TEST_ASSERT_EQUAL_UINT32(3, can.sent.size());  // requisição + 1 FC por ECU
     TEST_ASSERT_EQUAL_HEX32(0x7E0, can.sent[1].id);
     TEST_ASSERT_EQUAL_HEX32(0x7E1, can.sent[2].id);
     TEST_ASSERT_EQUAL_HEX8(0x06, responses.items[0].data[7]);
     TEST_ASSERT_EQUAL_HEX8(0x16, responses.items[1].data[7]);
+}
+
+// Com um PID por vez, a resposta atrasada do PID anterior (0x0D) pode chegar
+// durante a espera do atual (0x0C). Conferindo SID + PID, ela é descartada e a
+// espera continua até a resposta certa — em vez de encerrar a transação.
+void test_rx_late_reply_of_previous_pid_is_skipped() {
+    FakeCanBus can;
+    can.enqueue(0x7E8, {0x03, 0x41, 0x0D, 0x50});        // sobra: PID anterior
+    can.enqueue(0x7E8, {0x04, 0x41, 0x0C, 0x1A, 0xF8});  // resposta certa
+
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
+    uint8_t req[2] = {0x01, 0x0C};
+    IsoTp::ResponseSet responses;
+    int n = client.requestAll(0x7E0, 0x7E8, 0x7E8, req, sizeof(req),
+                              IsoTp::ReplyPrefix(0x41, 0x0C), responses, 20, 1);
+
+    TEST_ASSERT_EQUAL_INT(1, n);
+    TEST_ASSERT_EQUAL_HEX8(0x0C, responses.items[0].data[1]);
+    TEST_ASSERT_EQUAL_HEX8(0x1A, responses.items[0].data[2]);
+}
+
+// Frames que já estavam na recepção antes da requisição são sobras.
+void test_rx_stale_frames_are_drained_before_request() {
+    FakeCanBus can;
+    can.preload(0x7E8, {0x03, 0x41, 0x0C, 0x99});
+    can.enqueue(0x7E8, {0x03, 0x41, 0x0C, 0x10});
+
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
+    uint8_t req[2] = {0x01, 0x0C};
+    uint8_t out[8];
+    int n = client.request(0x7E0, 0x7E8, 0x7E8, req, sizeof(req),
+                           IsoTp::ReplyPrefix(0x41, 0x0C), out, sizeof(out), 20);
+
+    TEST_ASSERT_EQUAL_INT(3, n);
+    TEST_ASSERT_EQUAL_HEX8(0x10, out[2]);
+}
+
+// O Flow Control sai no mesmo formato de ID (11/29 bits) da resposta.
+uint32_t swapAddresses29(uint32_t id) {
+    return 0x18DA0000u | ((id & 0xFFu) << 8) | ((id >> 8) & 0xFFu);
+}
+
+void test_rx_ff_29bit_flow_control_target() {
+    FakeCanBus can;
+    can.enqueue(0x18DAF110, {0x10, 0x08, 0x43, 0x03, 0x03, 0x01, 0x04, 0x20});
+    can.enqueue(0x18DAF110, {0x21, 0x07, 0x00});
+
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, swapAddresses29, true);
+    uint8_t req[1] = {0x03};
+    uint8_t out[32];
+    int n = client.request(0x18DA10F1, 0x18DAF110, 0x18DAF110, req, 1, 0x43, out, sizeof(out), 20);
+
+    TEST_ASSERT_EQUAL_INT(8, n);
+    TEST_ASSERT_TRUE(can.sent[0].extended);
+    TEST_ASSERT_EQUAL_HEX32(0x18DA10F1, can.sent[1].id);
+    TEST_ASSERT_TRUE(can.sent[1].extended);
 }
 
 // Nenhuma resposta chega -> timeout (N_Bs). Único teste que consome tempo
@@ -130,7 +186,7 @@ void test_rx_multi_ecu_interleaved_multiframe() {
 void test_rx_timeout() {
     FakeCanBus can;
 
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t req[1] = {0x03};
     uint8_t out[32];
     int n = client.request(0x7DF, 0x7E8, 0x7EF, req, 1, 0x43, out, sizeof(out));
@@ -148,7 +204,7 @@ void test_tx_ff_cf_cts() {
     can.enqueue(0x7E8, {0x30, 0x00, 0x00});        // FC: CTS, BS=0, STmin=0
     can.enqueue(0x7E8, {0x02, 0x40, 0x00});        // resposta final (SF, SID = req[0]|0x40 = 0x40)
 
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t req[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     uint8_t out[16];
     int n = client.request(0x7E0, 0x7E8, 0x7E8, req, sizeof(req), 0x40, out, sizeof(out));
@@ -165,7 +221,7 @@ void test_tx_wait_then_cts() {
     can.enqueue(0x7E8, {0x30, 0x00, 0x00});  // FC: FS=CTS
     can.enqueue(0x7E8, {0x02, 0x40, 0x00});  // resposta final (SID = req[0]|0x40 = 0x40)
 
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t req[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     uint8_t out[16];
     int n = client.request(0x7E0, 0x7E8, 0x7E8, req, sizeof(req), 0x40, out, sizeof(out));
@@ -178,7 +234,7 @@ void test_tx_overflow() {
     FakeCanBus can;
     can.enqueue(0x7E8, {0x32, 0x00, 0x00});  // FC: FS=Overflow
 
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t req[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     uint8_t out[16];
     int n = client.request(0x7E0, 0x7E8, 0x7E8, req, sizeof(req), 0x40, out, sizeof(out));
@@ -196,7 +252,7 @@ void test_tx_block_size() {
 
     uint8_t req[20];
     for (int i = 0; i < 20; i++) req[i] = (uint8_t)i;
-    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_ID_OFFSET);
+    IsoTp::Client client(&can, NEGATIVE_RESPONSE_SID, FC_TARGET);
     uint8_t out[16];
     int n = client.request(0x7E0, 0x7E8, 0x7E8, req, sizeof(req), 0x40, out, sizeof(out));
 
@@ -215,6 +271,9 @@ int main(int argc, char** argv) {
     RUN_TEST(test_rx_negative_response);
     RUN_TEST(test_rx_multi_ecu_single_frame);
     RUN_TEST(test_rx_multi_ecu_interleaved_multiframe);
+    RUN_TEST(test_rx_late_reply_of_previous_pid_is_skipped);
+    RUN_TEST(test_rx_stale_frames_are_drained_before_request);
+    RUN_TEST(test_rx_ff_29bit_flow_control_target);
     RUN_TEST(test_rx_timeout);
     RUN_TEST(test_tx_ff_cf_cts);
     RUN_TEST(test_tx_wait_then_cts);
