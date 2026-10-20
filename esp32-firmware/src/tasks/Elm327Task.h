@@ -43,7 +43,7 @@ public:
      * @param priority   FreeRTOS task priority (default 5)
      * @param stackSize  Stack in bytes (default 8192)
      */
-    void start(UBaseType_t priority = 5, uint32_t stackSize = 8192);
+    TaskHandle_t start(UBaseType_t priority = 5, uint32_t stackSize = 8192);
 
 private:
     IConnectivity* _connectivity;
@@ -53,4 +53,5 @@ private:
     static void taskFunc(void* arg);
     void run();
     void pushToQueue(const uint8_t* data, size_t len);
+    static void emitResponse(const String& response, uint32_t durMs);
 };

@@ -12,7 +12,8 @@ struct ReadResult {
     bool     ok;
     uint8_t  value[kPidValueBytes];
     uint8_t  len;
-    uint32_t tMs;   // instante da resposta (ou do fim do prazo, se não houve)
+    uint32_t startMs;  // instante em que a requisição foi enviada
+    uint32_t tMs;      // instante da resposta (ou do fim do prazo, se não houve)
 };
 
 /**

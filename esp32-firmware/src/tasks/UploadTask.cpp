@@ -1,4 +1,5 @@
 #include "tasks/UploadTask.h"
+#include "collector/Events.h"
 #include "rtos/Adapters.h"
 
 namespace {
@@ -13,7 +14,7 @@ constexpr EventBits_t kReadyBits =
 
 }  // namespace
 
-void UploadTask::start() { rtos::startTask(this, "Upload", kStackBytes, kPriority, kCore); }
+TaskHandle_t UploadTask::start() { return rtos::startTask(this, "Upload", kStackBytes, kPriority, kCore); }
 
 void UploadTask::run() {
     while (true) {
@@ -22,7 +23,12 @@ void UploadTask::run() {
         sendWindow();
         receiveAck();
 
-        if (_cursor.timedOut(millis()) || !_ctx.hasBits(rtos::APP_CONNECTED)) _cursor.rewind();
+        const bool disconnected = !_ctx.hasBits(rtos::APP_CONNECTED);
+        if ((_cursor.timedOut(millis()) || disconnected) && _cursor.inFlight() > 0) {
+            _cursor.rewind();
+            collector::Event("UP_REWIND").token("reason", disconnected ? "disconnect" : "timeout")
+                .num("from", _cursor.ackSeq() + 1);
+        }
         updatePendingBit();
     }
 }
@@ -40,6 +46,7 @@ void UploadTask::sendWindow() {
             _cursor.rewind();
             return;
         }
+        collector::Event("UP_SEND").num("seq", seq).num("oldest", oldest).num("len", static_cast<int64_t>(len));
     }
 }
 
@@ -48,9 +55,14 @@ void UploadTask::receiveAck() {
     if (xQueueReceive(_ctx.uploadRx, &message, kAckPollTicks) != pdTRUE) return;
 
     uint32_t seq;
-    if (_protocol.decodeAck(message.bytes, message.len, seq) && _cursor.onAck(seq, millis())) {
-        _store.deleteUpTo(seq);
-    }
+    if (!_protocol.decodeAck(message.bytes, message.len, seq)) return;
+    const bool advanced = _cursor.onAck(seq, millis());
+    if (advanced) _store.deleteUpTo(seq);
+
+    collector::Event e("UP_ACK");
+    e.num("seq", seq).flag("advanced", advanced);
+    if (advanced) e.num("deleted_upto", seq);
+    else          e.absent("deleted_upto");
 }
 
 void UploadTask::updatePendingBit() {

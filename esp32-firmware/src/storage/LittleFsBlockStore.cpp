@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <algorithm>
+#include "collector/Events.h"
 
 using collector::Block;
 using collector::kBlockSize;
@@ -101,7 +102,10 @@ void LittleFsBlockStore::dropOldest() {
 
 void LittleFsBlockStore::ensureSpace(size_t bytes) {
     while (_count > 1 && freeBytes() < bytes + kReserveBytes) {
-        _lostBlocks += at(0).count;
+        const Segment& oldest = at(0);
+        collector::Event("SEG_DROP").num("first", oldest.firstSeq).num("last", oldest.lastSeq)
+            .num("count", oldest.count);
+        _lostBlocks += oldest.count;
         dropOldest();
     }
 }

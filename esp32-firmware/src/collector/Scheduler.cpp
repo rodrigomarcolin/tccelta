@@ -37,6 +37,7 @@ Scheduler::Decision Scheduler::next(uint32_t nowMs, size_t maxPerRead) const {
     pick(decision, picked, maxPerRead, Filter::Overdue, nowMs);
     if (decision.count > 0) {
         decision.read = true;
+        decision.lateMs = nowMs - find(decision.pids[0])->nextDueMs;  // o mais atrasado
         return decision;
     }
 
@@ -51,8 +52,9 @@ Scheduler::Decision Scheduler::next(uint32_t nowMs, size_t maxPerRead) const {
     if (untilDue > _tmaxMs) {
         pick(decision, picked, maxPerRead, Filter::EarlyEligible, nowMs);
         if (decision.count > 0) {
-            decision.read  = true;
-            decision.early = true;
+            decision.read    = true;
+            decision.early   = true;
+            decision.slackMs = untilDue;
             return decision;
         }
     }
@@ -105,6 +107,20 @@ Scheduler::Entry* Scheduler::find(uint8_t pid) {
         if (_entries[i].pid == pid) return &_entries[i];
     }
     return nullptr;
+}
+
+const Scheduler::Entry* Scheduler::find(uint8_t pid) const {
+    return const_cast<Scheduler*>(this)->find(pid);
+}
+
+Scheduler::Row Scheduler::row(size_t i) const {
+    const Entry& e = _entries[i];
+    return {e.pid, e.periodMs, e.minIntervalMs, e.nextDueMs, e.lastReadMs};
+}
+
+uint32_t Scheduler::nextDue(uint8_t pid) const {
+    const Entry* entry = find(pid);
+    return entry ? entry->nextDueMs : 0;
 }
 
 }  // namespace collector

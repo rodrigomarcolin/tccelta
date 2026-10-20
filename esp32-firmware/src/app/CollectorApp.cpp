@@ -3,6 +3,7 @@
 #include "collector/BlockWriter.h"
 #include "collector/Collector.h"
 #include "collector/DataProtocol.h"
+#include "collector/Events.h"
 #include "collector/IMessageAuth.h"
 #include "collector/SequentialPidReader.h"
 #include "connectivity/SerialDataChannel.h"
@@ -10,6 +11,7 @@
 #include "rtos/CollectorContext.h"
 #include "rtos/CollectorControl.h"
 #include "rtos/QueuedObd2.h"
+#include "rtos/SerialEventLog.h"
 #include "storage/LittleFsBlockStore.h"
 #include "storage/NvsStore.h"
 #include "tasks/AcquisitionTask.h"
@@ -26,6 +28,7 @@ constexpr UBaseType_t kElm327Priority = 5;
 constexpr uint32_t    kElm327Stack    = 8192;
 
 void onConnection(rtos::CollectorContext& ctx, bool connected) {
+    collector::Event("CONN").flag("up", connected);
     if (connected) {
         xEventGroupSetBits(ctx.events, rtos::APP_CONNECTED);
     } else {
@@ -36,6 +39,10 @@ void onConnection(rtos::CollectorContext& ctx, bool connected) {
 }  // namespace
 
 bool startCollector(BusFactory makeBus, BleConnectivity& ble) {
+    // 0. Eventos de depuração (só com COLLECTOR_EVENTS), antes de tudo.
+    static rtos::SerialEventLog eventLog;
+    if (collector::kEventsEnabled && !eventLog.begin()) return false;
+
     // 1. NVS: config e boot_id deste boot.
     static NvsStore nvs;
     if (!nvs.begin()) return false;
@@ -45,7 +52,11 @@ bool startCollector(BusFactory makeBus, BleConnectivity& ble) {
     // 2. Log de blocos e seq = max(NVS, log) + 1.
     static LittleFsBlockStore store;
     if (!store.begin()) return false;
-    const collector::SeqCounter seq = collector::SeqCounter::recover(nvs.loadLastSeq(), store.newestSeq());
+    const uint32_t nvsLastSeq = nvs.loadLastSeq();
+    const collector::SeqCounter seq = collector::SeqCounter::recover(nvsLastSeq, store.newestSeq());
+    collector::Event("BOOT").num("boot", bootId).num("seq_next", seq.peek()).num("nvs_last", nvsLastSeq)
+        .num("log_oldest", store.oldestSeq()).num("log_newest", store.newestSeq())
+        .num("lost", store.lostBlocks());
     Serial.printf("[collector] boot %u, next seq %lu\n", bootId, static_cast<unsigned long>(seq.peek()));
 
     // 3. Barramento no protocolo configurado.
@@ -80,11 +91,11 @@ bool startCollector(BusFactory makeBus, BleConnectivity& ble) {
     static AcquisitionTask acquisitionTask(ctx, collector, bus, clock, tmaxReport);
     static SessionTask sessionTask(ctx, protocol, dataChannel, bootId);
     static UploadTask uploadTask(ctx, store, protocol, dataChannel);
-    flushTask.start();
-    acquisitionTask.start(config);
-    elm327Task.start(kElm327Priority, kElm327Stack);
-    sessionTask.start();
-    uploadTask.start();
+    eventLog.watch("flush", flushTask.start());
+    eventLog.watch("acquisition", acquisitionTask.start(config));
+    eventLog.watch("elm327", elm327Task.start(kElm327Priority, kElm327Stack));
+    eventLog.watch("session", sessionTask.start());
+    eventLog.watch("upload", uploadTask.start());
     return true;
 }
 

@@ -25,6 +25,17 @@ public:
         uint8_t  pids[kMaxPidsPerRequest];
         size_t   count;
         uint32_t waitMs;
+        uint32_t lateMs;    // leitura vencida: atraso em relação ao vencimento
+        uint32_t slackMs;   // leitura antecipada: folga até o próximo vencimento
+    };
+
+    /** Uma linha da tabela, para eventos de depuração. */
+    struct Row {
+        uint8_t  pid;
+        uint32_t periodMs;
+        uint32_t minIntervalMs;
+        uint32_t nextDueMs;
+        uint32_t lastReadMs;
     };
 
     /** Recarrega os PIDs da config; todos vencem imediatamente. */
@@ -36,6 +47,8 @@ public:
     void onRead(const Decision& decision, uint32_t nowMs);
 
     size_t size() const { return _count; }
+    Row row(size_t i) const;
+    uint32_t nextDue(uint8_t pid) const;
 
 private:
     struct Entry {
@@ -56,6 +69,7 @@ private:
     void pick(Decision& decision, bool* picked, size_t maxPerRead, Filter filter,
               uint32_t nowMs) const;
     Entry* find(uint8_t pid);
+    const Entry* find(uint8_t pid) const;
 };
 
 }  // namespace collector

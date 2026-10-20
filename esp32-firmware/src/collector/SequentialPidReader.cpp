@@ -10,6 +10,7 @@ void SequentialPidReader::read(const uint8_t* pids, size_t n, ReadResult* out, u
         result.pid = pids[i];
 
         uint8_t buf[8];
+        result.startMs = _clock.nowMs();
         const int len = _obd.readEnginePid(pids[i], buf, sizeof(buf), timeoutMs);
         result.tMs = _clock.nowMs();
         if (len <= 0) continue;

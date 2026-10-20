@@ -11,6 +11,7 @@ bool BlockWriter::write(Block& block) {
     stampHeader(block, seq, _bootId);
 
     for (int attempt = 0; attempt < kAppendAttempts; ++attempt) {
+        _lastAttempts = attempt + 1;
         if (!_store.append(block)) continue;
         _persistence.saveLastSeq(seq);
         _seq.commit();

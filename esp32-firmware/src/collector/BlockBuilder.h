@@ -15,10 +15,13 @@ public:
     bool isOpen() const { return _block != nullptr; }
     bool empty() const { return !_block || _block->length == kHeaderSize; }
 
+    /** Instante do primeiro registro (t_ms inicial do cabeçalho). */
+    uint32_t startMs() const { return _tStartMs; }
+
     /** Instante em que o bloco aberto deve fechar (tStart + T_flush). */
     uint32_t deadlineMs() const { return _tStartMs + kFlushIntervalMs; }
 
-    /** false = não cabe (espaço ou Δt); o chamador fecha e abre outro. */
+    /** false = não cabe (espaço ou Δt fora de ±32 s); o chamador fecha e abre outro. */
     bool addPid(uint8_t pid, const uint8_t* value, uint8_t len, uint32_t tMs);
     bool addGps(const GpsFix& fix, uint32_t tMs);
 
@@ -29,8 +32,8 @@ private:
     Block*   _block    = nullptr;
     uint32_t _tStartMs = 0;
 
-    /** Δt a partir do início; registros anteriores ao início valem 0. */
-    bool deltaFor(uint32_t tMs, uint16_t& delta) const;
+    /** Δt (com sinal) a partir do início; false se não cabe em 16 bits. */
+    bool deltaFor(uint32_t tMs, int16_t& delta) const;
     bool fits(size_t recordSize) const { return _block->length + recordSize <= kBlockSize; }
 };
 

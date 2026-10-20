@@ -64,8 +64,12 @@ static void halt(const char* reason) {
 }
 #endif
 
+#ifndef SERIAL_BAUD
+#define SERIAL_BAUD 115200
+#endif
+
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(SERIAL_BAUD);
     delay(200);
     Serial.println("\n=== OBD2 Dongle ===");
 

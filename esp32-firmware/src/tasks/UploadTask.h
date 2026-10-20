@@ -15,7 +15,7 @@ public:
                collector::DataProtocol& protocol, IDataChannel& channel)
         : _ctx(ctx), _store(store), _protocol(protocol), _channel(channel) {}
 
-    void start();
+    TaskHandle_t start();
     void run();
 
 private:

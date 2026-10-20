@@ -62,6 +62,9 @@ public:
         free.push_back(block);  // a "Flush" grava na hora
     }
     void release(collector::Block* block) override { free.push_back(block); }
+    int indexOf(const collector::Block* block) const override {
+        return static_cast<int>(block - buffers);
+    }
 
     collector::Block buffers[2] = {};
     std::vector<collector::Block*> free = {&buffers[0], &buffers[1]};
@@ -70,7 +73,14 @@ public:
 
 class FakeValues : public collector::IValueSink {
 public:
-    void update(const collector::ReadResult& result) override { updates.push_back(result); }
+    void update(const collector::ReadResult& result) override {
+        updates.push_back(result);
+        values.update(result);
+    }
+    bool get(uint8_t pid, collector::CurrentValues::Value& out) const override {
+        return values.get(pid, out);
+    }
+    collector::CurrentValues values;
     std::vector<collector::ReadResult> updates;
 };
 

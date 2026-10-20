@@ -180,12 +180,12 @@ void test_block_builder_serializes_records() {
     TEST_ASSERT_EQUAL_INT32(-235000000, static_cast<int32_t>(getU32(&gps[3])));
 }
 
-void test_gps_before_block_start_gets_zero_delta() {
+void test_gps_before_block_start_gets_negative_delta() {
     Block block;
     BlockBuilder builder;
     builder.open(block, 5000);
     TEST_ASSERT_TRUE(builder.addGps({1, 2, 3}, 4990));
-    TEST_ASSERT_EQUAL_UINT16(0, getU16(&block.bytes[kHeaderSize + 1]));
+    TEST_ASSERT_EQUAL_INT16(-10, static_cast<int16_t>(getU16(&block.bytes[kHeaderSize + 1])));
 }
 
 void test_block_builder_rejects_when_full() {
@@ -261,7 +261,7 @@ int main(int, char**) {
     RUN_TEST(test_scheduler_keeps_phase_for_overdue_reads);
     RUN_TEST(test_interval_bound_with_worst_case_responses);
     RUN_TEST(test_block_builder_serializes_records);
-    RUN_TEST(test_gps_before_block_start_gets_zero_delta);
+    RUN_TEST(test_gps_before_block_start_gets_negative_delta);
     RUN_TEST(test_block_builder_rejects_when_full);
     RUN_TEST(test_collector_closes_block_by_deadline_even_without_answers);
     RUN_TEST(test_collector_wait_includes_block_deadline);

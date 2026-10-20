@@ -1,4 +1,5 @@
 #include "tasks/SessionTask.h"
+#include "collector/Events.h"
 #include "rtos/Adapters.h"
 
 namespace {
@@ -10,7 +11,7 @@ constexpr TickType_t kPollTicks    = pdMS_TO_TICKS(500);
 
 }  // namespace
 
-void SessionTask::start() { rtos::startTask(this, "Session", kStackBytes, kPriority, kCore); }
+TaskHandle_t SessionTask::start() { return rtos::startTask(this, "Session", kStackBytes, kPriority, kCore); }
 
 void SessionTask::run() {
     while (true) {
@@ -29,19 +30,23 @@ void SessionTask::run() {
 void SessionTask::synchronizeTime() {
     while (!_sync.done() && _ctx.hasBits(rtos::APP_CONNECTED | rtos::INTERNET)) {
         if (!_sync.pending() || _sync.timedOut(millis())) {
-            const size_t len = _protocol.encodeTimeRequest(_sync.start(_bootId, millis()),
-                                                           _message, sizeof(_message));
+            const collector::TimeExchange request = _sync.start(_bootId, millis());
+            const size_t len = _protocol.encodeTimeRequest(request, _message, sizeof(_message));
             _channel.send(_message, len);
+            collector::Event("TIME_REQ").num("boot", request.bootId).num("t1", request.t1Ms);
         }
 
         rtos::DataMessage message;
         if (xQueueReceive(_ctx.sessionRx, &message, kPollTicks) != pdTRUE) continue;
 
         collector::TimeExchange response;
-        if (_protocol.decodeTimeResponse(message.bytes, message.len, response) &&
-            _sync.accept(response, millis())) {
+        const bool ok = _protocol.decodeTimeResponse(message.bytes, message.len, response) &&
+                        _sync.accept(response, millis());
+        collector::Event("TIME_RESP").flag("ok", ok);
+        if (ok) {
             const size_t len = _protocol.encodeTimeReport(_sync.report(), _message, sizeof(_message));
             _channel.send(_message, len);
+            collector::Event("TIME_REPORT").num("t1", _sync.report().t1Ms).num("t2", _sync.report().t2Ms);
         }
     }
 }

@@ -70,6 +70,8 @@ struct CollectorContext {
     /** Cria filas e eventos e coloca os buffers de bloco no pool livre. */
     void create();
 
+    int indexOf(const collector::Block* block) const { return static_cast<int>(block - blocks); }
+
     bool hasBits(EventBits_t bits) const {
         return (xEventGroupGetBits(events) & bits) == bits;
     }

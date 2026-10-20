@@ -23,6 +23,7 @@ public:
 
     uint32_t nextSeq() const { return _seq.peek(); }
     uint32_t failedBlocks() const { return _failedBlocks; }
+    int lastAttempts() const { return _lastAttempts; }
 
 private:
     IBlockStore&     _store;
@@ -30,6 +31,7 @@ private:
     SeqCounter       _seq;
     uint16_t         _bootId;
     uint32_t         _failedBlocks = 0;
+    int              _lastAttempts = 0;
 };
 
 }  // namespace collector

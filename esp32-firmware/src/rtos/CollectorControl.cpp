@@ -1,4 +1,5 @@
 #include "rtos/CollectorControl.h"
+#include "collector/Events.h"
 
 namespace rtos {
 
@@ -68,6 +69,7 @@ bool CollectorControl::currentValue(uint8_t pid, collector::CurrentValues::Value
 }
 
 void CollectorControl::setInternet(bool available) {
+    collector::Event("NET").flag("up", available);
     if (available) xEventGroupSetBits(_ctx.events, INTERNET);
     else           xEventGroupClearBits(_ctx.events, INTERNET);
 }

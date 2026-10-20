@@ -16,7 +16,7 @@ public:
                     const collector::IClock& clock, rtos::SharedTmaxReport& tmaxReport)
         : _ctx(ctx), _collector(collector), _bus(bus), _clock(clock), _tmaxReport(tmaxReport) {}
 
-    void start(const collector::CollectorConfig& config);
+    TaskHandle_t start(const collector::CollectorConfig& config);
     void run();
 
 private:
@@ -36,4 +36,5 @@ private:
     void startMeasurement();
     void measureOnce();
     void resumeCollection() { _collector.setRunning(!_diag && !_stopped && !_measuring); }
+    void emitMode() const;
 };

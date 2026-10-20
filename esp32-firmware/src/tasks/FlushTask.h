@@ -13,11 +13,13 @@ public:
               const collector::IBlockStore& store)
         : _ctx(ctx), _writer(writer), _store(store) {}
 
-    void start();
+    TaskHandle_t start();
     void run();
 
 private:
     rtos::CollectorContext&       _ctx;
     collector::BlockWriter&       _writer;
     const collector::IBlockStore& _store;
+
+    void emitFlush(const collector::Block& block, bool written, uint32_t startMs);
 };

@@ -14,7 +14,7 @@ public:
                 IDataChannel& channel, uint16_t bootId)
         : _ctx(ctx), _protocol(protocol), _channel(channel), _bootId(bootId) {}
 
-    void start();
+    TaskHandle_t start();
     void run();
 
 private:

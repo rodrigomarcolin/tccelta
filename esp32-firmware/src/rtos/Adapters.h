@@ -25,6 +25,7 @@ public:
     }
     void submit(collector::Block* block) override { xQueueSend(_ctx.fullBlocks, &block, portMAX_DELAY); }
     void release(collector::Block* block) override { xQueueSend(_ctx.freeBlocks, &block, portMAX_DELAY); }
+    int indexOf(const collector::Block* block) const override { return _ctx.indexOf(block); }
 
     /** Os dois buffers estão livres = tudo o que foi coletado já está na flash. */
     bool allFree() const { return uxQueueMessagesWaiting(_ctx.freeBlocks) == kBlockBuffers; }
@@ -44,7 +45,7 @@ public:
         xSemaphoreGive(_mutex);
     }
 
-    bool get(uint8_t pid, collector::CurrentValues::Value& out) const {
+    bool get(uint8_t pid, collector::CurrentValues::Value& out) const override {
         xSemaphoreTake(_mutex, portMAX_DELAY);
         const bool found = _values.get(pid, out);
         xSemaphoreGive(_mutex);
@@ -81,9 +82,12 @@ private:
 
 /** Cria uma tarefa que roda `self->run()` no núcleo indicado. */
 template <typename Task>
-void startTask(Task* self, const char* name, uint32_t stackBytes, UBaseType_t priority, BaseType_t core) {
+TaskHandle_t startTask(Task* self, const char* name, uint32_t stackBytes, UBaseType_t priority,
+                       BaseType_t core) {
+    TaskHandle_t handle = nullptr;
     xTaskCreatePinnedToCore([](void* arg) { static_cast<Task*>(arg)->run(); }, name, stackBytes,
-                            self, priority, nullptr, core);
+                            self, priority, &handle, core);
+    return handle;
 }
 
 /**

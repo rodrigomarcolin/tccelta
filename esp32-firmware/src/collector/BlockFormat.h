@@ -6,11 +6,13 @@
  * Formato em blocos (§2.6.4 da Investigação). Inteiros em little-endian.
  *
  *   Cabeçalho (12 B): seq u32 | boot_id u16 | t_ms inicial u32 | tamanho u16
- *   Leitura de PID (5 B): tipo u8 (= PID) | Δt u16 | valor 2 B
- *   Posição GPS (15 B):   tipo u8 (= 0xFF) | Δt u16 | lat i32 | lon i32 | alt i32
+ *   Leitura de PID (5 B): tipo u8 (= PID) | Δt i16 | valor 2 B
+ *   Posição GPS (15 B):   tipo u8 (= 0xFF) | Δt i16 | lat i32 | lon i32 | alt i32
  *
  * `tamanho` é o total de bytes do bloco, cabeçalho incluído. Δt é contado a
- * partir de `t_ms inicial`. lat/lon em graus × 10⁷, alt em milímetros.
+ * partir de `t_ms inicial` e tem sinal: uma posição GPS marcada ao chegar o
+ * comando pode ser anterior ao primeiro registro do bloco. lat/lon em
+ * graus × 10⁷, alt em milímetros.
  */
 namespace collector {
 
