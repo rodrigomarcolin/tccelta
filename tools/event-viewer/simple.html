@@ -264,6 +264,9 @@ function short(ev){
     case 'CMD': case 'RESP': return `<span class="mono">${esc(f.txt)}</span>`;
     case 'CONFIG': return `${f.reason} · Tmax ${f.tmax} · ${L(f.pids).length} PIDs`;
     case 'UP_SEND': case 'UP_ACK': return `seq ${f.seq}`;
+    case 'UP_REWIND': return `resend from ${f.from} · ${esc(f.reason)}`;
+    case 'GPS_DROP': return `<span class="bad">GPS discarded</span> · ${esc(f.reason)}`;
+    case 'BOOT': return `boot ${f.boot}${B(f.wiped) ? ' · flash wiped' : ''}`;
     default: return esc(Object.entries(f).map(([k,v]) => `${k}=${v}`).join(' ').slice(0, 80));
   }
 }
@@ -340,6 +343,9 @@ function eventCard(ev, st){
     case 'MODE': head = B(f.diag) ? 'Diagnostic mode: scheduler suspended' : B(f.running) ? 'Collecting' : 'Scheduler stopped'; break;
     case 'CMD': head = `App sent <span class="mono">${esc(f.txt)}</span>`; break;
     case 'RESP': head = `Dongle answered <span class="mono">${esc(f.txt)}</span>`; body = `<div class="sub">${f.dur} ms</div>`; break;
+    case 'GPS_DROP': head = '<span class="bad">GPS position discarded</span>'; body = `<div class="sub">${esc({diag:'The dongle is in diagnostic mode: positions are not recorded.', rate:'Arrived less than 1 s after the last accepted position.', queue:'The acquisition queue was full.'}[f.reason] || f.reason)}</div>`; break;
+    case 'UP_REWIND': head = `Upload resends from seq ${f.from}`; body = `<div class="sub">${f.reason === 'reconnect' ? 'The app reconnected: whatever was in flight on the previous connection was lost.' : 'No ACK from the server within 5 s.'}</div>`; break;
+    case 'BOOT': head = `Boot ${f.boot}${B(f.wiped) ? ' — flash wiped' : ''}`; body = `<div class="sub">next seq ${f.seq_next} · flash log ${N(f.log_newest) ? f.log_oldest + ' … ' + f.log_newest : 'empty'}</div>`; break;
     default: head = ev.type; body = `<dl class="kv">${Object.entries(f).map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v.length > 80 ? v.slice(0,80) + '…' : v)}</dd>`).join('')}</dl>`;
   }
   return `<h2><span class="ty">${ev.type}</span> Current event <span class="r">#${ev.n} · ${fmtT(ev.t)}</span></h2>

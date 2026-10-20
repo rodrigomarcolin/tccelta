@@ -4,7 +4,7 @@
 const ROW_H = 26, CP_K = 256, BLOCK_MAX = 1024, HDR = 12, DEADLINE = 10000, ACK_TIMEOUT = 5000, HEALTH_EVERY = 60000;
 const CATS = {
   sched:{label:'Scheduler', c:'var(--s1)', types:['DECIDE','READ','BUS']},
-  rec:{label:'Records', c:'var(--s3)', types:['REC','REC_DROP','GPS']},
+  rec:{label:'Records', c:'var(--s3)', types:['REC','REC_DROP','GPS','GPS_DROP']},
   block:{label:'Blocks', c:'var(--s7)', types:['BLK_OPEN','BLK_CLOSE','BLK_RELEASE']},
   flash:{label:'Flash', c:'var(--s2)', types:['FLUSH','SEG_DROP']},
   cmd:{label:'Commands', c:'var(--s5)', types:['CMD','RESP']},
@@ -76,7 +76,7 @@ function parseLog(text){
     fre.lastIndex = 0; let fm;
     while ((fm = fre.exec(m[4]))){
       let v = fm[2];
-      if (v[0] === '"') v = v.slice(1,-1).replace(/\\(["\\])/g, '$1');
+      if (v[0] === '"') v = v.slice(1,-1).replace(/\\(["\\rn])/g, (_, c) => c === 'r' ? '\r' : c === 'n' ? '\n' : c);
       f[fm[1]] = v;
     }
     evs.push({i:evs.length, n:+m[1], t:+m[2], type:m[3], f, raw:s, line:li+1, d:null});
@@ -90,7 +90,7 @@ function newState(seg){
     bufs:[{st:'free'},{st:'free'}], openBuf:-1, mode:null, pending:null, conn:null, net:null,
     up:{lastAck:null, sends:{}, inflight:[], oldest:null, rewind:null, lastSend:null, ackT:null},
     health:{stack:{}, heap:null, heapT:null}, time:{}, tmaxRun:null, seqNext:null, cmd:null, lastBus:null,
-    cnt:{reads:0, ok:0, early:0, recs:0, drops:0, flushOk:0, flushFail:0, segDrop:0, lost:0, diag:0}};
+    cnt:{reads:0, ok:0, early:0, recs:0, drops:0, gpsDrop:0, flushOk:0, flushFail:0, segDrop:0, lost:0, diag:0}};
 }
 const clone = o => JSON.parse(JSON.stringify(o));
 function ensureBuf(st, b){ while (st.bufs.length <= b) st.bufs.push({st:'free'}); }
@@ -100,7 +100,7 @@ function apply(st, ev){
   const f = ev.f; st.idx = ev.i; st.t = ev.t;
   switch (ev.type){
     case 'BOOT':
-      st.boot = {boot:N(f.boot), seq_next:N(f.seq_next), nvs_last:N(f.nvs_last), log_oldest:N(f.log_oldest), log_newest:N(f.log_newest), lost:N(f.lost)};
+      st.boot = {boot:N(f.boot), wiped:B(f.wiped), seq_next:N(f.seq_next), nvs_last:N(f.nvs_last), log_oldest:N(f.log_oldest), log_newest:N(f.log_newest), lost:N(f.lost)};
       st.seqNext = st.boot.seq_next; break;
     case 'CONFIG':
       st.config = {reason:f.reason, proto:N(f.proto), tmax:N(f.tmax), u:N(f.u), pids:L(f.pids), t:ev.t, i:ev.i};
@@ -122,11 +122,12 @@ function apply(st, ev){
       st.cnt.reads++; if (ok) st.cnt.ok++; if (early) st.cnt.early++;
       if (st.pending){ st.pending.left = st.pending.left.filter(x => x !== p); if (!st.pending.left.length) st.pending = null; }
       break; }
-    case 'BUS': st.cnt.diag++; st.lastBus = {start:N(f.start), dur:N(f.dur), ok:B(f.ok), t:ev.t}; break;
+    case 'BUS': st.cnt.diag++; st.lastBus = {start:N(f.start), dur:N(f.dur), t:ev.t}; break;
     case 'BLK_OPEN': { const b = N(f.buf); ensureBuf(st,b);
       st.bufs[b] = {st:'fill', t0:N(f.t0), len:HDR, recs:0, openT:ev.t, openI:ev.i}; st.openBuf = b; break; }
     case 'REC': { const b = st.bufs[st.openBuf]; if (b && b.st === 'fill'){ b.len = N(f.len); b.recs++; } st.cnt.recs++; break; }
     case 'REC_DROP': st.cnt.drops++; break;
+    case 'GPS_DROP': st.cnt.gpsDrop++; break;
     case 'BLK_CLOSE': { const b = N(f.buf); ensureBuf(st,b); const o = st.bufs[b];
       st.bufs[b] = {st:'write', t0:o.t0, len:N(f.len), recs:N(f.recs), reason:f.reason, closeT:ev.t, closeI:ev.i, openI:o.openI};
       if (st.openBuf === b) st.openBuf = -1; break; }
@@ -206,6 +207,7 @@ function decodeBlock(hex){
   const bytes = [];
   for (let k = 0; k + 1 < hex.length; k += 2) bytes.push(parseInt(hex.substr(k,2),16));
   const u16 = o => bytes[o] | bytes[o+1] << 8;
+  const i16 = o => (u16(o) << 16) >> 16;
   const u32 = o => (bytes[o] | bytes[o+1] << 8 | bytes[o+2] << 16 | bytes[o+3] << 24) >>> 0;
   const i32 = o => u32(o) | 0;
   if (bytes.length < HDR) return {bytes, hdr:null, recs:[], err:`only ${bytes.length} bytes, shorter than the header`};
@@ -216,7 +218,7 @@ function decodeBlock(hex){
   while (o < end){
     const type = bytes[o], size = type === 0xFF ? 15 : 5;
     if (o + size > end){ err = `truncated record at offset ${o}`; break; }
-    const r = {k:recs.length, off:o, size, dt:u16(o+1)};
+    const r = {k:recs.length, off:o, size, dt:i16(o+1)};  // dt tem sinal: GPS pode ser anterior ao t0
     if (type === 0xFF){ r.kind = 'gps'; r.lat = i32(o+3); r.lon = i32(o+7); r.alt = i32(o+11); }
     else { r.kind = 'pid'; r.pid = hx(type,1); r.val = hx(bytes[o+3],1) + hx(bytes[o+4],1); }
     recs.push(r); o += size;
@@ -304,7 +306,7 @@ function build(parsed){
         seg.intervals.push({k:'read', pid:f.pid, s:N(f.start), e:ev.t, ok:B(f.ok), early:B(f.early), i:ev.i});
         seg.reads.push(ev.i);
         break; }
-      case 'BUS': seg.intervals.push({k:'diag', s:N(f.start), e:N(f.start) + N(f.dur), ok:B(f.ok), i:ev.i}); break;
+      case 'BUS': seg.intervals.push({k:'diag', s:N(f.start), e:N(f.start) + N(f.dur), ok:true, i:ev.i}); break;
       case 'TMAX_SAMPLE': seePid(f.pid); seg.intervals.push({k:'tmax', pid:f.pid, s:ev.t - N(f.lat), e:ev.t, ok:B(f.ok), i:ev.i}); break;
       case 'BLK_OPEN': {
         const b = N(f.buf);
@@ -490,7 +492,7 @@ function genDemo(){
       closeBlock(t, 'mode'); E(t, 'MODE diag=1 running=0'); running = false;
       for (let k = 0, c = t + 300; k < 14; k++, c += ri(380, 520)){
         const pid = ['0C','0D','05'][k % 3], d = ri(9, 22);
-        E(c, `CMD txt="01${pid}"`); E(c + 1, `BUS kind=diag start=${c + 1} dur=${d} ok=1`);
+        E(c, `CMD txt="01${pid}"`); E(c + 1, `BUS kind=diag start=${c + 1} dur=${d}`);
         E(c + d + 2, `RESP txt="41 ${pid} ${car(pid, c).match(/../g).join(' ')}\\r\\r>" dur=${d + 2}`);
       }
     }},
@@ -510,18 +512,21 @@ function genDemo(){
     const start = now, ok = engineOn(start) && rnd() > 0.015;
     const dur = ok ? ri(7, 26) : tmax, t = start + dur, val = ok ? car(r.pid, t) : null;
     let nd; if (early) nd = t + r.p; else { nd = r.due + r.p; if (nd < t) nd = t; }
-    r.due = nd; r.last = t;
+    r.due = nd; r.last = t; if (ok) r.val = val;
     E(t, `READ pid=${r.pid} ok=${ok ? 1 : 0} val=${ok ? val : '-'} start=${start} dur=${dur} early=${early ? 1 : 0} next_due=${nd}`);
     now = t;
     if (ok) addRec(t, {pid:r.pid, val});
     now = t + (rnd() < 0.3 ? 1 : 0);
   };
   E(T0, 'FORMAT v=1');
-  E(T0, `BOOT boot=${BOOTN} seq_next=${seq} nvs_last=127 log_oldest=65 log_newest=127 lost=0`);
+  E(T0, `BOOT boot=${BOOTN} wiped=0 seq_next=${seq} nvs_last=127 log_oldest=65 log_newest=127 lost=0`);
   config(T0, 'boot', PLAN1); E(T0, 'MODE diag=0 running=1');
   while (now < END){
     while (acts.length && acts[0].at <= now){ const a = acts.shift(); const r = a.fn(now); if (r) now = Math.max(now, r); }
-    if (now >= nextCmd){ E(now, 'CMD txt="ATRV"'); E(now + 1, 'RESP txt="12.6V\\r\\r>" dur=1'); nextCmd += 5000; }
+    if (now >= nextCmd){  // app lê um PID coletado: respondido da tabela, sem usar o barramento
+      const r = rows.find(x => x.pid === '0D'), v = r && r.val ? r.val.match(/../g).join(' ') : null;
+      E(now, 'CMD txt="010D"'); E(now + 1, `RESP txt="${v ? '41 0D ' + v : 'NO DATA'}\\r\\r>" dur=1`); nextCmd += 5000; }
+    if (conn && !running && now >= nextGps){ E(now, `GPS_DROP reason=diag t_rx=${now - ri(1, 4)}`); nextGps += 1000; }
     if (conn && running && now >= nextGps){
       const k = (now - T0) / 1000, lat = -235505200 + Math.round(k * 900), lon = -466333300 + Math.round(k * 640), alt = 760000 + ri(-500, 500);
       E(now, `GPS lat=${lat} lon=${lon} alt=${alt} t_rx=${now - ri(1, 4)}`); addRec(now, {gps:true, lat, lon, alt}); nextGps += 1000;

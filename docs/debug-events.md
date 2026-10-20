@@ -118,7 +118,7 @@ rely on it.
 |---|---|---|
 | `DECIDE` | `rule:enum(due,early)` `pids:list` `late:int\|-` `slack:int\|-` | The scheduler decided to read. `rule=due`: rule 1, `late` = ms past the earliest `due` among `pids` (`slack=-`). `rule=early`: rule 2, `slack` = ms until the earliest `due` of the whole table (`late=-`). Waits are **not** logged. |
 | `READ` | `pid:hex` `ok:bool` `val:hex\|-` `start:ms` `dur:int` `early:bool` `next_due:ms` | One PID was read. `t` = end of the read = the new `last` of that row. `start` = request sent, `dur = t − start` (bus occupancy). `ok=0` means no answer (`dur ≈ tmax`). `next_due` = new `due` of the row after rescheduling. One `READ` per PID in the preceding `DECIDE`. |
-| `BUS` | `kind:enum(diag)` `start:ms` `dur:int` `ok:bool` | The bus was used for something other than a scheduled read (a diagnostic request from the app). |
+| `BUS` | `kind:enum(diag)` `start:ms` `dur:int` | The bus was used for something other than a scheduled read (a diagnostic request from the app). Whether the car answered is in the following `RESP`. |
 
 ### 5.3 Blocks (RAM)
 

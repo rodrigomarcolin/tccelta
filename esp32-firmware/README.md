@@ -63,6 +63,17 @@ Além do subconjunto ELM327 (`ATZ`, `ATE0`, `ATH1`, `ATST hh`, `ATSP h`, `01 0C`
 `ATSP h` (6 a 9) grava o protocolo e reinicia o dongle. O simulador de ECU
 (`simulador/`) usa CAN 11 bits a 250 kbps: envie `AT SP 8` uma vez.
 
+## Hardware
+
+| GPIO | Função |
+|---|---|
+| 21 | TWAI TX |
+| 22 | TWAI RX |
+| 18 / 19 / 23 | MCP2515 SCK / MISO / MOSI |
+| 5 | MCP2515 CS |
+
+Transceiver: SN65HVD230 (TWAI) ou MCP2551 (MCP2515).
+
 ## Organização
 
 ```
