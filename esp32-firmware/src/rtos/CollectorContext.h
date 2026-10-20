@@ -64,6 +64,7 @@ struct CollectorContext {
     QueueHandle_t      uploadRx;
     QueueHandle_t      sessionRx;
     EventGroupHandle_t events;
+    std::atomic<uint32_t> connections{0};  // incrementa a cada conexão do app
     collector::Block   blocks[kBlockBuffers];
     Counters           counters;
 

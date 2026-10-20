@@ -44,6 +44,12 @@ public:
     virtual TmaxReport tmaxReport() const = 0;
 
     virtual CollectorStats stats() const = 0;
+
+    /**
+     * Bancada (só builds de depuração): entrega ao Upload um ACK(seq) como se
+     * viesse do servidor, para testar o upload sem o canal BLE de dados.
+     */
+    virtual bool injectAck(uint32_t seq) = 0;
 };
 
 }  // namespace collector

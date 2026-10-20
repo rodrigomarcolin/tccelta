@@ -51,6 +51,13 @@ size_t DataProtocol::encodeTimeReport(const TimeExchange& report, uint8_t* out, 
     return seal(out, 11, cap);
 }
 
+size_t DataProtocol::encodeAck(uint32_t seq, uint8_t* out, size_t cap) {
+    if (cap < kAckBodySize) return 0;
+    out[0] = static_cast<uint8_t>(MessageType::Ack);
+    putU32(&out[1], seq);
+    return seal(out, kAckBodySize, cap);
+}
+
 bool DataProtocol::verifiedType(const uint8_t* msg, size_t len, MessageType& type) {
     if (open(msg, len) < 0) return false;
     type = static_cast<MessageType>(msg[0]);

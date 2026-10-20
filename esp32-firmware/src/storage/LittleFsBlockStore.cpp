@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <algorithm>
+#include <vector>
 #include "collector/Events.h"
 
 using collector::Block;
@@ -31,6 +32,16 @@ String segmentPath(uint32_t firstSeq) {
 
 size_t freeBytes() { return LittleFS.totalBytes() - LittleFS.usedBytes(); }
 
+/** "0000000128.seg" → 128. */
+bool parseSegmentName(const String& name, uint32_t& firstSeq) {
+    if (!name.endsWith(".seg")) return false;
+    char* end = nullptr;
+    const unsigned long value = strtoul(name.c_str(), &end, 10);
+    if (end != name.c_str() + name.length() - 4) return false;
+    firstSeq = static_cast<uint32_t>(value);
+    return true;
+}
+
 /** Lê o cabeçalho do próximo bloco; false se acabou ou está inconsistente. */
 bool readHeader(File& file, uint8_t* header, size_t& length) {
     if (file.read(header, kHeaderSize) != kHeaderSize) return false;
@@ -43,28 +54,32 @@ bool readHeader(File& file, uint8_t* header, size_t& length) {
 
 LittleFsBlockStore::LittleFsBlockStore() : _mutex(xSemaphoreCreateMutex()) { configASSERT(_mutex); }
 
-bool LittleFsBlockStore::begin() {
+bool LittleFsBlockStore::begin(bool wipe) {
     if (!LittleFS.begin(true)) return false;
+    if (wipe && !LittleFS.format()) return false;
     if (!LittleFS.exists(kDir)) LittleFS.mkdir(kDir);
 
-    Segment found[kMaxSegments];
-    size_t foundCount = 0;
+    // O nome de cada segmento é o seq do seu primeiro bloco: ordena por ele.
+    std::vector<uint32_t> firstSeqs;
     File dir = LittleFS.open(kDir);
     for (File file = dir.openNextFile(); file; file = dir.openNextFile()) {
-        const String path = String(kDir) + "/" + file.name();
+        const String name = file.name();
         file.close();
+        uint32_t firstSeq;
+        if (parseSegmentName(name, firstSeq)) firstSeqs.push_back(firstSeq);
+        else LittleFS.remove(String(kDir) + "/" + name);  // não é um segmento
+    }
+    std::sort(firstSeqs.begin(), firstSeqs.end());
+
+    Lock lock(_mutex);
+    for (uint32_t firstSeq : firstSeqs) {
         Segment segment;
-        if (foundCount < kMaxSegments && loadSegment(path.c_str(), segment)) {
-            found[foundCount++] = segment;
+        if (loadSegment(segmentPath(firstSeq).c_str(), segment)) {
+            pushSegment(segment);  // acima do limite, descarta os mais antigos
         } else {
-            LittleFS.remove(path);  // vazio ou ilegível
+            LittleFS.remove(segmentPath(firstSeq));  // vazio ou ilegível
         }
     }
-
-    std::sort(found, found + foundCount,
-              [](const Segment& a, const Segment& b) { return a.firstSeq < b.firstSeq; });
-    Lock lock(_mutex);
-    for (size_t i = 0; i < foundCount; ++i) pushSegment(found[i]);
     return true;
 }
 
@@ -89,7 +104,7 @@ bool LittleFsBlockStore::loadSegment(const char* path, Segment& out) {
 }
 
 void LittleFsBlockStore::pushSegment(const Segment& segment) {
-    if (_count == kMaxSegments) dropOldest();
+    if (_count == kMaxSegments) discardOldest();
     _segments[(_head + _count) % kMaxSegments] = segment;
     ++_count;
 }
@@ -100,14 +115,16 @@ void LittleFsBlockStore::dropOldest() {
     --_count;
 }
 
+void LittleFsBlockStore::discardOldest() {
+    const Segment& oldest = at(0);
+    collector::Event("SEG_DROP").num("first", oldest.firstSeq).num("last", oldest.lastSeq)
+        .num("count", oldest.count);
+    _lostBlocks += oldest.count;
+    dropOldest();
+}
+
 void LittleFsBlockStore::ensureSpace(size_t bytes) {
-    while (_count > 1 && freeBytes() < bytes + kReserveBytes) {
-        const Segment& oldest = at(0);
-        collector::Event("SEG_DROP").num("first", oldest.firstSeq).num("last", oldest.lastSeq)
-            .num("count", oldest.count);
-        _lostBlocks += oldest.count;
-        dropOldest();
-    }
+    while (_count > 1 && freeBytes() < bytes + kReserveBytes) discardOldest();
 }
 
 bool LittleFsBlockStore::append(const Block& block) {

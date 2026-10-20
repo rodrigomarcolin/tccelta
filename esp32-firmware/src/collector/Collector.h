@@ -83,7 +83,14 @@ private:
     uint16_t      _openRecords = 0;
 
     void closeIfDue(uint32_t nowMs);
+
     void emitConfig(const CollectorConfig& config, ConfigReason reason) const;
+    void emitDecide(const Scheduler::Decision& decision) const;
+    void emitRead(const ReadResult& result, bool early, uint32_t endMs) const;
+    void emitPidRecord(const ReadResult& result, bool stored) const;
+    void emitGpsRecord(const GpsFix& fix, uint32_t tMs, bool stored) const;
+    void emitBlockOpen(const Block& block, uint32_t t0) const;
+    void emitBlockClose(const Block& block, CloseReason why, bool empty) const;
 
     /** Garante um bloco aberto e tenta `add`; se não couber, troca de bloco. */
     template <typename AddFn>

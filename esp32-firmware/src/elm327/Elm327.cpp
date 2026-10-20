@@ -234,6 +234,8 @@ String Elm327::processAtHash(const String& upper) {
             return _control->startTmaxMeasurement() ? ok : fail;
         case Kind::TmaxQuery:
             return formatTmaxReport(_control->tmaxReport()) + prompt();
+        case Kind::Ack:
+            return _control->injectAck(cmd.seq) ? ok : fail;
         case Kind::Invalid:
             break;
     }

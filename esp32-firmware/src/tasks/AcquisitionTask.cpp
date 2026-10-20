@@ -52,11 +52,9 @@ bool AcquisitionTask::handle(const AcqRequest& request) {
 
     switch (request.op) {
         case AcqOp::RunOnBus: {
-            const uint32_t startMs = _clock.nowMs();
+            const uint32_t startMs = collector::kEventsEnabled ? _clock.nowMs() : 0;
             request.job(_bus, request.jobContext);
-            const uint32_t endMs = _clock.nowMs();
-            collector::Event("BUS").at(endMs).token("kind", "diag").num("start", startMs)
-                .num("dur", endMs - startMs);
+            emitBus(startMs);
             return true;
         }
 
@@ -85,12 +83,20 @@ bool AcquisitionTask::handle(const AcqRequest& request) {
             startMeasurement();
             return true;
 
-        case AcqOp::Gps:
-            if (_stopped) return false;
+        case AcqOp::Gps: {
+            if (_stopped) return false;  // reiniciando
+            const collector::GpsGate::Verdict verdict = _gpsGate.check(_diag, request.gpsTimeMs);
+            if (verdict != collector::GpsGate::Verdict::Accept) {
+                ++_ctx.counters.droppedGps;
+                collector::Event("GPS_DROP").token("reason", collector::toString(verdict))
+                    .num("t_rx", request.gpsTimeMs);
+                return false;
+            }
             collector::Event("GPS").num("lat", request.gps.latE7).num("lon", request.gps.lonE7)
                 .num("alt", request.gps.altMm).num("t_rx", request.gpsTimeMs);
             _collector.addGps(request.gps, request.gpsTimeMs);
             return true;
+        }
     }
     return false;
 }
@@ -102,10 +108,12 @@ void AcquisitionTask::startMeasurement() {
     _meter.begin(_config);
     _tmaxReport.set(_meter.report());
 
-    uint8_t pids[collector::kMaxPids];
-    for (size_t i = 0; i < _config.pidCount; ++i) pids[i] = _config.pids[i].pid;
-    collector::Event("TMAX_START").hexList("pids", pids, _config.pidCount)
-        .num("samples", collector::kTmaxSamplesPerPid);
+    if (collector::kEventsEnabled) {
+        uint8_t pids[collector::kMaxPids];
+        for (size_t i = 0; i < _config.pidCount; ++i) pids[i] = _config.pids[i].pid;
+        collector::Event("TMAX_START").hexList("pids", pids, _config.pidCount)
+            .num("samples", collector::kTmaxSamplesPerPid);
+    }
 }
 
 void AcquisitionTask::measureOnce() {
@@ -118,14 +126,22 @@ void AcquisitionTask::measureOnce() {
         _meter.record(len > 0, latencyMs);
         collector::Event("TMAX_SAMPLE").hex8("pid", pid).flag("ok", len > 0).num("lat", latencyMs);
     }
-    _tmaxReport.set(_meter.report());
+    const collector::TmaxReport report = _meter.report();
+    _tmaxReport.set(report);
 
     if (_meter.finished()) {
         _measuring = false;
-        collector::Event("TMAX_DONE").num("tmax", _meter.report().suggestedTmaxMs);
+        collector::Event("TMAX_DONE").num("tmax", report.suggestedTmaxMs);
         resumeCollection();
         emitMode();
     }
+}
+
+void AcquisitionTask::emitBus(uint32_t startMs) const {
+    if (!collector::kEventsEnabled) return;
+    const uint32_t endMs = _clock.nowMs();
+    collector::Event("BUS").at(endMs).token("kind", "diag").num("start", startMs)
+        .num("dur", endMs - startMs);
 }
 
 void AcquisitionTask::emitMode() const {

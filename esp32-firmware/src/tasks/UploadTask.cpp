@@ -20,17 +20,24 @@ void UploadTask::run() {
     while (true) {
         xEventGroupWaitBits(_ctx.events, kReadyBits, pdFALSE, pdTRUE, portMAX_DELAY);
 
+        // O que estava em trânsito numa conexão anterior se perdeu: reenvia já.
+        const uint32_t connection = _ctx.connections;
+        if (connection != _connection) {
+            _connection = connection;
+            rewind("reconnect");
+        }
+
         sendWindow();
         receiveAck();
-
-        const bool disconnected = !_ctx.hasBits(rtos::APP_CONNECTED);
-        if ((_cursor.timedOut(millis()) || disconnected) && _cursor.inFlight() > 0) {
-            _cursor.rewind();
-            collector::Event("UP_REWIND").token("reason", disconnected ? "disconnect" : "timeout")
-                .num("from", _cursor.ackSeq() + 1);
-        }
+        if (_cursor.timedOut(millis())) rewind("timeout");
         updatePendingBit();
     }
+}
+
+void UploadTask::rewind(const char* reason) {
+    if (_cursor.inFlight() == 0) return;
+    _cursor.rewind();
+    collector::Event("UP_REWIND").token("reason", reason).num("from", _cursor.ackSeq() + 1);
 }
 
 void UploadTask::sendWindow() {

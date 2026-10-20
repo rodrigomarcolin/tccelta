@@ -35,9 +35,19 @@ Key concepts used by the events:
 
 ## 2. Enabling
 
-Compile-time only. The PlatformIO environments `collector_mock_debug` and
-`collector_twai_debug` define `COLLECTOR_EVENTS`; without it, no event code is
-compiled in. Debug builds use the serial port at **921600 baud**.
+Compile-time only. The PlatformIO environments `collector_mock_debug`,
+`collector_twai_debug` and `collector_mcp2515_debug` define `COLLECTOR_EVENTS`;
+without it, no event code is compiled in. Debug builds use the serial port at
+**921600 baud**.
+
+Two bench aids interact with the stream:
+
+- `COLLECTOR_WIPE_ON_BOOT` (build flag, off by default): every boot starts
+  with an empty flash log and `seq` back at 1; `boot` keeps increasing.
+  Visible as `BOOT wiped=1`.
+- `AT#ACK n` (debug builds only): simulates the server confirming all blocks
+  up to `n`, so upload can be exercised without the BLE data channel. It
+  appears as `CMD txt="AT#ACK n"` followed by `UP_ACK`.
 
 ## 3. Line grammar
 
@@ -98,7 +108,7 @@ rely on it.
 | Event | Fields | Meaning |
 |---|---|---|
 | `FORMAT` | `v:int` | First event of a boot. `v=1` for this spec. |
-| `BOOT` | `boot:int` `seq_next:int` `nvs_last:int` `log_oldest:int` `log_newest:int` `lost:int` | Persistent counters at start. `seq_next = max(nvs_last, log_newest) + 1`. `log_oldest/log_newest` are 0 if the flash log is empty. `lost` = blocks dropped for lack of space so far (this boot). |
+| `BOOT` | `boot:int` `wiped:bool` `seq_next:int` `nvs_last:int` `log_oldest:int` `log_newest:int` `lost:int` | Persistent counters at start. `wiped=1`: the flash log and `seq` were erased at this boot (bench builds only). `seq_next = max(nvs_last, log_newest) + 1`. `log_oldest/log_newest` are 0 if the flash log is empty. `lost` = blocks dropped for lack of space so far (this boot). |
 | `CONFIG` | `reason:enum(boot,apply)` `proto:int` `tmax:int` `u:int` `pids:list` | Active configuration. `proto` 6–9 (CAN 11/29 bit, 500/250 kbps). `u` = planned bus utilization **in permille** (`Σ tmax/p × 1000`, e.g. `782`). Followed by one `CVT` line per PID. |
 | `CVT` | `pid:hex` `p:int` `pmin:int` `due:ms` `last:ms` `val:hex\|-` | Full snapshot of one scheduler table row. Emitted for every PID right after `CONFIG`. |
 
@@ -139,7 +149,8 @@ rely on it.
 | Event | Fields | Meaning |
 |---|---|---|
 | `MODE` | `diag:bool` `running:bool` | Mode changed. `running=1` = scheduler active. It is 0 in diagnostic mode, during Tmax measurement, and after a stop (before a restart). |
-| `GPS` | `lat:int` `lon:int` `alt:int` `t_rx:ms` | A GPS position from the app reached the acquisition task. `t_rx` = when the command was received. Followed by `REC kind=gps` or `REC_DROP`. |
+| `GPS` | `lat:int` `lon:int` `alt:int` `t_rx:ms` | A GPS position from the app was accepted. `t_rx` = when the command was received. Followed by `REC kind=gps` or `REC_DROP`. GPS only exists while the app is connected (the app sends it). |
+| `GPS_DROP` | `reason:enum(diag,rate,queue)` `t_rx:ms` | A GPS position was discarded: `diag` = diagnostic mode; `rate` = less than 1 s (minus 100 ms of tolerance) after the last accepted one; `queue` = the acquisition task's queue was full. |
 | `TMAX_START` | `pids:list` `samples:int` | Tmax measurement started (`samples` per PID). |
 | `TMAX_SAMPLE` | `pid:hex` `ok:bool` `lat:int` | One measurement request. `lat` = response latency in ms (bus occupancy). |
 | `TMAX_DONE` | `tmax:int` | Measurement finished; suggested Tmax in ms. |
@@ -152,7 +163,7 @@ rely on it.
 | `NET` | `up:bool` | The app reported Internet available / unavailable. |
 | `UP_SEND` | `seq:int` `oldest:int` `len:int` | A block was sent towards the server. `oldest` = oldest block still in flash. |
 | `UP_ACK` | `seq:int` `advanced:bool` `deleted_upto:int\|-` | The server confirmed all blocks up to `seq`. `advanced=0`: stale ACK, ignored. |
-| `UP_REWIND` | `reason:enum(timeout,disconnect)` `from:int` | No ACK in 5 s, or app disconnected: resend from `seq=from`. |
+| `UP_REWIND` | `reason:enum(timeout,reconnect)` `from:int` | Blocks in flight are resent from `seq=from`: no ACK in 5 s, or the app reconnected (whatever was in flight on the previous connection was lost). |
 | `TIME_REQ` | `boot:int` `t1:ms` | Time sync request sent. |
 | `TIME_RESP` | `ok:bool` | Time sync response received; `ok=0` if it did not match the pending request. |
 | `TIME_REPORT` | `t1:ms` `t2:ms` | Round trip complete; sent to the server. |
@@ -238,7 +249,7 @@ PID record.
 
 ```
 EV 0 812 FORMAT v=1
-EV 1 812 BOOT boot=3 seq_next=128 nvs_last=127 log_oldest=65 log_newest=127 lost=0
+EV 1 812 BOOT boot=3 wiped=0 seq_next=128 nvs_last=127 log_oldest=65 log_newest=127 lost=0
 EV 2 812 CONFIG reason=boot proto=6 tmax=50 u=782 pids=0C,0D,49,04,10,05,2F
 EV 3 812 CVT pid=0C p=250 pmin=125 due=812 last=687 val=-
 EV 4 812 CVT pid=0D p=250 pmin=125 due=812 last=687 val=-

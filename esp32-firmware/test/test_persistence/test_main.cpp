@@ -2,6 +2,7 @@
 #include "collector/AtHashParser.h"
 #include "collector/BlockWriter.h"
 #include "collector/DataProtocol.h"
+#include "collector/GpsGate.h"
 #include "collector/SeqCounter.h"
 #include "collector/TimeSync.h"
 #include "collector/TmaxMeter.h"
@@ -200,6 +201,40 @@ void test_at_hash_parser() {
     TEST_ASSERT_TRUE(parseAtHash("AT#LISTX").kind == AtHashCommand::Kind::Invalid);
 }
 
+void test_ack_roundtrip() {
+    NoAuth auth;
+    DataProtocol protocol(auth);
+    uint8_t msg[16];
+    const size_t len = protocol.encodeAck(1234, msg, sizeof(msg));
+    uint32_t seq = 0;
+    TEST_ASSERT_TRUE(protocol.decodeAck(msg, len, seq));
+    TEST_ASSERT_EQUAL_UINT32(1234, seq);
+}
+
+void test_at_ack_parsing() {
+    AtHashCommand c = parseAtHash("AT#ACK 42");
+    TEST_ASSERT_TRUE(c.kind == AtHashCommand::Kind::Ack);
+    TEST_ASSERT_EQUAL_UINT32(42, c.seq);
+    TEST_ASSERT_TRUE(parseAtHash("AT#ACK").kind == AtHashCommand::Kind::Invalid);
+    TEST_ASSERT_TRUE(parseAtHash("AT#ACK 0").kind == AtHashCommand::Kind::Invalid);
+}
+
+void test_gps_gate_rejects_diag_mode() {
+    GpsGate gate;
+    TEST_ASSERT_TRUE(gate.check(true, 1000) == GpsGate::Verdict::Diag);
+    // Rejeitar no diagnóstico não conta como posição aceita.
+    TEST_ASSERT_TRUE(gate.check(false, 1100) == GpsGate::Verdict::Accept);
+}
+
+void test_gps_gate_limits_to_one_per_second_with_jitter() {
+    GpsGate gate;
+    TEST_ASSERT_TRUE(gate.check(false, 1000) == GpsGate::Verdict::Accept);
+    TEST_ASSERT_TRUE(gate.check(false, 1500) == GpsGate::Verdict::Rate);
+    TEST_ASSERT_TRUE(gate.check(false, 1950) == GpsGate::Verdict::Accept);   // 950 ms: dentro da tolerância
+    TEST_ASSERT_TRUE(gate.check(false, 2800) == GpsGate::Verdict::Rate);     // 850 ms após a última aceita
+    TEST_ASSERT_TRUE(gate.check(false, 2950) == GpsGate::Verdict::Accept);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_seq_recovery_uses_last_written_plus_one);
@@ -214,5 +249,9 @@ int main(int, char**) {
     RUN_TEST(test_time_sync_accepts_only_matching_response);
     RUN_TEST(test_tmax_meter_p99_and_suggestion);
     RUN_TEST(test_at_hash_parser);
+    RUN_TEST(test_ack_roundtrip);
+    RUN_TEST(test_at_ack_parsing);
+    RUN_TEST(test_gps_gate_rejects_diag_mode);
+    RUN_TEST(test_gps_gate_limits_to_one_per_second_with_jitter);
     return UNITY_END();
 }

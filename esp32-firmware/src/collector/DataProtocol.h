@@ -48,6 +48,8 @@ public:
     size_t encodeBatch(uint32_t oldestSeq, const Block& block, uint8_t* out, size_t cap);
     size_t encodeTimeRequest(const TimeExchange& request, uint8_t* out, size_t cap);
     size_t encodeTimeReport(const TimeExchange& report, uint8_t* out, size_t cap);
+    /** ACK como o servidor o enviaria (bancada: AT#ACK; testes). */
+    size_t encodeAck(uint32_t seq, uint8_t* out, size_t cap);
 
     /** Tipo de uma mensagem recebida, já verificada. false = inválida/não autêntica. */
     bool verifiedType(const uint8_t* msg, size_t len, MessageType& type);
