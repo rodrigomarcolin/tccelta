@@ -9,10 +9,6 @@ BLE-based OBD2 dongle firmware for ESP32, built with PlatformIO + FreeRTOS.
 ```
 IConnectivity (interface)
 ├── BleConnectivity                           plain BLE transport (NUS profile)
-└── SecureBleConnectivity                     abstract base (FreeRTOS queue + task)
-    ├── SecurePskBleConnectivity               AES-256-GCM, static PSK              ← USE_SECURE_PSK
-    ├── SecureHandshakeBleConnectivity         PSK handshake + HKDF session key      ← USE_SECURE_HANDSHAKE
-    └── SecureHandshakeReplayBleConnectivity   same handshake + anti-replay counter  ← USE_SECURE_HANDSHAKE_REPLAY
 
 IObd2 (interface)
 ├── Obd2Can → ICanBus
@@ -24,11 +20,8 @@ IObd2 (interface)
 Inbound data flow:
 ```
 BleConnectivity::onWrite()
-    └─► SecureBleConnectivity._rawQueue   (ISR-safe enqueue)
-            └─► [SecureTask]
-                    └─► onRawFrameReceived()   ← subclass decrypts
-                            └─► deliverPlaintext() → _userCallback
-                                                       └─► [Elm327Task]
+    → _userCallback
+    └─► [Elm327Task]
 ```
 
 ---
@@ -42,8 +35,6 @@ Run with: `pio run -e <env>` / `pio run -e <env> -t upload`
 | `mock` | Simulated | None |
 | `twai` | ESP32 TWAI | None |
 | `mcp2515` | MCP2515 SPI | None |
-| `mock_psk` | Simulated | AES-256-GCM PSK |
-| `twai_psk` | ESP32 TWAI | AES-256-GCM PSK |
 | `mcp2515_psk` | MCP2515 SPI | AES-256-GCM PSK |
 | `mock_handshake` | Simulated | PSK handshake + HKDF session key |
 | `twai_handshake` | ESP32 TWAI | PSK handshake + HKDF session key |
