@@ -157,7 +157,7 @@ void test_interval_bound_with_worst_case_responses() {
 void test_block_builder_serializes_records() {
     Block block;
     BlockBuilder builder;
-    builder.open(block, 5000);
+    builder.open(block, 5000, kDefaultFlushIntervalMs);
     const uint8_t rpm[2] = {0x1A, 0xF8};
     TEST_ASSERT_TRUE(builder.addPid(0x0C, rpm, 2, 5300));
     TEST_ASSERT_TRUE(builder.addGps({-235000000, -466000000, 760000}, 5400));
@@ -183,7 +183,7 @@ void test_block_builder_serializes_records() {
 void test_gps_before_block_start_gets_negative_delta() {
     Block block;
     BlockBuilder builder;
-    builder.open(block, 5000);
+    builder.open(block, 5000, kDefaultFlushIntervalMs);
     TEST_ASSERT_TRUE(builder.addGps({1, 2, 3}, 4990));
     TEST_ASSERT_EQUAL_INT16(-10, static_cast<int16_t>(getU16(&block.bytes[kHeaderSize + 1])));
 }
@@ -191,7 +191,7 @@ void test_gps_before_block_start_gets_negative_delta() {
 void test_block_builder_rejects_when_full() {
     Block block;
     BlockBuilder builder;
-    builder.open(block, 0);
+    builder.open(block, 0, kDefaultFlushIntervalMs);
     const uint8_t v[2] = {1, 2};
     size_t added = 0;
     while (builder.addPid(0x0C, v, 2, 0)) ++added;
@@ -232,7 +232,40 @@ void test_collector_wait_includes_block_deadline() {
 
     collector.poll();  // lê 0x2F; próxima só em 60 s
     const uint32_t wait = collector.poll();
-    TEST_ASSERT_LESS_OR_EQUAL_UINT32(kFlushIntervalMs, wait);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(kDefaultFlushIntervalMs, wait);
+}
+
+void test_collector_closes_block_at_configured_interval() {
+    FakeClock clock;
+    FakeObd2 obd(clock);
+    SequentialPidReader reader(obd, clock);
+    FakePool pool;
+    FakeValues values;
+    Collector collector(clock, reader, pool, values);
+    CollectorConfig config;
+    config.pids[0] = {0x2F, 60000, 60000};
+    config.pidCount = 1;
+    config.flushIntervalMs = 2000;
+    collector.applyConfig(config);
+    collector.setRunning(true);
+
+    collector.poll();           // abre o bloco em 1010
+    clock.advance(1999);
+    collector.poll();
+    TEST_ASSERT_EQUAL_UINT32(0, pool.submitted.size());
+    clock.advance(1);
+    collector.poll();
+    TEST_ASSERT_EQUAL_UINT32(1, pool.submitted.size());
+}
+
+void test_validate_flush_interval_range() {
+    CollectorConfig config = CollectorConfig::defaults();
+    config.flushIntervalMs = 999;
+    TEST_ASSERT_EQUAL(ConfigError::FlushOutOfRange, validate(config));
+    config.flushIntervalMs = 30001;
+    TEST_ASSERT_EQUAL(ConfigError::FlushOutOfRange, validate(config));
+    config.flushIntervalMs = 2000;
+    TEST_ASSERT_EQUAL(ConfigError::None, validate(config));
 }
 
 void test_collector_counts_records_dropped_without_free_buffer() {
@@ -266,5 +299,7 @@ int main(int, char**) {
     RUN_TEST(test_collector_closes_block_by_deadline_even_without_answers);
     RUN_TEST(test_collector_wait_includes_block_deadline);
     RUN_TEST(test_collector_counts_records_dropped_without_free_buffer);
+    RUN_TEST(test_collector_closes_block_at_configured_interval);
+    RUN_TEST(test_validate_flush_interval_range);
     return UNITY_END();
 }

@@ -217,6 +217,10 @@ void test_at_ack_parsing() {
     TEST_ASSERT_EQUAL_UINT32(42, c.seq);
     TEST_ASSERT_TRUE(parseAtHash("AT#ACK").kind == AtHashCommand::Kind::Invalid);
     TEST_ASSERT_TRUE(parseAtHash("AT#ACK 0").kind == AtHashCommand::Kind::Invalid);
+
+    const AtHashCommand flush = parseAtHash("AT#FLUSH 2000");
+    TEST_ASSERT_TRUE(flush.kind == AtHashCommand::Kind::Flush);
+    TEST_ASSERT_EQUAL_UINT32(2000, flush.periodMs);
 }
 
 void test_gps_gate_rejects_diag_mode() {

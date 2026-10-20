@@ -15,6 +15,7 @@ struct AtHashCommand {
         Gps,         // AT#GPS lat lon alt
         Tmax,        // AT#TMAX
         TmaxQuery,   // AT#TMAX?
+        Flush,       // AT#FLUSH mmmm (prazo de fechamento dos blocos, ms)
         Ack,         // AT#ACK n (só nas builds de depuração: simula o ACK do servidor)
     };
 

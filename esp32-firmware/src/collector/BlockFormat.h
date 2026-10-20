@@ -21,7 +21,6 @@ constexpr size_t   kHeaderSize       = 12;
 constexpr size_t   kPidRecordSize    = 5;
 constexpr size_t   kGpsRecordSize    = 15;
 constexpr uint8_t  kGpsRecordType    = 0xFF;
-constexpr uint32_t kFlushIntervalMs  = 10000;  // T_flush (Tabela 7)
 
 namespace header {
 constexpr size_t kSeq     = 0;

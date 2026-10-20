@@ -31,6 +31,7 @@ public:
     virtual ConfigError setPid(uint8_t pid, uint32_t periodMs) = 0;
     virtual bool deletePid(uint8_t pid) = 0;
     virtual ConfigError setTmax(uint32_t tmaxMs) = 0;
+    virtual ConfigError setFlushInterval(uint32_t intervalMs) = 0;
     /** Grava o protocolo, espera os blocos irem para a flash e reinicia. */
     virtual bool setProtocol(uint8_t number) = 0;
 

@@ -26,6 +26,7 @@ public:
     collector::ConfigError setPid(uint8_t pid, uint32_t periodMs) override;
     bool deletePid(uint8_t pid) override;
     collector::ConfigError setTmax(uint32_t tmaxMs) override;
+    collector::ConfigError setFlushInterval(uint32_t intervalMs) override;
     bool setProtocol(uint8_t number) override;
 
     bool currentValue(uint8_t pid, collector::CurrentValues::Value& out) const override;

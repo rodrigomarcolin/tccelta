@@ -4,11 +4,12 @@
 
 namespace collector {
 
-void BlockBuilder::open(Block& block, uint32_t tStartMs) {
+void BlockBuilder::open(Block& block, uint32_t tStartMs, uint32_t closeAfterMs) {
     memset(block.bytes, 0, kHeaderSize);
     block.length = kHeaderSize;
-    _block    = &block;
-    _tStartMs = tStartMs;
+    _block        = &block;
+    _tStartMs     = tStartMs;
+    _closeAfterMs = closeAfterMs;
 }
 
 bool BlockBuilder::deltaFor(uint32_t tMs, int16_t& delta) const {

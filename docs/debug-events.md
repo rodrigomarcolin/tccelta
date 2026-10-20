@@ -27,7 +27,7 @@ Key concepts used by the events:
 | Scheduler table (CVT) | Per PID: `p`, `pmin`, `due` (when it must be read next), `last` (when it was last read), `val` (last value). |
 | Scheduler rules | 1. If any PID is due (`now ≥ due`), read the one most overdue. 2. Otherwise, if the earliest `due` is more than `Tmax` away, read early the eligible PID (`now − last ≥ pmin`) with the earliest `due`. 3. Otherwise wait. |
 | Rescheduling | After a due read: `due += p` (if still in the past, `due = now`). After an early read: `due = now + p`. Always `last = now` (time the read finished). |
-| Block | Header + records. Opened on its first record. Closed when full, 10 s after opening, or on mode/config change. |
+| Block | Header + records. Opened on its first record. Closed when full, `flush` ms after opening (10 s by default, `CONFIG.flush`), or on mode/config change. |
 | Double buffer | Two block buffers (`buf=0`, `buf=1`). One is being filled while the other may be being written to flash. If none is free, records are dropped. |
 | `seq` | Sequence number of a block, assigned only when it is written to flash. Strictly increasing, no gaps unless blocks are lost. |
 | `boot` | Boot counter, incremented on every restart. Timestamps restart from 0 on each boot. |
@@ -109,7 +109,7 @@ rely on it.
 |---|---|---|
 | `FORMAT` | `v:int` | First event of a boot. `v=1` for this spec. |
 | `BOOT` | `boot:int` `wiped:bool` `seq_next:int` `nvs_last:int` `log_oldest:int` `log_newest:int` `lost:int` | Persistent counters at start. `wiped=1`: the flash log and `seq` were erased at this boot (bench builds only). `seq_next = max(nvs_last, log_newest) + 1`. `log_oldest/log_newest` are 0 if the flash log is empty. `lost` = blocks dropped for lack of space so far (this boot). |
-| `CONFIG` | `reason:enum(boot,apply)` `proto:int` `tmax:int` `u:int` `pids:list` | Active configuration. `proto` 6–9 (CAN 11/29 bit, 500/250 kbps). `u` = planned bus utilization **in permille** (`Σ tmax/p × 1000`, e.g. `782`). Followed by one `CVT` line per PID. |
+| `CONFIG` | `reason:enum(boot,apply)` `proto:int` `tmax:int` `flush:int` `u:int` `pids:list` | Active configuration. `proto` 6–9 (CAN 11/29 bit, 500/250 kbps). `flush` = block deadline in ms (1000–30000, default 10000; absent in older logs = 10000). `u` = planned bus utilization **in permille** (`Σ tmax/p × 1000`, e.g. `782`). Followed by one `CVT` line per PID. |
 | `CVT` | `pid:hex` `p:int` `pmin:int` `due:ms` `last:ms` `val:hex\|-` | Full snapshot of one scheduler table row. Emitted for every PID right after `CONFIG`. |
 
 ### 5.2 Scheduler and bus
@@ -127,7 +127,7 @@ rely on it.
 | `BLK_OPEN` | `buf:int` `t0:ms` | A buffer was taken and a block opened. `t0` = block start time = time of its first record. |
 | `REC` | `kind:enum(pid,gps)` `pid:hex\|-` `dt:int` `val:hex\|-` `lat:int\|-` `lon:int\|-` `alt:int\|-` `len:int` | A record was appended to the open block. `dt` = record time − `t0`; it can be **negative** for GPS (position received just before the block was opened). PID record: `pid`, `val` (always 2 bytes, 4 hex digits; 1-byte PIDs have `00` as second byte). GPS record: `lat`/`lon` in degrees × 10⁷, `alt` in mm. `len` = bytes used in the block after this record, header included. |
 | `REC_DROP` | `kind:enum(pid,gps)` `pid:hex\|-` `reason:enum(no_buffer)` | A record could not be stored: no free buffer. |
-| `BLK_CLOSE` | `buf:int` `reason:enum(full,deadline,config,mode,stop)` `len:int` `recs:int` `age:int` | The open block was closed. `age = t − t0`. `full`: the next record did not fit. `deadline`: 10 s elapsed. Others: closed by a configuration change, a mode change, or a restart. The block is handed to the flash writer. |
+| `BLK_CLOSE` | `buf:int` `reason:enum(full,deadline,config,mode,stop)` `len:int` `recs:int` `age:int` | The open block was closed. `age = t − t0`. `full`: the next record did not fit. `deadline`: `CONFIG.flush` ms elapsed. Others: closed by a configuration change, a mode change, or a restart. The block is handed to the flash writer. |
 | `BLK_RELEASE` | `buf:int` | An empty block was closed and its buffer returned without writing. |
 
 ### 5.4 Flash
@@ -250,7 +250,7 @@ PID record.
 ```
 EV 0 812 FORMAT v=1
 EV 1 812 BOOT boot=3 wiped=0 seq_next=128 nvs_last=127 log_oldest=65 log_newest=127 lost=0
-EV 2 812 CONFIG reason=boot proto=6 tmax=50 u=782 pids=0C,0D,49,04,10,05,2F
+EV 2 812 CONFIG reason=boot proto=6 tmax=50 flush=10000 u=782 pids=0C,0D,49,04,10,05,2F
 EV 3 812 CVT pid=0C p=250 pmin=125 due=812 last=687 val=-
 EV 4 812 CVT pid=0D p=250 pmin=125 due=812 last=687 val=-
 ...

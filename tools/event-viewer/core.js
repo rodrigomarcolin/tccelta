@@ -103,7 +103,7 @@ function apply(st, ev){
       st.boot = {boot:N(f.boot), wiped:B(f.wiped), seq_next:N(f.seq_next), nvs_last:N(f.nvs_last), log_oldest:N(f.log_oldest), log_newest:N(f.log_newest), lost:N(f.lost)};
       st.seqNext = st.boot.seq_next; break;
     case 'CONFIG':
-      st.config = {reason:f.reason, proto:N(f.proto), tmax:N(f.tmax), u:N(f.u), pids:L(f.pids), t:ev.t, i:ev.i};
+      st.config = {reason:f.reason, proto:N(f.proto), tmax:N(f.tmax), flush:N(f.flush) ?? DEADLINE, u:N(f.u), pids:L(f.pids), t:ev.t, i:ev.i};
       st.rows = {}; st.order = []; st.pending = null; break;
     case 'CVT': {
       const p = f.pid; if (!st.rows[p]) st.order.push(p);
@@ -409,7 +409,8 @@ function timers(st, now){
     }
   }
   const ob = st.bufs[st.openBuf];
-  if (ob && ob.st === 'fill') T.block = {buf:st.openBuf, age:now - ob.t0, left:ob.t0 + DEADLINE - now, len:ob.len, recs:ob.recs};
+  const flush = c ? c.flush : DEADLINE;
+  if (ob && ob.st === 'fill') T.block = {buf:st.openBuf, age:now - ob.t0, left:ob.t0 + flush - now, flush, len:ob.len, recs:ob.recs};
   T.writing = st.bufs.map((b,k) => b.st === 'write' ? {buf:k, wait:now - b.closeT, len:b.len, reason:b.reason} : null).filter(Boolean);
   const sends = Object.entries(st.up.sends).map(([s,t]) => ({seq:+s, t})).sort((a,b) => a.t - b.t);
   if (sends.length) T.ack = {seq:sends[0].seq, left:sends[0].t + ACK_TIMEOUT - now, n:sends.length};
@@ -430,7 +431,7 @@ function genDemo(){
   const PLAN2 = [['0C',250,125],['0D',250,125],['49',500,250],['11',500,250],['04',500,250],['10',1000,500],['05',2000,1000],['2F',5000,2500]];
   const config = (t, reason, plan) => {
     const u = Math.round(plan.reduce((s,[,p]) => s + tmax/p, 0) * 1000);
-    E(t, `CONFIG reason=${reason} proto=6 tmax=${tmax} u=${u} pids=${plan.map(x => x[0]).join(',')}`);
+    E(t, `CONFIG reason=${reason} proto=6 tmax=${tmax} flush=${DEADLINE} u=${u} pids=${plan.map(x => x[0]).join(',')}`);
     rows = plan.map(([pid,p,pmin]) => ({pid, p, pmin, due:t, last:t - pmin}));
     for (const r of rows) E(t, `CVT pid=${r.pid} p=${r.p} pmin=${r.pmin} due=${r.due} last=${r.last} val=-`);
   };

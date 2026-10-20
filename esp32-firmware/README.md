@@ -30,6 +30,10 @@ pio test -e native                                     # testes no host
 Para salvar os eventos num arquivo (para o visualizador):
 `pio device monitor -e collector_mock_debug --filter log2file`.
 
+Impacto da escrita na flash sobre as leituras, a partir desse arquivo:
+`node ../tools/event-viewer/flash-impact.js sessao.log`. Para comparar prazos de
+bloco, grave uma sessão para cada valor de `AT#FLUSH` e passe todas ao script.
+
 ## Configuração local
 
 Porta serial e flags de teste ficam fora do git, em `platformio_local.ini`:
@@ -58,6 +62,7 @@ Além do subconjunto ELM327 (`ATZ`, `ATE0`, `ATH1`, `ATST hh`, `ATSP h`, `01 0C`
 | `AT#NET b` | O app informa se tem Internet |
 | `AT#GPS lat lon alt` | Posição atual (graus × 10⁷, mm); no máximo 1/s, ignorada no diagnóstico |
 | `AT#TMAX` / `AT#TMAX?` | Mede o Tmax / consulta o resultado |
+| `AT#FLUSH mmmm` | Prazo de fechamento dos blocos, de 1000 a 30000 ms (padrão 10000) |
 | `AT#ACK n` | Só nas builds de depuração: simula o ACK do servidor até o bloco `n` |
 
 `ATSP h` (6 a 9) grava o protocolo e reinicia o dongle. O simulador de ECU

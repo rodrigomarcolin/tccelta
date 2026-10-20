@@ -84,6 +84,9 @@ ConfigError validate(const CollectorConfig& config) {
     if (!isValidProtocol(static_cast<uint8_t>(config.protocol))) return ConfigError::InvalidProtocol;
     if (config.tmaxMs < kMinTmaxMs) return ConfigError::TmaxTooSmall;
     if (config.pidCount > kMaxPids) return ConfigError::TooManyPids;
+    if (config.flushIntervalMs < kMinFlushIntervalMs || config.flushIntervalMs > kMaxFlushIntervalMs) {
+        return ConfigError::FlushOutOfRange;
+    }
     for (size_t i = 0; i < config.pidCount; ++i) {
         if (config.pids[i].periodMs < kMinPeriodMs ||
             config.pids[i].minIntervalMs < kMinPeriodMs) {

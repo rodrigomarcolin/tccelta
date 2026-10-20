@@ -447,7 +447,7 @@ function summary(ev){
       const blk = M.blocks[ev.d.block], bad = blk && blk.checks && blk.checks.some(c => !c.ok);
       return `${B(f.ok) ? '<span class="ok">✓</span>' : '<span class="bad">✗ failed</span>'} seq <b>${f.seq}</b> · buf ${f.buf} · ${f.len} B · ${f.dur} ms${N(f.attempts) > 1 ? ` · ${f.attempts} attempts` : ''}${bad ? ' <span class="bad">⚠</span>' : ''}`; }
     case 'CVT': return `${chip(f.pid)} p ${f.p} · pmin ${f.pmin} · due ${f.due}`;
-    case 'CONFIG': return `${esc(f.reason)} · Tmax ${f.tmax} · u ${(N(f.u)/10).toFixed(1)}% · ${L(f.pids).length} PIDs`;
+    case 'CONFIG': return `${esc(f.reason)} · Tmax ${f.tmax} · flush ${f.flush ? fmtD(N(f.flush)) : '10 s'} · u ${(N(f.u)/10).toFixed(1)}% · ${L(f.pids).length} PIDs`;
     case 'BOOT': return `boot ${f.boot} · seq_next ${f.seq_next}${B(f.wiped) ? ' · <b>flash wiped</b>' : ''}`;
     case 'MODE': return B(f.diag) ? 'diagnostic' : (B(f.running) ? 'collecting' : 'stopped');
     case 'CMD': return `<span class="mono">${esc(f.txt)}</span>`;
@@ -810,7 +810,7 @@ function renderState(){
   else if (!T.running) tm += timer('Scheduler', T.diag ? 'suspended (diagnostic)' : 'stopped');
   else if (T.wake) tm += timer('Next collect wake-up', T.wake.in <= 0 ? 'now' : fmtD(T.wake.in), null, `${T.wake.rule === 'due' ? 'due read' : 'early read'} of ${pidChip(s,T.wake.pid)}`);
   if (T.earliest) tm += timer('Earliest due', T.earliest.in < 0 ? `<span class="warn">overdue ${fmtD(-T.earliest.in)}</span>` : fmtD(T.earliest.in), null, pidChip(s, T.earliest.pid));
-  tm += T.block ? timer(`Block deadline · buf ${T.block.buf}`, `closes in ${fmtD(T.block.left)}`, T.block.age / DEADLINE, `open for ${fmtD(T.block.age)} of 10 s`, 'var(--s3)')
+  tm += T.block ? timer(`Block deadline · buf ${T.block.buf}`, `closes in ${fmtD(T.block.left)}`, T.block.age / T.block.flush, `open for ${fmtD(T.block.age)} of ${fmtD(T.block.flush)}`, 'var(--s3)')
     + timer('Block fill', `${T.block.len} / ${BLOCK_MAX} B`, T.block.len / BLOCK_MAX, `${T.block.recs} records · ${BLOCK_MAX - T.block.len} B free`)
     : timer('Block deadline', 'no open block');
   tm += timer('Flash write queue', T.writing.length ? T.writing.map(w => `buf ${w.buf} · ${fmtD(w.wait)}`).join(', ') : 'idle', null, T.writing.length ? 'closed block(s) waiting for / being written to flash' : '');
@@ -1061,7 +1061,7 @@ function renderSystem(){
   const cmds = seg.cmds.filter(x => x.cmd <= sel).slice(-50).reverse();
   return `<div class="grid2" style="margin-bottom:14px">
     <div class="card"><h3>Boot</h3>${b ? kv([['boot', b.boot], ['flash', b.wiped ? '<b>wiped at boot</b>' : 'kept'], ['seq_next', b.seq_next], ['nvs_last', b.nvs_last], ['flash log', b.log_newest ? `${b.log_oldest} … ${b.log_newest}` : 'empty'], ['lost (this boot)', b.lost], ['next seq now', st.seqNext]]) : '<span class="muted">No BOOT event</span>'}</div>
-    <div class="card"><h3>Configuration</h3>${c ? kv([['reason', esc(c.reason)], ['protocol', `${c.proto} · ${PROTO[c.proto] || '?'}`], ['Tmax', c.tmax + ' ms'], ['planned bus', (c.u/10).toFixed(1) + ' %'], ['PIDs', c.pids.map(p => pidChip(s,p)).join(' ')], ['since', evLink(c.i, fmtT(c.t))]]) : '<span class="muted">—</span>'}</div>
+    <div class="card"><h3>Configuration</h3>${c ? kv([['reason', esc(c.reason)], ['protocol', `${c.proto} · ${PROTO[c.proto] || '?'}`], ['Tmax', c.tmax + ' ms'], ['block deadline', fmtD(c.flush)], ['planned bus', (c.u/10).toFixed(1) + ' %'], ['PIDs', c.pids.map(p => pidChip(s,p)).join(' ')], ['since', evLink(c.i, fmtT(c.t))]]) : '<span class="muted">—</span>'}</div>
     <div class="card"><h3>Mode &amp; link</h3>${kv([['mode', st.mode ? (st.mode.diag ? 'diagnostic' : st.mode.running ? 'collecting' : 'stopped') + ' · since ' + fmtT(st.mode.t) : '—'],
       ['BLE app', st.conn ? (st.conn.up ? '<span class="ok">connected</span>' : 'disconnected') : '—'], ['Internet', st.net ? (st.net.up ? '<span class="ok">available</span>' : 'unavailable') : '—'],
       ['time sync', st.time.report ? `round trip ${st.time.report.t2 - st.time.report.t1} ms` : st.time.req ? 'pending' : '—']])}</div>

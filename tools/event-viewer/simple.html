@@ -330,7 +330,7 @@ function eventCard(ev, st){
     case 'REC': head = f.kind === 'gps' ? 'GPS record appended' : `Record ${chip(s,f.pid)} appended`;
       body = `<div class="sub">${f.kind === 'gps' ? 15 : 5} bytes at dt ${f.dt} ms · block now ${f.len} / 1024 B</div>`; break;
     case 'REC_DROP': head = '<span class="bad">Record dropped</span>'; body = `<div class="sub">Both buffers were busy (one filling is full, the other still waiting for flash).</div>`; break;
-    case 'BLK_OPEN': head = `Block opened in buf ${f.buf}`; body = `<div class="sub">It will close when full or 10 s from now (at ${fmtT(N(f.t0) + DEADLINE)}).</div>`; break;
+    case 'BLK_OPEN': { const fl = st && st.config ? st.config.flush : DEADLINE; head = `Block opened in buf ${f.buf}`; body = `<div class="sub">It will close when full or ${fmtD(fl)} from now (at ${fmtT(N(f.t0) + fl)}).</div>`; break; }
     case 'BLK_CLOSE': head = `Block in buf ${f.buf} closed: ${esc(f.reason)}`;
       body = `<div class="sub">${({full:'The next record did not fit in 1024 bytes.', deadline:'10 s since it opened.', config:'Configuration changed.', mode:'Mode changed.', stop:'Restart.'})[f.reason] || ''} ${f.len} B, ${f.recs} records, ${fmtD(N(f.age))} old. Now waiting for the flash writer.</div>`; break;
     case 'FLUSH': {
@@ -387,7 +387,7 @@ function timersCard(st, t){
   if (T.reading) row(`Reading ${T.reading.pids.map(p => chip(s,p)).join(' ')}`, `${fmtD(T.reading.since)} / ${T.reading.tmax} ms`, bar(T.reading.since / T.reading.tmax));
   else if (T.wake) row(`Next wake-up · ${T.wake.rule} ${chip(s,T.wake.pid)}`, T.wake.in <= 0 ? 'now' : fmtD(T.wake.in));
   else row('Scheduler', mode);
-  if (T.block) row(`Open block closes (10 s)`, `in ${fmtD(T.block.left)}`, bar(T.block.age / DEADLINE, 'var(--s3)'));
+  if (T.block) row(`Open block closes (${fmtD(T.block.flush)})`, `in ${fmtD(T.block.left)}`, bar(T.block.age / T.block.flush, 'var(--s3)'));
   else row('Open block', 'none');
   row('Flash writer', T.writing.length ? T.writing.map(w => `buf ${w.buf} waiting ${fmtD(w.wait)}`).join(', ') : 'idle');
   if (T.ack) row(`Upload ACK timeout (seq ${T.ack.seq})`, fmtD(T.ack.left), bar(1 - T.ack.left / ACK_TIMEOUT, 'var(--warn)'));

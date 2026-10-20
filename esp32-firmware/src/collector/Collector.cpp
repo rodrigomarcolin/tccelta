@@ -29,6 +29,7 @@ void recordValue(const ReadResult& result, uint8_t out[2]) {
 void Collector::applyConfig(const CollectorConfig& config, ConfigReason reason) {
     closeBlock(CloseReason::Config);
     _tmaxMs = config.tmaxMs;
+    _flushIntervalMs = config.flushIntervalMs;
     _scheduler.apply(config, _clock.nowMs());
     emitConfig(config, reason);
 }
@@ -41,6 +42,7 @@ void Collector::emitConfig(const CollectorConfig& config, ConfigReason reason) c
         .token("reason", reason == ConfigReason::Boot ? "boot" : "apply")
         .num("proto", static_cast<int>(config.protocol))
         .num("tmax", config.tmaxMs)
+        .num("flush", config.flushIntervalMs)
         .num("u", static_cast<int64_t>(std::lround(utilization(config) * 1000.0)))
         .hexList("pids", pids, config.pidCount);
 
@@ -123,7 +125,7 @@ bool Collector::append(uint32_t tMs, AddFn add) {
         if (!_builder.isOpen()) {
             Block* block = _pool.acquire();
             if (!block) break;
-            _builder.open(*block, tMs);
+            _builder.open(*block, tMs, _flushIntervalMs);
             _openBlock   = block;
             _openRecords = 0;
             emitBlockOpen(*block, tMs);

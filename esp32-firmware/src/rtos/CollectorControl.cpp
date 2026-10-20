@@ -47,6 +47,12 @@ collector::ConfigError CollectorControl::setTmax(uint32_t tmaxMs) {
     return commit(candidate);
 }
 
+collector::ConfigError CollectorControl::setFlushInterval(uint32_t intervalMs) {
+    collector::CollectorConfig candidate = _config;
+    candidate.flushIntervalMs = intervalMs;
+    return commit(candidate);
+}
+
 bool CollectorControl::setProtocol(uint8_t number) {
     if (!collector::isValidProtocol(number)) return false;
     collector::CollectorConfig candidate = _config;

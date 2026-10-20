@@ -9,7 +9,7 @@ constexpr const char* kKeyBootId     = "boot_id";
 constexpr const char* kKeyLastSeq    = "last_seq";
 
 // Muda sempre que o layout de CollectorConfig mudar, para não ler lixo.
-constexpr uint8_t kConfigVersion = 1;
+constexpr uint8_t kConfigVersion = 2;  // 2: + flushIntervalMs
 
 }  // namespace
 

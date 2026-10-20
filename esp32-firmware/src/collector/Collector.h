@@ -78,6 +78,7 @@ private:
     BlockBuilder  _builder;
     Block*        _openBlock = nullptr;
     uint32_t      _tmaxMs  = kDefaultTmaxMs;
+    uint32_t      _flushIntervalMs = kDefaultFlushIntervalMs;
     bool          _running = false;
     uint32_t      _droppedRecords = 0;
     uint16_t      _openRecords = 0;
