@@ -36,42 +36,49 @@ constexpr uint8_t FS_OVERFLOW = 0x02;
 
 bool inRange(uint32_t id, uint32_t lo, uint32_t hi) { return id >= lo && id <= hi; }
 
-void sendSf(ICanBus* can, uint32_t id, const uint8_t* data, uint8_t len) {
+CanFrame makeFrame(uint32_t id, bool extended) {
     CanFrame f = {};
     f.id  = id;
     f.dlc = 8;
+    f.extended = extended;
+    return f;
+}
+
+void sendSf(ICanBus* can, uint32_t id, bool extended, const uint8_t* data, uint8_t len) {
+    CanFrame f = makeFrame(id, extended);
     f.data[0] = (uint8_t)(N_PCI_SF | len);
     memcpy(&f.data[1], data, len);
     can->send(f);
 }
 
-void sendFf(ICanBus* can, uint32_t id, const uint8_t* data, uint16_t totalLen) {
-    CanFrame f = {};
-    f.id  = id;
-    f.dlc = 8;
+void sendFf(ICanBus* can, uint32_t id, bool extended, const uint8_t* data, uint16_t totalLen) {
+    CanFrame f = makeFrame(id, extended);
     f.data[0] = (uint8_t)(N_PCI_FF | ((totalLen >> 8) & 0x0F));
     f.data[1] = (uint8_t)(totalLen & 0xFF);
     memcpy(&f.data[2], data, 6);
     can->send(f);
 }
 
-void sendCf(ICanBus* can, uint32_t id, const uint8_t* data, uint8_t len, uint8_t seq) {
-    CanFrame f = {};
-    f.id  = id;
-    f.dlc = 8;
+void sendCf(ICanBus* can, uint32_t id, bool extended, const uint8_t* data, uint8_t len, uint8_t seq) {
+    CanFrame f = makeFrame(id, extended);
     f.data[0] = (uint8_t)(N_PCI_CF | (seq & 0x0F));
     memcpy(&f.data[1], data, len);
     can->send(f);
 }
 
-void sendFc(ICanBus* can, uint32_t id, uint8_t fs, uint8_t bs, uint8_t stmin) {
-    CanFrame f = {};
-    f.id  = id;
-    f.dlc = 8;
+void sendFc(ICanBus* can, uint32_t id, bool extended, uint8_t fs, uint8_t bs, uint8_t stmin) {
+    CanFrame f = makeFrame(id, extended);
     f.data[0] = (uint8_t)(N_PCI_FC | fs);
     f.data[1] = bs;
     f.data[2] = stmin;
     can->send(f);
+}
+
+// A resposta pertence a esta transação se começa com os bytes do prefixo
+// (ex.: [0x41, PID]). `available` é quanto do payload está neste frame.
+bool matchesPrefix(const uint8_t* payload, size_t available, const ReplyPrefix& prefix) {
+    if (available < prefix.len) return false;
+    return memcmp(payload, prefix.bytes, prefix.len) == 0;
 }
 
 // Decodifica STmin (byte 2 do FC) em microssegundos.
@@ -94,9 +101,10 @@ enum class SendOutcome { OK, TIMEOUT, OVERFLOW };
 // Envia `len` (>7) bytes como FF + CF(s), obedecendo o(s) FC(s) do peer
 // (FlowStatus, Block Size, STmin). `fcIdMin`/`fcIdMax` é a faixa de IDs em
 // que se aceita o FC.
-SendOutcome sendSegmented(ICanBus* can, uint32_t txId, uint32_t fcIdMin, uint32_t fcIdMax,
+SendOutcome sendSegmented(ICanBus* can, uint32_t txId, bool extended,
+                           uint32_t fcIdMin, uint32_t fcIdMax,
                            const uint8_t* data, size_t len) {
-    sendFf(can, txId, data, (uint16_t)len);
+    sendFf(can, txId, extended, data, (uint16_t)len);
     size_t  sent = 6;
     uint8_t seq  = 1;
     uint8_t fcWaitCount = 0;
@@ -129,7 +137,7 @@ SendOutcome sendSegmented(ICanBus* can, uint32_t txId, uint32_t fcIdMin, uint32_
         while (sent < len) {
             uint8_t chunk = (uint8_t)((len - sent) < 7 ? (len - sent) : 7);
             waitStMin(stmin);
-            sendCf(can, txId, data + sent, chunk, seq);
+            sendCf(can, txId, extended, data + sent, chunk, seq);
             sent += chunk;
             seq   = (uint8_t)((seq + 1) & 0x0F);
             sentThisBlock++;
@@ -143,7 +151,7 @@ SendOutcome sendSegmented(ICanBus* can, uint32_t txId, uint32_t fcIdMin, uint32_
 
 int Client::requestAll(uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
                         const uint8_t* req, size_t reqLen,
-                        uint8_t expectedReplyMarker,
+                        const ReplyPrefix& expectedReply,
                         ResponseSet& responses,
                         uint32_t timeoutMs,
                         size_t expectedResponses) {
@@ -155,19 +163,18 @@ int Client::requestAll(uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
     // então nada deveria estar pendente na fila neste ponto; qualquer coisa
     // que esteja é, por construção, sobra de uma transação anterior (ex.:
     // a 2ª ECU que respondeu a um broadcast funcional, cuja resposta não foi
-    // a escolhida). O filtro por `expectedReplyMarker` abaixo já cobre o caso
+    // a escolhida). O filtro por `expectedReply` abaixo já cobre o caso
     // de uma sobra chegar DURANTE a espera desta transação; mas quando duas
-    // requisições seguidas esperam o MESMO marcador de resposta (ex.: várias
-    // leituras de PID do freeze frame, todas com o mesmo SID), o filtro não
+    // requisições seguidas esperam o MESMO prefixo de resposta, o filtro não
     // consegue distinguir a sobra da resposta de verdade — só o dreno aqui
     // resolve isso.
     CanFrame stale;
     while (_can->receive(stale)) {}
 
     if (reqLen <= 7) {
-        sendSf(_can, reqId, req, static_cast<uint8_t>(reqLen));
+        sendSf(_can, reqId, _extendedIds, req, static_cast<uint8_t>(reqLen));
     } else {
-        SendOutcome rc = sendSegmented(_can, reqId, respIdMin, respIdMax, req, reqLen);
+        SendOutcome rc = sendSegmented(_can, reqId, _extendedIds, respIdMin, respIdMax, req, reqLen);
         if (rc == SendOutcome::OVERFLOW) return OVERFLOW_ABORT;
         if (rc != SendOutcome::OK) return TIMEOUT;
     }
@@ -256,7 +263,7 @@ int Client::requestAll(uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
                 negativeNrc = frame.data[3];
                 continue;
             }
-            if (frame.data[1] != expectedReplyMarker) continue;
+            if (!matchesPrefix(&frame.data[1], len, expectedReply)) continue;
             if (findResponse(frame.id) < 0) {
                 addResponse(frame.id, &frame.data[1], len);
             }
@@ -264,7 +271,7 @@ int Client::requestAll(uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
         }
 
         if (pciType == N_PCI_FF) {
-            if (frame.data[2] != expectedReplyMarker) continue;
+            if (!matchesPrefix(&frame.data[2], 6, expectedReply)) continue;
             const uint16_t total = static_cast<uint16_t>(((frame.data[0] & 0x0F) << 8) |
                                                          frame.data[1]);
             if (total < 8) continue;
@@ -276,10 +283,9 @@ int Client::requestAll(uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
                 responses.items[index].ecuId = frame.id;
                 responses.items[index].len = 0;
             }
-            const uint32_t fcTargetId = static_cast<uint32_t>(
-                static_cast<int64_t>(frame.id) + _fcIdOffset);
+            const uint32_t fcTargetId = _fcTargetFor(frame.id);
             if (total > MAX_RESPONSE_BYTES) {
-                sendFc(_can, fcTargetId, FS_OVERFLOW, 0, 0);
+                sendFc(_can, fcTargetId, frame.extended, FS_OVERFLOW, 0, 0);
                 active[index] = false;
                 continue;
             }
@@ -291,7 +297,7 @@ int Client::requestAll(uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
             expectedSequence[index] = 1;
             active[index] = true;
             cfDeadline[index] = millis() + N_CR_MS;
-            sendFc(_can, fcTargetId, FS_CTS, 0, 0);
+            sendFc(_can, fcTargetId, frame.extended, FS_CTS, 0, 0);
             continue;
         }
 
@@ -324,12 +330,12 @@ int Client::requestAll(uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
 
 int Client::request(uint32_t reqId, uint32_t respIdMin, uint32_t respIdMax,
                      const uint8_t* req, size_t reqLen,
-                     uint8_t expectedReplyMarker,
+                     const ReplyPrefix& expectedReply,
                      uint8_t* outBuf, size_t maxLen,
                      uint32_t timeoutMs) {
     ResponseSet responses;
     int result = requestAll(reqId, respIdMin, respIdMax, req, reqLen,
-                            expectedReplyMarker, responses, timeoutMs, 1);
+                            expectedReply, responses, timeoutMs, 1);
     if (result < 0) {
         if (result == NEGATIVE_RESPONSE && responses.count > 0 && maxLen >= 2) {
             memcpy(outBuf, responses.items[0].data, 2);

@@ -3,8 +3,8 @@
 #include <cstring>
 
 Elm327Task::Elm327Task(IConnectivity* connectivity, IObd2* obd2,
-                       UBaseType_t queueDepth)
-    : _connectivity(connectivity), _elm327(obd2) {
+                       collector::ICollectorControl* control, UBaseType_t queueDepth)
+    : _connectivity(connectivity), _elm327(obd2, control) {
     _commandQueue = xQueueCreate(queueDepth, sizeof(CommandMessage));
     configASSERT(_commandQueue);
 }

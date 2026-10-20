@@ -32,9 +32,11 @@ public:
     /**
      * @param connectivity  Camada de Transporte IConnectivity
      * @param obd2          Camada OBD2
+     * @param control       Coleta (nullptr = só diagnóstico, como antes)
      * @param queueDepth    Qt máxima de comandos pendentes (default 8)
      */
     Elm327Task(IConnectivity* connectivity, IObd2* obd2,
+               collector::ICollectorControl* control = nullptr,
                UBaseType_t queueDepth = 8);
 
     /**

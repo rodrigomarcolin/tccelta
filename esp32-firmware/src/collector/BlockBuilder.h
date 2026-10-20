@@ -1,0 +1,37 @@
+#pragma once
+#include <cstdint>
+#include "collector/BlockFormat.h"
+
+namespace collector {
+
+/**
+ * Monta um bloco: abre no primeiro registro, acrescenta leituras de PID e
+ * posições GPS, e fecha preenchendo `t_ms inicial` e `tamanho`. Não conhece
+ * `seq` nem `boot_id`, que são da Flush.
+ */
+class BlockBuilder {
+public:
+    void open(Block& block, uint32_t tStartMs);
+    bool isOpen() const { return _block != nullptr; }
+    bool empty() const { return !_block || _block->length == kHeaderSize; }
+
+    /** Instante em que o bloco aberto deve fechar (tStart + T_flush). */
+    uint32_t deadlineMs() const { return _tStartMs + kFlushIntervalMs; }
+
+    /** false = não cabe (espaço ou Δt); o chamador fecha e abre outro. */
+    bool addPid(uint8_t pid, const uint8_t* value, uint8_t len, uint32_t tMs);
+    bool addGps(const GpsFix& fix, uint32_t tMs);
+
+    /** Fecha o bloco aberto e o devolve (nullptr se não havia). */
+    Block* close();
+
+private:
+    Block*   _block    = nullptr;
+    uint32_t _tStartMs = 0;
+
+    /** Δt a partir do início; registros anteriores ao início valem 0. */
+    bool deltaFor(uint32_t tMs, uint16_t& delta) const;
+    bool fits(size_t recordSize) const { return _block->length + recordSize <= kBlockSize; }
+};
+
+}  // namespace collector

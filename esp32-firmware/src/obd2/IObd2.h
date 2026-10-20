@@ -34,6 +34,17 @@ public:
     virtual int readPid(uint8_t service, uint8_t pid,
                         uint8_t* buf, size_t maxLen) = 0;
 
+    /**
+     * Lê um PID do serviço 01 com requisição física ao motor (só a ECU #1
+     * responde). Usada pela coleta, que não quer respostas de várias ECUs.
+     * Implementações sem endereçamento (mock) caem em `readPid`.
+     * @return número de bytes de dado escritos, ou -1 em erro/timeout
+     */
+    virtual int readEnginePid(uint8_t pid, uint8_t* buf, size_t maxLen, uint32_t timeoutMs) {
+        (void)timeoutMs;
+        return readPid(0x01, pid, buf, maxLen);
+    }
+
     virtual int readPidAll(uint8_t service, uint8_t pid,
                            Obd2ResponseSet& responses,
                            uint32_t timeoutMs = 200,

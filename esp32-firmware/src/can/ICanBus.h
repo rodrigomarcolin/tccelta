@@ -1,10 +1,13 @@
 #pragma once
 #include <cstdint>
 
+enum class CanBitrate : uint8_t { Kbps250, Kbps500 };
+
 struct CanFrame {
     uint32_t id;
     uint8_t  dlc;
     uint8_t  data[8];
+    bool     extended = false;  // true = identificador de 29 bits
 };
 
 /**
