@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collector Event Viewer</title>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f3f3f0; --panel:#fcfcfb; --panel-2:#f3f2ee; --hover:#ecebe6;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781; --line:#e1e0d9; --line-2:#c3c2b7;
+  --accent:#2a78d6; --sel:rgba(42,120,214,.13);
+  --good:#0ca30c; --good-ink:#006300; --warn:#fab219; --warn-ink:#8a5a00; --serious:#ec835a; --crit:#d03b3b; --crit-ink:#b42828;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#6250d6; --s8:#e34948;
+  --hdr:#52514e; --gps:#898781;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#0d0d0d; --panel:#161615; --panel-2:#1e1e1d; --hover:#262624;
+    --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --line:#2a2a28; --line-2:#383835;
+    --accent:#3987e5; --sel:rgba(57,135,229,.2);
+    --good-ink:#3fc43f; --warn-ink:#fab219; --crit-ink:#e66767;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    --hdr:#c3c2b7; --gps:#6b6a66;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0d0d0d; --panel:#161615; --panel-2:#1e1e1d; --hover:#262624;
+  --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --line:#2a2a28; --line-2:#383835;
+  --accent:#3987e5; --sel:rgba(57,135,229,.2);
+  --good-ink:#3fc43f; --warn-ink:#fab219; --crit-ink:#e66767;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+  --hdr:#c3c2b7; --gps:#6b6a66;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:13px/1.45 var(--sans);overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .ink2{color:var(--ink-2)}
+a.ev{color:var(--accent);cursor:pointer;text-decoration:none;font-family:var(--mono)}
+a.ev:hover{text-decoration:underline}
+
+/* top bar */
+.top{height:50px;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand b{font-size:14px;white-space:nowrap}
+.brand .file{color:var(--muted);font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-stats{display:flex;gap:6px;flex:1;min-width:0;overflow:hidden}
+.top-actions{display:flex;gap:8px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--line-2);background:var(--panel);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08)}
+.ibtn{width:30px;height:30px;display:inline-grid;place-items:center;border-radius:7px;border:1px solid transparent;background:none;cursor:pointer;color:var(--ink-2)}
+.ibtn:hover{background:var(--hover);color:var(--ink)}
+.ibtn.on{background:var(--accent);color:#fff}
+.pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:11px;background:var(--panel-2);border:1px solid var(--line);font-size:12px;white-space:nowrap;color:var(--ink-2)}
+.pill b{color:var(--ink);font-weight:600}
+.pill.bad{border-color:color-mix(in srgb,var(--crit) 50%,transparent);color:var(--crit-ink)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--c,var(--muted));flex:none}
+
+/* empty state */
+.empty{position:absolute;inset:50px 0 0;display:grid;place-items:center;padding:16px}
+.empty .card{max-width:520px;width:100%;text-align:center;padding:40px 32px;border:1.5px dashed var(--line-2);border-radius:14px;background:var(--panel)}
+.empty h1{font-size:18px;margin:0 0 6px}
+.empty p{color:var(--ink-2);margin:0 0 20px}
+.empty .actions{display:flex;gap:10px;justify-content:center}
+.empty code{font-family:var(--mono);background:var(--panel-2);padding:1px 5px;border-radius:4px}
+body.drag .empty .card{border-color:var(--accent);background:var(--sel)}
+
+/* app layout */
+#app{position:absolute;inset:50px 0 0;display:grid;grid-template-rows:auto 1fr}
+.transport{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.tgroup{display:flex;align-items:center;gap:2px}
+.scrub{position:relative;flex:1;height:30px;min-width:120px;cursor:pointer;border-radius:6px;background:var(--panel-2);overflow:hidden}
+.scrub canvas{position:absolute;inset:0;width:100%;height:100%}
+.scrub .thumb{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);pointer-events:none}
+.clock{font-family:var(--mono);font-variant-numeric:tabular-nums;min-width:150px;text-align:right;line-height:1.2}
+.clock b{font-size:14px} .clock small{display:block;color:var(--muted);font-size:11px}
+select.sm{height:28px;border-radius:6px;border:1px solid var(--line-2);background:var(--panel);padding:0 6px}
+.main{display:grid;grid-template-columns:minmax(360px,40%) 1fr;min-height:0}
+
+/* log pane */
+.logpane{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
+.filters{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.frow{display:flex;gap:6px;align-items:center}
+.search{flex:1;height:28px;border-radius:6px;border:1px solid var(--line-2);background:var(--panel-2);padding:0 9px;min-width:0}
+.search:focus,select.sm:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.cats{display:flex;flex-wrap:wrap;gap:4px}
+.cat{height:22px;padding:0 8px;border-radius:11px;border:1px solid var(--line);background:none;cursor:pointer;font-size:11.5px;color:var(--muted);display:inline-flex;align-items:center;gap:5px}
+.cat .dot{background:var(--line-2)}
+.cat.on{color:var(--ink);background:var(--panel-2);border-color:var(--line-2)}
+.cat.on .dot{background:var(--c)}
+.logscroll{flex:1;overflow:auto;position:relative;min-height:0}
+.logspacer{position:relative}
+.row{position:absolute;left:0;right:0;height:26px;display:grid;grid-template-columns:52px 70px 92px 1fr;align-items:center;gap:8px;padding:0 12px;cursor:pointer;white-space:nowrap;border-left:2px solid transparent}
+.row:hover{background:var(--hover)}
+.row.sel{background:var(--sel);border-left-color:var(--accent)}
+.row .n{font-family:var(--mono);color:var(--muted);font-size:11px;text-align:right}
+.row .t{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);text-align:right;font-variant-numeric:tabular-nums}
+.row .sum{overflow:hidden;text-overflow:ellipsis;color:var(--ink-2);font-size:12.5px}
+.ty{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.02em;padding:2px 6px;border-radius:4px;justify-self:start;color:var(--ink);background:color-mix(in srgb,var(--c) 18%,transparent);box-shadow:inset 2px 0 0 var(--c)}
+.row.sep{cursor:default;grid-template-columns:1fr;font-size:11.5px;font-weight:600;color:var(--ink-2);background:var(--panel-2);border-left-color:var(--line-2)}
+.row.gap{cursor:default;grid-template-columns:1fr;font-size:11.5px;color:var(--crit-ink);background:color-mix(in srgb,var(--crit) 10%,transparent);border-left-color:var(--crit)}
+.pid{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--ink)}
+.pid::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--c)}
+.ok{color:var(--good-ink)} .bad{color:var(--crit-ink)} .warn{color:var(--warn-ink)}
+.tag{font-size:10.5px;padding:0 5px;border-radius:3px;border:1px solid var(--line-2);color:var(--ink-2);margin-left:2px}
+
+/* detail pane */
+.detail{display:flex;flex-direction:column;min-height:0;min-width:0}
+.strip{display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line);overflow-x:auto;background:var(--panel)}
+.chip{flex:none;display:flex;flex-direction:column;gap:1px;padding:5px 10px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);min-width:120px}
+.chip .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:flex;align-items:center;gap:5px}
+.chip .v{font-family:var(--mono);font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mini-bufs{display:flex;gap:4px;align-items:center;height:19px}
+.mini-buf{width:34px;height:12px;border-radius:3px;border:1px solid var(--line-2);position:relative;overflow:hidden}
+.mini-buf i{position:absolute;left:0;top:0;bottom:0;background:var(--c)}
+.tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+.tab{border:none;background:none;padding:10px 12px 9px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font-weight:500}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--ink);border-bottom-color:var(--accent)}
+.tab .cnt{font-size:10.5px;margin-left:4px;padding:0 5px;border-radius:8px;background:color-mix(in srgb,var(--crit) 20%,transparent);color:var(--crit-ink)}
+.tabbody{flex:1;overflow:auto;padding:16px;min-height:0}
+
+/* cards */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.card h3{margin:0 0 10px;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:8px}
+.card h3 .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.grid2>.card{margin-bottom:0}
+.stack{display:flex;flex-direction:column;gap:14px}
+.stack>.card{margin-bottom:0}
+table.t{width:100%;border-collapse:collapse;font-size:12.5px}
+table.t th{text-align:left;font-weight:500;color:var(--muted);font-size:11px;padding:4px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.t td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
+table.t tr:last-child td{border-bottom:none}
+table.t td.num,table.t th.num{text-align:right}
+table.t tr.hi td{background:var(--sel)}
+table.t tr.click{cursor:pointer} table.t tr.click:hover td{background:var(--hover)}
+.chg{font-size:11px;color:var(--muted);margin-right:4px;text-decoration:line-through}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:5px 16px;font-size:12.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;word-break:break-all}
+.bar{height:5px;border-radius:3px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden;position:relative}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--c,var(--accent));border-radius:0 3px 3px 0}
+.status{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--ink)}
+.status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--c)}
+
+/* timers */
+.timer{display:grid;grid-template-columns:1fr auto;gap:3px 12px;padding:7px 0;border-bottom:1px solid var(--line)}
+.timer:last-child{border-bottom:none}
+.timer .l{color:var(--ink-2)} .timer .v{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.timer .bar{grid-column:1/-1}
+.timer .s{grid-column:1/-1;font-size:11.5px;color:var(--muted)}
+
+/* buffers */
+.bufs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.buf{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel-2)}
+.buf.fill{border-color:color-mix(in srgb,var(--accent) 60%,transparent)}
+.buf.write{border-color:color-mix(in srgb,var(--warn) 70%,transparent)}
+.buf .bh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.buf .bh b{font-family:var(--mono)}
+.buf canvas{width:100%;display:block;border-radius:3px;image-rendering:pixelated}
+.buf .bd{font-size:11.5px;color:var(--ink-2);margin-top:6px;font-family:var(--mono)}
+
+/* phase bar in schedule table */
+.phase{position:relative;width:140px;height:10px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line)}
+.phase .f{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:color-mix(in srgb,var(--c) 55%,transparent)}
+.phase .f.over{background:var(--serious)}
+.phase .m{position:absolute;top:-3px;bottom:-3px;width:1.5px;background:var(--ink-2)}
+
+/* inspector */
+.ihead{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.ihead .ty{font-size:12px;padding:3px 8px}
+.ihead .meta{font-family:var(--mono);color:var(--ink-2)}
+.ihead .nav{margin-left:auto;display:flex;gap:4px}
+.raw{font-family:var(--mono);font-size:11.5px;background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:8px 10px;word-break:break-all;color:var(--ink-2);max-height:96px;overflow:auto}
+.hero{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+.hero .big{font-size:28px;font-weight:600;letter-spacing:-.01em}
+.hero .unit{font-size:14px;color:var(--ink-2);margin-left:4px;font-weight:400}
+.tl{margin:6px 0 2px}
+.tl-track{position:relative;height:22px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line)}
+.tl-bar{position:absolute;top:3px;bottom:3px;border-radius:3px;background:var(--c,var(--accent))}
+.tl-bar.bad{background:repeating-linear-gradient(45deg,var(--crit) 0 4px,color-mix(in srgb,var(--crit) 40%,transparent) 4px 8px)}
+.tl-mark{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink-2)}
+.tl-mark span{position:absolute;top:-16px;left:4px;font-size:10.5px;color:var(--muted);white-space:nowrap}
+.tl-lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:4px}
+.notice{padding:8px 12px;border-radius:7px;font-size:12.5px;margin-bottom:12px;border:1px solid}
+.notice.bad{background:color-mix(in srgb,var(--crit) 9%,transparent);border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
+.notice.warn{background:color-mix(in srgb,var(--warn) 10%,transparent);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.notice.good{background:color-mix(in srgb,var(--good) 8%,transparent);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+
+/* block view */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px}
+.kpi{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.kpi .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.kpi .v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.kpi .v small{font-size:11.5px;font-weight:400;color:var(--ink-2)}
+.bytemap{display:grid;grid-template-columns:repeat(64,1fr);gap:1px;margin:4px 0 6px}
+.bytemap i{aspect-ratio:1;border-radius:1px;background:var(--c);opacity:var(--o,1)}
+.bytemap i.free{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
+.bytemap i.hl,.hex span.hl{outline:2px solid var(--ink);outline-offset:-1px;opacity:1}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-2);margin-bottom:12px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend span::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--c)}
+.legend span.free::before{background:transparent;box-shadow:inset 0 0 0 1px var(--line-2)}
+.hdrf{display:grid;grid-template-columns:4fr 2fr 4fr 2fr;gap:4px;margin-bottom:14px}
+.hdrf>div{border:1px solid var(--line);border-top:3px solid var(--hdr);border-radius:6px;padding:6px 8px;background:var(--panel-2);min-width:0}
+.hdrf .k{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;gap:6px}
+.hdrf .b{font-family:var(--mono);font-size:11px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdrf .v{font-family:var(--mono);font-weight:600;white-space:nowrap}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:7px;overflow:hidden;margin-bottom:10px}
+.seg button{border:none;background:none;padding:5px 12px;cursor:pointer;color:var(--ink-2);font-size:12.5px}
+.seg button+button{border-left:1px solid var(--line-2)}
+.seg button.on{background:var(--panel-2);color:var(--ink);font-weight:600}
+.scrollbox{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.scrollbox table.t th{position:sticky;top:0;background:var(--panel);z-index:1}
+.hex{font-family:var(--mono);font-size:12px;line-height:1.75;padding:8px 10px}
+.hex .ln{display:flex;gap:10px}
+.hex .off{color:var(--muted);width:40px;flex:none}
+.hex span{padding:0 2px;border-radius:2px;cursor:default}
+.hex span.h{background:color-mix(in srgb,var(--hdr) 22%,transparent)}
+.hex span.ty{all:unset;padding:0 2px;border-radius:2px;font-weight:700;background:color-mix(in srgb,var(--c) 45%,transparent)}
+.hex span.dt{background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--ink-2)}
+.hex span.vl{background:color-mix(in srgb,var(--c) 28%,transparent)}
+.hex span.bad{background:color-mix(in srgb,var(--crit) 35%,transparent)}
+tr.rh td{background:var(--sel)!important}
+.checks{list-style:none;margin:0;padding:0}
+.checks li{display:grid;grid-template-columns:18px 1fr auto;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.checks li:last-child{border-bottom:none}
+.checks .d{font-family:var(--mono);color:var(--muted);font-size:11.5px}
+
+/* bus timeline */
+.busctl{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.bus svg{display:block;width:100%;font-family:var(--sans)}
+.bus text{fill:var(--muted);font-size:10.5px}
+.bus text.lane{fill:var(--ink-2);font-size:11.5px;font-family:var(--mono)}
+.bus rect.hit{cursor:pointer}
+.bus rect.hit:hover{stroke:var(--ink);stroke-width:1.5}
+
+.tip{position:fixed;z-index:20;pointer-events:none;background:var(--panel);border:1px solid var(--line-2);border-radius:7px;padding:6px 9px;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:320px;display:none;white-space:pre-line}
+.foot{font-size:11.5px;color:var(--muted);margin-top:8px}
+
+@media (max-width: 900px){
+  body{overflow:auto}
+  .top{height:auto;flex-wrap:wrap;padding:8px 16px}
+  .top-stats{display:none}
+  #app{position:static;display:block}
+  .empty{position:static;min-height:70vh}
+  .transport{flex-wrap:wrap}
+  .main{grid-template-columns:1fr}
+  .logpane{height:45vh;border-right:none;border-bottom:1px solid var(--line)}
+  .tabs{overflow-x:auto}
+  .tabbody{overflow:visible}
+  .hdrf{grid-template-columns:1fr 1fr}
+  .bufs{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 12h3l2-6 4 12 2-6h7"/></svg>
+    <b>Collector events</b><span class="file" id="fileName"></span>
+  </div>
+  <div class="top-stats" id="topStats"></div>
+  <div class="top-actions">
+    <label class="btn">Open log…<input type="file" id="fileInput" hidden></label>
+    <button class="btn" id="demoBtn">Demo</button>
+    <button class="ibtn" id="themeBtn" title="Toggle light/dark">◐</button>
+  </div>
+</header>
+
+<div class="empty" id="empty">
+  <div class="card">
+    <h1>Drop a serial log here</h1>
+    <p>Lines starting with <code>EV </code> are parsed per <code>docs/debug-events.md</code> (v1). Everything else is ignored.</p>
+    <div class="actions">
+      <label class="btn primary">Open log file…<input type="file" id="fileInput2" hidden></label>
+      <button class="btn" id="demoBtn2">Load a generated demo</button>
+    </div>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <section class="transport">
+    <div class="tgroup">
+      <button class="ibtn" data-act="first" title="First event (Home)">⏮</button>
+      <button class="ibtn" data-act="prev" title="Previous event (←)">◀</button>
+      <button class="ibtn" data-act="play" id="playBtn" title="Play / pause (Space)">▶</button>
+      <button class="ibtn" data-act="next" title="Next event (→)">▶︎|</button>
+      <button class="ibtn" data-act="last" title="Last event (End)">⏭</button>
+    </div>
+    <select class="sm" id="speed" title="Playback speed (real time)">
+      <option value="0.1">0.1×</option><option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option><option value="2">2×</option><option value="5">5×</option>
+      <option value="20">20×</option><option value="100">100×</option>
+    </select>
+    <div class="scrub" id="scrub" title="Click or drag to seek"><canvas id="mini"></canvas><div class="thumb" id="thumb"></div></div>
+    <div class="tgroup">
+      <select class="sm" id="jumpType" title="Jump to (Shift+← / Shift+→)">
+        <option value="READ">READ</option><option value="DECIDE">DECIDE</option><option value="FLUSH" selected>FLUSH</option>
+        <option value="BLK_CLOSE">BLK_CLOSE</option><option value="REC_DROP">REC_DROP</option><option value="MODE">MODE</option>
+        <option value="CMD">CMD</option><option value="!issue">⚠ issue</option>
+      </select>
+      <button class="ibtn" data-act="jprev" title="Previous of this type">‹</button>
+      <button class="ibtn" data-act="jnext" title="Next of this type">›</button>
+    </div>
+    <div class="clock" id="clock"></div>
+  </section>
+  <section class="main">
+    <aside class="logpane">
+      <div class="filters">
+        <div class="frow">
+          <input class="search" id="q" placeholder="Search raw lines…" spellcheck="false">
+          <select class="sm" id="pidFilter" title="Filter by PID"><option value="">All PIDs</option></select>
+        </div>
+        <div class="cats" id="cats"></div>
+      </div>
+      <div class="logscroll" id="logScroll"><div class="logspacer" id="logSpacer"></div></div>
+    </aside>
+    <section class="detail">
+      <div class="strip" id="strip"></div>
+      <nav class="tabs" id="tabs"></nav>
+      <div class="tabbody" id="tabBody"></div>
+    </section>
+  </section>
+</div>
+<div class="tip" id="tip"></div>
+
+<script src="core.js"></script>
+<script>
+'use strict';
+/* ================= UI state ================= */
+let sel = 0, activeTab = 'inspector', playing = false, clock = 0, speed = 1, busWin = 2000, blkPane = 'records', lastFrame = 0, lastLive = 0;
+let rows = [], rowOf = null, fileLabel = '';
+const filt = {cats:new Set(Object.keys(CATS)), q:'', pid:''};
+const $ = id => document.getElementById(id);
+const pidColor = (segId, p) => { const s = M.segs[segId].slot[p]; return s != null && s < 8 ? `var(--s${s + 1})` : 'var(--muted)'; };
+const pidChip = (segId, p) => p && p !== '-' ? `<span class="pid" style="--c:${pidColor(segId,p)}">${esc(p)}</span>` : '<span class="muted">—</span>';
+
+/* ================= loading ================= */
+function load(text, name){
+  const parsed = parseLog(text);
+  if (!parsed.evs.length){ alert('No "EV " lines found in this file.'); return; }
+  build(parsed);
+  fileLabel = name;
+  stCache = {i:-1, st:null}; playing = false; sel = 0;
+  $('empty').hidden = true; $('app').hidden = false;
+  $('fileName').textContent = name;
+  const pids = [...new Set(M.segs.flatMap(s => s.pids))];
+  $('pidFilter').innerHTML = '<option value="">All PIDs</option>' + pids.map(p => `<option value="${p}">${p} · ${esc(pidName(p))}</option>`).join('');
+  filt.pid = '';
+  renderTopStats(); renderCats(); rebuildRows(); drawMini();
+  const firstRead = M.evs.findIndex(e => e.type === 'READ');
+  select(firstRead >= 0 ? firstRead : 0);
+}
+function renderTopStats(){
+  const issues = M.segs.reduce((s,g) => s + g.mismatches.length + g.blockIssues.length, 0);
+  const p = [];
+  p.push(`<span class="pill"><b>${M.evs.length.toLocaleString()}</b> events</span>`);
+  p.push(`<span class="pill"><b>${M.segs.length}</b> boot${M.segs.length > 1 ? 's' : ''}</span>`);
+  p.push(`<span class="pill"><b>${M.blocks.filter(b => b.flushIdx != null).length}</b> blocks written</span>`);
+  if (M.lost) p.push(`<span class="pill bad">⚠ <b>${M.lost}</b> events lost</span>`);
+  if (issues) p.push(`<span class="pill bad">⚠ <b>${issues}</b> check failures</span>`);
+  if (M.ignored) p.push(`<span class="pill" title="Non-EV lines (free-form logs)">${M.ignored.toLocaleString()} other lines</span>`);
+  $('topStats').innerHTML = p.join('');
+}
+
+/* ================= log list ================= */
+function renderCats(){
+  $('cats').innerHTML = Object.entries(CATS).map(([k,c]) => {
+    const cnt = M.evs.filter(e => catOf(e.type) === k).length;
+    if (!cnt) return '';
+    return `<button class="cat ${filt.cats.has(k) ? 'on' : ''}" data-cat="${k}" style="--c:${c.c}" title="Shift-click: show only this"><span class="dot"></span>${c.label} <span class="muted">${cnt.toLocaleString()}</span></button>`;
+  }).join('');
+}
+function passes(ev){
+  if (!filt.cats.has(catOf(ev.type))) return false;
+  if (filt.pid && ev.f.pid !== filt.pid && !(ev.f.pids && L(ev.f.pids).includes(filt.pid))) return false;
+  if (filt.q && !ev.raw.toLowerCase().includes(filt.q)) return false;
+  return true;
+}
+function rebuildRows(){
+  rows = []; rowOf = new Int32Array(M.evs.length).fill(-1);
+  for (const s of M.segs){
+    rows.push({k:'seg', s:s.id});
+    for (let i = s.start; i <= s.end; i++){
+      const ev = M.evs[i];
+      if (ev.gap) rows.push({k:'gap', i});
+      if (passes(ev)){ rowOf[i] = rows.length; rows.push({k:'ev', i}); }
+    }
+  }
+  $('logSpacer').style.height = rows.length * ROW_H + 'px';
+  renderRows(true);
+}
+function selRow(){ for (let i = sel; i >= 0; i--) if (rowOf[i] >= 0) return rowOf[i]; return -1; }
+let renderedRange = '';
+function renderRows(force){
+  const sc = $('logScroll'), h = sc.clientHeight || 600;
+  const a = Math.max(0, Math.floor(sc.scrollTop / ROW_H) - 10), b = Math.min(rows.length, Math.ceil((sc.scrollTop + h) / ROW_H) + 10);
+  const key = a + ':' + b + ':' + sel;
+  if (!force && key === renderedRange) return;
+  renderedRange = key;
+  const sr = selRow(), out = [];
+  for (let r = a; r < b; r++){
+    const row = rows[r], top = r * ROW_H;
+    if (row.k === 'seg'){
+      const s = M.segs[row.s], fe = M.evs[s.start];
+      out.push(`<div class="row sep" style="top:${top}px">${s.boot != null ? 'Boot #' + s.boot : (s.implicit ? 'Log start (no FORMAT)' : 'Boot')} · ${fe.type === 'FORMAT' ? 'FORMAT v' + esc(fe.f.v) + ' · ' : ''}${(s.end - s.start + 1).toLocaleString()} events · ${fmtD(s.lastT - s.firstT)}</div>`);
+    } else if (row.k === 'gap'){
+      const g = M.evs[row.i].gap;
+      out.push(`<div class="row gap" style="top:${top}px">⚠ ${g.missing} event${g.missing > 1 ? 's' : ''} lost (n ${g.from} → ${g.to}): state after this point may be unreliable</div>`);
+    } else {
+      const ev = M.evs[row.i], c = CATS[catOf(ev.type)];
+      out.push(`<div class="row ${r === sr ? 'sel' : ''}" style="top:${top}px" data-i="${ev.i}"><span class="n">${ev.n}</span><span class="t">${(ev.t/1000).toFixed(3)}</span><span class="ty" style="--c:${c.c}">${ev.type}</span><span class="sum">${summary(ev)}</span></div>`);
+    }
+  }
+  $('logSpacer').innerHTML = out.join('');
+}
+function scrollToSel(){
+  const r = selRow(); if (r < 0) return;
+  const sc = $('logScroll'), y = r * ROW_H, h = sc.clientHeight;
+  if (y < sc.scrollTop + ROW_H || y > sc.scrollTop + h - 2 * ROW_H) sc.scrollTop = y - h / 2;
+}
+function summary(ev){
+  const f = ev.f, s = ev.seg, chip = p => pidChip(s, p);
+  switch (ev.type){
+    case 'READ': {
+      const dv = decode(f.pid, f.val);
+      return `${chip(f.pid)} ${B(f.ok) ? (dv ? `<b>${esc(dv.text)}</b> ${esc(dv.unit)}` : esc(f.val)) : '<span class="bad">✗ no answer</span>'} · ${f.dur} ms${B(f.early) ? ' <span class="tag">early</span>' : ''}`; }
+    case 'DECIDE': {
+      const bad = ev.d.check && !ev.d.check.ok ? ' <span class="bad">⚠ mismatch</span>' : '';
+      return `${esc(f.rule)} · ${L(f.pids).map(chip).join(' ')} · ${f.rule === 'due' ? 'late ' + f.late + ' ms' : 'slack ' + f.slack + ' ms'}${bad}`; }
+    case 'REC': return f.kind === 'gps' ? `GPS · dt ${f.dt} · ${f.len} B` : `${chip(f.pid)} ${esc(f.val)} · dt ${f.dt} · ${f.len} B`;
+    case 'REC_DROP': return `<span class="bad">dropped</span> ${f.kind === 'gps' ? 'GPS' : chip(f.pid)} · ${esc(f.reason)}`;
+    case 'BLK_OPEN': return `buf ${f.buf} opened · t0 ${f.t0}`;
+    case 'BLK_CLOSE': return `buf ${f.buf} · <b>${esc(f.reason)}</b> · ${f.len} B · ${f.recs} recs · ${fmtD(N(f.age))}`;
+    case 'BLK_RELEASE': return `buf ${f.buf} released (empty)`;
+    case 'FLUSH': {
+      const blk = M.blocks[ev.d.block], bad = blk && blk.checks && blk.checks.some(c => !c.ok);
+      return `${B(f.ok) ? '<span class="ok">✓</span>' : '<span class="bad">✗ failed</span>'} seq <b>${f.seq}</b> · buf ${f.buf} · ${f.len} B · ${f.dur} ms${N(f.attempts) > 1 ? ` · ${f.attempts} attempts` : ''}${bad ? ' <span class="bad">⚠</span>' : ''}`; }
+    case 'CVT': return `${chip(f.pid)} p ${f.p} · pmin ${f.pmin} · due ${f.due}`;
+    case 'CONFIG': return `${esc(f.reason)} · Tmax ${f.tmax} · u ${(N(f.u)/10).toFixed(1)}% · ${L(f.pids).length} PIDs`;
+    case 'BOOT': return `boot ${f.boot} · seq_next ${f.seq_next}`;
+    case 'MODE': return B(f.diag) ? 'diagnostic' : (B(f.running) ? 'collecting' : 'stopped');
+    case 'CMD': return `<span class="mono">${esc(f.txt)}</span>`;
+    case 'RESP': return `<span class="mono">${esc(f.txt)}</span> · ${f.dur} ms`;
+    case 'BUS': return `diag · ${f.dur} ms · ${B(f.ok) ? 'ok' : 'no answer'}`;
+    case 'GPS': return `${(N(f.lat)/1e7).toFixed(5)}, ${(N(f.lon)/1e7).toFixed(5)} · ${(N(f.alt)/1000).toFixed(1)} m`;
+    case 'UP_SEND': return `seq ${f.seq} · ${f.len} B`;
+    case 'UP_ACK': return `up to seq ${f.seq}${B(f.advanced) ? '' : ' (stale)'}`;
+    case 'UP_REWIND': return `${esc(f.reason)} · resend from ${f.from}`;
+    case 'TMAX_SAMPLE': return `${chip(f.pid)} ${f.lat} ms${B(f.ok) ? '' : ' ✗'}`;
+    case 'TMAX_DONE': return `suggested Tmax ${f.tmax} ms`;
+    case 'STACK': return `${esc(f.task)} · ${f.free} B free`;
+    case 'HEAP': return `${(N(f.free)/1024).toFixed(1)} KiB free · min ${(N(f.min)/1024).toFixed(1)} KiB`;
+    case 'LOG_DROP': return `<span class="bad">${f.count} events dropped by logger</span>`;
+    default: return esc(Object.entries(f).map(([k,v]) => `${k}=${v}`).join(' '));
+  }
+}
+
+/* ================= minimap scrubber ================= */
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function drawMini(){
+  const cv = $('mini'), r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  cv.width = r.width * dpr; cv.height = r.height * dpr;
+  const g = cv.getContext('2d'); g.scale(dpr, dpr);
+  const W = r.width, H = r.height, n = M.evs.length, x = i => n > 1 ? i / (n - 1) * W : 0;
+  // read density
+  const bins = Math.max(1, Math.floor(W / 2)), dens = new Array(bins).fill(0);
+  for (const s of M.segs) for (const i of s.reads) dens[Math.min(bins - 1, Math.floor(i / n * bins))]++;
+  const mx = Math.max(1, ...dens);
+  g.fillStyle = cssVar('--line-2');
+  dens.forEach((v, k) => { const h = v / mx * (H * 0.45); g.fillRect(k * 2, H - h, 1.5, h); });
+  const mark = (i, col, h, w = 1.5) => { g.fillStyle = col; g.fillRect(x(i) - w/2, 0, w, h); };
+  const acc = cssVar('--s2'), ser = cssVar('--serious'), crit = cssVar('--crit'), ink2 = cssVar('--ink-2');
+  for (const ev of M.evs){
+    if (ev.type === 'FLUSH') mark(ev.i, B(ev.f.ok) ? acc : crit, H * 0.5);
+    else if (ev.type === 'REC_DROP') mark(ev.i, ser, H * 0.8);
+    else if (ev.type === 'MODE' || ev.type === 'CONFIG') mark(ev.i, ink2, H, 1);
+    if (ev.gap || ev.type === 'LOG_DROP') mark(ev.i, crit, H, 2);
+  }
+  for (const s of M.segs) if (s.start > 0) mark(s.start, cssVar('--ink'), H, 2);
+  placeThumb();
+}
+function placeThumb(){ const n = M.evs.length; $('thumb').style.left = (n > 1 ? sel / (n - 1) * 100 : 0) + '%'; }
+
+/* ================= selection & playback ================= */
+function select(i, fromPlay){
+  sel = clamp(i, 0, M.evs.length - 1);
+  if (!fromPlay) clock = M.evs[sel].t;
+  renderRows(); scrollToSel(); renderRows(); placeThumb(); renderClock(); renderStrip(); renderTab();
+}
+function renderClock(){
+  const ev = M.evs[sel];
+  $('clock').innerHTML = `<b>${fmtT(playing ? clock : ev.t)}</b><small>#${ev.n} · ${(sel + 1).toLocaleString()} / ${M.evs.length.toLocaleString()}${M.segs.length > 1 ? ' · boot ' + (M.segs[ev.seg].boot ?? '?') : ''}</small>`;
+}
+function now(){ return playing ? clock : M.evs[sel].t; }
+function togglePlay(){
+  playing = !playing;
+  $('playBtn').textContent = playing ? '❚❚' : '▶';
+  $('playBtn').classList.toggle('on', playing);
+  if (playing){ clock = M.evs[sel].t; lastFrame = performance.now(); requestAnimationFrame(tick); }
+  else renderAll();
+}
+function tick(ts){
+  if (!playing) return;
+  clock += (ts - lastFrame) * speed; lastFrame = ts;
+  const evs = M.evs; let i = sel;
+  const end = M.segs[evs[i].seg].end;
+  while (i < end && evs[i + 1].t <= clock) i++;
+  if (i === end && clock > evs[i].t + 800){
+    if (i + 1 < evs.length){ i++; clock = evs[i].t; } else { togglePlay(); return; }
+  }
+  if (i !== sel) select(i, true);
+  else if (ts - lastLive > 50){ lastLive = ts; renderClock(); renderStrip(); if (activeTab === 'state' || activeTab === 'bus') renderTab(); }
+  requestAnimationFrame(tick);
+}
+function step(d){
+  // step through visible (filtered) events
+  let i = sel + d;
+  while (i >= 0 && i < M.evs.length && rowOf[i] < 0) i += d;
+  if (i >= 0 && i < M.evs.length) select(i);
+}
+function isIssue(ev){
+  return ev.gap || ev.type === 'LOG_DROP' || ev.type === 'REC_DROP' || ev.type === 'SEG_DROP' || (ev.type === 'DECIDE' && ev.d.check && !ev.d.check.ok)
+    || (ev.type === 'FLUSH' && (!B(ev.f.ok) || M.blocks[ev.d.block].checks.some(c => !c.ok)));
+}
+function jump(d){
+  const ty = $('jumpType').value, evs = M.evs;
+  for (let i = sel + d; i >= 0 && i < evs.length; i += d)
+    if (ty === '!issue' ? isIssue(evs[i]) : evs[i].type === ty){ select(i); return; }
+}
+function renderAll(){ renderClock(); renderStrip(); renderTab(); }
+
+/* ================= status strip ================= */
+function renderStrip(){
+  const st = curState(), t = now(), T = timers(st, t), seg = M.segs[st.seg];
+  const chip = (k, v, c) => `<div class="chip"><span class="k">${c ? `<span class="dot" style="--c:${c}"></span>` : ''}${k}</span><span class="v">${v}</span></div>`;
+  const out = [];
+  out.push(chip('Mode', !st.config ? 'no config' : T.diag ? 'Diagnostic' : T.running ? 'Collecting' : 'Stopped',
+    !st.config ? null : T.diag ? 'var(--warn)' : T.running ? 'var(--good)' : 'var(--muted)'));
+  if (T.reading) out.push(chip('Bus', `reading ${T.reading.pids.map(p => pidChip(st.seg,p)).join(' ')} · ${fmtD(T.reading.since)}`, 'var(--accent)'));
+  else if (T.wake) out.push(chip('Next wake-up', T.wake.in <= 0 ? `now · due ${pidChip(st.seg,T.wake.pid)}` : `${fmtD(T.wake.in)} · ${T.wake.rule} ${pidChip(st.seg,T.wake.pid)}`));
+  else out.push(chip('Scheduler', st.config ? 'suspended' : '—'));
+  out.push(chip('Open block', T.block ? `buf ${T.block.buf} · ${T.block.len} B · ⏱ ${fmtD(T.block.left)}` : 'none'));
+  out.push(`<div class="chip"><span class="k">Buffers</span><span class="mini-bufs">${st.bufs.map((b,k) => {
+    const c = b.st === 'fill' ? 'var(--accent)' : b.st === 'write' ? 'var(--warn)' : 'transparent';
+    const w = b.st === 'free' ? 0 : b.len / BLOCK_MAX * 100;
+    return `<span class="mini-buf" title="buf ${k}: ${b.st}"><i style="--c:${c};width:${w}%"></i></span>`;
+  }).join('')}${T.writing.length ? `<span class="v" style="font-size:11.5px">writing ${T.writing.map(w => w.buf).join(',')}</span>` : ''}</span></div>`);
+  if (st.conn || st.up.lastAck != null)
+    out.push(chip('Upload', T.ack ? `ACK timeout ${fmtD(T.ack.left)}` : st.up.lastAck != null ? `acked ≤ seq ${st.up.lastAck}` : (st.conn && st.conn.up ? 'idle' : 'offline'),
+      st.conn ? (st.conn.up ? 'var(--good)' : 'var(--muted)') : null));
+  const lost = seg.gapLost + seg.logDrop;
+  if (lost) out.push(chip('Integrity', `<span class="bad">${lost} events lost</span>`, 'var(--crit)'));
+  $('strip').innerHTML = out.join('');
+}
+
+/* ================= tabs ================= */
+const TABS = [['inspector','Inspector'],['state','State'],['bus','Bus timeline'],['blocks','Blocks'],['stats','Stats'],['system','System']];
+function renderTabs(){
+  const seg = M ? M.segs[M.evs[sel].seg] : null;
+  const issues = seg ? seg.mismatches.length + seg.blockIssues.length + seg.gapLost : 0;
+  $('tabs').innerHTML = TABS.map(([k,l]) => `<button class="tab ${k === activeTab ? 'on' : ''}" data-tab="${k}">${l}${k === 'stats' && issues ? `<span class="cnt">${issues}</span>` : ''}</button>`).join('');
+}
+let tabKey = '';
+function renderTab(){
+  renderTabs();
+  const ev = M.evs[sel];
+  const key = activeTab + ':' + sel + ':' + (activeTab === 'state' || activeTab === 'bus' ? Math.round(now()) + ':' + busWin : '') + ':' + blkPane;
+  if (key === tabKey) return;
+  tabKey = key;
+  const body = $('tabBody');
+  const keepScroll = activeTab === 'state' || activeTab === 'bus' || activeTab === 'stats' || activeTab === 'system';
+  const sy = body.scrollTop;
+  switch (activeTab){
+    case 'inspector': body.innerHTML = renderInspector(ev); break;
+    case 'state': body.innerHTML = renderState(); drawBufCanvases(); break;
+    case 'bus': body.innerHTML = renderBus(); break;
+    case 'blocks': body.innerHTML = renderBlocksTab(); break;
+    case 'stats': body.innerHTML = renderStats(); break;
+    case 'system': body.innerHTML = renderSystem(); break;
+  }
+  if (keepScroll) body.scrollTop = sy;
+}
+
+/* ---------- inspector ---------- */
+function renderInspector(ev){
+  const c = CATS[catOf(ev.type)];
+  let h = `<div class="ihead"><span class="ty" style="--c:${c.c}">${ev.type}</span><span class="meta">#${ev.n} · ${fmtT(ev.t)}</span><span class="muted">line ${ev.line}</span>
+    <span class="nav"><button class="btn" data-same="-1" title="Previous ${ev.type}">‹ prev ${ev.type}</button><button class="btn" data-same="1" title="Next ${ev.type}">next ›</button></span></div>`;
+  if (ev.gap) h += `<div class="notice bad">⚠ ${ev.gap.missing} event(s) lost just before this one (n ${ev.gap.from} → ${ev.gap.to}). Reconstructed state may be unreliable until the next CVT snapshot.</div>`;
+  const fn = INSPECT[ev.type];
+  h += fn ? fn(ev) : inspGeneric(ev);
+  h += `<div class="card"><h3>Raw line</h3><div class="raw">${esc(ev.raw)}</div></div>`;
+  return h;
+}
+function fieldTable(ev){
+  return `<dl class="kv">${Object.entries(ev.f).map(([k,v]) => `<dt>${esc(k)}</dt><dd>${k === 'pid' ? pidChip(ev.seg, v) : k === 'pids' ? L(v).map(p => pidChip(ev.seg,p)).join(' ') : esc(v.length > 120 ? v.slice(0,120) + '…' : v)}</dd>`).join('')}</dl>`;
+}
+const inspGeneric = ev => `<div class="card"><h3>Fields</h3>${fieldTable(ev)}</div>`;
+const INSPECT = {
+  READ(ev){
+    const f = ev.f, d = ev.d, s = ev.seg, ok = B(f.ok), early = B(f.early), dur = N(f.dur), start = N(f.start);
+    const tmax = d.tmax || dur || 1, scale = Math.max(tmax, dur) * 1.15, dv = decode(f.pid, f.val), col = pidColor(s, f.pid);
+    const b = d.before, a = d.after;
+    let h = `<div class="card"><div class="hero">${pidChip(s, f.pid)}<span class="ink2">${esc(pidName(f.pid))}</span>
+      <span class="status" style="--c:${ok ? 'var(--good)' : 'var(--crit)'}">${ok ? 'answered' : 'no answer'}</span>
+      <span class="status" style="--c:${early ? 'var(--s3)' : 'var(--s1)'}">${early ? 'early read' : 'due read'}</span></div>
+      <div class="hero"><span class="big">${ok ? (dv ? esc(dv.text) + `<span class="unit">${esc(dv.unit)}</span>` : esc(f.val)) : '—'}</span>${ok ? `<span class="mono muted">raw ${esc(f.val)}</span>` : ''}</div>
+      <h3 style="margin-top:14px">Bus occupancy <span class="r mono">${dur} ms of Tmax ${d.tmax ?? '?'} ms</span></h3>
+      <div class="tl" style="margin-top:20px"><div class="tl-track"><i class="tl-bar ${ok ? '' : 'bad'}" style="--c:${col};left:0;width:${dur/scale*100}%"></i>
+        <b class="tl-mark" style="left:${tmax/scale*100}%"><span>Tmax</span></b></div>
+        <div class="tl-lbl"><span>request ${fmtT(start)}</span><span>answer ${fmtT(ev.t)}</span></div></div>`;
+    if (d.decide != null){
+      const de = M.evs[d.decide];
+      h += `<div class="foot">Decided by ${evLink(de.i)} · rule <b>${esc(de.f.rule)}</b> · ${de.f.rule === 'due' ? `late ${de.f.late} ms` : `slack ${de.f.slack} ms`} · waited ${start - de.t} ms before request</div>`;
+    }
+    h += `</div>`;
+    const row = (label, bv, av, fmt = v => v) => {
+      const changed = bv !== av;
+      return `<tr class="${changed ? 'hi' : ''}"><td class="muted">${label}</td><td class="mono">${b ? fmt(bv) : '—'}</td><td class="mono">${fmt(av)}</td></tr>`;
+    };
+    const dvb = b && decode(f.pid, b.val), dva = decode(f.pid, a.val);
+    h += `<div class="card"><h3>Effect on the table</h3><table class="t"><tr><th></th><th>before</th><th>after</th></tr>
+      ${row('value', b ? b.val : null, a.val, v => v ? esc(v) : '—')}
+      <tr class="${(dvb && dvb.text) !== (dva && dva.text) ? 'hi' : ''}"><td class="muted">decoded</td><td class="mono">${dvb ? esc(dvb.text + ' ' + dvb.unit) : '—'}</td><td class="mono">${dva ? esc(dva.text + ' ' + dva.unit) : '—'}</td></tr>
+      ${row('last', b ? b.last : null, a.last, fmtT)}
+      ${row('due', b ? b.due : null, a.due, fmtT)}
+      <tr><td class="muted">next due in</td><td></td><td class="mono">${fmtD(a.due - ev.t)} <span class="muted">(${early ? 'now + p' : 'due + p'})</span></td></tr>
+      ${row('reads (ok / total)', b ? `${b.ok} / ${b.reads}` : null, `${a.ok} / ${a.reads}`)}
+    </table>`;
+    if (d.interval != null){
+      const bound = a.p != null && d.tmax ? a.p + d.tmax * (M.segs[s].pids.length - 1) : null;
+      h += `<div class="foot">Interval since previous ${f.pid} request: <b class="mono">${d.interval} ms</b> · p ${a.p} · pmin ${a.pmin}${d.interval > (a.p ?? Infinity) ? ' · <span class="warn">longer than p</span>' : ''}${bound && d.interval > bound ? ' · <span class="bad">exceeds guaranteed bound ' + bound + ' ms</span>' : ''}</div>`;
+    }
+    h += `</div>`;
+    h += `<div class="card"><h3>Storage</h3>${d.rec != null ? `Stored as ${evLink(d.rec)} in ${blockRef(M.evs[d.rec].d.block)}`
+      : d.drop != null ? `<span class="bad">Dropped</span>: ${evLink(d.drop)} (no free buffer)` : ok ? '<span class="warn">No matching REC found</span>' : '<span class="muted">Nothing stored: no answer.</span>'}</div>`;
+    return h;
+  },
+  DECIDE(ev){
+    const f = ev.f, d = ev.d, c = d.check, s = ev.seg;
+    let h = `<div class="card"><div class="hero"><span class="big">${f.rule === 'due' ? 'Due read' : 'Early read'}</span>${L(f.pids).map(p => pidChip(s,p)).join(' ')}
+      <span class="mono ink2">${f.rule === 'due' ? `late ${f.late} ms` : `slack ${f.slack} ms`}</span></div>
+      <div class="foot">${f.rule === 'due' ? 'Rule 1: a PID was due; the most overdue one is read.' : 'Rule 2: nothing due and the earliest due is more than Tmax away, so the eligible PID with the earliest due is read early.'}</div></div>`;
+    if (c) h += `<div class="notice ${c.ok ? 'good' : 'bad'}">${c.ok ? '✓ Matches the rules re-run on the reconstructed table' : '⚠ Mismatch: ' + esc(c.msg) + ` (expected: ${esc(c.expected)})`}</div>`;
+    if (c) h += `<div class="card"><h3>Table at decision time</h3><table class="t"><tr><th>PID</th><th class="num">due in</th><th class="num">since last</th><th class="num">pmin</th><th>status</th></tr>
+      ${c.cand.map(r => `<tr class="${L(f.pids).includes(r.pid) ? 'hi' : ''}"><td>${pidChip(s,r.pid)}</td><td class="num mono">${r.dueIn <= 0 ? `<span class="warn">${r.dueIn}</span>` : r.dueIn} ms</td><td class="num mono">${r.since ?? '—'} ms</td><td class="num mono">${r.pmin}</td><td>${r.isDue ? '<span class="status" style="--c:var(--serious)">due</span>' : r.elig ? '<span class="status" style="--c:var(--s3)">eligible</span>' : '<span class="status" style="--c:var(--line-2)">waiting</span>'}</td></tr>`).join('')}
+      </table></div>`;
+    h += `<div class="card"><h3>Resulting reads</h3>${d.reads.length ? d.reads.map(i => evLink(i, `#${M.evs[i].n} READ ${M.evs[i].f.pid}`)).join(' · ') : '<span class="muted">none (lost or log ended)</span>'}</div>`;
+    return h;
+  },
+  REC(ev){
+    const f = ev.f, d = ev.d, s = ev.seg;
+    let h = `<div class="card"><div class="hero">${f.kind === 'gps' ? '<span class="big">GPS record</span>' : `${pidChip(s,f.pid)}<span class="big">${(() => { const v = decode(f.pid, f.val); return v ? esc(v.text) + `<span class="unit">${esc(v.unit)}</span>` : esc(f.val); })()}</span>`}</div>
+      <dl class="kv"><dt>block</dt><dd>${d.block != null ? blockRef(d.block) : '—'}</dd><dt>record #</dt><dd>${d.recNo ?? '—'}</dd><dt>dt</dt><dd>${f.dt} ms (t0 + dt = ${d.block != null ? M.blocks[d.block].t0 + N(f.dt) : '?'})</dd>
+      <dt>size</dt><dd>${f.kind === 'gps' ? 15 : 5} B → block now ${f.len} / ${BLOCK_MAX} B</dd>
+      ${f.kind === 'gps' ? `<dt>position</dt><dd>${(N(f.lat)/1e7).toFixed(6)}, ${(N(f.lon)/1e7).toFixed(6)} · alt ${(N(f.alt)/1000).toFixed(1)} m</dd>` : ''}
+      <dt>source</dt><dd>${d.read != null ? evLink(d.read) : d.gps != null ? evLink(d.gps) : '<span class="warn">no matching READ</span>'}</dd></dl>
+      <div class="bar" style="margin-top:10px"><i style="width:${N(f.len)/BLOCK_MAX*100}%"></i></div></div>`;
+    if (d.block != null) h += blockView(M.blocks[d.block], ev.i);
+    return h;
+  },
+  BLK_OPEN(ev){ return M.blocks[ev.d.block] ? blockView(M.blocks[ev.d.block], ev.i) : inspGeneric(ev); },
+  BLK_CLOSE(ev){
+    const f = ev.f, blk = ev.d.block != null ? M.blocks[ev.d.block] : null;
+    let h = `<div class="card"><div class="hero"><span class="big">Block closed</span><span class="status" style="--c:${REASON_C[f.reason] || 'var(--muted)'}">${esc(f.reason)}</span></div>
+      <div class="foot">${({full:'The next record did not fit in 1024 bytes.', deadline:'10 s elapsed since the block opened.', config:'Closed by a configuration change.', mode:'Closed by a mode change.', stop:'Closed by a restart.'})[f.reason] || ''}
+      ${blk && blk.flushIdx != null ? ` Written by ${evLink(blk.flushIdx)} ${fmtD(M.evs[blk.flushIdx].t - ev.t)} later.` : ' Not written yet.'}</div></div>`;
+    return h + (blk ? blockView(blk, ev.i) : inspGeneric(ev));
+  },
+  BLK_RELEASE(ev){ return `<div class="notice warn">An empty block was closed; its buffer went back to the pool without a flash write.</div>` + inspGeneric(ev); },
+  FLUSH(ev){ return blockView(M.blocks[ev.d.block], ev.i); },
+  CMD(ev){ return cmdCard(ev.i, ev.d.resp); },
+  RESP(ev){ return cmdCard(ev.d.cmd, ev.i); },
+  CONFIG(ev){
+    const f = ev.f, s = ev.seg, st = stateAt(Math.min(M.segs[s].end, ev.i + L(f.pids).length));
+    return `<div class="card"><h3>Configuration (${esc(f.reason)})</h3><dl class="kv"><dt>protocol</dt><dd>${f.proto} · ${PROTO[f.proto] || '?'}</dd><dt>Tmax</dt><dd>${f.tmax} ms</dd>
+      <dt>planned bus use</dt><dd>${(N(f.u)/10).toFixed(1)} %</dd></dl><div class="bar" style="margin:10px 0 14px"><i style="width:${N(f.u)/10}%"></i></div>
+      <table class="t"><tr><th>PID</th><th>name</th><th class="num">p</th><th class="num">pmin</th><th class="num">share of bus</th></tr>
+      ${L(f.pids).map(p => { const r = st.rows[p]; return `<tr><td>${pidChip(s,p)}</td><td>${esc(pidName(p))}</td><td class="num mono">${r ? r.p : '?'}</td><td class="num mono">${r ? r.pmin : '?'}</td><td class="num mono">${r ? (N(f.tmax)/r.p*100).toFixed(1) + ' %' : ''}</td></tr>`; }).join('')}</table></div>`;
+  },
+};
+function cmdCard(ci, ri){
+  const c = ci != null ? M.evs[ci] : null, r = ri != null ? M.evs[ri] : null;
+  const fmtTxt = t => esc(t).replace(/\\r/g, '<span class="muted">↵</span>').replace(/\\n/g, '<span class="muted">⏎</span>');
+  return `<div class="card"><h3>App command</h3><dl class="kv"><dt>command</dt><dd>${c ? fmtTxt(c.f.txt) + ' · ' + evLink(c.i) : '—'}</dd>
+    <dt>response</dt><dd>${r ? fmtTxt(r.f.txt) + ' · ' + evLink(r.i) : '<span class="muted">none</span>'}</dd><dt>processing</dt><dd>${r ? r.f.dur + ' ms' : '—'}</dd></dl></div>`;
+}
+function blockRef(id){
+  const b = M.blocks[id]; if (!b) return '—';
+  const fl = b.flushIdx != null ? M.evs[b.flushIdx] : null;
+  return `buf ${b.buf} block${fl ? ' · seq ' + fl.f.seq : ''} (${evLink(b.openIdx ?? b.flushIdx, 'opened ' + fmtT(b.t0))})`;
+}
+
+/* ---------- block view ---------- */
+// Layout of a block's records: from the FLUSH hex when written, else from REC events up to `upto`.
+function blockLayout(blk, upto){
+  const evs = M.evs;
+  if (blk.dec && (upto == null || upto >= blk.flushIdx)) return {recs:blk.dec.recs, len:blk.dec.hdr ? blk.dec.hdr.len : blk.dec.bytes.length, fromHex:true};
+  const recs = []; let off = HDR;
+  for (const i of blk.recIdxs){
+    if (upto != null && i > upto) break;
+    const f = evs[i].f, size = f.kind === 'gps' ? 15 : 5;
+    recs.push({k:recs.length, off, size, dt:N(f.dt), kind:f.kind, pid:f.kind === 'pid' ? f.pid : null, val:f.val, lat:N(f.lat), lon:N(f.lon), alt:N(f.alt), ev:i, match:true});
+    off += size;
+  }
+  return {recs, len:off, fromHex:false};
+}
+function recColor(seg, r){ return r.kind === 'gps' ? 'var(--gps)' : pidColor(seg, r.pid); }
+function blockView(blk, at){
+  const evs = M.evs, seg = blk.seg;
+  const fl = blk.flushIdx != null && at >= blk.flushIdx ? evs[blk.flushIdx] : null;
+  const cl = blk.closeIdx != null && at >= blk.closeIdx ? evs[blk.closeIdx] : null;
+  const lay = blockLayout(blk, at), recs = lay.recs;
+  const nGps = recs.filter(r => r.kind === 'gps').length;
+  const status = fl ? (B(fl.f.ok) ? 'written' : 'write failed') : cl ? (blk.released ? 'released' : 'waiting for flash') : 'filling';
+  const sc = {written:'var(--good)', 'write failed':'var(--crit)', released:'var(--muted)', 'waiting for flash':'var(--warn)', filling:'var(--accent)'}[status];
+  const age = cl ? N(cl.f.age) : (evs[at].t - blk.t0);
+  const queue = fl && cl ? (fl.t - N(fl.f.dur)) - cl.t : null;
+  const failed = blk.checks ? blk.checks.filter(c => !c.ok).length : 0;
+  let h = `<div class="card blk" data-blk="${blk.id}"><h3>Block ${fl ? 'seq ' + esc(fl.f.seq) : ''} · buf ${blk.buf}
+    <span class="status" style="--c:${sc}">${status}</span>${blk.reason ? `<span class="status" style="--c:${REASON_C[blk.reason] || 'var(--muted)'}">${esc(blk.reason)}</span>` : ''}
+    <span class="r">${blk.openIdx != null ? evLink(blk.openIdx, 'open') : ''}${cl ? ' · ' + evLink(cl.i, 'close') : ''}${fl ? ' · ' + evLink(fl.i, 'flush') : ''}</span></h3>
+    <div class="kpis">
+      <div class="kpi"><div class="k">Size</div><div class="v">${lay.len} <small>/ ${BLOCK_MAX} B</small></div><div class="bar" style="margin-top:5px"><i style="width:${lay.len/BLOCK_MAX*100}%"></i></div></div>
+      <div class="kpi"><div class="k">Records</div><div class="v">${recs.length} <small>${recs.length - nGps} PID · ${nGps} GPS</small></div></div>
+      <div class="kpi"><div class="k">Age</div><div class="v">${fmtD(age)}</div></div>
+      <div class="kpi"><div class="k">Fill rate</div><div class="v">${age > 0 ? Math.round((lay.len - HDR) / age * 1000) : '—'} <small>B/s</small></div></div>
+      ${fl ? `<div class="kpi"><div class="k">Queue wait</div><div class="v">${fmtD(queue)}</div></div>
+      <div class="kpi"><div class="k">Write</div><div class="v">${fl.f.dur} <small>ms · ${fl.f.attempts} att.</small></div></div>` : ''}
+    </div>`;
+  if (fl && !B(fl.f.ok)) h += `<div class="notice bad">Both write attempts failed: the block was discarded and seq ${esc(fl.f.seq)} was not consumed (the next FLUSH reuses it).</div>`;
+  // byte map
+  const cells = [], byteRec = new Array(Math.max(BLOCK_MAX, lay.len)).fill(null);
+  for (const r of recs) for (let b = r.off; b < r.off + r.size; b++) byteRec[b] = r;
+  for (let b = 0; b < byteRec.length; b++){
+    if (b < HDR) cells.push(`<i style="--c:var(--hdr)" data-rk="h" data-b="${b}"></i>`);
+    else if (byteRec[b]){ const r = byteRec[b]; cells.push(`<i style="--c:${recColor(seg,r)};--o:${r.k % 2 ? .62 : 1}" data-rk="${r.k}" data-b="${b}"></i>`); }
+    else cells.push(`<i class="free" data-b="${b}"></i>`);
+  }
+  const usedPids = [...new Set(recs.filter(r => r.kind === 'pid').map(r => r.pid))];
+  h += `<div class="bytemap">${cells.join('')}</div>
+    <div class="legend"><span style="--c:var(--hdr)">header 12 B</span>${usedPids.map(p => `<span style="--c:${pidColor(seg,p)}">${p} ${esc(pidName(p))}</span>`).join('')}${nGps ? '<span style="--c:var(--gps)">GPS 15 B</span>' : ''}<span class="free">free ${Math.max(0, BLOCK_MAX - lay.len)} B</span><span class="muted" style="margin-left:auto">1 cell = 1 byte · alternating shade = record boundary</span></div>`;
+  // header
+  const hd = blk.dec && blk.dec.hdr && fl ? blk.dec.hdr : null, by = blk.dec ? blk.dec.bytes : [];
+  const hb = (o,n) => hd ? by.slice(o,o+n).map(x => hx(x,1)).join(' ') : '—';
+  h += `<div class="hdrf">
+      <div><div class="k"><span>seq · u32</span><span>@0</span></div><div class="v">${hd ? hd.seq : '<span class="muted">assigned at write</span>'}</div><div class="b">${hb(0,4)}</div></div>
+      <div><div class="k"><span>boot · u16</span><span>@4</span></div><div class="v">${hd ? hd.boot : '—'}</div><div class="b">${hb(4,2)}</div></div>
+      <div><div class="k"><span>t_ms_start · u32</span><span>@6</span></div><div class="v">${hd ? hd.t0 : blk.t0}${hd && blk.openIdx != null ? (hd.t0 === blk.t0 ? ' <span class="ok">✓</span>' : ' <span class="bad">≠ ' + blk.t0 + '</span>') : ''}</div><div class="b">${hb(6,4)}</div></div>
+      <div><div class="k"><span>length · u16</span><span>@10</span></div><div class="v">${hd ? hd.len : lay.len}</div><div class="b">${hb(10,2)}</div></div>
+    </div>`;
+  const panes = [['records','Records'],['hex','Hex'],['checks', blk.checks ? `Checks ${blk.checks.length - failed}/${blk.checks.length}` : 'Checks']];
+  h += `<div class="seg">${panes.map(([k,l]) => `<button class="${blkPane === k ? 'on' : ''}" data-pane="${k}">${l}${k === 'checks' && failed ? ' ⚠' : ''}</button>`).join('')}</div>`;
+  if (blkPane === 'records'){
+    h += `<div class="scrollbox"><table class="t"><tr><th class="num">#</th><th class="num">offset</th><th>type</th><th class="num">dt</th><th class="num">t</th><th>raw</th><th>value</th><th></th></tr>
+      ${recs.map(r => {
+        const dv = r.kind === 'pid' ? decode(r.pid, r.val) : null;
+        return `<tr class="click" data-rk="${r.k}" ${r.ev != null ? `data-i="${r.ev}"` : ''}><td class="num mono muted">${r.k}</td><td class="num mono muted">${r.off}</td>
+          <td>${r.kind === 'gps' ? '<span class="pid" style="--c:var(--gps)">GPS</span>' : pidChip(seg, r.pid)}</td><td class="num mono">${r.dt}</td><td class="num mono">${blk.t0 != null ? ((blk.t0 + r.dt)/1000).toFixed(3) : ''}</td>
+          <td class="mono">${r.kind === 'gps' ? '' : esc(r.val)}</td>
+          <td class="mono">${r.kind === 'gps' ? `${(r.lat/1e7).toFixed(5)}, ${(r.lon/1e7).toFixed(5)}, ${(r.alt/1000).toFixed(0)} m` : dv ? esc(dv.text + ' ' + dv.unit) : ''}</td>
+          <td>${lay.fromHex ? (r.match ? '<span class="ok" title="matches REC event">✓</span>' : '<span class="bad" title="does not match REC event">✗</span>') : ''}</td></tr>`;
+      }).join('')}</table></div><div class="foot">Hover a row to locate its bytes; click to jump to its REC event.</div>`;
+  } else if (blkPane === 'hex'){
+    if (!fl) h += `<div class="muted">The exact bytes are only known once the block is written (FLUSH).</div>`;
+    else {
+      const lines = [];
+      for (let o = 0; o < by.length; o += 16){
+        const sp = [];
+        for (let b = o; b < Math.min(o + 16, by.length); b++){
+          const r = byteRec[b], v = hx(by[b],1);
+          if (b < HDR) sp.push(`<span class="h" data-rk="h" data-b="${b}">${v}</span>`);
+          else if (!r) sp.push(`<span class="bad" data-b="${b}">${v}</span>`);
+          else { const p = b - r.off, cls = p === 0 ? 'ty' : p < 3 ? 'dt' : 'vl'; sp.push(`<span class="${cls}" style="--c:${recColor(seg,r)}" data-rk="${r.k}" data-b="${b}">${v}</span>`); }
+        }
+        lines.push(`<div class="ln"><span class="off">${o.toString(16).padStart(4,'0')}</span><div>${sp.join(' ')}</div></div>`);
+      }
+      h += `<div class="scrollbox hex">${lines.join('')}</div><div class="legend" style="margin-top:8px"><span style="--c:var(--hdr)">header</span><span style="--c:var(--ink-2)">bold = record type</span><span style="--c:var(--line-2)">light = dt (u16 LE)</span><span style="--c:var(--ink-2)">medium = value</span></div>`;
+    }
+  } else {
+    h += blk.checks ? `<ul class="checks">${blk.checks.map(c => `<li><span class="${c.ok ? 'ok' : 'bad'}">${c.ok ? '✓' : '✗'}</span><span>${esc(c.label)}</span><span class="d">${esc(c.detail || '')}</span></li>`).join('')}</ul>`
+      : `<div class="muted">Checks run once the block is written (FLUSH).</div>`;
+  }
+  h += `</div>`;
+  layouts.set(String(blk.id), {byteRec, seg, blk});
+  return h;
+}
+const layouts = new Map();
+
+/* ---------- state tab ---------- */
+function renderState(){
+  const ev = M.evs[sel], st = curState(), t = now(), T = timers(st, t), s = st.seg;
+  const hiPids = ev.type === 'READ' ? [ev.f.pid] : ev.type === 'DECIDE' ? L(ev.f.pids) : [];
+  const timer = (l, v, frac, sub, c) => `<div class="timer"><span class="l">${l}</span><span class="v">${v}</span>${frac != null ? `<div class="bar" style="--c:${c || 'var(--accent)'}"><i style="width:${clamp(frac,0,1)*100}%"></i></div>` : ''}${sub ? `<span class="s">${sub}</span>` : ''}</div>`;
+  let tm = '';
+  if (!st.config) tm += timer('Scheduler', 'no configuration yet');
+  else if (T.reading) tm += timer(`Reading ${T.reading.pids.map(p => pidChip(s,p)).join(' ')}`, `${fmtD(T.reading.since)} / ${T.reading.tmax} ms`, T.reading.since / T.reading.tmax, `answer deadline in ${fmtD(T.reading.left)}`);
+  else if (!T.running) tm += timer('Scheduler', T.diag ? 'suspended (diagnostic)' : 'stopped');
+  else if (T.wake) tm += timer('Next collect wake-up', T.wake.in <= 0 ? 'now' : fmtD(T.wake.in), null, `${T.wake.rule === 'due' ? 'due read' : 'early read'} of ${pidChip(s,T.wake.pid)}`);
+  if (T.earliest) tm += timer('Earliest due', T.earliest.in < 0 ? `<span class="warn">overdue ${fmtD(-T.earliest.in)}</span>` : fmtD(T.earliest.in), null, pidChip(s, T.earliest.pid));
+  tm += T.block ? timer(`Block deadline · buf ${T.block.buf}`, `closes in ${fmtD(T.block.left)}`, T.block.age / DEADLINE, `open for ${fmtD(T.block.age)} of 10 s`, 'var(--s3)')
+    + timer('Block fill', `${T.block.len} / ${BLOCK_MAX} B`, T.block.len / BLOCK_MAX, `${T.block.recs} records · ${BLOCK_MAX - T.block.len} B free`)
+    : timer('Block deadline', 'no open block');
+  tm += timer('Flash write queue', T.writing.length ? T.writing.map(w => `buf ${w.buf} · ${fmtD(w.wait)}`).join(', ') : 'idle', null, T.writing.length ? 'closed block(s) waiting for / being written to flash' : '');
+  if (T.ack) tm += timer('Upload ACK timeout', fmtD(T.ack.left), 1 - T.ack.left / ACK_TIMEOUT, `${T.ack.n} block(s) in flight, oldest seq ${T.ack.seq}`, T.ack.left < 1000 ? 'var(--serious)' : 'var(--accent)');
+  if (T.health) tm += timer('Next health report', fmtD(T.health.left), 1 - T.health.left / HEALTH_EVERY, null, 'var(--muted)');
+
+  const bufs = st.bufs.map((b,k) => {
+    const label = {free:'free', fill:'filling', write:'writing'}[b.st];
+    const c = {free:'var(--line-2)', fill:'var(--accent)', write:'var(--warn)'}[b.st];
+    let det = '';
+    if (b.st === 'fill') det = `${b.len} B · ${b.recs} recs · ${fmtD(t - b.t0)}`;
+    else if (b.st === 'write') det = `${esc(b.reason)} · ${b.len} B · waiting ${fmtD(t - b.closeT)}`;
+    else det = b.lastSeq != null ? `last: seq ${b.lastSeq} ${b.lastOk ? '✓' : '✗'}` : '—';
+    const blkId = b.openI != null ? M.evs[b.openI].d.block : null;
+    return `<div class="buf ${b.st}"><div class="bh"><b>buf ${k}</b><span class="status" style="--c:${c}">${label}</span></div>
+      <canvas width="64" height="16" data-blk="${blkId ?? ''}" data-st="${b.st}"></canvas><div class="bd">${det}</div></div>`;
+  }).join('');
+
+  const rows = st.order.map(p => st.rows[p]).filter(Boolean);
+  const before = ev.type === 'READ' ? ev.d.before : null;
+  const vals = rows.map(r => {
+    const dv = decode(r.pid, r.val), hi = hiPids.includes(r.pid);
+    const old = hi && before && before.val !== r.val ? `<span class="chg">${esc(before.val ?? '—')}</span>` : '';
+    return `<tr class="${hi ? 'hi' : ''}"><td>${pidChip(s,r.pid)}</td><td>${esc(pidName(r.pid))}</td><td class="mono">${old}${esc(r.val ?? '—')}</td>
+      <td class="num mono"><b>${dv ? esc(dv.text) : '—'}</b> <span class="muted">${dv ? esc(dv.unit) : ''}</span></td>
+      <td class="num mono">${r.valT != null ? fmtD(t - r.valT) : '—'}</td><td class="num mono">${r.ok}/${r.reads}${r.early ? ` <span class="muted">(${r.early} early)</span>` : ''}</td></tr>`;
+  }).join('');
+
+  const sched = rows.map(r => {
+    const hi = hiPids.includes(r.pid), reading = T.reading && T.reading.pids.includes(r.pid);
+    const span = Math.max(1, r.due - (r.last ?? r.due)), pos = r.last != null ? (t - r.last) / span : 0;
+    const over = t > r.due, pm = r.last != null ? r.pmin / span : 0;
+    const status = reading ? ['reading','var(--accent)'] : over || t === r.due ? ['due','var(--serious)'] : r.last != null && t - r.last >= r.pmin ? ['eligible','var(--s3)'] : ['waiting','var(--line-2)'];
+    const ch = (k, fmt) => hi && before && before[k] !== r[k] ? `<span class="chg">${fmt(before[k])}</span>` : '';
+    return `<tr class="${hi ? 'hi' : ''}"><td>${pidChip(s,r.pid)}</td><td class="num mono">${r.p}</td><td class="num mono">${r.pmin}</td>
+      <td class="num mono">${ch('last', v => v ?? '—')}${r.last ?? '—'}</td><td class="num mono">${ch('due', v => v ?? '—')}${r.due}</td>
+      <td class="num mono">${over ? `<span class="warn">−${fmtD(t - r.due)}</span>` : fmtD(r.due - t)}</td>
+      <td><div class="phase" title="last → due; tick = last + pmin"><div class="f ${over ? 'over' : ''}" style="--c:${pidColor(s,r.pid)};width:${clamp(pos,0,1)*100}%"></div><b class="m" style="left:${clamp(pm,0,1)*100}%"></b></div></td>
+      <td><span class="status" style="--c:${status[1]}">${status[0]}</span></td></tr>`;
+  }).join('');
+
+  return `<div class="grid2" style="margin-bottom:14px"><div class="card"><h3>Timers <span class="r mono">t = ${fmtT(t)}</span></h3>${tm}</div>
+    <div class="card"><h3>Double buffer</h3><div class="bufs">${bufs}</div><div class="foot">Each cell is one byte of the 1024-byte block; colors = PID of the record.</div></div></div>
+    <div class="stack">
+    <div class="card"><h3>Current values ${ev.type === 'READ' ? `<span class="r">highlighted: effect of ${evLink(ev.i)}</span>` : ''}</h3>
+      ${rows.length ? `<table class="t"><tr><th>PID</th><th>name</th><th>raw</th><th class="num">value</th><th class="num">age</th><th class="num">ok / reads</th></tr>${vals}</table>` : '<span class="muted">No table yet (waiting for CONFIG / CVT).</span>'}</div>
+    <div class="card"><h3>Schedule ${st.config ? `<span class="r mono">Tmax ${st.config.tmax} ms · planned bus ${(st.config.u/10).toFixed(1)} %</span>` : ''}</h3>
+      ${rows.length ? `<table class="t"><tr><th>PID</th><th class="num">p</th><th class="num">pmin</th><th class="num">last</th><th class="num">due</th><th class="num">due in</th><th>last → due</th><th>status</th></tr>${sched}</table>` : '<span class="muted">—</span>'}</div>
+    </div>`;
+}
+function drawBufCanvases(){
+  const st = curState();
+  document.querySelectorAll('.buf canvas').forEach(cv => {
+    const g = cv.getContext('2d'); g.clearRect(0,0,64,16);
+    g.fillStyle = cssVar('--line'); g.fillRect(0,0,64,16);
+    if (cv.dataset.st === 'free' || cv.dataset.blk === '') return;
+    const blk = M.blocks[+cv.dataset.blk], seg = blk.seg;
+    const lay = blockLayout(blk, sel);
+    const colors = {};
+    const col = r => { const k = r.kind === 'gps' ? '--gps' : (() => { const sl = M.segs[seg].slot[r.pid]; return sl != null && sl < 8 ? `--s${sl+1}` : '--muted'; })(); return colors[k] ??= cssVar(k); };
+    g.fillStyle = cssVar('--hdr'); for (let b = 0; b < HDR; b++) g.fillRect(b % 64, Math.floor(b/64), 1, 1);
+    for (const r of lay.recs){
+      g.fillStyle = col(r); g.globalAlpha = r.k % 2 ? .62 : 1;
+      for (let b = r.off; b < r.off + r.size && b < 1024; b++) g.fillRect(b % 64, Math.floor(b/64), 1, 1);
+    }
+    g.globalAlpha = 1;
+  });
+}
+
+/* ---------- bus timeline ---------- */
+function renderBus(){
+  const ev = M.evs[sel], seg = M.segs[ev.seg], st = curState(), t = now();
+  const W = Math.max(480, $('tabBody').clientWidth - 34), LBL = 74, PW = W - LBL - 8;
+  const t0 = t - busWin * 0.7, t1 = t0 + busWin, x = v => LBL + (v - t0) / busWin * PW;
+  const lanes = [];
+  const order = st.order.length ? [...st.order, ...seg.pids.filter(p => !st.order.includes(p))] : seg.pids;
+  order.forEach(p => lanes.push({id:'p:' + p, label:p, c:pidColor(seg.id,p)}));
+  const hasDiag = seg.intervals.some(v => v.k === 'diag' || v.k === 'tmax');
+  if (hasDiag) lanes.push({id:'diag', label:'diag/tmax'});
+  const nb = Math.max(2, st.bufs.length);
+  for (let b = 0; b < nb; b++) lanes.push({id:'b:' + b, label:'buf ' + b});
+  const LH = 22, TOP = 24, laneY = {}; lanes.forEach((l,k) => laneY[l.id] = TOP + k * (LH + 4) + (l.id.startsWith('b:') ? 10 : 0) + (l.id === 'diag' ? 5 : 0));
+  const H = TOP + lanes.length * (LH + 4) + 30;
+  const out = [];
+  out.push(`<defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="var(--panel)"/><line x1="0" y1="0" x2="0" y2="5" stroke="var(--crit)" stroke-width="2.2"/></pattern>
+    <pattern id="whatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="var(--warn)" stroke-width="1.5"/></pattern>
+    <clipPath id="plot"><rect x="${LBL}" y="0" width="${PW}" height="${H}"/></clipPath></defs>`);
+  // grid + axis
+  const steps = [1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,60000];
+  const stp = steps.find(s => busWin / s <= 10) || 60000;
+  for (let v = Math.ceil(t0 / stp) * stp; v <= t1; v += stp){
+    out.push(`<line x1="${x(v)}" x2="${x(v)}" y1="${TOP - 6}" y2="${H - 24}" stroke="var(--line)"/><text x="${x(v)}" y="${H - 10}" text-anchor="middle">${(v/1000).toFixed(stp < 10 ? 3 : stp < 100 ? 2 : stp < 1000 ? 1 : 0)} s</text>`);
+  }
+  lanes.forEach(l => {
+    const y = laneY[l.id];
+    out.push(`<rect x="${LBL}" y="${y}" width="${PW}" height="${LH}" fill="var(--panel-2)" rx="3"/>`);
+    out.push(`<text class="lane" x="${LBL - 8}" y="${y + LH/2 + 4}" text-anchor="end">${esc(l.label)}</text>`);
+    if (l.c) out.push(`<rect x="${LBL - 6 - 0}" y="${y + 6}" width="3" height="${LH - 12}" rx="1" fill="${l.c}"/>`);
+  });
+  out.push(`<g clip-path="url(#plot)">`);
+  // schedule markers from current state
+  for (const p of st.order){
+    const r = st.rows[p], y = laneY['p:' + p]; if (!r || y == null) continue;
+    if (r.last != null){ const e = r.last + r.pmin; if (e > t0 && e < t1) out.push(`<line x1="${x(e)}" x2="${x(e)}" y1="${y + 2}" y2="${y + LH - 2}" stroke="var(--s3)" stroke-width="1.5" stroke-dasharray="2 2"><title>${p} early-eligible at ${fmtT(e)} (last + pmin)</title></line>`); }
+    for (let k = 0, d = r.due; d < t1 && k < 50; k++, d += r.p){
+      if (d < t0) continue;
+      const xx = x(d);
+      out.push(`<path d="M${xx - 4} ${y - 1} L${xx + 4} ${y - 1} L${xx} ${y + 5} Z" fill="${k ? 'var(--line-2)' : 'var(--ink-2)'}"><title>${p} ${k ? 'projected due' : 'due'} ${fmtT(d)}</title></path>`);
+    }
+  }
+  let busy = 0; const ha = t0, hb = Math.min(t1, t);
+  for (const v of seg.intervals){
+    if (v.e < t0 || v.s > t1) continue;
+    const xs = x(v.s), w = Math.max(1.5, x(v.e) - xs), fut = v.s > t ? ' opacity=".35"' : '';
+    if (v.k === 'read' || v.k === 'diag' || v.k === 'tmax') busy += Math.max(0, Math.min(v.e, hb) - Math.max(v.s, ha));
+    let tip, y, fill, extra = '';
+    if (v.k === 'read'){
+      y = laneY['p:' + v.pid]; if (y == null) continue;
+      const c = pidColor(seg.id, v.pid);
+      fill = v.ok ? c : 'url(#hatch)';
+      if (v.early && v.ok) extra = ` fill-opacity=".5" stroke="${c}" stroke-width="1"`;
+      if (!v.ok) extra = ` stroke="var(--crit)" stroke-width="1"`;
+      const e = M.evs[v.i];
+      tip = `READ ${v.pid} ${pidName(v.pid)}\n${v.ok ? 'value ' + (decode(v.pid, e.f.val)?.text ?? e.f.val) + ' ' + (decode(v.pid, e.f.val)?.unit ?? '') : 'no answer'} · ${v.e - v.s} ms${v.early ? ' · early' : ''}\n${fmtT(v.s)} → ${fmtT(v.e)}`;
+    } else if (v.k === 'diag' || v.k === 'tmax'){
+      y = laneY.diag; fill = v.k === 'diag' ? 'var(--s5)' : (v.pid ? pidColor(seg.id, v.pid) : 'var(--muted)');
+      tip = `${v.k === 'diag' ? 'Diagnostic request' : 'Tmax sample ' + v.pid} · ${v.e - v.s} ms`;
+    } else {
+      y = laneY['b:' + v.buf]; if (y == null) continue;
+      if (v.k === 'blk'){ fill = 'var(--accent)'; extra = ' fill-opacity=".18"'; tip = `buf ${v.buf} block open ${fmtT(v.s)} → ${v.open ? '(still open)' : fmtT(v.e)} · ${fmtD(v.e - v.s)}`; }
+      else if (v.k === 'wait'){ fill = 'url(#whatch)'; tip = `buf ${v.buf} closed, waiting for flash · ${fmtD(v.e - v.s)}`; }
+      else { fill = v.ok ? 'var(--s2)' : 'var(--crit)'; tip = `FLUSH buf ${v.buf} · ${v.e - v.s} ms${v.ok ? '' : ' · FAILED'}`; }
+    }
+    const inset = v.k === 'blk' ? 2 : v.k === 'flash' ? 5 : 3;
+    out.push(`<rect class="hit" x="${xs}" y="${y + inset}" width="${w}" height="${LH - inset*2}" rx="2" fill="${fill}"${extra}${fut} data-i="${v.i}" data-tip="${esc(tip)}"/>`);
+  }
+  // decide ticks
+  out.push(`<line x1="${x(t)}" x2="${x(t)}" y1="${TOP - 10}" y2="${H - 24}" stroke="var(--ink)" stroke-width="1.5"/>`);
+  out.push(`</g><text x="${x(t)}" y="${TOP - 12}" text-anchor="middle" style="fill:var(--ink);font-weight:600">${fmtT(t)}</text>`);
+  const util = hb > ha ? busy / (hb - ha) : 0;
+  const wins = [[250,'250 ms'],[1000,'1 s'],[2000,'2 s'],[5000,'5 s'],[20000,'20 s'],[60000,'60 s']];
+  return `<div class="card bus"><div class="busctl"><div class="seg" style="margin:0">${wins.map(([v,l]) => `<button class="${busWin === v ? 'on' : ''}" data-win="${v}">${l}</button>`).join('')}</div>
+    <span class="pill">bus busy <b>${(util*100).toFixed(0)}%</b> in the visible past${st.config ? ` · planned ${(st.config.u/10).toFixed(0)}%` : ''}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${out.join('')}</svg>
+    <div class="legend" style="margin-top:6px"><span style="--c:var(--s1)">due read</span><span style="--c:color-mix(in srgb,var(--s1) 50%,transparent)">early read</span><span style="--c:var(--crit)">no answer (hatched)</span>
+    <span style="--c:var(--ink-2)">▼ due · ▽ projected due</span><span style="--c:var(--s3)">┊ early-eligible (last + pmin)</span><span style="--c:color-mix(in srgb,var(--accent) 25%,transparent)">block open</span><span style="--c:var(--warn)">waiting for flash</span><span style="--c:var(--s2)">flash write</span></div>
+    <div class="foot">Everything right of the cursor is in the future of the selected event (faded). Click a bar to jump to its event.</div></div>`;
+}
+
+/* ---------- blocks tab ---------- */
+function renderBlocksTab(){
+  const ev = M.evs[sel], seg = M.segs[ev.seg];
+  let cur = ev.d && ev.d.block != null ? ev.d.block : null;
+  if (cur == null){ for (let k = seg.blocks.length - 1; k >= 0; k--){ const b = M.blocks[seg.blocks[k]]; if ((b.openIdx ?? b.flushIdx) <= sel){ cur = b.id; break; } } }
+  const rowsH = seg.blocks.map(id => {
+    const b = M.blocks[id], fl = b.flushIdx != null ? M.evs[b.flushIdx] : null, cl = b.closeIdx != null ? M.evs[b.closeIdx] : null;
+    const len = fl ? N(fl.f.len) : cl ? N(cl.f.len) : null, fail = b.checks && b.checks.some(c => !c.ok);
+    const target = b.flushIdx ?? b.closeIdx ?? b.openIdx;
+    return `<tr class="click ${id === cur ? 'hi' : ''}" data-i="${target}"><td class="mono">${fl ? fl.f.seq : '—'}</td><td class="num mono">${b.buf}</td><td class="num mono">${b.t0 != null ? (b.t0/1000).toFixed(3) : '—'}</td>
+      <td>${b.reason ? `<span class="status" style="--c:${REASON_C[b.reason] || 'var(--muted)'}">${esc(b.reason)}</span>` : '<span class="muted">open</span>'}</td>
+      <td class="num mono">${len ?? '—'}</td><td style="width:90px"><div class="bar"><i style="width:${(len ?? 0)/BLOCK_MAX*100}%"></i></div></td>
+      <td class="num mono">${cl ? cl.f.recs : b.recIdxs.length}</td><td class="num mono">${cl ? fmtD(N(cl.f.age)) : '—'}</td>
+      <td class="num mono">${fl ? fl.f.dur + ' ms' : '—'}</td><td>${fl ? (B(fl.f.ok) ? (fail ? '<span class="bad">⚠ checks</span>' : '<span class="ok">✓</span>') : '<span class="bad">✗ failed</span>') : ''}</td></tr>`;
+  }).join('');
+  return `<div class="card"><h3>Blocks in this boot <span class="r">${seg.blocks.length} total</span></h3>
+    <div class="scrollbox" style="max-height:230px"><table class="t"><tr><th>seq</th><th class="num">buf</th><th class="num">t0</th><th>closed</th><th class="num">len</th><th></th><th class="num">recs</th><th class="num">age</th><th class="num">write</th><th></th></tr>${rowsH}</table></div></div>
+    ${cur != null ? blockView(M.blocks[cur], Math.max(sel, M.blocks[cur].flushIdx ?? sel)) : '<div class="muted">No block yet.</div>'}`;
+}
+
+/* ---------- stats tab ---------- */
+const statsCache = new Map();
+function segStats(seg){
+  if (statsCache.has(seg.id)) return statsCache.get(seg.id);
+  const evs = M.evs, per = {};
+  const P = p => per[p] ??= {reads:0, ok:0, early:0, dur:[], iv:[], late:[], lastStart:null, p:null, pmin:null};
+  for (const i of seg.reads){
+    const e = evs[i], f = e.f, s = P(f.pid);
+    s.reads++; if (B(f.ok)) s.ok++; if (B(f.early)) s.early++;
+    s.dur.push(N(f.dur)); if (s.lastStart != null) s.iv.push(N(f.start) - s.lastStart); s.lastStart = N(f.start);
+    if (e.d.after){ s.p = e.d.after.p; s.pmin = e.d.after.pmin; }
+  }
+  let mism = 0;
+  for (let i = seg.start; i <= seg.end; i++){
+    const e = evs[i];
+    if (e.type === 'DECIDE' && e.f.rule === 'due') for (const p of L(e.f.pids)) P(p).late.push(N(e.f.late));
+  }
+  let busy = 0, a = Infinity, b = -Infinity;
+  for (const v of seg.intervals) if (v.k === 'read' || v.k === 'diag' || v.k === 'tmax'){ busy += v.e - v.s; a = Math.min(a, v.s); b = Math.max(b, v.e); }
+  const blocks = seg.blocks.map(id => M.blocks[id]);
+  const reasons = {}; let lens = [], ages = [], waits = [], writes = [], fOk = 0, fBad = 0;
+  for (const bk of blocks){
+    if (bk.reason) reasons[bk.reason] = (reasons[bk.reason] || 0) + 1;
+    const cl = bk.closeIdx != null ? evs[bk.closeIdx] : null, fl = bk.flushIdx != null ? evs[bk.flushIdx] : null;
+    if (cl && !bk.released){ lens.push(N(cl.f.len)); ages.push(N(cl.f.age)); }
+    if (fl){ writes.push(N(fl.f.dur)); B(fl.f.ok) ? fOk++ : fBad++; if (cl) waits.push(fl.t - N(fl.f.dur) - cl.t); }
+  }
+  let drops = 0, segDrop = 0, cfg = null;
+  for (let i = seg.start; i <= seg.end; i++){ const e = evs[i]; if (e.type === 'REC_DROP') drops++; if (e.type === 'SEG_DROP') segDrop += N(e.f.count) || 0; if (e.type === 'CONFIG') cfg = e; }
+  const r = {per, busy, span:b - a, cfg, reasons, lens, ages, waits, writes, fOk, fBad, drops, segDrop, mism};
+  statsCache.set(seg.id, r); return r;
+}
+function renderStats(){
+  const seg = M.segs[M.evs[sel].seg], S = segStats(seg), tmax = S.cfg ? N(S.cfg.f.tmax) : null;
+  const pids = seg.pids.filter(p => S.per[p]);
+  const mx = a => a.length ? Math.max(...a) : null, f0 = v => v == null ? '—' : Math.round(v);
+  const pidRows = pids.map(p => {
+    const s = S.per[p], ai = avg(s.iv), bound = s.p != null && tmax ? s.p + tmax * (pids.length - 1) : null;
+    const over = bound != null && mx(s.iv) > bound;
+    return `<tr><td>${pidChip(seg.id,p)}</td><td class="num mono">${s.reads}</td><td class="num mono">${pct(s.ok, s.reads)}</td><td class="num mono">${pct(s.early, s.reads)}</td>
+      <td class="num mono">${f0(avg(s.dur))} <span class="muted">/ ${f0(mx(s.dur))}</span></td>
+      <td class="num mono">${f0(ai)} <span class="muted">/</span> <span class="${over ? 'bad' : ''}">${f0(mx(s.iv))}</span></td><td class="num mono">${s.p ?? '—'} <span class="muted">/ ${s.pmin ?? '—'}</span></td><td class="num mono">${bound ?? '—'}</td>
+      <td class="num mono">${f0(avg(s.late))} <span class="muted">/ ${f0(mx(s.late))}</span></td>
+      <td class="num mono">${ai ? (1000/ai).toFixed(2) : '—'} <span class="muted">/ ${s.p ? (1000/s.p).toFixed(2) : '—'}</span></td></tr>`;
+  }).join('');
+  const util = S.span > 0 ? S.busy / S.span : 0, planned = S.cfg ? N(S.cfg.f.u) / 1000 : null;
+  const reasonTotal = Object.values(S.reasons).reduce((a,b) => a + b, 0);
+  const issuesList = [
+    ...seg.mismatches.map(i => `<li><span class="bad">⚠</span><span>DECIDE mismatch: ${esc(M.evs[i].d.check.msg)}</span><span class="d">${evLink(i)}</span></li>`),
+    ...seg.blockIssues.map(id => { const b = M.blocks[id]; return `<li><span class="bad">⚠</span><span>Block ${b.dec && b.dec.hdr ? 'seq ' + b.dec.hdr.seq : ''}: ${esc(b.checks.filter(c => !c.ok).map(c => c.label).join('; '))}</span><span class="d">${evLink(b.flushIdx)}</span></li>`; }),
+    ...M.gaps.filter(i => M.evs[i].seg === seg.id).map(i => `<li><span class="bad">⚠</span><span>${M.evs[i].gap.missing} events lost (n ${M.evs[i].gap.from} → ${M.evs[i].gap.to})</span><span class="d">${evLink(i)}</span></li>`),
+  ];
+  return `<div class="card"><h3>Per PID <span class="r">avg / max · intervals between consecutive requests</span></h3><div style="overflow-x:auto"><table class="t">
+    <tr><th>PID</th><th class="num">reads</th><th class="num">ok</th><th class="num">early</th><th class="num">dur ms</th><th class="num">interval ms</th><th class="num">p / pmin</th><th class="num" title="p + Σ Tmax of the other PIDs">bound</th><th class="num">late ms</th><th class="num">rate Hz / planned</th></tr>${pidRows}</table></div></div>
+    <div class="grid2" style="margin-bottom:14px">
+    <div class="card"><h3>Bus utilization</h3>
+      <div class="timer"><span class="l">Real (reads + diag + Tmax)</span><span class="v">${(util*100).toFixed(1)} %</span><div class="bar"><i style="width:${util*100}%"></i></div></div>
+      ${planned != null ? `<div class="timer"><span class="l">Planned Σ Tmax / p</span><span class="v">${(planned*100).toFixed(1)} %</span><div class="bar" style="--c:var(--muted)"><i style="width:${planned*100}%"></i></div></div>` : ''}
+      <div class="foot">Busy ${fmtD(S.busy)} over ${fmtD(S.span)} of scheduler activity.</div></div>
+    <div class="card"><h3>Blocks &amp; flash</h3><dl class="kv">
+      <dt>written</dt><dd>${S.fOk} ok${S.fBad ? ` · <span class="bad">${S.fBad} failed</span>` : ''}</dd>
+      <dt>avg size</dt><dd>${f0(avg(S.lens))} B (${S.lens.length ? Math.round(avg(S.lens) / BLOCK_MAX * 100) : 0}% full)</dd>
+      <dt>avg age</dt><dd>${fmtD(avg(S.ages))}</dd>
+      <dt>queue wait</dt><dd>${fmtD(avg(S.waits))} avg · ${fmtD(mx(S.waits))} max</dd>
+      <dt>write time</dt><dd>${fmtD(avg(S.writes))} avg · ${fmtD(mx(S.writes))} max</dd>
+      <dt>records dropped</dt><dd class="${S.drops ? 'bad' : ''}">${S.drops}</dd><dt>flash blocks lost</dt><dd class="${S.segDrop ? 'bad' : ''}">${S.segDrop}</dd></dl>
+      ${reasonTotal ? `<div style="display:flex;gap:2px;height:10px;margin-top:12px">${Object.entries(S.reasons).map(([k,v]) => `<span style="flex:${v};background:${REASON_C[k] || 'var(--muted)'};border-radius:2px" title="${k}: ${v}"></span>`).join('')}</div>
+      <div class="legend" style="margin:6px 0 0">${Object.entries(S.reasons).map(([k,v]) => `<span style="--c:${REASON_C[k] || 'var(--muted)'}">${k} ${v}</span>`).join('')}</div>` : ''}</div></div>
+    <div class="card"><h3>Integrity checks <span class="r">${issuesList.length ? `<span class="bad">${issuesList.length} issue(s)</span>` : '<span class="ok">all good</span>'}</span></h3>
+      ${issuesList.length ? `<ul class="checks">${issuesList.slice(0,200).join('')}</ul>` : '<div class="muted">Every DECIDE matches the rules, every written block matches its REC events and READs, no events lost.</div>'}</div>`;
+}
+
+/* ---------- system tab ---------- */
+function renderSystem(){
+  const st = curState(), seg = M.segs[st.seg], s = st.seg;
+  const kv = o => `<dl class="kv">${o.map(([k,v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  const b = st.boot, c = st.config, up = st.up, h = st.health;
+  const tasks = Object.entries(h.stack);
+  const cmds = seg.cmds.filter(x => x.cmd <= sel).slice(-50).reverse();
+  return `<div class="grid2" style="margin-bottom:14px">
+    <div class="card"><h3>Boot</h3>${b ? kv([['boot', b.boot], ['seq_next', b.seq_next], ['nvs_last', b.nvs_last], ['flash log', b.log_newest ? `${b.log_oldest} … ${b.log_newest}` : 'empty'], ['lost (this boot)', b.lost], ['next seq now', st.seqNext]]) : '<span class="muted">No BOOT event</span>'}</div>
+    <div class="card"><h3>Configuration</h3>${c ? kv([['reason', esc(c.reason)], ['protocol', `${c.proto} · ${PROTO[c.proto] || '?'}`], ['Tmax', c.tmax + ' ms'], ['planned bus', (c.u/10).toFixed(1) + ' %'], ['PIDs', c.pids.map(p => pidChip(s,p)).join(' ')], ['since', evLink(c.i, fmtT(c.t))]]) : '<span class="muted">—</span>'}</div>
+    <div class="card"><h3>Mode &amp; link</h3>${kv([['mode', st.mode ? (st.mode.diag ? 'diagnostic' : st.mode.running ? 'collecting' : 'stopped') + ' · since ' + fmtT(st.mode.t) : '—'],
+      ['BLE app', st.conn ? (st.conn.up ? '<span class="ok">connected</span>' : 'disconnected') : '—'], ['Internet', st.net ? (st.net.up ? '<span class="ok">available</span>' : 'unavailable') : '—'],
+      ['time sync', st.time.report ? `round trip ${st.time.report.t2 - st.time.report.t1} ms` : st.time.req ? 'pending' : '—']])}</div>
+    <div class="card"><h3>Upload</h3>${kv([['server acked ≤', up.lastAck ?? '—'], ['last sent', up.lastSend ?? '—'], ['in flight', up.inflight.length ? up.inflight.join(', ') : 'none'], ['oldest in flash', up.oldest ?? '—'],
+      ['last rewind', up.rewind ? `${esc(up.rewind.reason)} from ${up.rewind.from} at ${fmtT(up.rewind.t)}` : '—']])}</div>
+    <div class="card"><h3>Health ${h.heapT != null ? `<span class="r mono">${fmtT(h.heapT)}</span>` : ''}</h3>${h.heap ? kv([['heap free', (h.heap.free/1024).toFixed(1) + ' KiB'], ['heap min', (h.heap.min/1024).toFixed(1) + ' KiB']]) : '<span class="muted">No report yet</span>'}
+      ${tasks.length ? `<table class="t" style="margin-top:10px"><tr><th>task</th><th class="num">min free stack</th><th></th></tr>${tasks.map(([k,v]) => `<tr><td>${esc(k)}</td><td class="num mono ${v < 512 ? 'bad' : ''}">${v} B</td><td style="width:40%"><div class="bar" style="--c:${v < 512 ? 'var(--crit)' : 'var(--accent)'}"><i style="width:${Math.min(100, v / 40.96)}%"></i></div></td></tr>`).join('')}</table>` : ''}</div>
+    <div class="card"><h3>Counters (this boot, so far)</h3>${kv([['reads', `${st.cnt.ok} ok / ${st.cnt.reads} (${st.cnt.early} early)`], ['records', st.cnt.recs], ['records dropped', st.cnt.drops], ['flushes', `${st.cnt.flushOk} ok · ${st.cnt.flushFail} failed`], ['diag bus uses', st.cnt.diag], ['events dropped (LOG_DROP)', st.cnt.lost]])}
+      ${st.tmaxRun ? `<div class="foot">Tmax measurement: ${st.tmaxRun.list.length}/${st.tmaxRun.pids.length * st.tmaxRun.samples} samples${st.tmaxRun.done != null ? ` → suggested ${st.tmaxRun.done} ms` : ''}</div>` : ''}</div>
+  </div>
+  <div class="card"><h3>App commands <span class="r">latest first, up to the selected event</span></h3>${cmds.length ? `<div class="scrollbox"><table class="t"><tr><th class="num">t</th><th>command</th><th>response</th><th class="num">ms</th></tr>
+    ${cmds.map(x => { const ce = M.evs[x.cmd], re = x.resp != null && x.resp <= sel ? M.evs[x.resp] : null; return `<tr class="click" data-i="${ce.i}"><td class="num mono">${(ce.t/1000).toFixed(3)}</td><td class="mono">${esc(ce.f.txt)}</td><td class="mono">${re ? esc(re.f.txt) : '<span class="muted">…</span>'}</td><td class="num mono">${re ? re.f.dur : ''}</td></tr>`; }).join('')}</table></div>` : '<span class="muted">None</span>'}</div>`;
+}
+
+/* ================= wiring ================= */
+function readFile(file){ if (!file) return; const r = new FileReader(); r.onload = () => load(String(r.result), file.name); r.readAsText(file); }
+$('fileInput').onchange = e => readFile(e.target.files[0]);
+$('fileInput2').onchange = e => readFile(e.target.files[0]);
+$('demoBtn').onclick = $('demoBtn2').onclick = () => load(genDemo(), 'demo (generated)');
+document.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('drag'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('drag'); });
+document.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('drag'); readFile(e.dataTransfer.files[0]); });
+$('themeBtn').onclick = () => {
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const cur = document.documentElement.dataset.theme || (dark ? 'dark' : 'light');
+  document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('evv-theme', document.documentElement.dataset.theme); } catch (e) {}
+  if (M){ drawMini(); tabKey = ''; renderTab(); }
+};
+try { const th = localStorage.getItem('evv-theme'); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+
+$('logScroll').addEventListener('scroll', () => renderRows());
+$('logSpacer').addEventListener('click', e => { const r = e.target.closest('.row[data-i]'); if (r) select(+r.dataset.i); });
+$('cats').addEventListener('click', e => {
+  const b = e.target.closest('.cat'); if (!b) return;
+  const k = b.dataset.cat;
+  if (e.shiftKey){ filt.cats = new Set([k]); }
+  else filt.cats.has(k) ? filt.cats.delete(k) : filt.cats.add(k);
+  renderCats(); rebuildRows(); scrollToSel();
+});
+let qTimer; $('q').addEventListener('input', e => { clearTimeout(qTimer); qTimer = setTimeout(() => { filt.q = e.target.value.trim().toLowerCase(); rebuildRows(); scrollToSel(); }, 150); });
+$('pidFilter').onchange = e => { filt.pid = e.target.value; rebuildRows(); scrollToSel(); };
+$('speed').onchange = e => { speed = +e.target.value; };
+document.querySelector('.transport').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || !M) return;
+  ({first:() => select(0), last:() => select(M.evs.length - 1), prev:() => step(-1), next:() => step(1), play:togglePlay, jprev:() => jump(-1), jnext:() => jump(1)})[b.dataset.act]();
+});
+const scrub = $('scrub');
+let dragging = false;
+const seek = e => { const r = scrub.getBoundingClientRect(); select(Math.round(clamp((e.clientX - r.left) / r.width, 0, 1) * (M.evs.length - 1))); };
+scrub.addEventListener('pointerdown', e => { if (!M) return; dragging = true; scrub.setPointerCapture(e.pointerId); seek(e); });
+scrub.addEventListener('pointermove', e => { if (dragging) seek(e); });
+scrub.addEventListener('pointerup', () => { dragging = false; });
+$('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b){ activeTab = b.dataset.tab; tabKey = ''; renderTab(); $('tabBody').scrollTop = 0; } });
+$('tabBody').addEventListener('click', e => {
+  const w = e.target.closest('[data-win]'); if (w){ busWin = +w.dataset.win; renderTab(); return; }
+  const p = e.target.closest('[data-pane]'); if (p){ blkPane = p.dataset.pane; renderTab(); return; }
+  const s = e.target.closest('[data-same]');
+  if (s){ const d = +s.dataset.same, ty = M.evs[sel].type; for (let i = sel + d; i >= 0 && i < M.evs.length; i += d) if (M.evs[i].type === ty){ select(i); break; } return; }
+  const l = e.target.closest('[data-i]'); if (l) select(+l.dataset.i);
+});
+// hover: highlight a block record's bytes everywhere; tooltips
+const tip = $('tip');
+document.addEventListener('mouseover', e => {
+  const t = e.target.closest('[data-tip]');
+  if (t){ tip.textContent = t.dataset.tip; tip.style.display = 'block'; }
+  const blkEl = e.target.closest('.blk');
+  document.querySelectorAll('.blk .hl, .blk tr.rh').forEach(x => x.classList.remove('hl', 'rh'));
+  if (blkEl){
+    const c = e.target.closest('[data-rk],[data-b]');
+    if (c){
+      const lay = layouts.get(blkEl.dataset.blk);
+      let rk = c.dataset.rk;
+      if (rk != null){
+        blkEl.querySelectorAll(`[data-rk="${rk}"]`).forEach(x => x.tagName === 'TR' ? x.classList.add('rh') : x.classList.add('hl'));
+        if (!t && lay){
+          const b = +c.dataset.b;
+          if (rk === 'h') tip.textContent = `header · byte ${isNaN(b) ? '' : b}\n${b < 4 ? 'seq u32' : b < 6 ? 'boot_id u16' : b < 10 ? 't_ms_start u32' : 'length u16'}`;
+          else { const r = lay.byteRec[+c.dataset.b] || (lay.blk.dec ? lay.blk.dec.recs[+rk] : null);
+            if (r) tip.textContent = r.kind === 'gps' ? `#${r.k} GPS · ${r.size} B @${r.off}\ndt ${r.dt} ms` : `#${r.k} ${r.pid} ${pidName(r.pid)} · ${r.size} B @${r.off}\ndt ${r.dt} ms · ${r.val} = ${decode(r.pid, r.val)?.text ?? ''} ${decode(r.pid, r.val)?.unit ?? ''}`; }
+          if (!isNaN(+c.dataset.b) || rk) tip.style.display = c.tagName === 'TR' ? 'none' : 'block';
+        }
+      } else if (!t && c.dataset.b != null){ tip.textContent = `free · byte ${c.dataset.b}`; tip.style.display = 'block'; }
+      return;
+    }
+  }
+  if (!t) tip.style.display = 'none';
+});
+document.addEventListener('mousemove', e => {
+  if (tip.style.display !== 'block') return;
+  const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8), y = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 8);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+});
+document.addEventListener('keydown', e => {
+  if (!M || e.target.matches('input,select,textarea')) return;
+  if (e.key === 'ArrowRight' || e.key === 'j'){ e.preventDefault(); e.shiftKey ? jump(1) : step(1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'k'){ e.preventDefault(); e.shiftKey ? jump(-1) : step(-1); }
+  else if (e.key === ' '){ e.preventDefault(); togglePlay(); }
+  else if (e.key === 'Home') select(0);
+  else if (e.key === 'End') select(M.evs.length - 1);
+  else if (/^[1-6]$/.test(e.key)){ activeTab = TABS[+e.key - 1][0]; tabKey = ''; renderTab(); }
+});
+addEventListener('resize', () => { if (M){ drawMini(); renderRows(true); tabKey = ''; renderTab(); } });
+</script>
+</body>
+</html>
