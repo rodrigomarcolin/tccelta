@@ -30,5 +30,12 @@ that timeout in 4 ms units (`ATST32` is 200 ms). It does not change ISO-TP
 per-frame deadlines.
 
 `ATH1` reports the CAN ID captured from each ECU. The AT allowlist is local and
-does not permit protocol selection, address injection, raw transmission, or
-fabricated voltage/status commands.
+does not permit address injection, raw transmission, or fabricated
+voltage/status commands.
+
+With the collector (`USE_COLLECTOR`), `Elm327` also receives an
+`ICollectorControl`: `ATSPh` selects one of the four ISO 15765-4 protocols
+(6–9) and restarts the dongle, `ATSThh` sets Tmax, and the `AT#` commands
+(`PID`, `DEL`, `LIST`, `DIAG`, `NET`, `GPS`, `TMAX`, `TMAX?`) configure the
+collection. Outside diagnostic mode, collected PIDs are answered from the last
+value read, without touching the bus; any other request answers `?`.

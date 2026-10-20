@@ -226,3 +226,8 @@ state as a counter does.
 | 5    | MCP2515 CS |
 
 Transceiver: SN65HVD230 (TWAI) or MCP2551 (MCP2515).
+
+
+pio run -e collector_mock_debug -t upload -t monitor
+
+pio device monitor -e collector_mock_debug --filter log2file

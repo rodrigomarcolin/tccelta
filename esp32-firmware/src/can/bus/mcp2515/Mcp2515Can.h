@@ -14,12 +14,12 @@
 class Mcp2515Can : public ICanBus {
 public:
     /**
+     * @param bitrate taxa do barramento (ISO 15765-4: 250 ou 500 kbps)
      * @param csPin   SPI chip-select GPIO (default 5)
-     * @param bitrate CAN_500KBPS for HS-CAN, CAN_250KBPS for MS-CAN
      * @param clock   MCP_8MHZ or MCP_16MHZ depending on crystal
      */
-    explicit Mcp2515Can(uint8_t csPin   = 5,
-                        CAN_SPEED bitrate = CAN_500KBPS,
+    explicit Mcp2515Can(CanBitrate bitrate = CanBitrate::Kbps500,
+                        uint8_t csPin     = 5,
                         CAN_CLOCK clock   = MCP_8MHZ);
 
     bool begin()   override;

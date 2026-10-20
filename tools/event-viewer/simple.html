@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collector Event Stepper</title>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f3f3f0; --panel:#fcfcfb; --panel-2:#f3f2ee; --hover:#ecebe6;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781; --line:#e1e0d9; --line-2:#c3c2b7;
+  --accent:#2a78d6; --sel:rgba(42,120,214,.13); --chg:rgba(250,178,25,.28);
+  --good:#0ca30c; --good-ink:#006300; --warn:#fab219; --warn-ink:#8a5a00; --crit:#d03b3b; --crit-ink:#b42828;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#6250d6; --s8:#e34948;
+  --hdr:#52514e; --gps:#898781;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#0d0d0d; --panel:#161615; --panel-2:#1e1e1d; --hover:#262624;
+    --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --line:#2a2a28; --line-2:#383835;
+    --accent:#3987e5; --sel:rgba(57,135,229,.2); --chg:rgba(250,178,25,.22);
+    --good-ink:#3fc43f; --warn-ink:#fab219; --crit-ink:#e66767;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    --hdr:#c3c2b7; --gps:#6b6a66;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0d0d0d; --panel:#161615; --panel-2:#1e1e1d; --hover:#262624;
+  --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --line:#2a2a28; --line-2:#383835;
+  --accent:#3987e5; --sel:rgba(57,135,229,.2); --chg:rgba(250,178,25,.22);
+  --good-ink:#3fc43f; --warn-ink:#fab219; --crit-ink:#e66767;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+  --hdr:#c3c2b7; --gps:#6b6a66;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:13px/1.45 var(--sans);display:flex;flex-direction:column;overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .ok{color:var(--good-ink)} .bad{color:var(--crit-ink)} .warn{color:var(--warn-ink)}
+
+.top{flex:none;height:52px;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.top b.title{font-size:14px;white-space:nowrap}
+.top .file{color:var(--muted);font-family:var(--mono);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ctrl{display:flex;align-items:center;gap:4px;margin:0 auto}
+.btn{display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--line-2);background:var(--panel);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.ib{width:32px;height:30px;border-radius:7px;border:1px solid var(--line-2);background:var(--panel);cursor:pointer}
+.ib:hover{background:var(--hover)}
+.ib.on{background:var(--accent);border-color:var(--accent);color:#fff}
+select.sm{height:30px;border-radius:7px;border:1px solid var(--line-2);background:var(--panel);padding:0 6px}
+.pos{font-family:var(--mono);font-size:12px;color:var(--ink-2);min-width:170px;text-align:center}
+.actions{display:flex;gap:8px;align-items:center}
+
+.empty{flex:1;display:grid;place-items:center;padding:16px}
+.empty .box{max-width:480px;text-align:center;padding:40px 32px;border:1.5px dashed var(--line-2);border-radius:14px;background:var(--panel)}
+.empty h1{font-size:18px;margin:0 0 6px} .empty p{color:var(--ink-2);margin:0 0 20px}
+body.drag .empty .box{border-color:var(--accent)}
+
+.app{flex:1;display:grid;grid-template-columns:340px 1fr;min-height:0}
+.side{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-right:1px solid var(--line)}
+.side .f{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.side input[type=search]{height:30px;border-radius:7px;border:1px solid var(--line-2);background:var(--panel-2);padding:0 10px}
+.side label{font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:6px;cursor:pointer}
+.list{flex:1;overflow:auto;position:relative}
+.list .sp{position:relative}
+.ev{position:absolute;left:0;right:0;height:26px;display:grid;grid-template-columns:62px 84px 1fr;gap:8px;align-items:center;padding:0 12px;cursor:pointer;white-space:nowrap;border-left:2px solid transparent}
+.ev:hover{background:var(--hover)}
+.ev.sel{background:var(--sel);border-left-color:var(--accent)}
+.ev.gap{color:var(--crit-ink);font-size:11.5px;grid-template-columns:1fr;cursor:default;background:color-mix(in srgb,var(--crit) 10%,transparent)}
+.ev .t{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-align:right}
+.ev .s{overflow:hidden;text-overflow:ellipsis;color:var(--ink-2)}
+.ty{font-family:var(--mono);font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:4px;justify-self:start;background:var(--panel-2);border:1px solid var(--line)}
+
+.main{overflow:auto;padding:16px;min-width:0}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.card h2{margin:0 0 10px;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:8px}
+.card h2 .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400;font-family:var(--mono)}
+.card.event{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.headline{font-size:16px;font-weight:600;margin-bottom:4px}
+.sub{color:var(--ink-2);margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font-weight:500;color:var(--muted);font-size:11px;padding:4px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.num{text-align:right}
+td.chg{background:var(--chg)}
+tr.hi td{background:var(--sel)}
+tr.hi td.chg{background:var(--chg)}
+.was{font-size:11px;color:var(--muted);text-decoration:line-through;margin-right:5px}
+.pid{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-weight:600}
+.pid::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--c)}
+.st{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;background:color-mix(in srgb,var(--c) 18%,transparent)}
+.st::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--c)}
+.bar{height:6px;border-radius:3px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden;position:relative}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--c,var(--accent))}
+.bar b{position:absolute;top:0;bottom:0;width:2px;background:var(--ink-2)}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;font-size:12.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-family:var(--mono);word-break:break-all}
+.trow{display:grid;grid-template-columns:1fr auto;gap:3px 12px;padding:7px 0;border-bottom:1px solid var(--line)}
+.trow:last-child{border-bottom:none}
+.trow .v{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.trow .bar{grid-column:1/-1}
+.metrics{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px}
+.metrics div{display:flex;flex-direction:column}
+.metrics .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.metrics .v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.metrics .v small{font-size:11.5px;color:var(--ink-2);font-weight:400}
+canvas.map{width:100%;aspect-ratio:4/1;image-rendering:pixelated;border-radius:4px;display:block;margin:8px 0}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend span::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--c)}
+.hdr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:6px 0 10px}
+.hdr div{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-width:0}
+.hdr .k{font-size:10.5px;color:var(--muted)} .hdr .v{font-family:var(--mono);font-weight:600}
+.hdr .b{font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.note{padding:7px 10px;border-radius:7px;font-size:12.5px;margin-top:10px;border:1px solid}
+.note.bad{background:color-mix(in srgb,var(--crit) 9%,transparent);border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
+.note.good{background:color-mix(in srgb,var(--good) 8%,transparent);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.note.warn{background:color-mix(in srgb,var(--warn) 10%,transparent);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.raw{font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all;margin-top:10px;max-height:48px;overflow:hidden}
+.none{color:var(--muted);padding:6px 0}
+@media (max-width:1100px){ .cols{grid-template-columns:1fr} }
+@media (max-width:760px){
+  body{overflow:auto;display:block}
+  .top{height:auto;flex-wrap:wrap;padding:8px 16px}
+  .ctrl{margin:0}
+  .app{display:block}
+  .side{height:40vh}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <b class="title">Collector stepper</b><span class="file" id="file"></span>
+  <div class="ctrl" id="ctrl" hidden>
+    <button class="ib" data-a="first" title="First (Home)">⏮</button>
+    <button class="ib" data-a="prev" title="Previous (←)">◀</button>
+    <button class="ib" data-a="play" id="play" title="Play / pause (Space)">▶</button>
+    <button class="ib" data-a="next" title="Next (→)">▶</button>
+    <button class="ib" data-a="last" title="Last (End)">⏭</button>
+    <select class="sm" id="speed" title="Playback speed">
+      <option value="0.25">0.25×</option><option value="1" selected>1×</option><option value="5">5×</option><option value="20">20×</option>
+    </select>
+    <span class="pos" id="pos"></span>
+  </div>
+  <div class="actions">
+    <label class="btn">Open log…<input type="file" id="fi" hidden></label>
+    <button class="btn" id="demo">Demo</button>
+    <a class="btn" href="index.html" title="Full viewer with timeline, stats and hex">Detailed view</a>
+    <button class="ib" id="theme" title="Light / dark">◐</button>
+  </div>
+</header>
+
+<div class="empty" id="empty">
+  <div class="box">
+    <h1>Drop a serial log here</h1>
+    <p>Step through the collector one event at a time and see the table, schedule and block at that moment.</p>
+    <label class="btn primary">Open log file…<input type="file" id="fi2" hidden></label>
+    <button class="btn" id="demo2">Load demo</button>
+  </div>
+</div>
+
+<div class="app" id="app" hidden>
+  <aside class="side">
+    <div class="f">
+      <input type="search" id="q" placeholder="Search events…" spellcheck="false">
+      <label><input type="checkbox" id="noise" checked> Hide REC, CVT and health lines</label>
+    </div>
+    <div class="list" id="list"><div class="sp" id="sp"></div></div>
+  </aside>
+  <main class="main">
+    <div class="cols">
+      <div class="col">
+        <section class="card event" id="cEvent"></section>
+        <section class="card" id="cValues"></section>
+        <section class="card" id="cSched"></section>
+      </div>
+      <div class="col">
+        <section class="card" id="cTimers"></section>
+        <section class="card" id="cBlock"></section>
+        <section class="card" id="cFlush"></section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="core.js"></script>
+<script>
+'use strict';
+const ROW = 26, NOISE = new Set(['REC','CVT','STACK','HEAP','TMAX_SAMPLE']);
+let sel = 0, list = [], posOf = null, playing = false, clock = 0, speed = 1, lastFrame = 0, lastLive = 0;
+const $ = id => document.getElementById(id);
+const color = (seg, p) => { const s = M.segs[seg].slot[p]; return s != null && s < 8 ? `var(--s${s + 1})` : 'var(--muted)'; };
+const chip = (seg, p) => p && p !== '-' ? `<span class="pid" style="--c:${color(seg,p)}">${esc(p)}</span>` : '—';
+const val = (pid, v) => { const d = decode(pid, v); return d ? `${esc(d.text)} <span class="muted">${esc(d.unit)}</span>` : '—'; };
+const bar = (frac, c, mark) => `<div class="bar" style="--c:${c || 'var(--accent)'}"><i style="width:${clamp(frac,0,1)*100}%"></i>${mark != null ? `<b style="left:${clamp(mark,0,1)*100}%"></b>` : ''}</div>`;
+const now = () => playing ? clock : M.evs[sel].t;
+
+/* ---------- load ---------- */
+function load(text, name){
+  const p = parseLog(text);
+  if (!p.evs.length){ alert('No "EV " lines found.'); return; }
+  build(p);
+  $('file').textContent = name;
+  $('empty').hidden = true; $('app').hidden = false; $('ctrl').hidden = false;
+  rebuildList();
+  const r = M.evs.findIndex(e => e.type === 'READ');
+  select(r >= 0 ? r : 0);
+}
+function readFile(f){ if (!f) return; const r = new FileReader(); r.onload = () => load(String(r.result), f.name); r.readAsText(f); }
+
+/* ---------- event list ---------- */
+function rebuildList(){
+  const q = $('q').value.trim().toLowerCase(), hide = $('noise').checked;
+  list = []; posOf = new Int32Array(M.evs.length).fill(-1);
+  for (const ev of M.evs){
+    if (ev.gap) list.push(-1 - ev.i);                       // gap marker before ev
+    if (hide && NOISE.has(ev.type)) continue;
+    if (q && !ev.raw.toLowerCase().includes(q)) continue;
+    posOf[ev.i] = list.length; list.push(ev.i);
+  }
+  $('sp').style.height = list.length * ROW + 'px';
+  drawList(true);
+}
+function selPos(){ for (let i = sel; i >= 0; i--) if (posOf[i] >= 0) return posOf[i]; return -1; }
+let drawn = '';
+function drawList(force){
+  const el = $('list'), a = Math.max(0, Math.floor(el.scrollTop / ROW) - 8), b = Math.min(list.length, Math.ceil((el.scrollTop + el.clientHeight) / ROW) + 8);
+  const key = a + ':' + b + ':' + sel; if (!force && key === drawn) return; drawn = key;
+  const sp = selPos(), out = [];
+  for (let k = a; k < b; k++){
+    const v = list[k], top = k * ROW;
+    if (v < 0){ const g = M.evs[-1 - v].gap; out.push(`<div class="ev gap" style="top:${top}px">⚠ ${g.missing} event(s) lost (n ${g.from} → ${g.to})</div>`); continue; }
+    const ev = M.evs[v];
+    out.push(`<div class="ev ${k === sp ? 'sel' : ''}" style="top:${top}px" data-i="${v}"><span class="t">${(ev.t/1000).toFixed(3)}</span><span class="ty">${ev.type}</span><span class="s">${short(ev)}</span></div>`);
+  }
+  $('sp').innerHTML = out.join('');
+}
+function scrollToSel(){
+  const p = selPos(); if (p < 0) return;
+  const el = $('list'), y = p * ROW;
+  if (y < el.scrollTop || y > el.scrollTop + el.clientHeight - ROW) el.scrollTop = y - el.clientHeight / 2;
+}
+function short(ev){
+  const f = ev.f, s = ev.seg;
+  switch (ev.type){
+    case 'READ': return `${chip(s,f.pid)} ${B(f.ok) ? val(f.pid, f.val) : '<span class="bad">no answer</span>'} · ${f.dur} ms${B(f.early) ? ' · early' : ''}`;
+    case 'DECIDE': return `${f.rule} ${L(f.pids).map(p => chip(s,p)).join(' ')}${ev.d.check && !ev.d.check.ok ? ' <span class="bad">⚠</span>' : ''}`;
+    case 'REC': return f.kind === 'gps' ? `GPS → ${f.len} B` : `${chip(s,f.pid)} → ${f.len} B`;
+    case 'REC_DROP': return `<span class="bad">dropped</span> ${f.kind === 'gps' ? 'GPS' : chip(s,f.pid)}`;
+    case 'BLK_OPEN': return `buf ${f.buf} opened`;
+    case 'BLK_CLOSE': return `buf ${f.buf} · ${f.reason} · ${f.len} B`;
+    case 'FLUSH': return `${B(f.ok) ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'} seq ${f.seq} · ${f.len} B · ${f.dur} ms`;
+    case 'MODE': return B(f.diag) ? 'diagnostic' : B(f.running) ? 'collecting' : 'stopped';
+    case 'CMD': case 'RESP': return `<span class="mono">${esc(f.txt)}</span>`;
+    case 'CONFIG': return `${f.reason} · Tmax ${f.tmax} · ${L(f.pids).length} PIDs`;
+    case 'UP_SEND': case 'UP_ACK': return `seq ${f.seq}`;
+    default: return esc(Object.entries(f).map(([k,v]) => `${k}=${v}`).join(' ').slice(0, 80));
+  }
+}
+
+/* ---------- selection & playback ---------- */
+function select(i, fromPlay){
+  sel = clamp(i, 0, M.evs.length - 1);
+  if (!fromPlay) clock = M.evs[sel].t;
+  scrollToSel(); drawList(true); render();
+}
+function step(d){ let i = sel + d; while (i >= 0 && i < M.evs.length && posOf[i] < 0) i += d; if (i >= 0 && i < M.evs.length) select(i); }
+function togglePlay(){
+  playing = !playing; $('play').textContent = playing ? '❚❚' : '▶'; $('play').classList.toggle('on', playing);
+  if (playing){ clock = M.evs[sel].t; lastFrame = performance.now(); requestAnimationFrame(tick); } else render();
+}
+function tick(ts){
+  if (!playing) return;
+  clock += (ts - lastFrame) * speed; lastFrame = ts;
+  let i = sel; const end = M.evs.length - 1;
+  while (i < end && M.evs[i + 1].t <= clock && M.evs[i + 1].seg === M.evs[i].seg) i++;
+  if (i < end && M.evs[i + 1].seg !== M.evs[i].seg && clock > M.evs[i].t + 800){ i++; clock = M.evs[i].t; }
+  if (i === end && clock > M.evs[end].t + 800){ togglePlay(); return; }
+  if (i !== sel) select(i, true); else if (ts - lastLive > 60){ lastLive = ts; render(); }
+  requestAnimationFrame(tick);
+}
+
+/* ---------- render all cards ---------- */
+function render(){
+  const ev = M.evs[sel], st = stateAt(sel);
+  const prev = sel > 0 && M.evs[sel - 1].seg === ev.seg ? stateAt(sel - 1) : null;
+  const t = now();
+  $('pos').textContent = `#${ev.n} · ${fmtT(t)} · ${sel + 1}/${M.evs.length}`;
+  $('cEvent').innerHTML = eventCard(ev, st);
+  $('cValues').innerHTML = valuesCard(st, prev, t);
+  $('cSched').innerHTML = schedCard(st, prev, t);
+  $('cTimers').innerHTML = timersCard(st, t);
+  $('cBlock').innerHTML = blockCard(st, t);
+  $('cFlush').innerHTML = flushCard(st);
+  drawMaps();
+}
+
+function eventCard(ev, st){
+  const f = ev.f, d = ev.d, s = ev.seg;
+  let head = '', body = '';
+  switch (ev.type){
+    case 'READ': {
+      const ok = B(f.ok), dur = N(f.dur), tmax = d.tmax || dur;
+      head = `Read ${chip(s,f.pid)} ${esc(pidName(f.pid))}: ${ok ? val(f.pid, f.val) : '<span class="bad">no answer</span>'}`;
+      body = `<div class="sub">${B(f.early) ? 'Early read' : 'Due read'} · bus busy <b>${dur} ms</b> of Tmax ${tmax} ms · next due in ${fmtD(N(f.next_due) - ev.t)}</div>
+        ${bar(dur / Math.max(tmax, dur) , ok ? color(s, f.pid) : 'var(--crit)', tmax / Math.max(tmax, dur))}
+        <div class="sub" style="margin-top:8px">${d.rec != null ? `Stored in the open block (record #${M.evs[d.rec].d.recNo}).` : d.drop != null ? '<span class="bad">Value dropped: no free buffer.</span>' : ok ? '' : 'Nothing stored.'}
+        ${d.interval != null ? ` ${d.interval} ms since the previous ${f.pid} request (p = ${d.after.p}).` : ''}</div>
+        <div class="sub">Highlighted cells in the tables below changed with this read.</div>`;
+      break; }
+    case 'DECIDE': {
+      const c = d.check;
+      head = `Scheduler chose ${f.rule === 'due' ? 'a due read' : 'an early read'} of ${L(f.pids).map(p => chip(s,p)).join(' ')}`;
+      body = `<div class="sub">${f.rule === 'due' ? `It was due ${f.late} ms ago (most overdue PID).` : `Nothing due; the earliest due is ${f.slack} ms away (more than Tmax), so an eligible PID is read early.`}</div>`
+        + (c ? `<div class="note ${c.ok ? 'good' : 'bad'}">${c.ok ? '✓ Same choice as the rules applied to the table.' : '⚠ ' + esc(c.msg)}</div>` : '');
+      break; }
+    case 'REC': head = f.kind === 'gps' ? 'GPS record appended' : `Record ${chip(s,f.pid)} appended`;
+      body = `<div class="sub">${f.kind === 'gps' ? 15 : 5} bytes at dt ${f.dt} ms · block now ${f.len} / 1024 B</div>`; break;
+    case 'REC_DROP': head = '<span class="bad">Record dropped</span>'; body = `<div class="sub">Both buffers were busy (one filling is full, the other still waiting for flash).</div>`; break;
+    case 'BLK_OPEN': head = `Block opened in buf ${f.buf}`; body = `<div class="sub">It will close when full or 10 s from now (at ${fmtT(N(f.t0) + DEADLINE)}).</div>`; break;
+    case 'BLK_CLOSE': head = `Block in buf ${f.buf} closed: ${esc(f.reason)}`;
+      body = `<div class="sub">${({full:'The next record did not fit in 1024 bytes.', deadline:'10 s since it opened.', config:'Configuration changed.', mode:'Mode changed.', stop:'Restart.'})[f.reason] || ''} ${f.len} B, ${f.recs} records, ${fmtD(N(f.age))} old. Now waiting for the flash writer.</div>`; break;
+    case 'FLUSH': {
+      const blk = M.blocks[d.block], bad = blk.checks.filter(c => !c.ok);
+      head = B(f.ok) ? `Block seq ${f.seq} written to flash` : `<span class="bad">Flash write failed (seq ${f.seq} not consumed)</span>`;
+      body = `<div class="sub">${f.len} B from buf ${f.buf} · write ${f.dur} ms · ${f.attempts} attempt(s)${blk.reason ? ' · closed by ' + blk.reason : ''}. Details in “Last written block”.</div>`
+        + `<div class="note ${bad.length ? 'bad' : 'good'}">${bad.length ? '⚠ ' + bad.map(c => esc(c.label + ' (' + c.detail + ')')).join('<br>⚠ ') : `✓ All ${blk.checks.length} checks pass (header, records = REC events = READs, seq).`}</div>`;
+      break; }
+    case 'CONFIG': head = `Configuration (${esc(f.reason)})`; body = `<div class="sub">Tmax ${f.tmax} ms · planned bus ${(N(f.u)/10).toFixed(1)} % · ${PROTO[f.proto] || 'proto ' + f.proto}. The table is reset from the CVT lines that follow.</div>`; break;
+    case 'MODE': head = B(f.diag) ? 'Diagnostic mode: scheduler suspended' : B(f.running) ? 'Collecting' : 'Scheduler stopped'; break;
+    case 'CMD': head = `App sent <span class="mono">${esc(f.txt)}</span>`; break;
+    case 'RESP': head = `Dongle answered <span class="mono">${esc(f.txt)}</span>`; body = `<div class="sub">${f.dur} ms</div>`; break;
+    default: head = ev.type; body = `<dl class="kv">${Object.entries(f).map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v.length > 80 ? v.slice(0,80) + '…' : v)}</dd>`).join('')}</dl>`;
+  }
+  return `<h2><span class="ty">${ev.type}</span> Current event <span class="r">#${ev.n} · ${fmtT(ev.t)}</span></h2>
+    ${ev.gap ? `<div class="note bad" style="margin:0 0 10px">⚠ ${ev.gap.missing} event(s) lost right before this one: the state below may be off.</div>` : ''}
+    <div class="headline">${head}</div>${body}<div class="raw">${esc(ev.raw)}</div>`;
+}
+
+function valuesCard(st, prev, t){
+  const rows = st.order.map(p => st.rows[p]).filter(Boolean);
+  if (!rows.length) return `<h2>Current values</h2><div class="none">No table yet.</div>`;
+  const s = st.seg;
+  return `<h2>Current values</h2><table><tr><th>PID</th><th>name</th><th class="num">value</th><th class="num">raw</th><th class="num">age</th></tr>${rows.map(r => {
+    const o = prev && prev.rows[r.pid], ch = o && o.val !== r.val;
+    return `<tr><td>${chip(s,r.pid)}</td><td>${esc(pidName(r.pid))}</td><td class="num ${ch ? 'chg' : ''}"><b>${val(r.pid, r.val)}</b></td>
+      <td class="num mono ${ch ? 'chg' : ''}">${ch ? `<span class="was">${esc(o.val ?? '—')}</span>` : ''}${esc(r.val ?? '—')}</td>
+      <td class="num mono muted">${r.valT != null ? fmtD(t - r.valT) : '—'}</td></tr>`;
+  }).join('')}</table>`;
+}
+
+function schedCard(st, prev, t){
+  const rows = st.order.map(p => st.rows[p]).filter(Boolean);
+  if (!rows.length) return `<h2>Schedule</h2><div class="none">—</div>`;
+  const s = st.seg, reading = st.pending ? st.pending.pids : [];
+  const cell = (r, o, k, txt) => { const ch = o && o[k] !== r[k]; return `<td class="num mono ${ch ? 'chg' : ''}">${ch ? `<span class="was">${o[k] ?? '—'}</span>` : ''}${txt}</td>`; };
+  return `<h2>Schedule <span class="r">Tmax ${st.config ? st.config.tmax : '?'} ms</span></h2><table><tr><th>PID</th><th class="num">p / pmin</th><th class="num">last</th><th class="num">due</th><th class="num">due in</th><th>status</th></tr>${rows.map(r => {
+    const o = prev && prev.rows[r.pid];
+    const status = reading.includes(r.pid) ? ['reading','var(--accent)'] : t >= r.due ? ['due','var(--crit)'] : r.last != null && t - r.last >= r.pmin ? ['can read early','var(--s3)'] : ['waiting','var(--line-2)'];
+    return `<tr class="${reading.includes(r.pid) ? 'hi' : ''}"><td>${chip(s,r.pid)}</td><td class="num mono muted">${r.p} / ${r.pmin}</td>
+      ${cell(r, o, 'last', r.last ?? '—')}${cell(r, o, 'due', r.due)}
+      <td class="num mono">${t > r.due ? `<span class="warn">late ${fmtD(t - r.due)}</span>` : fmtD(r.due - t)}</td>
+      <td><span class="st" style="--c:${status[1]}">${status[0]}</span></td></tr>`;
+  }).join('')}</table>`;
+}
+
+function timersCard(st, t){
+  const T = timers(st, t), s = st.seg, r = [];
+  const row = (l, v, b) => r.push(`<div class="trow"><span>${l}</span><span class="v">${v}</span>${b || ''}</div>`);
+  const mode = !st.config ? 'no config' : T.diag ? 'diagnostic' : T.running ? 'collecting' : 'stopped';
+  if (T.reading) row(`Reading ${T.reading.pids.map(p => chip(s,p)).join(' ')}`, `${fmtD(T.reading.since)} / ${T.reading.tmax} ms`, bar(T.reading.since / T.reading.tmax));
+  else if (T.wake) row(`Next wake-up · ${T.wake.rule} ${chip(s,T.wake.pid)}`, T.wake.in <= 0 ? 'now' : fmtD(T.wake.in));
+  else row('Scheduler', mode);
+  if (T.block) row(`Open block closes (10 s)`, `in ${fmtD(T.block.left)}`, bar(T.block.age / DEADLINE, 'var(--s3)'));
+  else row('Open block', 'none');
+  row('Flash writer', T.writing.length ? T.writing.map(w => `buf ${w.buf} waiting ${fmtD(w.wait)}`).join(', ') : 'idle');
+  if (T.ack) row(`Upload ACK timeout (seq ${T.ack.seq})`, fmtD(T.ack.left), bar(1 - T.ack.left / ACK_TIMEOUT, 'var(--warn)'));
+  else if (st.up.lastAck != null) row('Upload', `server has ≤ seq ${st.up.lastAck}`);
+  return `<h2>Timers <span class="r">${mode}</span></h2>${r.join('')}`;
+}
+
+// records of a block as of the selected event (from REC events)
+function recsOf(blk, upto){
+  const out = []; let off = HDR;
+  for (const i of blk.recIdxs){ if (i > upto) break; const f = M.evs[i].f, size = f.kind === 'gps' ? 15 : 5; out.push({i, off, size, f}); off += size; }
+  return out;
+}
+let maps = [];
+function blockCard(st, t){
+  const s = st.seg, b = st.bufs[st.openBuf];
+  const bufLine = st.bufs.map((x,k) => `buf ${k}: <b>${{free:'free', fill:'filling', write:'waiting for flash'}[x.st]}</b>`).join(' · ');
+  if (!b || b.st !== 'fill') return `<h2>Block being filled</h2><div class="none">No block open.</div><div class="sub">${bufLine}</div>`;
+  const blk = M.blocks[M.evs[b.openI].d.block], recs = recsOf(blk, sel), ev = M.evs[sel];
+  maps.push({id:'mapOpen', recs, seg:s});
+  const last = recs.slice(-6).reverse();
+  return `<h2>Block being filled <span class="r">buf ${st.openBuf}</span></h2>
+    <div class="metrics"><div><span class="k">size</span><span class="v">${b.len} <small>/ 1024 B</small></span></div><div><span class="k">records</span><span class="v">${b.recs}</span></div>
+      <div><span class="k">age</span><span class="v">${fmtD(t - b.t0)} <small>/ 10 s</small></span></div><div><span class="k">opened</span><span class="v">${fmtT(b.t0)}</span></div></div>
+    ${bar(b.len / BLOCK_MAX)}
+    <canvas class="map" id="mapOpen" width="64" height="16"></canvas>
+    ${legend(recs, s)}
+    <table style="margin-top:8px"><tr><th>latest records</th><th class="num">offset</th><th class="num">dt</th><th class="num">value</th></tr>${last.map(r => `<tr class="${r.i === ev.i ? 'hi' : ''}"><td>${r.f.kind === 'gps' ? 'GPS' : chip(s, r.f.pid)}</td><td class="num mono">${r.off}</td><td class="num mono">${r.f.dt}</td><td class="num">${r.f.kind === 'gps' ? `${(N(r.f.lat)/1e7).toFixed(4)}, ${(N(r.f.lon)/1e7).toFixed(4)}` : val(r.f.pid, r.f.val)}</td></tr>`).join('')}</table>
+    <div class="sub" style="margin:8px 0 0">${bufLine}</div>`;
+}
+function legend(recs, s){
+  const pids = [...new Set(recs.map(r => r.f.kind === 'gps' ? 'GPS' : r.f.pid))];
+  return `<div class="legend"><span style="--c:var(--hdr)">header</span>${pids.map(p => `<span style="--c:${p === 'GPS' ? 'var(--gps)' : color(s,p)}">${p}</span>`).join('')}<span style="--c:var(--line)">free</span></div>`;
+}
+
+function flushCard(st){
+  const seg = M.segs[st.seg];
+  let fi = -1; for (let i = sel; i >= seg.start; i--) if (M.evs[i].type === 'FLUSH'){ fi = i; break; }
+  if (fi < 0) return `<h2>Last written block</h2><div class="none">No block written yet.</div>`;
+  const fl = M.evs[fi], f = fl.f, blk = M.blocks[fl.d.block], dec = blk.dec, h = dec.hdr, s = st.seg;
+  const bytes = (o,n) => dec.bytes.slice(o, o + n).map(x => hx(x,1)).join(' ');
+  const recs = dec.recs.map(r => ({off:r.off, size:r.size, f:{kind:r.kind, pid:r.pid}}));
+  maps.push({id:'mapFlush', recs, seg:s});
+  const counts = {}; for (const r of dec.recs){ const k = r.kind === 'gps' ? 'GPS' : r.pid; counts[k] = (counts[k] || 0) + 1; }
+  const bad = blk.checks.filter(c => !c.ok);
+  const cl = blk.closeIdx != null ? M.evs[blk.closeIdx] : null;
+  return `<h2>Last written block <span class="r">${fi === sel ? 'this event' : fmtD(M.evs[sel].t - fl.t) + ' ago'}</span></h2>
+    <div class="metrics"><div><span class="k">seq</span><span class="v">${f.seq}${B(f.ok) ? '' : ' <small class="bad">failed</small>'}</span></div><div><span class="k">size</span><span class="v">${f.len} <small>B</small></span></div>
+      <div><span class="k">records</span><span class="v">${dec.recs.length}</span></div><div><span class="k">closed by</span><span class="v">${esc(blk.reason || '?')}</span></div>
+      <div><span class="k">write</span><span class="v">${f.dur} <small>ms${cl ? ` · waited ${fl.t - N(f.dur) - cl.t} ms` : ''}</small></span></div></div>
+    ${h ? `<div class="hdr"><div><div class="k">seq u32</div><div class="v">${h.seq}</div><div class="b">${bytes(0,4)}</div></div><div><div class="k">boot u16</div><div class="v">${h.boot}</div><div class="b">${bytes(4,2)}</div></div>
+      <div><div class="k">t_ms_start u32</div><div class="v">${h.t0}</div><div class="b">${bytes(6,4)}</div></div><div><div class="k">length u16</div><div class="v">${h.len}</div><div class="b">${bytes(10,2)}</div></div></div>` : ''}
+    <canvas class="map" id="mapFlush" width="64" height="16"></canvas>
+    <div class="legend">${Object.entries(counts).map(([k,v]) => `<span style="--c:${k === 'GPS' ? 'var(--gps)' : color(s,k)}">${k} ×${v}</span>`).join('')}<span style="--c:var(--line)">free ${BLOCK_MAX - N(f.len)} B</span></div>
+    <div class="note ${bad.length ? 'bad' : 'good'}">${bad.length ? bad.map(c => '⚠ ' + esc(c.label + ' (' + c.detail + ')')).join('<br>') : `✓ ${blk.checks.length}/${blk.checks.length} checks pass`}</div>`;
+}
+
+// 64×16 canvas = 1024 bytes, one pixel per byte
+function drawMaps(){
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  for (const m of maps){
+    const cv = $(m.id); if (!cv) continue;
+    const g = cv.getContext('2d');
+    g.fillStyle = css('--line'); g.fillRect(0, 0, 64, 16);
+    g.fillStyle = css('--hdr'); for (let b = 0; b < HDR; b++) g.fillRect(b % 64, b >> 6, 1, 1);
+    m.recs.forEach((r, k) => {
+      const sl = r.f.kind === 'gps' ? null : M.segs[m.seg].slot[r.f.pid];
+      g.fillStyle = css(r.f.kind === 'gps' ? '--gps' : sl != null && sl < 8 ? `--s${sl + 1}` : '--muted');
+      g.globalAlpha = k % 2 ? .65 : 1;
+      for (let b = r.off; b < r.off + r.size && b < 1024; b++) g.fillRect(b % 64, b >> 6, 1, 1);
+    });
+    g.globalAlpha = 1;
+  }
+  maps = [];
+}
+
+/* ---------- wiring ---------- */
+$('fi').onchange = e => readFile(e.target.files[0]);
+$('fi2').onchange = e => readFile(e.target.files[0]);
+$('demo').onclick = $('demo2').onclick = () => load(genDemo(), 'demo (generated)');
+document.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('drag'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('drag'); });
+document.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('drag'); readFile(e.dataTransfer.files[0]); });
+$('list').addEventListener('scroll', () => drawList());
+$('sp').addEventListener('click', e => { const r = e.target.closest('[data-i]'); if (r) select(+r.dataset.i); });
+$('q').addEventListener('input', () => { if (M){ rebuildList(); scrollToSel(); } });
+$('noise').onchange = () => { if (M){ rebuildList(); scrollToSel(); } };
+$('speed').onchange = e => speed = +e.target.value;
+$('ctrl').addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b || !M) return;
+  ({first:() => select(0), last:() => select(M.evs.length - 1), prev:() => step(-1), next:() => step(1), play:togglePlay})[b.dataset.a]();
+});
+document.addEventListener('keydown', e => {
+  if (!M || e.target.matches('input,select')) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown'){ e.preventDefault(); step(1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp'){ e.preventDefault(); step(-1); }
+  else if (e.key === ' '){ e.preventDefault(); togglePlay(); }
+  else if (e.key === 'Home') select(0);
+  else if (e.key === 'End') select(M.evs.length - 1);
+});
+$('theme').onclick = () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('evv-theme', document.documentElement.dataset.theme); } catch (e) {}
+  if (M) render();
+};
+try { const th = localStorage.getItem('evv-theme'); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+</script>
+</body>
+</html>
