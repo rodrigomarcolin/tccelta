@@ -257,7 +257,7 @@ será utilizado o protocolo HTTPS/TLS, que é amplamente utilizado para garantir
 
 Fica como limitação do projeto a mitigação de ataques que envolvam o barramento CAN do veículo, como os da categoria \ref{secsec:comunicacao-carro-dongle},
 pois o escopo do projeto envolve apenas os dados medidos pelo dongle, sem abordar a garantia de que o dongle está realmente conectado em uma rede CAN válida, o
-que deve ser garantido externamente. Alguns exemplos de mitigação para isso é incorporar o dongle dentro da arquitetura do carro e não exposto na conexão OBD2 interna,
+que deve ser garantido externamente. Alguns exemplos de mitigação para isso são incorporar o dongle dentro da arquitetura do carro e não exposto na conexão OBD2 interna,
 configurar alertas de desconexão para entender se o dongle foi retirado a fim de ser colocado em um simulador, ou cruzar a medida com sensores externos de velocidade e 
 localização instalados externamente à rede CAN.
 
@@ -272,7 +272,7 @@ confidencialidade e integridade na comunicação. Quando os dois aparelhos são 
 é salva em cada um dos aparelhos para futuras conexões, de modo que não seja necessário repetir o processo de pareamento.
 
 Esse pareamento é feito com um total de 3 fases. Na primeira fase, os aparelhos declaram suas capacidades e requisitos de autenticação como, por exemplo, se têm capacidade
-de entrada e saída e se suportam LESC. Trocadas as capacidades, os dispositivos decidem se continuam o pareamento e é escolhido um método de associação, que estão especificados
+de entrada e saída e se suportam LESC. Trocadas as capacidades, os dispositivos decidem se continuam o pareamento e é escolhido um método de associação, os quais estão especificados
 na tabela \ref{lesc:metodos}, na qual considera-se implícita a pré-condição de que ambos os lados suportam LESC.
 
 \begin{table}[H] 	\label{lesc:metodos}
@@ -320,7 +320,7 @@ de fabricação.
 
 O uso de um KMS é importante pois permite que o servidor consiga verificar e gerar MACs sem que a chave precise estar na memória do servidor de aplicação ($S_{App}$), que
 é um alvo de mais fácil acesso e, portanto, com maior risco de comprometimento, diminuindo a superfície de ataque para adversários do tipo AD5. Ainda há superfície de ataque
-no servidor do KMS, mas ele não é exposto a internet e pode ter um controle de acesso bem mais rígido. 
+no servidor do KMS, mas ele não é exposto à internet e pode ter um controle de acesso bem mais rígido. 
 
 A escolha de usar duas chaves é para que $K_{auth}$ seja usada para criar MAC nas mensagens de autenticação entre o servidor e o dongle, enquanto $K_{rec}$ fica apenas para
 gerar MAC dos blocos de dados que saem do dongle até o servidor. Assim, é possível gerenciar as permissões do KMS para que o servidor de aplicação consiga gerar e verificar
@@ -332,9 +332,9 @@ dessa encriptação, também conta com: Secure Boot V2 para rodar apenas \textit
 da flash e a chave de encriptação do NVS; \textit{eFuse}, memória gravável e não editável que guarda configurações da placa como o bloqueio do uso de JTAG e download pela UART, evitando depuração, 
 e também guardar a chave de encriptação da flash, contando com bloqueio total de leitura. Mesmo com todas essas camadas de proteção, ainda há risco de ataques com atacantes extremamente qualificados.
 
-Uma evolução para guardar melhor as chaves é o uso de um elemento seguro de hardware, como o chip ATECC608B, para armazenar as chaves fora da ESP. Como, mesmo ainda muito mais difícil,
+Uma evolução para guardar melhor as chaves é o uso de um elemento seguro de hardware, como o chip ATECC608B, para armazenar as chaves fora da ESP. Como, embora muito mais difícil,
 ainda é possível extrair chaves de elementos seguros, não vale a pena o seu uso dentro desse projeto, pois agrega apenas em aumento de custo para um ataque de recuperação de chave e não configura uma
-melhoria academicamente relevante em relação a segurança dentro do escopo deste trabalho.
+melhoria academicamente relevante em relação à segurança dentro do escopo deste trabalho.
 
 \begin{figure}[H]
 	\centering
@@ -403,13 +403,13 @@ Assim, com essa modelagem, é possível garantir ordem e completude detectável,
 \end{figure}
 
 Uma limitação real desse modelo vem da dependência do app para conexão com a internet. Um app malicioso pode deliberadamente parar de encaminhar comunicações entre o dongle e o server, ocasionando
-na omissão de medidas e inviabilização da conexão via handshake, como está modelado nos ataques A3.2 e A3.7 da seção \ref{secsec:app-malicioso}. Mesmo que não seja possível mitigar diretamente esse
+a omissão de medidas e inviabilização da conexão via handshake, como está modelado nos ataques A3.2 e A3.7 da seção \ref{secsec:app-malicioso}. Mesmo que não seja possível mitigar diretamente esse
 tipo de ataque, a falta dos dados é detectável do lado do servidor, podendo gerar um alerta.
 
 \subsection{Riscos de sincronização}
 
 O fato de o servidor apenas aceitar valores de $seq$ exatamente iguais a $ACK_{seq} + 1$ pode gerar problema de sincronização em dois casos diferentes: quando ocorre perda de energia, o valor de $seq$
-é perdido, pois ele é armazenado apenas em RAM, uma vez que seu valor muda muito e desgastaria bastante a NVS reescreve-lo a todo bloco gerado; quando um bloco salvo na \textit{flash} é corrompido,
+é perdido, pois ele é armazenado apenas em RAM, uma vez que seu valor muda muito e desgastaria bastante a NVS reescrevê-lo a todo bloco gerado; quando um bloco salvo na \textit{flash} é corrompido,
 a verificação de HMAC falha no servidor e ele é rejeitado e, como não há bloco válido com aquele número de $seq$, o servidor não consegue mais receber blocos. Para abordar esses problemas, são
 criados dois blocos especiais de BOOT e de LOSS.
 
@@ -471,7 +471,7 @@ bloco, que é justificável depois das otimizações feitas anteriormente.
 \subsection{Especificação do processo de handshake}
 
 Quando o dongle começa sua operação principal, ele salva um $boot_id$ na NVS que serve até ele deixar de ser alimentado ou até entrar e sair de deep sleep.
-Enquanto o dongle estiver offline, a coleta dos PIDs de telemetria vai continuar ocorrendo como esperado, com blocos passando buffer em RAM e indo
+Enquanto o dongle estiver offline, a coleta dos PIDs de telemetria vai continuar ocorrendo como esperado, com blocos passando pelo buffer em RAM e indo
 para a memória \textit{flash} com suas tags de autenticação e um CRC32.
 
 Assim que há um pedido de handshake do dongle ou assim que o app se conecta com a internet, o \textit{handshake}, utilizando os parâmetros definidos na tabela \ref{table:params-handshake},
@@ -535,14 +535,18 @@ não está respondendo um desafio repetido; caso $ACK_{local} < ACK_{seq} \leq H
 \textit{flash}. Na resposta do dongle, o $N_S$ ecoado serve para garantir que a resposta enviada é de um novo desafio. Ao avaliar a resposta, o 
 server confere, além da tag, se o eco de $c_S$ e de $N_S$ corresponde ao desafio guardado no banco de dados, se ele ainda não foi usado e se não expirou; caso positivo, envia bloco $ACK$ com flags zeradas e o token JWT.
 
-Para o cálculo da tag, é usada a chave $K_{auth}$ para gerar o HMAC-SHA256 segundo a equação \ref{eq:hmac-sha256}, que é truncado em seguida para
-16 bytes a fim de economizar banda na transmissão. Aqui é possível truncar devido ao fato de o server ter permissão de gerar MACs com $K_{auth}$
-no KMS, o que possibilita o servidor gerar o HMAC e comparar os primeiros 16 bytes; como o server não consegue gerar HMAC para $K_{rec}$, não é possível
-truncar o HMAC dos blocos sem perder o isolamento de responsabilidades no KMS. 
+Para o cálculo da tag das mensagens de handshake, que são relacionadas à autenticação, é usada a chave $K_{auth}$ para gerar o HMAC-SHA256 segundo a 
+equação \ref{eq:hmac-sha256-auth}, que é truncado em seguida para 16 bytes a fim de economizar banda na transmissão. Aqui é possível truncar devido ao 
+ato de o server ter permissão de gerar MACs com $K_{auth}$ no KMS, o que possibilita o servidor gerar o HMAC e comparar os primeiros 16 bytes; como o server 
+não consegue gerar HMAC para $K_{rec}$, não é possível truncar o HMAC dos blocos, mostrado na equação \ref{eq:hmac-sha256-rec}, sem perder o isolamento de 
+responsabilidades no KMS.
 
-No cálculo do HMAC em \ref{eq:hmac-sha256}, além da chave e do payload, são adicionados no cálculo da tag alguns separadores de contexto para evitar
+No cálculo do HMAC em \ref{eq:hmac-sha256-auth}, além da chave e do payload, são adicionados no cálculo da tag alguns separadores de contexto para evitar
 que uma tag válida seja reaproveitada em outro contexto para um payload de mesmo valor. O termo "MALCONG" é um rótulo fixo para esse projeto, 
 o \textit{tipo} representa o tipo de bloco que está sendo calculado no MAC. A figura \ref{fig:blocos-handshake} mostra os tipos de blocos utilizados no handshake.
+Já a equação \ref{eq:hmac-sha256-rec} mostra o cálculo do HMAC feito para os blocos guardados na \textit{flash}, também usando o rótulo fixo "MALCONG" e o \textit{DevId},
+completando com a constante $0x03$ para manter a convenção de adicionar o tipo de mensagem no cálculo do HMAC; é importante lembrar que o bloco engloba seu próprio cabeçalho,
+que contém o $seq$, não sendo necessário adicioná-lo novamente.
 
 O diagrama de sequência da figura \ref{fig:sequencia-handshake} mostra o fluxo de comunicação, considerando a intermediação do app. O gatilho de handshake ocorre nas seguintes
 situações: boot do dongle ou nova conexão BLE, eventos que zeram a flag na RAM do dongle que indica se houve handshake, fazendo com que o dongle peça um handshake para o app
@@ -551,9 +555,15 @@ que força um novo handshake para sincronização.
 
 Sobre a âncora de tempo, uma limitação conhecida é quando um boot fica todo seu ciclo de vida em uma conexão, o que faz com que o boot fique sem sincronização de relógio completa.
 
-\begin{equation} \label{eq:hmac-sha256}
+
+\begin{equation} \label{eq:hmac-sha256-auth}
 	tag = \text{HMAC-SHA256}_{K_{auth}}("MALCONG"\ ||\ \text{tipo}\ ||\ DevId\ ||\ \text{payload})
 \end{equation}
+
+\begin{equation} \label{eq:hmac-sha256-rec}
+	tag = \text{HMAC-SHA256}_{K_{rec}}("MALCONG"\ ||\ \text{0x03} ||\ DevId\ ||\ \text{bloco})
+\end{equation}
+
 
 \begin{figure}[H]
 	\centering
@@ -631,7 +641,7 @@ cada fluxo de dados entre app e dongle fica separado e com suas próprias respon
 
 Além dos tipos de blocos definidos no handshake, existem mais alguns tipos que precisam ser usados para orquestrar a comunicação entre app e dongle, sendo
 todos eles apresentados na tabela \ref{table:tipos-blocos}. Quando são enviados via BLE no SYNC\_RX, como convenção do projeto, os blocos são estruturados no formato TLV (type, length, value), 
-sendo 3 bytes concatenados no início de cada bloco, o primeiro representando o tipo e o segundo o comprimento total do corpo da mensagem (sem contar o tipo e comprimento). Além disso, quando são
+sendo 3 bytes concatenados no início de cada bloco, o primeiro byre representa o tipo e os outros dois o comprimento do corpo da mensagem, ou seja, sem contar o tipo e comprimento. Além disso, quando são
 enviados no SYNC\_TX, também é necessário englobar o bloco TLV em um enquadramento com um byte de controle na frente: nesse byte de controle, o bit 7 vale 1 quando for um início de mensagem e os bits de 6 a 0
 servem de contador de modo que o primeiro fragmento da mensagem completa começa em 0 e a cada fragmento vai somando 1 até 127, voltando para 0 no próximo fragmento, o que permite detectar fragmentos faltantes.
 Para remontar, então, basta desencapsular e juntar os fragmentos na ordem correta até o comprimento marcado ser alcançado.
@@ -750,7 +760,7 @@ A quantidade de blocos pedida na mensagem é sempre o mínimo entre o número de
 
 É importante notar que o MTU do BLE não suporta um bloco inteiro, que fica negociado em torno de 272 bytes. O bloco completo, como mostra a figura \ref{fig:bloco-completo} terá 1059 bytes, sendo 1 byte com o 
 tipo, 2 bytes com o comprimento, 1024 bytes de dados e, por fim, 32 bytes de tag. Os bytes do CRC são conferidos antes de o dongle enviar os blocos via BLE, então não aparecem aqui.
-Para enviar os blocos então, o app primeiro consolida no formato TLV e, em seguida, divide em tamanhos iguais de $MTU - 1$ bytes, adicionando o byte de controle, sendo que o bit 7 do byte de controle vale 1 somente
+Para enviar os blocos então, o dongle primeiro consolida no formato TLV e, em seguida, divide em fragmentos de até $MTU - 4$ bytes, adicionando o byte de controle, sendo que o bit 7 do byte de controle vale 1 somente
 no primeiro fragmento de cada bloco da flash. Esses blocos são então mandados via BLE para o app, que remonta o bloco original da flash. Quando os blocos chegam no app, são enviados via requisição POST. A resposta
 dessa requisição é um bloco ACK (0x04) que contém o novo valor de $ACK_{seq}$, que é usado para atualizar o app e o dongle sobre quais blocos foram reconhecidos pelo servidor.
 
