@@ -482,7 +482,7 @@ começa e segue a seguinte sequência de passos, abstraindo a intermediação do
 	\item Server anota $S1$
 	\item Server envia um bloco desafio tipo 0x01 para o dongle contendo: $c_S$, $N_S$, $ACK_{seq}$, $c_{conf}$, $flags_c$, $diag_min$ e $tag$ (47 bytes) com destino ao dongle
 	\item Dongle responde um bloco tipo 0x02 contendo: $c_S$, $N_S$, $HEAD_{seq}$, $boot\_id$, $t_{ms}$, e $tag$ (46 bytes) com destino ao server
-	\item Com $S2$, o server fecha a âncora de tempo para $boot\_id$ segundo algoritmo de Christian
+	\item Com $S2$, o server fecha a âncora de tempo para $boot\_id$ segundo algoritmo de Cristian
 	\item Server envia bloco ACK tipo 0x04 contendo: $ACK_{seq}$, $c_{conf}$, $flags_a$, e $tag$ (25 bytes) com destino ao dongle
 	\item Server envia, com destino ao app, um token JWT válido para receber blocos do app.
 \end{enumerate}
@@ -549,7 +549,7 @@ situações: boot do dongle ou nova conexão BLE, eventos que zeram a flag na RA
 a partir das mensagens que serão especificadas em \ref{sec:app-ble-dongle}; token JWT perto de expirar, o que força um novo handshake para nova emissão de token JWT; ou âncora rejeitada,
 que força um novo handshake para sincronização.
 
-Sobre a âncora de tempo, uma limitação conhecida é quando um boot fica todo seu ciclo de vida em uma conexão, o que faz com que o boot fique sem sincroniza de relógio completa.
+Sobre a âncora de tempo, uma limitação conhecida é quando um boot fica todo seu ciclo de vida em uma conexão, o que faz com que o boot fique sem sincronização de relógio completa.
 
 \begin{equation} \label{eq:hmac-sha256}
 	tag = \text{HMAC-SHA256}_{K_{auth}}("MALCONG"\ ||\ \text{tipo}\ ||\ DevId\ ||\ \text{payload})
@@ -612,7 +612,7 @@ a possibilidade de ataques do tipo A1.2, A1.3 e A1.4 da seção \ref{secsec:comu
 apenas depois de um pareamento seguindo o padrão LESC, ajustando o firmware do dongle para aceitar apenas conexões LESC.
 
 O método de pareamento dentre os definidos na tabela \ref{lesc:metodos} será o Just Works, devido ao fato de o dongle não
-ter nenhuma capacidade de Input/Output. Isso expõe a conexão ao ataque A1.2, de \textit{Man in The Middle}, modelado na seção
+ter nenhuma capacidade de Input/Output. Isso expõe a conexão ao ataque A1.3, de \textit{Man in The Middle}, modelado na seção
 \ref{secsec:comunicacao-wireless} para um adversário do tipo AD1, que está perto do carro no momento da conexão. 
 
 No entanto, são tomadas algumas medidas para diminuir esse risco:
@@ -633,7 +633,8 @@ Além dos tipos de blocos definidos no handshake, existem mais alguns tipos que 
 todos eles apresentados na tabela \ref{table:tipos-blocos}. Quando são enviados via BLE no SYNC\_RX, como convenção do projeto, os blocos são estruturados no formato TLV (type, length, value), 
 sendo 3 bytes concatenados no início de cada bloco, o primeiro representando o tipo e o segundo o comprimento total do corpo da mensagem (sem contar o tipo e comprimento). Além disso, quando são
 enviados no SYNC\_TX, também é necessário englobar o bloco TLV em um enquadramento com um byte de controle na frente: nesse byte de controle, o bit 7 vale 1 quando for um início de mensagem e os bits de 6 a 0
-servem de contador de modo que o primeiro fragmento da mensagem completa começa em 0 e a cada fragmento vai somando 1 até 127, voltando para 0 no próximo fragmento, o que permite sabe quando a mensagem acabou.
+servem de contador de modo que o primeiro fragmento da mensagem completa começa em 0 e a cada fragmento vai somando 1 até 127, voltando para 0 no próximo fragmento, o que permite detectar fragmentos faltantes.
+Para remontar, então, basta desencapsular e juntar os fragmentos na ordem correta até o comprimento marcado ser alcançado.
 Isso é necessário pelo fato de as mensagens do SYNC\_TX poderem ser fragmentadas em vários pacotes BLE. O formato do pacote de cada característica do SYNC pode ser visto na figura \ref{fig:sync-tvl}.
 
 \begin{figure}[H]
@@ -749,7 +750,7 @@ A quantidade de blocos pedida na mensagem é sempre o mínimo entre o número de
 
 É importante notar que o MTU do BLE não suporta um bloco inteiro, que fica negociado em torno de 272 bytes. O bloco completo, como mostra a figura \ref{fig:bloco-completo} terá 1059 bytes, sendo 1 byte com o 
 tipo, 2 bytes com o comprimento, 1024 bytes de dados e, por fim, 32 bytes de tag. Os bytes do CRC são conferidos antes de o dongle enviar os blocos via BLE, então não aparecem aqui.
-Para enviar os blocos então, o app primeiro consolida no formato TLV e, em seguida, divide em tamanhos iguais de $MTU - 1$ bytes, adicionando o byte de controle, sendo que o bit 0 do byte de controle vale 1 somente
+Para enviar os blocos então, o app primeiro consolida no formato TLV e, em seguida, divide em tamanhos iguais de $MTU - 1$ bytes, adicionando o byte de controle, sendo que o bit 7 do byte de controle vale 1 somente
 no primeiro fragmento de cada bloco da flash. Esses blocos são então mandados via BLE para o app, que remonta o bloco original da flash. Quando os blocos chegam no app, são enviados via requisição POST. A resposta
 dessa requisição é um bloco ACK (0x04) que contém o novo valor de $ACK_{seq}$, que é usado para atualizar o app e o dongle sobre quais blocos foram reconhecidos pelo servidor.
 
