@@ -414,7 +414,7 @@ a verificação de HMAC falha no servidor e ele é rejeitado e, como não há bl
 criados dois blocos especiais de BOOT e de LOSS.
 
 Para o bloco de BOOT, é necessário manter uma reserva de $seq$ na NVS para que o contador retome a partir do valor da reserva sempre que perder alimentação. Uma sugestão para esse valor é sempre
-armazenar o valor de $seq + 64$ na NVS a cada $64$ blocos gerados e gravados na 	extit{flash}. Sempre que o dongle perder energia, ao ser religado ele deve ler o valor da reserva $seq$ da NVS, retomar a contagem a partir dele e,
+armazenar o valor de $seq + 64$ na NVS a cada $64$ blocos gerados e gravados na \textit{flash}. Sempre que o dongle perder energia, ao ser religado ele deve ler o valor da reserva $seq$ da NVS, retomar a contagem a partir dele e,
 por fim, gerar um bloco de BOOT declarando que há furo na sequência entre o último bloco salvo na \textit{flash} e o valor que está na reserva de $seq$.
 
 \begin{figure}[H]
@@ -480,10 +480,10 @@ começa e segue a seguinte sequência de passos, abstraindo a intermediação do
 \begin{enumerate}
 	\item Dongle pede que $S_{App}$ envie um desafio
 	\item Server anota $S1$
-	\item Server envia um bloco desafio tipo 0x01 para o dongle contendo: $c_S$, $N_S$, $ACK_{seq}$, $c_{conf}$, $flags_c$, $diag_min$ e $tag$ (63 bytes) com destino ao dongle
-	\item Dongle responde um bloco tipo 0x02 contendo: $HEAD_{seq}$, $boot\_id$, $t_{ms}$, $flags_a$ e $tag$ (62 bytes) com destino ao server
+	\item Server envia um bloco desafio tipo 0x01 para o dongle contendo: $c_S$, $N_S$, $ACK_{seq}$, $c_{conf}$, $flags_c$, $diag_min$ e $tag$ (47 bytes) com destino ao dongle
+	\item Dongle responde um bloco tipo 0x02 contendo: $HEAD_{seq}$, $boot\_id$, $t_{ms}$, e $tag$ (46 bytes) com destino ao server
 	\item Com $S2$, o server fecha a âncora de tempo para $boot\_id$ segundo algoritmo de Christian
-	\item Server envia bloco ACK tipo 0x04 contendo: $ACK_{seq}$, $c_{conf}$, $flags_a$, e $tag$ (41 bytes) com destino ao dongle
+	\item Server envia bloco ACK tipo 0x04 contendo: $ACK_{seq}$, $c_{conf}$, $flags_a$, e $tag$ (25 bytes) com destino ao dongle
 	\item Server envia, com destino ao app, um token JWT válido para receber blocos do app.
 \end{enumerate}
 
@@ -573,33 +573,33 @@ Sobre a âncora de tempo, uma limitação conhecida é quando um boot fica todo 
 		\newcommand{\fim}[3]{\node[posfim] at (#1,#2-0.9) {#3};}
 
 		% Desafio (tipo 0x01, servidor -> dongle)
-		\node[titulo] at (0,0.2) {Desafio: 0x01 (63 bytes)};
+		\node[titulo] at (0,0.2) {Desafio: 0x01 (47 bytes)};
 		\campo{0}{0}{1.4}{$c_S$}{0}
 		\campo{1.4}{0}{3.0}{$N_S$}{4}
 		\campo{4.4}{0}{1.8}{$ack_{seq}$}{20}
 		\campo{6.2}{0}{1.8}{$c_{conf}$}{24}
 		\campo{8.0}{0}{1.2}{flags}{28}
 		\campo{9.2}{0}{1.8}{$diag_{min}$}{29}
-		\campo{11.0}{0}{3.8}{$tag$ ($K_{auth}$)}{31}
-		\fim{14.8}{0}{63}
+		\campo{11.0}{0}{1.9}{$tag$ ($K_{auth}$)}{31}
+		\fim{12.9}{0}{47}
 
 		% Resposta (tipo 0x02, dongle -> servidor)
-		\node[titulo] at (0,-2.4) {Resposta: 0x02 (62 bytes)};
+		\node[titulo] at (0,-2.4) {Resposta: 0x02 (46 bytes)};
 		\campo{0}{-2.4}{1.8}{$c_S$ (eco)}{0}
 		\campo{1.8}{-2.4}{3.0}{$N_S$ (eco)}{4}
 		\campo{4.8}{-2.4}{1.8}{$head_{seq}$}{20}
 		\campo{6.6}{-2.4}{1.6}{$boot_{id}$}{24}
 		\campo{8.2}{-2.4}{1.2}{$t_{ms}$}{26}
-		\campo{9.4}{-2.4}{3.8}{$tag$ ($K_{auth}$)}{30}
-		\fim{13.2}{-2.4}{62}
+		\campo{9.4}{-2.4}{1.9}{$tag$ ($K_{auth}$)}{30}
+		\fim{11.3}{-2.4}{46}
 
 		% ACK (tipo 0x04, servidor -> dongle)
-		\node[titulo] at (0,-4.8) {ACK: 0x04 (41 bytes)};
+		\node[titulo] at (0,-4.8) {ACK: 0x04 (25 bytes)};
 		\campo{0}{-4.8}{1.8}{$ack_{seq}$}{0}
 		\campo{1.8}{-4.8}{1.8}{$c_{conf}$}{4}
 		\campo{3.6}{-4.8}{1.2}{flags}{8}
-		\campo{4.8}{-4.8}{3.8}{$tag$ ($K_{auth}$)}{9}
-		\fim{8.6}{-4.8}{41}
+		\campo{4.8}{-4.8}{1.9}{$tag$ ($K_{auth}$)}{9}
+		\fim{6.7}{-4.8}{25}
 	\end{tikzpicture}
 	\legend{Fonte: elaborado pelo autor.}
 \end{figure}
@@ -694,13 +694,13 @@ pelo fato de as mensagens do SYNC\_TX poderem ser fragmentadas em vários pacote
 		\hline
 		\textbf{Tipo} & \textbf{Nome} & \textbf{Tamanho (bytes)} & \textbf{Parâmetros (bytes)} \\
 		\hline
-		0x01 & Desafio & 61 ou 63 & $c_{S}$ (4), $N_{S}$ (16), $ACK_{seq}$ (4), $c_{conf}$ (4), $flags$ (1), $diag\_min$ (2, só com o bit 0 das $flags$), $tag$ (32) \\
+		0x01 & Desafio & 45 ou 47 & $c_{S}$ (4), $N_{S}$ (16), $ACK_{seq}$ (4), $c_{conf}$ (4), $flags$ (1), $diag\_min$ (2, só com o bit 0 das $flags$), $tag$ (16) \\
 		\hline
-		0x02 & Resposta & 62 & $c_{S}$ (4, eco), $N_{S}$ (16, eco), $HEAD_{seq}$ (4), $boot\_id$ (2), $t_{ms}$ (4), $tag$ (32) \\
+		0x02 & Resposta & 46 & $c_{S}$ (4, eco), $N_{S}$ (16, eco), $HEAD_{seq}$ (4), $boot\_id$ (2), $t_{ms}$ (4), $tag$ (16) \\
 		\hline
 		0x03 & Bloco & 392 a 1.056 & $seq$ (4), $boot\_id$ (2), $t_{ms}$ inicial (4), tamanho (2), registros (até 1.012), $tag$ (32) \\
 		\hline
-		0x04 & ACK & 41 & $ACK_{seq}$ (4), $c_{conf}$ (4), $flags$ (1), $tag$ (32) \\
+		0x04 & ACK & 25 & $ACK_{seq}$ (4), $c_{conf}$ (4), $flags$ (1), $tag$ (16) \\
 		\hline
 		0x05 & Pedido de lote & 2 & $K$ (2) \\
 		\hline

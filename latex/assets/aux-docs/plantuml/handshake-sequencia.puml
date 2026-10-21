@@ -21,7 +21,7 @@ note over S
   (anota o instante do envio)
 end note
 
-S -> A : Desafio 0x01\n(c_S, N_S, ACK_seq, c_conf, flags, diag_min, tag)
+S -> A : Desafio 0x01\n(c_S, N_S, ACK_seq, c_conf, flags_c, diag_min, tag)
 A -> D : Desafio 0x01 (BLE)
 
 note over D
@@ -29,7 +29,7 @@ note over D
   e **boot_id** da NVS
 end note
 
-D -> A : Resposta 0x02\n(c_S, N_S, HEAD_seq, boot_id, t_ms, flags, tag)
+D -> A : Resposta 0x02\n(c_S, N_S, HEAD_seq, boot_id, t_ms, tag)
 A -> S : Resposta 0x02 (HTTPS)
 
 note over S
