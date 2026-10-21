@@ -27,7 +27,7 @@
 \usepackage{microtype}
 \usepackage{longtable}
 \usepackage{tikz}
-\usetikzlibrary{decorations.pathreplacing,arrows.meta,positioning}
+\usetikzlibrary{decorations.pathreplacing,arrows.meta,positioning,calc}
 \usepackage{amsmath}
 \usepackage{float}
 \usepackage{array}
@@ -833,11 +833,112 @@ O bloco de erro carrega um byte que pode definir diferentes tipos de erros. Os e
 	\legend{Fonte: elaborado pelo autor.}
 \end{figure}
 
-Para permitir mais eficiência, o dongle usa uma estratégia de cursor de envio para enviar novos blocos para o app antes de receber o ACK dos anteriores.
+Para permitir mais eficiência, o dongle usa uma estratégia de \textit{cursor de envio} para enviar novos blocos para o app antes de receber o ACK dos anteriores.
 Quando o app pede por mais blocos, mesmo o ACK ainda não tendo chegado dos blocos anteriores, o dongle manda para o app via BLE, que já lê e remonta os fragmentos
 para ter os blocos prontos para enviar ao servidor. Assim que o post é concluído, o próximo lote pode ser enviado sem esperar uma leitura do BLE, garantindo maior eficiência.
 Caso a requisição para o servidor falhe, o app manda um bloco de erro com parâmetro 0x07 e o dongle volta o cursor de envio para o primeiro bloco ainda não reconhecido pelo servidor, que é o $ACK_{seq} + 1$,
 e o app descarta o pacote lido anteriormente. No fim, nada se perde, pois a flash só é limpa quando o ACK é recebido.
+
+\begin{figure}[H]
+	\centering
+	\caption{Cursor de envio e $ACK_{seq}$ na sequência de blocos do dongle}
+	\label{fig:cursor-envio}
+	\begin{tikzpicture}[
+			bloco/.style={draw, minimum width=1.2cm, minimum height=0.9cm, font=\small},
+			ack/.style={bloco, fill=green!45},
+			env/.style={bloco, fill=orange!60},
+			prox/.style={bloco, fill=violet!40},
+			pend/.style={bloco, fill=white},
+			seta/.style={-{Stealth[length=2.5mm]}, thick}
+		]
+		\foreach \i/\est in {1/ack, 2/ack, 3/env, 4/env, 5/env, 6/prox, 7/prox, 8/prox, 9/pend} {
+			\node[\est] (b\i) at (1.2*\i, 0) {\i};
+		}
+		\node[right=2mm of b9] {$\cdots$};
+
+		% ACK_seq
+		\draw[seta] ($(b2.north)+(0,1.1)$) -- (b2.north);
+		\node[above] at ($(b2.north)+(0,1.1)$) {$ACK_{seq}$};
+
+		% Cursor anterior (pontilhado)
+		\draw[seta, dotted] ($(b5.north)+(0,1.1)$) -- (b5.north);
+		\node[above] at ($(b5.north)+(0,1.1)$) {Cursor anterior};
+
+		% Cursor atual
+		\draw[seta] ($(b8.north)+(0,1.1)$) -- (b8.north);
+		\node[above] at ($(b8.north)+(0,1.1)$) {Cursor};
+
+		% Chave sobre os blocos em envio ao servidor
+		\draw[decorate, decoration={brace, amplitude=6pt, mirror}, thick]
+			($(b3.south west)+(0.05,-0.15)$) -- ($(b5.south east)+(-0.05,-0.15)$)
+			node[midway, below=9pt, align=center, font=\footnotesize]
+			{sendo enviados ao\\servidor pelo app};
+
+		% Chave sobre os blocos enviados antes do ACK
+		\draw[decorate, decoration={brace, amplitude=6pt, mirror}, thick]
+			($(b6.south west)+(0.05,-0.15)$) -- ($(b8.south east)+(-0.05,-0.15)$)
+			node[midway, below=9pt, align=center, font=\footnotesize]
+			{enviados ao app antes do\\ACK dos blocos anteriores};
+
+		% Legenda
+		\node[font=\small, align=center] at (6.6,-3.3) {%
+			\tikz[baseline=-0.5ex]\draw[fill=green!45] (0,-0.15) rectangle (0.3,0.15); reconhecidos pelo servidor\quad
+			\tikz[baseline=-0.5ex]\draw[fill=orange!60] (0,-0.15) rectangle (0.3,0.15); em envio ao servidor\\[1mm]
+			\tikz[baseline=-0.5ex]\draw[fill=violet!40] (0,-0.15) rectangle (0.3,0.15); enviados ao app antes do ACK\quad
+			\tikz[baseline=-0.5ex]\draw[fill=white] (0,-0.15) rectangle (0.3,0.15); ainda não enviados};
+	\end{tikzpicture}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+Na figura \ref{fig:cursor-envio}, os blocos 1 e 2 já foram reconhecidos pelo servidor, os blocos 3 a 5 estão sendo enviados ao servidor pelo app e o cursor, que antes estava no bloco 5,
+avançou para o bloco 8, pois os blocos 6 a 8 já foram enviados ao app antes do ACK dos anteriores.
+A figura \ref{fig:cursor-paralelismo} compara os dois comportamentos: sem o cursor, o dongle só transfere o lote seguinte depois do ACK do anterior; com o cursor,
+a transferência BLE do lote seguinte acontece durante o \textit{post} do lote atual.
+
+\begin{figure}[H]
+	\centering
+	\caption{Paralelismo entre a transferência BLE e o envio ao servidor, sem e com cursor de envio}
+	\label{fig:cursor-paralelismo}
+	\begin{tikzpicture}[
+			lane/.style={font=\small, anchor=east},
+			ble/.style={draw, fill=blue!20, minimum height=0.7cm, anchor=west, font=\small, inner sep=0pt},
+			post/.style={draw, fill=orange!50, minimum height=0.7cm, anchor=west, font=\small, inner sep=0pt},
+			futuro/.style={draw, dashed, fill=blue!8, minimum height=0.7cm, anchor=west, font=\small, inner sep=0pt},
+			titulo/.style={font=\small\bfseries, anchor=west},
+			seta/.style={{Stealth[length=2mm]}-{Stealth[length=2mm]}, thick}
+		]
+		\def\tlbox#1#2#3#4#5{\node[#1, minimum width=#4cm] at (#2,#3) {#5};}
+
+		% (a) sem cursor
+		\node[titulo] at (-2.3,0.9) {(a) Sem cursor: o dongle espera o ACK para enviar o próximo lote};
+		\node[lane] at (-0.2,0) {BLE};
+		\node[lane] at (-0.2,-0.9) {Servidor};
+		\tlbox{ble}{0}{0}{2}{Lote 1}
+		\tlbox{post}{2}{-0.9}{3}{\textit{Post} do lote 1}
+		\tlbox{ble}{5}{0}{2}{Lote 2}
+		\tlbox{post}{7}{-0.9}{3}{\textit{Post} do lote 2}
+
+		% (b) com cursor
+		\node[titulo] at (-2.3,-2.3) {(b) Com cursor: o BLE do próximo lote ocorre durante o \textit{post}};
+		\node[lane] at (-0.2,-3.2) {BLE};
+		\node[lane] at (-0.2,-4.1) {Servidor};
+		\tlbox{ble}{0}{-3.2}{2}{Lote 1}
+		\tlbox{post}{2}{-4.1}{3}{\textit{Post} do lote 1}
+		\tlbox{ble}{2}{-3.2}{2}{Lote 2}
+		\tlbox{post}{5}{-4.1}{3}{\textit{Post} do lote 2}
+		\tlbox{futuro}{5}{-3.2}{2}{Lote 3}
+
+		% Comparação de tempo
+		\draw[dashed] (10,0.5) -- (10,-4.55);
+		\draw[dashed] (8,-3.65) -- (8,-4.55);
+		\draw[seta] (8,-4.4) -- (10,-4.4);
+		\node[font=\small, below] at (9,-4.4) {tempo economizado};
+
+		% Eixo do tempo
+		\draw[-{Stealth[length=2.5mm]}, thick] (0,-5.4) -- (10.8,-5.4) node[right, font=\small] {tempo};
+	\end{tikzpicture}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
 
 Os diagramas \ref{seq:aviso-novo-bloco} e \ref{seq:lote-envio} mostram esse processo de comunicação e troca de mensagens BLE entre dongle e app pelo serviço de SYNC.
 O primeiro cobre o aviso de novo bloco e a decisão de \textit{handshake}, inclusive quando o app está sem conexão com a internet; o segundo cobre o pedido de lote,

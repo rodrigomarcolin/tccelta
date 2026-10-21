@@ -47,19 +47,26 @@ The protocol sends data to `127.0.0.1` (localhost), so the simulator must run on
 
 ## Telemetry Data
 
-Each UDP packet contains the following fields:
+Each UDP packet (64 bytes, little-endian `<4s15f`) contains the following fields. Only raw vehicle signals are sent; the bridge derives every Service 01 PID available in the dongle's diagnostic mode from them (see `../socket/README.md`).
 
-| Field | Description | OBD-II PID / Unit |
-|---|---|---|
-| `format` | Protocol identifier (`OBD1`) | — |
-| `rpm` | Engine speed | PID `0C`, RPM |
-| `engineLoad` | Calculated engine load | PID `04`, 0–1 |
-| `watertemp` | Coolant temperature | PID `05`, °C |
-| `fuel` | Fuel level | PID `2F`, 0–1 |
-| `throttle` | Throttle position | PID `49`, 0–1 |
-| `speed` | Vehicle speed | PID `0D`, m/s |
-| `turboBoostPsi` | Turbo boost pressure | PSI |
-| `oiltemp` | Engine oil temperature | °C |
+| Field | Description | Unit | Feeds PIDs |
+|---|---|---|---|
+| `format` | Protocol identifier (`OBD2`) | — | — |
+| `rpm` | Engine speed | RPM | `0C`, MAF/MAP/timing estimates |
+| `engineLoad` | Calculated engine load | 0–1 | `04`, `0B`, `43`, `44` |
+| `watertemp` | Coolant temperature | °C | `05`, `30`, `2E` |
+| `oiltemp` | Engine oil temperature | °C | `5C` |
+| `fuel` | Fuel level | 0–1 | `2F` |
+| `throttle` | Throttle body position (after ESC / limiter) | 0–1 | `11`, `45`, `47`, `4C` |
+| `throttleInput` | Driver pedal | 0–1 | `49`, `5A`, `61` |
+| `speed` | Vehicle speed | m/s | `0D`, `31`, `21` |
+| `turboBoostPsi` | Turbo boost pressure | PSI | `0B`, `0F` |
+| `engineRunning` | Engine running flag | 0/1 | `1F` and all modelled PIDs |
+| `checkEngine` | BeamNG's check engine light | 0/1 | `21`, `4D` |
+| `engineTorque` | Current engine output torque | N·m | `62` |
+| `maxTorque` | Peak torque of the engine | N·m | `62`, `63` |
+| `ambientTemp` | Ambient air temperature | °C | `46`, `0F` |
+| `ambientPressure` | Ambient pressure | kPa | `33`, `0B` |
 
 The data is sent as a binary structure. The receiving application must use the same field order, data types, and memory layout to decode packets correctly.
 
@@ -76,5 +83,5 @@ You can modify these values in the Lua file if needed.
 ## Notes
 
 - The protocol skips sending data until the vehicle's coolant temperature signal is available.
-- Some telemetry values may be zero if the vehicle does not provide the corresponding signal.
+- Some telemetry values may be zero if the vehicle does not provide the corresponding signal (e.g. `engineTorque`/`maxTorque` on vehicles without a combustion engine). Ambient temperature and pressure fall back to 25 °C / 101.325 kPa if the environment cannot be queried.
 - Installing directly into the game directory may require reinstalling the file after a game update or file verification.
