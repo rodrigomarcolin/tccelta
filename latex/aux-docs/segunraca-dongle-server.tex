@@ -27,6 +27,7 @@
 \usepackage{microtype}
 \usepackage{longtable}
 \usepackage{tikz}
+\usetikzlibrary{decorations.pathreplacing,arrows.meta,positioning}
 \usepackage{amsmath}
 \usepackage{float}
 \usepackage{array}
@@ -146,34 +147,34 @@ a partir do qual o ataque é executado, a vulnerabilidade que ele explora, o alv
 Esses são ataques que se concetram tanto enlace BLE entre o app e dongle quanto na conexão de rede entre o app e o server. 
 Dentre eles, estão sniffing, replay, Man In The Middle (MITM), acesso direto ao dongle por um terceiro e negação de serviço do enlace.
 
-Abaixo estão modelados os ataques do ponto de vista do BLE, mas os mesmoes princípios podem ser pensados para um adverário do tipo (AD4) que interfere
+Abaixo estão modelados os ataques do ponto de vista do BLE, mas os mesmoes princípios podem ser pensados para um adverário do tipo AD4 que interfere
 na comunicação entre o app e o servidor.
 
-Um exemplo de ataque dessa categoria é o sniffing (A1.1), no qual o adversário do tipo (AD1) pode querer obter os dados do motorista, afetando sua
+Um exemplo de ataque dessa categoria é o sniffing (A1.1), no qual o adversário do tipo AD1 pode querer obter os dados do motorista, afetando sua
 privacidade. A pré-condição é ter um sniffer ao alcance do sinal do BLE, cujo enlace não é cifrado. O método a partir do qual ele é feito é
 seguir a conexão e recuperar tudo que passa pelas características do dongle de maneira passiva. A vulnerabilidade explorada é a falta de cifração
 nas características BLE, o alvo são os dados transferidos pelo enlace, e o efeito é o vazamento de dados medidos pelo dongle.
 
-No ataque de \textit{replay} (A1.2), o adversário do tipo (AD1) quer repetir comandos ou respostas para alterar o estado do dongle ou enganar o app.
+No ataque de \textit{replay} (A1.2), o adversário do tipo AD1 quer repetir comandos ou respostas para alterar o estado do dongle ou enganar o app.
 A pré-condição é ter capturado o tráfego por \textit{sniffing} e conseguir se conectar ao dongle ou se passar por ele. O método consiste em
 reescrever na característica de recepção quadros gravados anteriormente, como \texttt{AT\#DIAG 1}, \texttt{AT\#PID} ou \texttt{ATZ}, ou em se
 anunciar como o dongle e devolver respostas antigas ao app. A vulnerabilidade explorada é a ausência de autenticação da conexão e de
 garantia de frescor das mensagens, somada ao fato de o app não verificar a identidade do dongle. O alvo são o modo e a configuração do dongle
 e os dados exibidos pelo app, e o efeito é uma coleta pausada ou reconfigurada sem o conhecimento do motorista, ou um painel com valores falsos.
 
-Já no \textit{Man In The Middle} (A1.3), o adversário do tipo (AD1) quer ler e alterar em tempo real o que app e dongle trocam. A pré-condição é estar
+Já no \textit{Man In The Middle} (A1.3), o adversário do tipo AD1 quer ler e alterar em tempo real o que app e dongle trocam. A pré-condição é estar
 presente quando o app se conecta ou durante o pareamento, com dois rádios BLE. O método é conectar-se ao dongle, anunciar um clone dele ao
 app e repassar todo o tráfego entre os dois, alterando valores ou inserindo comandos no caminho. A vulnerabilidade explorada é que nenhum dos
 lados autentica o outro no enlace, o alvo é a integridade de comandos e respostas, incluindo as requisições ao barramento CAN no modo
 diagnóstico, e o efeito é um painel adulterado e requisições injetadas no carro.
 
-Por fim, no acesso direto (A1.4), o adversário do tipo (AD1) quer usar o dongle como se fosse o app. A pré-condição é que o dongle aceite conexões
+Por fim, no acesso direto (A1.4), o adversário do tipo AD1 quer usar o dongle como se fosse o app. A pré-condição é que o dongle aceite conexões
 de qualquer dispositivo, e o método é simplesmente conectar-se e escrever comandos na característica de recepção, inclusive requisições ao
 barramento CAN no modo diagnóstico. A vulnerabilidade explorada é a falta de autenticação da conexão, agravada pelo dongle aceitar uma
 segunda conexão simultânea. O alvo são os dados medidos, o modo diagnóstico e a configuração do dongle, e o efeito é a leitura dos dados,
 a pausa da coleta e consultas ao veículo feitas em nome do dono.
 
-Na negação de serviço do enlace (A1.5), o adversário do tipo (AD1) quer impedir que o app se comunique com o dongle, atacando a
+Na negação de serviço do enlace (A1.5), o adversário do tipo AD1 quer impedir que o app se comunique com o dongle, atacando a
 disponibilidade da conexão. A pré-condição é estar ao alcance do sinal BLE do dongle. O método é conectar-se ao dongle assim que ele
 começa a se anunciar e manter a conexão aberta, ocupando as conexões que ele aceita, de modo que o app oficial não consiga se conectar. 
 A vulnerabilidade explorada é que o dongle aceita conexões de qualquer dispositivo e tem um número limitado delas. O alvo é a disponibilidade 
@@ -186,14 +187,14 @@ Já esses ataques acontecem no barramento CAN entre o carro e o dongle, ou seja,
 usar algum elemento externo para simular a CAN do veículo por inteiro ou para sobrescrever um determinado PID a fim de
 manipular leituras.
 
-No ataque de ECU emulada (A2.1), o adversário do tipo (AD2) quer que a seguradora receba uma condução melhor do que a real. A pré-condição é ter
+No ataque de ECU emulada (A2.1), o adversário do tipo AD2 quer que a seguradora receba uma condução melhor do que a real. A pré-condição é ter
 acesso físico à porta OBD e um emulador ou \textit{gateway} CAN, sendo que o próprio ECUSim deste projeto serve como prova de conceito.
 O método é ligar o dongle no emulador, ou colocar um \textit{gateway} entre a porta e o dongle que repassa as requisições ao carro e altera
 apenas as respostas escolhidas, como limitar a velocidade reportada. A vulnerabilidade explorada é que as respostas OBD-II não são
 autenticadas, de modo que o dongle confia em quem responder. O alvo é a veracidade dos dados medidos antes de serem assinados, e o efeito
 são registros autênticos com conteúdo falso: a assinatura prova que o dongle mediu, mas não que o carro disse aquilo.
 
-Na resposta concorrente no barramento (A2.2), o adversário do tipo (AD2) quer sobrescrever apenas alguns PIDs sem retirar o carro do barramento.
+Na resposta concorrente no barramento (A2.2), o adversário do tipo AD2 quer sobrescrever apenas alguns PIDs sem retirar o carro do barramento.
 A pré-condição é ter um dispositivo ligado ao CAN capaz de responder mais rápido que a ECU. O método é escutar as requisições funcionais,
 enviadas para o identificador 0x7DF, e responder em 0x7E8 antes da ECU real. A vulnerabilidade explorada é a mesma do ataque anterior,
 somada ao fato de o dongle aceitar a primeira resposta da faixa 0x7E8--0x7EF sem endereçar ECUs específicas. O alvo é a veracidade dos PIDs
@@ -204,50 +205,41 @@ escolhidos, e o efeito, além dos registros autênticos com conteúdo falso, é 
 Como o aplicativo será instalado no aparelho do usuário do dongle, um aparelho com \textit{root} tem total controle do
 funcionamento do app e pode manipulá-lo para gerar ataques ao sistema. Esses ataques podem manipular o processo de envio dos
 dados entre o app e o servidor a fim de fazer com que as informações do servidor não correspondam com o que foi realmente medido 
-pelo dongle no carro. O principal adversário nesse contexto é o do tipo (AD2), que controla o app e pode querer forjar cenários de
+pelo dongle no carro. O principal adversário nesse contexto é o do tipo AD2, que controla o app e pode querer forjar cenários de
 medição que vão de encontra aos interesses da entidade no servidor externo, como uma seguradora ou gerenciadora de frotas.
 
-Na exfiltração (A3.1), o adversário do tipo (AD3), ou um SDK de terceiros embutido no próprio app, quer vender ou usar para outros fins os dados de
+Na exfiltração (A3.1), o adversário do tipo AD3, ou um SDK de terceiros embutido no próprio app, quer vender ou usar para outros fins os dados de
 condução e de posição do motorista. A pré-condição é ter permissão de Bluetooth e de internet no celular pareado com o dongle. O método é
 conectar-se ao dongle quando o app oficial não está conectado e ler os dados medidos, ou ler os registros e posições que passam pelo app,
 enviando tudo a outro servidor. A vulnerabilidade explorada é que os dados não são cifrados na camada de aplicação e que a autorização é
 feita por aparelho, e não por app. O alvo é a privacidade do motorista, e o efeito é o vazamento de dados pessoais e o rastreamento do veículo.
 
-Na pausa da coleta (A3.2), o adversário do tipo (AD2), por meio de um app modificado, ou o do tipo (AD3), quer esconder trechos da direção. A pré-condição
-é ter acesso às características BLE do dongle por um celular pareado, e o método é enviar \texttt{AT\#DIAG 1} antes de dirigir e
-\texttt{AT\#DIAG 0} depois, tirando o dongle do modo de coleta durante o trajeto. A vulnerabilidade explorada é que a troca de modo não exige
-autorização do servidor. O alvo é a completude da coleta, e o efeito é um intervalo sem dados que se parece com um uso legítimo do modo diagnóstico.
-
-Já na omissão de mensagens do servidor (A3.3), o adversário do tipo (AD2), por meio de um app modificado, quer degradar a coleta sem que a culpa
+Já na omissão de mensagens do servidor (A3.2), o adversário do tipo AD2, por meio de um app modificado, quer degradar a coleta sem que a culpa
 recaia sobre o app. A pré-condição é que o app seja o único caminho entre o servidor e o dongle. O método é receber do servidor o desafio, a
 confirmação de recebimento ou o \textit{token} de diagnóstico e não repassá-los ao dongle, ou repassar apenas alguns. A vulnerabilidade
 explorada é que as mensagens do servidor não têm confirmação de entrega ao dongle. O alvo é a recuperabilidade dos registros, a âncora de
 tempo e a troca de época, e o efeito é que, sem confirmações, a memória do dongle enche e ele descarta registros antigos; sem desafio, não
 há âncora de tempo nem época nova; e, sem \textit{token}, o diagnóstico é negado.
 
-Na alteração de medições (A3.4), o adversário do tipo (AD2) quer melhorar o próprio histórico. A pré-condição é controlar o app, ou um \textit{proxy}
+Na alteração de medições (A3.3), o adversário do tipo AD2 quer melhorar o próprio histórico. A pré-condição é controlar o app, ou um \textit{proxy}
 com uma autoridade certificadora instalada no celular, e o método é modificar bytes de um bloco antes de enviá-lo ao servidor. A
 vulnerabilidade explorada é a ausência de integridade fim a fim, o alvo é a integridade dos registros, e o efeito é a aceitação de dados falsos.
 
-Na repetição de medições (A3.5), o adversário do tipo (AD2) quer repetir uma viagem tranquila. A pré-condição é ter gravado blocos antigos, e o método
+Na repetição de medições (A3.4), o adversário do tipo AD2 quer repetir uma viagem tranquila. A pré-condição é ter gravado blocos antigos, e o método
 é reenviar ao servidor blocos já aceitos. A vulnerabilidade explorada é a falta de garantia de unicidade, o alvo é a unicidade dos registros,
 e o efeito são dados duplicados no servidor.
 
-Na reordenação das medidas enviadas (A3.6), o adversário do tipo (AD2) quer deslocar eventos no tempo. A pré-condição é controlar o app, e o método é enviar os blocos
+Na reordenação das medidas enviadas (A3.5), o adversário do tipo AD2 quer deslocar eventos no tempo. A pré-condição é controlar o app, e o método é enviar os blocos
 fora de ordem. A vulnerabilidade explorada é que a ordem dos registros não é garantida, o alvo é a ordem dos registros, e o efeito é uma
 linha do tempo falsa.
 
-No descarte de medições intermediários (A3.7), o adversário do tipo (AD2) quer apagar um evento específico, como uma frenagem brusca. A pré-condição
+No descarte de medições intermediários (A3.6), o adversário do tipo AD2 quer apagar um evento específico, como uma frenagem brusca. A pré-condição
 é controlar o app, e o método é deixar de enviar os blocos escolhidos. A vulnerabilidade explorada é a falta de completude, o alvo é a
 completude dos registros, e o efeito é uma lacuna silenciosa nos dados do servidor.
 
-Ao omitir as últimas medições (A3.8), o adversário do tipo (AD2) quer omitir a última viagem. A pré-condição é controlar o app, e o método é parar de enviar
+Ao omitir as últimas medições (A3.7), o adversário do tipo AD2 quer omitir a última viagem. A pré-condição é controlar o app, e o método é parar de enviar
 blocos antes do último. A vulnerabilidade explorada é que o servidor não conhece o número de sequência do último registro gerado, o alvo é a
 completude dos registros, e o efeito é uma perda de dados invisível ao servidor.
-
-Ao parar de sincronizar propositalmente o dongle com o app (A3.9), o adversário do tipo (AD2) quer não reportar nada. A pré-condição é poder desligar o app ou o Bluetooth, e o método é
-nunca abrir uma sessão com o servidor. Não há vulnerabilidade técnica a explorar, pois é impossível obrigar o app a sincronizar; o alvo é a
-completude dos registros, e o efeito é a ausência de dados.
 
 \subsection{Definição de escopo e mitigação de ataques}
 
@@ -309,19 +301,315 @@ e autenticidade entre a conexão app e servidor.
 
 \section{Segurança na comunicação fim a fim}
 
-\subsection{Modelo de handshake}
+Esta seção tem como propósito modelar como deve ser feita a comunicação fim a fim, entre dongle e servidor, garantindo que hava todas as propriedades de segurança previstas
+no projeto. A ideia é comparar com benchmarks duas implementações diferentes: usando MAC (Message Authentication Code) com chave simétrica pré-compartilhada (PSK) e usando 
+assinatura digital via chave assimétrica. Em ambas as formas, a ideia é o dongle conseguir provar criptograficamente que validou os blocos antes de enviá-los para o servidor e,
+quando esses blocos chegarem no seu destivo, o servidor consiga validar que os blocos que chegaram pela rede são de fato gerados pelo dongle. 
 
-\subsection{Auntenticação e integridade}
+Para entender a necessidade dessa modelagem, é importante deixar claro o motivo das camadas de LESC e HTTPS na comunicação não serem suficientes. Esses dois mecanismos garantem
+segurança na comunição entre dongle e app e entre app e servidor, respectivamente, mas não conseguem garantir que pacotes realmente foram gerados pelo dongle, uma vez que eles
+serão transmitidos por meio de um intermediário que tem controle total sobre o conteúdo.
 
-\subsection{Completude detectável}
+\subsection{Geração de chaves e identificação do dongle}
 
-\subsection{Unicidade}
+Na fabricação do dongle, serão gerados um \textit{DevId} de 8 bytes e duas chaver $K_{auth}$ e $K_{rec}$ de 32 bytes cada. Cada um desses elementos é sorteado usando forte
+entropia ao fabricar o dongle. As chaves são gravadas na NVS do dongle e registradas em um serviço de KMS (Key Management System) em um servidor separado ($S_{KMS}$), 
+trafegando na rede criptografadas com uma chave pública fornecida por $S_{KMS}$; dessa maneira, a fica em claro apenas apenas por pouco tempo na memória da estação
+de fabricação.
+
+O uso de um KMS é importante pois permite que o servidor consiga verificar e gerar MACs sem que a chave precise estar na memória do servidor de aplicação ($S_{App}$), que
+é um alvo de mais fácil acesso e, portanto, com maior risco de comprometimento, diminuindo a superfície de ataque para adversários do tipo AD5. Ainda há superfície de ataque
+no servidor do KMS, mas ele não é exposto a internet e pode ter um controle de acesso bem mais rídigo. 
+
+A escolha de usar duas chaves é para que $K_{auth}$ seja usada para criar MAC nas mensagens de autenticação entre o servidor e o dongle, enquanto $K_{rec}$ fica apenas para
+gerar MAC dos blocos de dados que saem do dongle até o servidor. Assim, é possível gerenciar as permissões do KMS para que o servidor de aplicação consiga gerar e verificar
+MACs com $K_{auth}$, mas consiga apenas verificar MACs com $K_{rec}$. Assim, mesmo que $S_{App}$ seja comprometido, um atacante não consegue gerar MACs válidos para um dongle
+sem também comprometer o $S_{KMS}$.
+
+Enquanto do lado do servidor o KMS garante a proteção das chaves, o dongle conta com o armazenamento das chaves no NVS (Non-Volatile Storage) com excriptação. Para garntir maior segurança
+desse encriptação, também conta com: Secure Boot V2 para rodar apenas \textit{firmware} assinado e não permitir injeção arbitrária de código; \textit{flash encryption} para cifrar as partições
+da flash e a chave de encriptação do NVP; \textit{eFuse}, memória gravável e não editável que guarda configurações da placa como o bloquear do uso de JTAG e download pela UART, evitando depuração, 
+e também guardar a chave de encriptação da flash, contando bom bloqueio total de leitura. Mesmo com todas essas camadas de proteção, ainda há risco de ataques com atacantes extremamente qualificados.
+
+Uma evolução para guardar melhor as chaves é o uso de um elemento seguro de hardware, como o chip ATECC608B, para armazenar as chaves fora da ESP. Como, mesmo ainda muito mais difícil,
+ainda é possível extrair chaves de elementos seguros, não vale a pena o seu uso dentro desse projeto, pois agrega apenas em aumento de custo para um ataque de recuperação de chave e não configura uma
+melhoria academicamente relevante em relação a segurança dentro do escopo desde trabalho.
+
+\begin{figure}[H]
+	\centering
+	\caption{Interação entre o app, o servidor de aplicação e o servidor KMS}
+	\label{fig:kms-servidor-app}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/kms-servidor-app.puml
+	\includegraphics[width=\textwidth]{aux-docs/kms-servidor-app.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+\subsection{Garantia das propriedades de segurança}
+
+A coleta no dongle ocorre de maneira offline-first, como mencionado em Investigação-3.pdf. Para que não seja possível alterar blocos guardadados no sistema de arquivos do dongle,
+assim que o buffer em memória enche o bloco vai ser guardados na memória \textit{flash}, é calculada uma tag de autenticação de 32 bytes via HMAC-SHA256 a partir da chave $K_{rec}$, 
+que é salva concatenada ao bloco de dados. Desse modo, caso o dado seja alterado enquanto está na memória, a tag se tornará inválida.
+
+Quando um bloco chega no servidor é possível verificar a tag a partir de uma chamda ao KMS para validar a mensagem e, em seguida, salvar o bloco decodificado. Desse modo, é possível garantir 
+integridade e autenticidade do bloco no servidor. Esse desenho garante que ataques to tipo A3.3 da seção \ref{secsec:app-malicioso} não consigam alterar blocos antigos antes de enviar
+ao servidor e também garante que não seja possível fabricar novos blocos.
+
+Para que seja possível garantir unicidade, quando um bloco cujo MAC seja válido é recebido pelo servidor, é extraída a \textit{seq} do cabeçado desse bloco. O servidor verifique se um
+bloco com o mesmo valor de \textit{seq} foi recebido, descartando o bloco em caso positivo. Assim, garante-se que um atacante não consiga repetir blocos antigos para alterar os registros
+no servidor, como foi modelado para o adversário do tivo AD2 no ataque A3.4 da seção \ref{secsec:app-malicioso}. 
+
+Para que seja possível garantir completude detectável, é necessário que o servidor consiga identificar com exatidão qual foi o número \textit{seq} no último bloco recebido, $ACK_{seq}$, a fim
+de que seja possível comparar com o \textit{seq} do último bloco medido pelo dongle, o $HEAD_{seq}$, sendo a diferença $HEAD_{seq} - ACK_{seq}$ entre esses valores a quantida de blocos
+que estão com envio pendente para o server. QUando um
+
+Por isso, para conseguir começar a enviar dados, deve haver um \textit{handshake} entre dongle e servidor (por meio do app) a partir do qual dongle e servidor trocam esses dois 
+valores, e assim o servidor consegue identificar se o app está escondendo alguma cauda de dados. Na medida que os blocos vão chegando, o servidor atualiza o valor de $ACK_{seq}$ e,
+nos próximos \textit{handshakes} e respostas do servidor, o dongle consegue apagar de seu armazenamento os blocos que já foram reconhecidos pelos servidor. Além disso, para garantir sequência e ordem, o servidor
+apenas aceita pacotes cujo valor de seq é exatamente $ACK_{seq} + 1$, descartando pacotes fora de ordem. Essa dinâmica é ilustrada na \autoref{fig:fila-ack-head}.
+
+Assim, com essa modelagem, é possível garantir ordem e completude detectável. A ordem é garantida pelo destaque de pacotes cujo $seq$ não é exatamente $ACK_{seq} + 1$, enquanto a completura
+é detectada na comparação entre os valores de $HEAD_{seq}$ e $ACK_{seq}$, que são trocados no \textit{handshake} obrigatório entre dongle e servidor antes que mais dados sejam enviados. Esse
+mecanismo mitiga os ataques A3.5 e A3.6 da seção \ref{secsec:app-malicioso}, impedindo que as medidas sejam reordenadas ou que sejam criadas lacunas entre difenretes medidas.
+
+\begin{figure}[H]
+	\centering
+	\caption{Fila de blocos no dongle e a posição de $ACK_{seq}$ e $HEAD_{seq}$}
+	\label{fig:fila-ack-head}
+	\begin{tikzpicture}[
+		bloco/.style={draw, minimum width=1.3cm, minimum height=1.1cm, inner sep=0pt, font=\small},
+		enviado/.style={bloco, fill=green!30},
+		pendente/.style={bloco, fill=orange!40},
+		ponteiro/.style={-{Stealth[length=2.5mm]}, thick},
+		chave/.style={decorate, decoration={brace, amplitude=7pt}, thick},
+		rotulo/.style={align=center, font=\small}
+	]
+		% Blocos 1..8, do mais antigo ao mais recente
+		\foreach \i in {1,...,4} {
+			\node[enviado] (b\i) at (1.3*\i, 0) {\i};
+		}
+		\foreach \i in {5,...,8} {
+			\node[pendente] (b\i) at (1.3*\i, 0) {\i};
+		}
+
+		% Ponteiros por baixo dos blocos
+		\draw[ponteiro] (b4.south |- 0,-1.9) -- (b4.south);
+		\node[anchor=north] at (b4.south |- 0,-1.9) {$ACK_{seq}$};
+		\draw[ponteiro] (b8.south |- 0,-1.9) -- (b8.south);
+		\node[anchor=north] at (b8.south |- 0,-1.9) {$HEAD_{seq}$};
+
+		% Chaves por cima dos blocos
+		\draw[chave] ([yshift=3pt]b1.north west) -- ([yshift=3pt]b4.north east)
+			node[rotulo, midway, above=9pt] {dados apagados\\da \textit{flash}};
+		\draw[chave] ([yshift=3pt]b5.north west) -- ([yshift=3pt]b8.north east)
+			node[rotulo, midway, above=9pt] {dados ainda\\não enviados};
+	\end{tikzpicture}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+Uma limitação real desse modelo vem da dependência do app para conexão com a internet. Um app malicioso pode deliberadamente parar de encaminhar comunicações entre o dongle e o server, ocasionando
+na omissão de medidas e inviabilização da conexão via handshake, como está modelado nos ataques A3.2 e A3.7 da seção \ref{secsec:app-malicioso}. Mesmo que não seja possível mitigar diretamente esse
+tipo de ataque, a falta dos dados é detectável do lado do servidor, podendo gerar um alerta.
+
+\subsection{Riscos de sincronização}
+
+O fato de o server apenas aceitar valores de $seq$ exatamente iguais a $ACK_{seq} + 1$ pode gerar problema de sincronização em dois casos diferentes: quando ocorre perda de energia, o valor de $seq$
+é perdido, pois ele é armazenado apenas em RAM, uma vez que seu valor muda muito e desgastaria bastante a NVS reescreve-lo a todo bloco gerado; quando um bloco salvo na \textit{flash} é corrompido,
+a verificação de HMAC falha no servidor e ele é rejeitado e, como não há bloco válido com aquele número de $seq$, o servidor não consegue mais receber blocos. Para abordar esses problemas, são
+criados dois blocos especiais de BOOT e de LOSS.
+
+Para o bloco de BOOT, é necessário manter uma reserva de $seq$ na NVS para que o contador retome a partir do valor da reseva semrep que perder alimentação. Uma sugestão para esse valor é sempre
+armazenar o valor de $seq + 64$ na NVS a cada $64$ blocos enviados. Sempre que o dongle perder energia, ao ser religado ele deve ler o valor da reserva $seq$ da NVS, retomar a contagem a partir dele e,
+por fim, gerar um bloco de BOOT declarando que há furo na sequência entre o último bloco salvo na \textit{flash} e o valor que está na reserva de $seq$.
+
+\begin{figure}[H]
+	\centering
+	\caption{Reserva de $seq$ na NVS e geração do bloco de BOOT após perda de energia}
+	\label{fig:reserva-seq-boot}
+	\begin{tikzpicture}[
+		bloco/.style={draw, minimum width=1.5cm, minimum height=1cm, inner sep=0pt, font=\small},
+		boot/.style={bloco, fill=green!30},
+		queda/.style={bloco, fill=red!25},
+		reticencias/.style={minimum width=1.5cm, font=\large},
+		ponteiro/.style={-{Stealth[length=2.5mm]}, thick},
+		chave/.style={decorate, decoration={brace, amplitude=7pt, mirror}, thick},
+		rotulo/.style={align=center, font=\small},
+		linha/.style={anchor=east, align=right, font=\small}
+	]
+		% Linha 1: operação normal e reserva de seq na NVS
+		\node[bloco] (a0) at (0,0) {$n$};
+		\node[bloco] (a1) at (1.7,0) {$n+1$};
+		\node[reticencias] (a2) at (3.4,0) {$\cdots$};
+		\node[bloco] (a3) at (5.1,0) {$n+64$};
+		\node[linha] at (-1,0) {operação\\normal};
+		\draw[ponteiro] ([yshift=1cm]a3.north) -- (a3.north);
+		\node[rotulo, above] at ([yshift=1cm]a3.north) {reserva de $seq$ na NVS};
+
+		% Linha 2: desligamento no meio da fila
+		\node[bloco] (b0) at (0,-3) {$n$};
+		\node[queda] (b1) at (1.7,-3) {$n+1$};
+		\node[reticencias] (b2) at (3.4,-3) {$\cdots$};
+		\node[bloco] (b3) at (5.1,-3) {$n+64$};
+		\node[linha] at (-1,-3) {perda de\\energia};
+		\draw[ponteiro] ([yshift=-1cm]b1.south) -- (b1.south);
+		\node[rotulo, below] at ([yshift=-1cm]b1.south) {desligamento};
+
+		% Linha 3: religamento e bloco de BOOT
+		\node[bloco] (c0) at (0,-6.5) {$n$};
+		\node[queda] (c1) at (1.7,-6.5) {$n+1$};
+		\node[reticencias] (c2) at (3.4,-6.5) {$\cdots$};
+		\node[boot] (c3) at (5.1,-6.5) {BOOT};
+		\node[linha] at (-1,-6.5) {religamento};
+		\draw[ponteiro] ([yshift=1cm]c3.north) -- (c3.north);
+		\node[rotulo, above] at ([yshift=1cm]c3.north) {novo valor de $seq$};
+		\draw[chave] (c1.south west) -- (c3.south east)
+			node[rotulo, midway, below=9pt] {faixa coberta pelo bloco de BOOT\\(furo na sequência)};
+	\end{tikzpicture}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+Para o caro de corrompimento, é necessário verificar se houve corrompimento no bloco sempre antes de enviá-lo ao app para ir ao servidor e, caso seja detectado, deve ser gerado um bloco de LOSS 
+com o valor atual de $seq$, que será reconhecido no servidor e registrado como LOSS. Seria possível verificar a integridade do bloco apenas calculando o hash, mas isso é computacionalmente custoso
+para recalcular em todo bloco. Por isso, é mais eficiente salvar um CRC32 junto da tag HMAC em todo bloco e verificar esse CRC32 antes de mandar para o app. O uso do CRC32 adiciona apenas 4 bytes por
+bloco, que é justificável depois das otimizações feitas anteriormente.
+
+\subsection{Especifição do processo de handshake}
+
+Quando o dongle começa sua operação principal, ele salva um $boot_id$ na NVS que serve até ele deixar de ser alimentado ou até entrar e sair de deep sleep.
+Enquanto o dongle estiver offline, a coleta dos PIDs de telemetria vai continuar ocorrendo como esperado, com blocos passando buffer em RAM e indo
+para a memória \textit{flash} com suas tags de autenticação e um CRC32.
+
+Assim que há um pedido de handshake do dongle ou assim que o app se conecta com a internet, o \textit{handshake}, utilizando os parâmetros definidos na tabela \ref{table:params-handshake},
+começa e segue a seguinte sequência de passos, abstraindo a intermediação do app:
+
+\begin{enumerate}
+	\item Dongle pede que $S_{App}$ envie um desafio
+	\item Server anota $S1$
+	\item Server envia um bloco desafio tipo 0x01 para o dongle contendo: $c_S$, $N_S$, $ACK_{seq}$, $c_{conf}$, $flags_c$, $diag_min$ e $tag$ (63 bytes) com destino ao dongle
+	\item Dongle responde um bloco tipo 0x02 contendo: $HEAD_{seq}$, $boot\_id$, $t_{ms}$, $flags_a$ e $tag$ (62 bytes) com destino ao server
+	\item Com $S2$, o server fecha a âncora de tempo para $boot\_id$ segundo algoritmo de Christian
+	\item Server envia bloco ACK tipo 0x04 contendo: $ACK_{seq}$, $c_{conf}$, $flags_a$, e $tag$ (41 bytes) com desito ao dongle
+	\item Server envia, com destivo ao app, um token JWT válido para receber blocos do app.
+\end{enumerate}
+
+\begin{figure}[H]
+	\centering
+	\caption{Diagrama de sequência do \textit{handshake} e da âncora de tempo}
+	\label{fig:sequencia-handshake}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/handshake-sequencia.puml
+	\includegraphics[width=\textwidth]{aux-docs/handshake-sequencia.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+\begin{table}[H]
+	\centering
+	\caption{Parâmetros do processo de \textit{handshake}}
+	\label{table:params-handshake}
+	\begin{tabular}{|>{\centering\arraybackslash}m{0.15\textwidth}|>{\raggedright\arraybackslash}m{0.45\textwidth}|>{\centering\arraybackslash}m{0.15\textwidth}|>{\centering\arraybackslash}m{0.1\textwidth}|}
+		\hline
+		\textbf{Parâmetro} & \textbf{Descrição} & \textbf{Origem} & \textbf{Bytes} \\
+		\hline
+		$c_{S}$ & Contador de desafios associado ao dongle pelo seu \textit{DevId} & $S_{App}$ & 4 \\
+		\hline
+		$N_{S}$ & \textit{Nonce} que identifica o desafio & $S_{App}$ & 16 \\
+		\hline
+		$ACK_{seq}$ & Fronteira que indica o último \textit{seq} recebido pelo server & $S_{App}$ & 4 \\
+		\hline
+		$c_{conf}$ & $c_{S}$ do último desafio aceito para conferência & $S_{App}$ & 4 \\
+		\hline
+		$flags_c$ & Bit 0: indice se ativa modo dignóstico; Outros bits reservados & $S_{App}$ & 1 \\
+		\hline
+		$diag_min$ & Tempos em minutos que o dispositivo ficará em modo diagnóstico & $S_{App}$ & 2 \\
+		\hline
+		$HEAD_seq$ & Valor de $seq$ do último bloco gravado no LittleFS & Dongle & 4 \\
+		\hline
+		$boot\_id$ & O valor de ID do \textit{boot} atual do dongle & Dongle & 2 \\
+		\hline
+		$t_{ms}$ & Tempo em milissegundos deste o boot no instance da resposta & Dongle & 4 \\
+		\hline
+		$flags_a$ & Bit 0: indica falha na sincronização de tempo, \textit{handshake} deve ser repetivo; Outros bits reservados & Dongle & 1 \\
+		\hline
+		$tag$ & Tag calculada via HMAC-SHA256 & Dongle ou $S_{App}$ & 16 \\
+		\hline
+	\end{tabular}
+\end{table}
+
+Para o cálculo da tag, é usada a chave $K_{auth}$ para gerar o HMAC-SHA256 segundo a equação \ref{eq:hmac-sha256}, que é truncado em seguida para
+16 bytes a fim de economizar banda na transmissão. Aqui é possível truncar devido ao fato de o server ter permissão de gerar MACs com $K_{auth}$
+no KSM, o que possibilita o app gerar o HMAC e comparar os primeiros 16 bytes; como o server não consegue gerar HMAC para $K_{rec}$, não é possível
+truncar o HMAC dos blocos sem perder o isolamento de responsabilidades no KMS. 
+
+No cálculo do HMAC em \ref{eq:hmac-sha256}, além da chave e do payload, são adicionadaos no cálculo da tag alguns separados de contexto para evitar
+que uma tag válida seja reaproveitada em outro contexto para um payload de mesmo valor. O termo "MALCONG" é um rótulo fixo para esse projeto, 
+o \textit{tipo} representa o tipo de bloco que está sendo calculada no MAC. A figura \ref{fig:blocos-handshake} mostra os tipos de blocos utilizados no handshake.
+
+O diagrama de sequência da figura \ref{fig:sequencia-handshake} mostra o fluxo de comunicação, considerando a intermdiação do app.
+
+\begin{equation} \label{eq:hmac-sha256}
+	tag = \text{HMAC-SHA256}_{K_{auth}}("MALCONG"\ ||\ \text{tipo}\ ||\ DevId\ ||\ \text{payload})
+\end{equation}
+
+\begin{figure}[H]
+	\centering
+	\caption{Blocos utilizados no \textit{handshake}}
+	\label{fig:blocos-handshake}
+	\begin{tikzpicture}[
+		campo/.style={draw, minimum height=0.9cm, inner sep=1pt, font=\small, align=center},
+		posini/.style={font=\scriptsize, anchor=north west, inner sep=1pt},
+		posfim/.style={font=\scriptsize, anchor=north east, inner sep=1pt},
+		titulo/.style={font=\small\bfseries, anchor=south west}
+	]
+		% \campo{x}{y}{largura}{texto}{posição inicial}
+		\newcommand{\campo}[5]{%
+			\node[campo, anchor=north west, minimum width=#3 cm] at (#1,#2) {#4};
+			\node[posini] at (#1,#2-0.9) {#5};}
+		% \fim{x}{y}{posição final}
+		\newcommand{\fim}[3]{\node[posfim] at (#1,#2-0.9) {#3};}
+
+		% Desafio (tipo 0x01, servidor -> dongle)
+		\node[titulo] at (0,0.2) {Desafio: 0x01 (63 bytes)};
+		\campo{0}{0}{1.4}{$c_S$}{0}
+		\campo{1.4}{0}{3.0}{$N_S$}{4}
+		\campo{4.4}{0}{1.8}{$ack_{seq}$}{20}
+		\campo{6.2}{0}{1.8}{$c_{conf}$}{24}
+		\campo{8.0}{0}{1.2}{flags}{28}
+		\campo{9.2}{0}{1.8}{$diag_{min}$}{29}
+		\campo{11.0}{0}{3.8}{$tag$ ($K_{auth}$)}{31}
+		\fim{14.8}{0}{63}
+
+		% Resposta (tipo 0x02, dongle -> servidor)
+		\node[titulo] at (0,-2.4) {Resposta: 0x02 (62 bytes)};
+		\campo{0}{-2.4}{1.8}{$c_S$ (eco)}{0}
+		\campo{1.8}{-2.4}{3.0}{$N_S$ (eco)}{4}
+		\campo{4.8}{-2.4}{1.8}{$head_{seq}$}{20}
+		\campo{6.6}{-2.4}{1.6}{$boot_{id}$}{24}
+		\campo{8.2}{-2.4}{1.2}{$t_{ms}$}{26}
+		\campo{9.4}{-2.4}{3.8}{$tag$ ($K_{auth}$)}{30}
+		\fim{13.2}{-2.4}{62}
+
+		% ACK (tipo 0x04, servidor -> dongle)
+		\node[titulo] at (0,-4.8) {ACK: 0x04 (41 bytes)};
+		\campo{0}{-4.8}{1.8}{$ack_{seq}$}{0}
+		\campo{1.8}{-4.8}{1.8}{$c_{conf}$}{4}
+		\campo{3.6}{-4.8}{1.2}{flags}{8}
+		\campo{4.8}{-4.8}{3.8}{$tag$ ($K_{auth}$)}{9}
+		\fim{8.6}{-4.8}{41}
+	\end{tikzpicture}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
 
 \section{Integração entre BLE e HTTPS/TLS para troca de dados entre dongle e servidor}
 
 \subsection{Repasse de pacotes via BLE}
 
 \subsection{Envio de dados do app para o servidor}
+
+\section{Implementação do servidor}
+
+\subsection{Estrutura de dados}
+
+\subsection{Servidor de aplicação}
+
+\subsection{Servidor KMS}
 
 \postextual
 
