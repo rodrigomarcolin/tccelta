@@ -543,7 +543,12 @@ No cálculo do HMAC em \ref{eq:hmac-sha256}, além da chave e do payload, são a
 que uma tag válida seja reaproveitada em outro contexto para um payload de mesmo valor. O termo "MALCONG" é um rótulo fixo para esse projeto, 
 o \textit{tipo} representa o tipo de bloco que está sendo calculada no MAC. A figura \ref{fig:blocos-handshake} mostra os tipos de blocos utilizados no handshake.
 
-O diagrama de sequência da figura \ref{fig:sequencia-handshake} mostra o fluxo de comunicação, considerando a intermdiação do app.
+O diagrama de sequência da figura \ref{fig:sequencia-handshake} mostra o fluxo de comunicação, considerando a intermdiação do app. O gatilhode handshake ocorre nas seguintes
+situações: boot do dongle ou nova conexão BLE, eventos que zeram a flag na RAM do dongle que indica se houve handshake, fazendo com que o dongle peça um handshake para o app
+a partir das mensagens que serão especificadas em \ref{sec:app-ble-dongle}; token JWT perto de expirar, o que força um novo handshake pra nova emissão de token JWT; ou âncora rejeitada,
+que força um novo handshake para sicronização.
+
+Sobre a âncora de tempo, uma limitação conhecida é quando um boot fica todo seu ciclo de vida em uma conexão, o que faz com que o boot fique sem sincroniza de relógio completa.
 
 \begin{equation} \label{eq:hmac-sha256}
 	tag = \text{HMAC-SHA256}_{K_{auth}}("MALCONG"\ ||\ \text{tipo}\ ||\ DevId\ ||\ \text{payload})
@@ -615,7 +620,7 @@ margem para o atacante conseguir interceptar a conexão; além disso, é permiti
 botão derruba todos os pareamentos feitos, o que desconecta um atacante. Essas medidas também evitam ataque do tipo DoS, modelados 
 na seção \ref{secsec:comunicacao-wireless} como A1.5
 
-
+\subsection{Serviços e blocos BLE para comunicação entre app e dongle} \label{sec:app-ble-dongle}
 
 Os comandos ELM327, incluindo os comandos customizados de configuração definidos no projeto, são enviados do app para o dongle a partir 
 do serviço NUS. Enquanto isso, os comandos de handshake e envio de blocos passam por um outro serviço criado para o projeto, chamado 
@@ -623,9 +628,199 @@ SYNC. Assim como o NUS, o SYNC expõem uma característica RX, na qual o dongle 
 o dongle envia dados para o app; no entanto, enquanto o NUS recebe texto, o serviço SYNC envia e recebe dados binários. Com essa separação,
 cada fluxo de dados entre app e dongle fica separado e com sua própria responsabilidades, ajudando na remontagem de blocos a partir dos fragmentos.
 
+Além dos tipos de blocos definidos no handshake, exitem mais alguns tipos que precisam ser usados para orquestrar a comunicação entre app e dongle, sendo
+todos eles aprensetados na tabela \ref{table:tipos-blocos}. Quando são enviados via BLE no SYNC\_RX, como convenção do projeto, os blocos são estruturados no formato TVL (type, length, value), 
+sendo 3 bytes concatenados no início de cada bloco, o primeiro representando o tipo e o segundo o comprimeiro total do corpo da mensagem (sem contar o tipo e comprimento). Além disso, quando são
+enviados no SYNC\_TX, também é necessário englobar o bloco TVL em um enquandramento com um byte de controle na frente, que vai ser o bit 0 valendo 1 quando for um início de mensagem; isso é necessário
+pelo fato de as mensagens do SYNC\_TX poderem ser fragmentadas em vários pacotes BLE. O formato do pacote de cada característica do SYNC pode ser visto na figura \ref{fig:sync-tvl}.
+
+\begin{figure}[H]
+	\centering
+	\caption{Formato dos dados nas características RX e TX do serviço SYNC}
+	\label{fig:sync-tvl}
+	\begin{tikzpicture}[
+		campo/.style={draw, minimum height=0.9cm, inner sep=1pt, font=\small, align=center},
+		controle/.style={campo, fill=orange!40},
+		ponteiro/.style={-{Stealth[length=2.5mm]}, thick},
+		rotulo/.style={align=center, font=\small, anchor=north},
+		chave/.style={decorate, decoration={brace, amplitude=5pt}, thick},
+		titulo/.style={font=\small\bfseries, anchor=south west}
+	]
+		% \campo{x}{y}{largura}{texto}{estilo}{id}
+		\newcommand{\campo}[6]{\node[#5, anchor=north west, minimum width=#3 cm] (#6) at (#1,#2) {#4};}
+		% \seta{id}{texto}
+		\newcommand{\seta}[2]{\draw[ponteiro] ([yshift=-0.9cm]#1.south) -- (#1.south);
+			\node[rotulo] at ([yshift=-0.9cm]#1.south) {#2};}
+
+		% SYNC_RX: formato TVL
+		\node[titulo] at (0,0.2) {SYNC\_RX};
+		\campo{0}{0}{1.8}{T\\(1 byte)}{campo}{rt}
+		\campo{1.8}{0}{1.8}{L\\(2 bytes)}{campo}{rl}
+		\campo{3.6}{0}{5.4}{V $\cdots$\\($n$ bytes)}{campo}{rv}
+		\seta{rt}{tipo}
+		\seta{rl}{comprimento}
+		\seta{rv}{valor}
+
+		% SYNC_TX: TVL precedido por um byte de controle
+		\node[titulo] at (0,-3.1) {SYNC\_TX};
+		% byte de controle: 8 bits, apenas o primeiro (bit de controle) é destacado
+		\campo{0}{-4.4}{0.3}{}{controle}{tc}
+		\foreach \i in {1,...,7} {
+			\node[campo, anchor=north west, minimum width=0.3cm] at (0.3*\i,-4.4) {};
+		}
+		\node[coordinate] (cini) at (0,-4.4) {};
+		\node[coordinate] (cfim) at (2.4,-4.4) {};
+		\draw[chave] ([yshift=3pt]cini) -- ([yshift=3pt]cfim)
+			node[rotulo, midway, anchor=south, yshift=7pt] {C (1 byte)};
+		\campo{2.4}{-4.4}{1.8}{T\\(1 byte)}{campo}{tt}
+		\campo{4.2}{-4.4}{1.8}{L\\(2 bytes)}{campo}{tl}
+		\campo{6.0}{-4.4}{5.4}{V $\cdots$\\($n$ bytes)}{campo}{tv}
+		\seta{tc}{bit de\\controle}
+		\seta{tt}{tipo}
+		\seta{tl}{comprimento}
+		\seta{tv}{valor}
+	\end{tikzpicture}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
 
 
-\subsection{Envio de dados do app para o servidor}
+
+\begin{table}[H]
+	\centering
+	\caption{Tipos de blocos trocados entre servidor, app e dongle}
+	\label{table:tipos-blocos}
+	\begin{tabular}{|>{\centering\arraybackslash}m{0.08\textwidth}|>{\raggedright\arraybackslash}m{0.17\textwidth}|>{\centering\arraybackslash}m{0.15\textwidth}|>{\raggedright\arraybackslash}m{0.42\textwidth}|}
+		\hline
+		\textbf{Tipo} & \textbf{Nome} & \textbf{Tamanho (bytes)} & \textbf{Parâmetros (bytes)} \\
+		\hline
+		0x01 & Desafio & 61 ou 63 & $c_{S}$ (4), $N_{S}$ (16), $ACK_{seq}$ (4), $c_{conf}$ (4), $flags$ (1), $diag\_min$ (2, só com o bit 0 das $flags$), $tag$ (32) \\
+		\hline
+		0x02 & Resposta & 62 & $c_{S}$ (4, eco), $N_{S}$ (16, eco), $HEAD_{seq}$ (4), $boot\_id$ (2), $t_{ms}$ (4), $tag$ (32) \\
+		\hline
+		0x03 & Bloco & 392 a 1.056 & $seq$ (4), $boot\_id$ (2), $t_{ms}$ inicial (4), tamanho (2), registros (até 1.012), $tag$ (32) \\
+		\hline
+		0x04 & ACK & 41 & $ACK_{seq}$ (4), $c_{conf}$ (4), $flags$ (1), $tag$ (32) \\
+		\hline
+		0x05 & Pedido de lote & 2 & $K$ (2) \\
+		\hline
+		0x06 & Erro & 1 & código (1) \\
+		\hline
+		0x07 & Aviso de novo bloco & 13 & $HEAD_{seq}$ (4), $flags$ (1), $DevID$ (8) \\
+		\hline
+	\end{tabular}
+\end{table}
+
+Os blocos do handshake de Desafio (0x01) e ACK (0x04), ao chegarem do servidor no app, são repassados diretamente para SYNC\_RX no formato binário ou, caso necessário, são antes decodificados
+a partir da string base64. Enquanto isso, os blocos de Resposta (0x02) e de Envio de Blocos (0x03) são construídos no dongle e, quando chegam no app via SYNC\_TX, são diretamente enviados pelo
+app para o servidor no seu respectivo endpoint, havendo codificação para string base64 quando necessário.
+
+Quando o dongle dá flush em um bloco para a \textit{flash}, ele envia um aviso de novo bloco (0x07) para o app. Quando esse aviso chega, caso o app já tenha disponível um valor de $ACK_{seq}$ válido, 
+ele calcula o valor de quantos blocos estão pendentes de envio a partir de $HEAD_{seq} - ACK_{seq}$, sendo o $HEAD_{seq}$ recebido via aviso. As flags desse bloco de aviso podem ser vistas na tabela
+\ref{tab:flags-aviso-novo-bloco}. Caso o app ainda não tenha um handshake válido, o dongle solicita para o app que faça um pedido de desafio para o servidor, iniciando o processo de handshake.
+
+\begin{table}[H]
+	\centering
+	\caption{\textit{Flags} do aviso de novo bloco}
+	\label{tab:flags-aviso-novo-bloco}
+	\begin{tabular}{|>{\centering\arraybackslash}m{0.07\textwidth}|>{\raggedright\arraybackslash}m{0.15\textwidth}|>{\raggedright\arraybackslash}m{0.19\textwidth}|>{\raggedright\arraybackslash}m{0.19\textwidth}|>{\raggedright\arraybackslash}m{0.19\textwidth}|}
+		\hline
+		\textbf{Bit} & \textbf{Significado} & \textbf{Quando liga} & \textbf{Quando desliga} & \textbf{O que o app faz} \\
+		\hline
+		0 & Sem \textit{handshake} nesta conexão & A cada conexão BLE nova (\textit{flag} em RAM, zerada ao conectar) & Quando chega um ACK com $c_{conf}$ igual ao $c_{S}$ que o dongle respondeu & Faz o \textit{handshake} antes de qualquer pedido de lote \\
+		\hline
+		1 & Sem \textit{handshake} neste \textit{boot} & A cada \textit{boot} & Igual ao bit 0 & Faz o \textit{handshake}, para o \textit{boot} ganhar uma âncora de tempo \\
+		\hline
+		2 & \textit{Flash} acima de 80\% & Quando a ocupação da \textit{flash} passa de 80\% & Quando cai abaixo disso, depois que ACKs liberam espaço & Prioriza o envio: pede lotes de 32 em seguida e pode avisar o usuário \\
+		\hline
+		3 a 7 & Reservados & --- & --- & Ignora \\
+		\hline
+	\end{tabular}
+\end{table}
+
+Quando a conta de pendentes no app chegar em $N_lote$, ou quando se passar $N_lote*T_Bloco$ segundos desde o lote de blocos enviados, o app envia um bloco de Pedido de Lote (0x05) para o dongle via SYNC\_RX.
+Como a maioria das configurações tem $T_max$ de 100ms ou 200ms, um bloco se completa em aproximadamente 10s ($T_bloco=10s$), então considera-se $N_lote=6$ para enviar 6 blocos a cada 10 minutos.
+A quantida de blocos pedida na mensagem é sempre o mínimo entre o número de pendentes e a quantida de máxima de blocos aceitadas na requisição POST para o servidor, que é 32 blocos.
+
+É importante notar que o MTU do BLE não suporta um bloco inteiro, que fica negociado em torno de 272 bytes. O bloco completo, como mostra a figura \ref{fig:bloco-completo} terá 1059 bytes, sendo 1 bytes com o 
+tipo, 2 bytes com o comprimento, 1024 bytes de dados e, por fim, 32 bytes de tag. Os bytes do CRC são conferidos antes de o dongle enviar os blocos vie BLE, então não aparecem aqui.
+Para enviar os blocos então, o app primeiro consolida no formato TVL e, em seguida, divide em tamanhos iguais de $MTU - 1$ bytes, adicionando o bytes de controle, sendo que o bit 0 do byte de controle vale 1 somente
+para no primeiro fragmento de cada bloco da flash. Esses blocos são então mandados via BLE para o app, que remonta o bloco original da flash. QUando os blocos chegam no app, são enviados via requisição POST. A resposta
+dessa requisição é um bloco ACK (0x04) que contém o novo valor de $ACK_{seq}$, que é usado para atualizar o app e o dongle sobre quais blocos foram reconhecidos pelo servidor.
+
+O bloco de erro carrega um byte que pode definir difenretes tipos de erros. Os erros e suas mitigações são mostrados na tabela \ref{tab:erros-bloco}.
+
+\begin{longtable}{|>{\raggedright\arraybackslash}p{0.13\textwidth}|>{\raggedright\arraybackslash}p{0.2\textwidth}|>{\raggedright\arraybackslash}p{0.32\textwidth}|>{\raggedright\arraybackslash}p{0.27\textwidth}|}
+	\caption{Erros e respostas de falha entre dongle, app e servidor}
+	\label{tab:erros-bloco} \\
+	\hline
+	\textbf{Sentido} & \textbf{Código} & \textbf{Quando} & \textbf{O que é feito} \\
+	\hline
+	\endfirsthead
+	\hline
+	\textbf{Sentido} & \textbf{Código} & \textbf{Quando} & \textbf{O que é feito} \\
+	\hline
+	\endhead
+	\hline
+	\endfoot
+	Dongle $\rightarrow$ app & 0x01 tag inválida & Desafio ou ACK cuja tag não confere & O app descarta a mensagem e pede um desafio novo. \\
+	\hline
+	Dongle $\rightarrow$ app & 0x02 $c_S$ antigo & Desafio com $c_S$ menor ou igual ao último aceito (desafio velho ou reapresentado) & O app pede um desafio novo ao servidor \\
+	\hline
+	Dongle $\rightarrow$ app & 0x03 $ACK_{seq}$ inválido & ACK com $ACK_{seq}$ menor que o do dongle ou maior que o $head_{seq}$ & O app não reescreve aquele ACK; o próximo ACK ou desafio corrige a fronteira \\
+	\hline
+	Dongle $\rightarrow$ app & 0x05 sem sessão & Pedido de lote antes do ACK de abertura & O app faz o \textit{handshake} ou reescreve o ACK de abertura se ainda o tiver \\
+	\hline
+	App $\rightarrow$ dongle & 0x04 mensagem incompleta & Salto no contador de fragmentos, ou 2 s sem o próximo fragmento & O dongle volta o cursor de envio para $ACK_{seq} + 1$ \\
+	\hline
+	App $\rightarrow$ dongle & 0x07 reenviar desde a fronteira & POST que falhou de vez, ou ACK com $ACK_{seq}$ abaixo do último $seq$ do lote & O dongle volta o cursor de envio para $ACK_{seq} + 1$ \\
+	\hline
+	Servidor $\rightarrow$ app & 200 com ACK e $ACK_{seq} \geq$ último $seq$ do lote & Lote aceito & O app escreve o ACK no dongle e segue \\
+	\hline
+	Servidor $\rightarrow$ app & 200 com ACK e $ACK_{seq} <$ último $seq$ do lote & Lote interrompido: tag inválida, salto não declarado ou blocos fora de ordem & O app escreve o ACK no dongle, manda Erro 0x07 e descarta o lote \\
+	\hline
+	Servidor $\rightarrow$ app & 401 & Token ausente, inválido ou expirado & O app faz um \textit{handshake} novo e reenvia o lote \\
+	\hline
+	Servidor $\rightarrow$ app & 403 & Token emitido para outro DevId & Bug do app: descarta o token e faz o \textit{handshake} \\
+	\hline
+	Servidor $\rightarrow$ app & 409 & No POST de resposta: nonce desconhecido, vencido ou já usado, ou $c_S$ antigo & O app pede um desafio novo \\
+	\hline
+	Servidor $\rightarrow$ app & 429 & Limite de taxa ou lote acima de 32 blocos & O app espera o Retry-After e reenvia com K menor \\
+	\hline
+	Servidor $\rightarrow$ app & 5xx, 503 ou falha de rede & Servidor indisponível ou sobrecarregado & O app tenta o mesmo lote com espera exponencial de 1 s a 5 min; o próximo K cai pela metade \\
+\end{longtable}
+
+\begin{figure}[H]
+	\centering
+	\caption{Estrutura do bloco completo de dados}
+	\label{fig:bloco-completo}
+	\begin{tikzpicture}[
+		campo/.style={draw, minimum height=0.9cm, inner sep=1pt, font=\small, align=center},
+		posini/.style={font=\scriptsize, anchor=north west, inner sep=1pt},
+		posfim/.style={font=\scriptsize, anchor=north east, inner sep=1pt},
+		titulo/.style={font=\small\bfseries, anchor=south west}
+	]
+		% \campo{x}{y}{largura}{texto}{posição inicial}
+		\newcommand{\campo}[5]{%
+			\node[campo, anchor=north west, minimum width=#3 cm] at (#1,#2) {#4};
+			\node[posini] at (#1,#2-0.9) {#5};}
+		% \fim{x}{y}{posição final}
+		\newcommand{\fim}[3]{\node[posfim] at (#1,#2-0.9) {#3};}
+
+		\node[titulo] at (0,0.2) {Bloco: 0x03 (1059 bytes)};
+		\campo{0}{0}{1.8}{tipo\\(1 byte)}{0}
+		\campo{1.8}{0}{2.8}{comprimento\\(2 bytes)}{1}
+		\campo{4.6}{0}{5.4}{dados\\(1024 bytes) $\cdots$}{3}
+		\campo{10.0}{0}{3.4}{$tag$ ($K_{rec}$)\\(32 bytes)}{1027}
+		\fim{13.4}{0}{1059}
+	\end{tikzpicture}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+Para permitir mais eficiência, o dongle usa uma estratégia de cursor de envio para enviar novos blocos para o app antes de receber o ACK dos anteriores.
+Quando o app pede por mais blocos, mesmo o ACK ainda não tendo chegado dos blocos anteriores, o dongle manda para o app via BLE, que já lê e remonta os fragmentos
+para ter os blocos prontos para enviar ao servidor. Assim que o post é concluído, o próximo lote pode ser enviado sem esperar uma leitura do BLE, garantindo maior eficiência.
+Caso o a requisição para o servidor falhe, o app manda um bloco de erro com parâmetro 0x07 e o dongle volta o cursor de envio para o primeiro bloco ainda não reconhecido pelo servidor, que é o $ACK_{seq} + 1$,
+e o app descarta o pacote lido anteriormente. No fim, nada se perde, pois a flash só é limpa quando o ACK é recebido
 
 \section{Implementação do servidor}
 
