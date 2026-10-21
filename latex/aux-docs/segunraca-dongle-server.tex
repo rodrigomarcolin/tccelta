@@ -124,11 +124,11 @@ e internet são modelados como não confiáveis, conforme a \autoref{fig:frontei
 
 \subsection{Modelagem de ataques}
 
-Existem diversos adversários e ataques que podem ser modelados cenário, envolvendo
-os diferentes componentes e ligações entre eles. É possível dividir os ataques em quatro principais
+Existem diversos adversários e ataques que podem ser modelados no cenário, envolvendo
+os diferentes componentes e ligações entre eles. É possível dividir os ataques em três principais
 categorias.
 
-Dentro das categorias de ataque, também é possível definir 5 principais de adversários que aparecem entre elas:
+Dentro das categorias de ataque, também é possível definir cinco tipos principais de adversários que aparecem entre elas:
 
 \begin{itemize}
     \item (AD1) o terceiro perto de carro que pode ter acesso ao enlace de rádio do BLE, cujo objetivo é espionar ou injetar dados;
@@ -252,7 +252,7 @@ como garantir autenticidade, integridade, unicidade e completude detectável dos
 
 Além disso, para complementar a segurança da comunicação fim a fim, também será abordado o uso de segunrança entre os enlaces BLE e internet para abordar os ataques 
 modelados na seção \ref{secsec:comunicacao-wireless}. Como já existem protocolos estabelecidos para garantir essa segurança, a ideia é usá-los para garantir
-confidenciabilidade na comunicação: para o enlace entre o dongle e o app, será utilizada a técnico LESC (LE Secure Connections) do BLE; já para o enlace entre app e dongle
+confidenciabilidade na comunicação: para o enlace entre o dongle e o app, será utilizada a técnica LESC (LE Secure Connections) do BLE; já para o enlace entre app e servidor
 será utilizado o protocolo HTTPS/TLS, que é amplamente utilizado para garantir a segurança de comunicação entre clientes e servidores na internet.
 
 Fica como limitação do projeto a mitigação de ataques que envolvam o barramento CAN do veículo, como os da categoria \ref{secsec:comunicacao-carro-dongle},
@@ -361,7 +361,7 @@ no servidor, como foi modelado para o adversário do tivo AD2 no ataque A3.4 da 
 
 Para que seja possível garantir completude detectável, é necessário que o servidor consiga identificar com exatidão qual foi o número \textit{seq} no último bloco recebido, $ACK_{seq}$, a fim
 de que seja possível comparar com o \textit{seq} do último bloco medido pelo dongle, o $HEAD_{seq}$, sendo a diferença $HEAD_{seq} - ACK_{seq}$ entre esses valores a quantidade de blocos
-que estão com envio pendente para o server; ao mesmo tempo, todos os blocos com $seq < ACK_{seq}$ já foram recebidos e processados, podendo ser exlcuídos da \textit{flash}. Para garantir sequência e ordem, 
+que estão com envio pendente para o server; ao mesmo tempo, todos os blocos com $seq \leq ACK_{seq}$ já foram recebidos e processados, podendo ser excluídos da \textit{flash}. Para garantir sequência e ordem, 
 o servidor apenas aceita pacotes cujo valor de seq é exatamente $ACK_{seq} + 1$, descartando pacotes fora de 
 ordem (Go-Back-N). Essa dinâmica é ilustrada na \autoref{fig:fila-ack-head}.
 
@@ -414,7 +414,7 @@ a verificação de HMAC falha no servidor e ele é rejeitado e, como não há bl
 criados dois blocos especiais de BOOT e de LOSS.
 
 Para o bloco de BOOT, é necessário manter uma reserva de $seq$ na NVS para que o contador retome a partir do valor da reserva sempre que perder alimentação. Uma sugestão para esse valor é sempre
-armazenar o valor de $seq + 64$ na NVS a cada $64$ blocos enviados. Sempre que o dongle perder energia, ao ser religado ele deve ler o valor da reserva $seq$ da NVS, retomar a contagem a partir dele e,
+armazenar o valor de $seq + 64$ na NVS a cada $64$ blocos gerados e gravados na 	extit{flash}. Sempre que o dongle perder energia, ao ser religado ele deve ler o valor da reserva $seq$ da NVS, retomar a contagem a partir dele e,
 por fim, gerar um bloco de BOOT declarando que há furo na sequência entre o último bloco salvo na \textit{flash} e o valor que está na reserva de $seq$.
 
 \begin{figure}[H]
@@ -464,11 +464,11 @@ por fim, gerar um bloco de BOOT declarando que há furo na sequência entre o ú
 \end{figure}
 
 Para o caso de corrompimento, é necessário verificar se houve corrompimento no bloco sempre antes de enviá-lo ao app para ir ao servidor e, caso seja detectado, deve ser gerado um bloco de LOSS 
-com o valor atual de $seq$, que será reconhecido no servidor e registrado como LOSS. Seria possível verificar a integridade do bloco apenas calculando o hash, mas isso é computacionalmente custoso
-para recalcular em todo bloco. Por isso, é mais eficiente salvar um CRC32 junto da tag HMAC em todo bloco e verificar esse CRC32 antes de mandar para o app. O uso do CRC32 adiciona apenas 4 bytes por
+que ocupa o próprio $seq$ do bloco corrompido (ou, se mais de um bloco for afetado, declara explicitamente a faixa de $seq$ perdida), de modo que o servidor receba um bloco válido naquela posição, registre-o como LOSS e a sequência volte a avançar. Seria possível verificar a integridade do bloco apenas calculando o hash, mas isso é computacionalmente custoso
+para recalcular em todo bloco. Por isso, é mais eficiente salvar um CRC32, calculado sobre os dados e a tag HMAC, em todo bloco e verificar esse CRC32 antes de mandar para o app. O uso do CRC32 adiciona apenas 4 bytes por
 bloco, que é justificável depois das otimizações feitas anteriormente.
 
-\subsection{Especifição do processo de handshake}
+\subsection{Especificação do processo de handshake}
 
 Quando o dongle começa sua operação principal, ele salva um $boot_id$ na NVS que serve até ele deixar de ser alimentado ou até entrar e sair de deep sleep.
 Enquanto o dongle estiver offline, a coleta dos PIDs de telemetria vai continuar ocorrendo como esperado, com blocos passando buffer em RAM e indo
@@ -531,9 +531,9 @@ começa e segue a seguinte sequência de passos, abstraindo a intermediação do
 
 Para emitir o desafio, o server incrementa $c_S$, sorteia $N_s$ e guarda o novo desafio no banco de dados associando ao $DevId$ que o pediu.
 Ao receber o desafio, o dongle confere a tag e verifica que $c_S$ é maior do que o último aceito, valor que está salvo na NVS, garantindo que
-não está respondendo um desafio repetido; caso $ACK_{seq}$ seja maior do que $HEAD_{seq}$, os blocos até o que foi reconhecido são removidos da 
+não está respondendo um desafio repetido; caso $ACK_{local} < ACK_{seq} \leq HEAD_{seq}$, em que $ACK_{local}$ é o último valor de ACK conhecido pelo dongle, os blocos até $ACK_{seq}$ são removidos da 
 \textit{flash}. Na resposta do dongle, o $N_S$ ecoado serve para garantir que a resposta enviada é de um novo desafio. Ao avaliar a resposta, o 
-server confere, além da tag,se $c_{conf} = C_{seq}$; caso positivo, envia bloco $ACK$ com flags zeradas e o token JWT.
+server confere, além da tag,se o eco de $c_S$ e de $N_S$ corresponde ao desafio guardado no banco de dados, se ele ainda não foi usado e se não expirou; caso positivo, envia bloco $ACK$ com flags zeradas e o token JWT.
 
 Para o cálculo da tag, é usada a chave $K_{auth}$ para gerar o HMAC-SHA256 segundo a equação \ref{eq:hmac-sha256}, que é truncado em seguida para
 16 bytes a fim de economizar banda na transmissão. Aqui é possível truncar devido ao fato de o server ter permissão de gerar MACs com $K_{auth}$
@@ -739,7 +739,7 @@ ele calcula o valor de quantos blocos estão pendentes de envio a partir de $HEA
 \end{table}
 
 Quando a conta de pendentes no app chegar em $N_lote$, ou quando se passar $N_lote*T_Bloco$ segundos desde o lote de blocos enviados, o app envia um bloco de Pedido de Lote (0x05) para o dongle via SYNC\_RX.
-Como a maioria das configurações tem $T_max$ de 100ms ou 200ms, um bloco se completa em aproximadamente 10s ($T_bloco=10s$), então considera-se $N_lote=6$ para enviar 6 blocos a cada 10 minutos.
+Como a maioria das configurações tem $T_max$ de 100ms ou 200ms, um bloco se completa em aproximadamente 10s ($T_bloco=10s$), então considera-se $N_lote=6$ para enviar 6 blocos a cada 1 minuto.
 A quantidade de blocos pedida na mensagem é sempre o mínimo entre o número de pendentes e a quantidade de máxima de blocos aceitadas na requisição POST para o servidor, que é 32 blocos.
 
 É importante notar que o MTU do BLE não suporta um bloco inteiro, que fica negociado em torno de 272 bytes. O bloco completo, como mostra a figura \ref{fig:bloco-completo} terá 1059 bytes, sendo 1 bytes com o 
