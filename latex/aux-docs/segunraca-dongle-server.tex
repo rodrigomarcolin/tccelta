@@ -354,22 +354,17 @@ Quando um bloco chega no servidor é possível verificar a tag a partir de uma c
 integridade e autenticidade do bloco no servidor. Esse desenho garante que ataques to tipo A3.3 da seção \ref{secsec:app-malicioso} não consigam alterar blocos antigos antes de enviar
 ao servidor e também garante que não seja possível fabricar novos blocos.
 
-Para que seja possível garantir unicidade, quando um bloco cujo MAC seja válido é recebido pelo servidor, é extraída a \textit{seq} do cabeçado desse bloco. O servidor verifique se um
+Para que seja possível garantir unicidade, quando um bloco cujo MAC seja válido é recebido pelo servidor, é extraída a \textit{seq} do cabeçado desse bloco. O servidor verifica se um
 bloco com o mesmo valor de \textit{seq} foi recebido, descartando o bloco em caso positivo. Assim, garante-se que um atacante não consiga repetir blocos antigos para alterar os registros
 no servidor, como foi modelado para o adversário do tivo AD2 no ataque A3.4 da seção \ref{secsec:app-malicioso}. 
 
 Para que seja possível garantir completude detectável, é necessário que o servidor consiga identificar com exatidão qual foi o número \textit{seq} no último bloco recebido, $ACK_{seq}$, a fim
 de que seja possível comparar com o \textit{seq} do último bloco medido pelo dongle, o $HEAD_{seq}$, sendo a diferença $HEAD_{seq} - ACK_{seq}$ entre esses valores a quantida de blocos
-que estão com envio pendente para o server. QUando um
+que estão com envio pendente para o server; ao mesmo tempo, todos os blocos com $seq < ACK_{seq}$ já foram recebidos e processados, podendo ser exlcuídos da \textit{flash}. Para garantir sequência e ordem, 
+o servidor apenas aceita pacotes cujo valor de seq é exatamente $ACK_{seq} + 1$, descartando pacotes fora de 
+ordem (Go-Back-N). Essa dinâmica é ilustrada na \autoref{fig:fila-ack-head}.
 
-Por isso, para conseguir começar a enviar dados, deve haver um \textit{handshake} entre dongle e servidor (por meio do app) a partir do qual dongle e servidor trocam esses dois 
-valores, e assim o servidor consegue identificar se o app está escondendo alguma cauda de dados. Na medida que os blocos vão chegando, o servidor atualiza o valor de $ACK_{seq}$ e,
-nos próximos \textit{handshakes} e respostas do servidor, o dongle consegue apagar de seu armazenamento os blocos que já foram reconhecidos pelos servidor. Além disso, para garantir sequência e ordem, o servidor
-apenas aceita pacotes cujo valor de seq é exatamente $ACK_{seq} + 1$, descartando pacotes fora de ordem. Essa dinâmica é ilustrada na \autoref{fig:fila-ack-head}.
-
-Assim, com essa modelagem, é possível garantir ordem e completude detectável. A ordem é garantida pelo destaque de pacotes cujo $seq$ não é exatamente $ACK_{seq} + 1$, enquanto a completura
-é detectada na comparação entre os valores de $HEAD_{seq}$ e $ACK_{seq}$, que são trocados no \textit{handshake} obrigatório entre dongle e servidor antes que mais dados sejam enviados. Esse
-mecanismo mitiga os ataques A3.5 e A3.6 da seção \ref{secsec:app-malicioso}, impedindo que as medidas sejam reordenadas ou que sejam criadas lacunas entre difenretes medidas.
+Assim, com essa modelagem, é possível garantir ordem e completude detectável, impedindo que as medidas sejam reordenadas ou que sejam criadas lacunas entre difenretes medidas.
 
 \begin{figure}[H]
 	\centering
@@ -412,7 +407,7 @@ tipo de ataque, a falta dos dados é detectável do lado do servidor, podendo ge
 
 \subsection{Riscos de sincronização}
 
-O fato de o server apenas aceitar valores de $seq$ exatamente iguais a $ACK_{seq} + 1$ pode gerar problema de sincronização em dois casos diferentes: quando ocorre perda de energia, o valor de $seq$
+O fato de o servidor apenas aceitar valores de $seq$ exatamente iguais a $ACK_{seq} + 1$ pode gerar problema de sincronização em dois casos diferentes: quando ocorre perda de energia, o valor de $seq$
 é perdido, pois ele é armazenado apenas em RAM, uma vez que seu valor muda muito e desgastaria bastante a NVS reescreve-lo a todo bloco gerado; quando um bloco salvo na \textit{flash} é corrompido,
 a verificação de HMAC falha no servidor e ele é rejeitado e, como não há bloco válido com aquele número de $seq$, o servidor não consegue mais receber blocos. Para abordar esses problemas, são
 criados dois blocos especiais de BOOT e de LOSS.
@@ -533,6 +528,12 @@ começa e segue a seguinte sequência de passos, abstraindo a intermediação do
 	\end{tabular}
 \end{table}
 
+Para emitir o desafio, o server incrementa $c_S$, sorteia $N_s$ e guarda o novo desafio no banco de dados associando ao $DevId$ que o pediu.
+Ao receber o desafio, o dongle confere a tag e verifique que $c_S$ é maior do que o último aceito, valor que está salvo na NVS, garantindo que
+não está respondendo um desafio repetido; caso $ACK_{seq}$ seja maior do que $HEAD_{seq}$, os blocos até o que foi reconhecido são removidos da 
+\textit{flash}. Na resposta do dongle, o $N_S$ ecoado serve para garantir que a resposta enviada é de um novo desafio. Ao avaliar a resposta, o 
+server confere, além da tag,se $c_{conf} = C_{seq}$; caso positivo, envia bloco $ACK$ com flags zeradas e o token JWT.
+
 Para o cálculo da tag, é usada a chave $K_{auth}$ para gerar o HMAC-SHA256 segundo a equação \ref{eq:hmac-sha256}, que é truncado em seguida para
 16 bytes a fim de economizar banda na transmissão. Aqui é possível truncar devido ao fato de o server ter permissão de gerar MACs com $K_{auth}$
 no KSM, o que possibilita o app gerar o HMAC e comparar os primeiros 16 bytes; como o server não consegue gerar HMAC para $K_{rec}$, não é possível
@@ -599,17 +600,78 @@ O diagrama de sequência da figura \ref{fig:sequencia-handshake} mostra o fluxo 
 
 \section{Integração entre BLE e HTTPS/TLS para troca de dados entre dongle e servidor}
 
-\subsection{Repasse de pacotes via BLE}
+O app se comunica com o dongle por meio de BLE. Como já foi modelado na seção \ref{secsec:comunicacao-wireless}, o BLE
+é um enlace sem autenticidade, confidenciabilidade e integridade caso não seja usado o padrão LESC, o que abre
+a possibilidade de ataques do tipo A1.2, A1.3 e A1.4 da seção \ref{secsec:comunicacao-wireless}. Por isso, o celular se comunicará
+apenas depois de um pareamento seguindo o padrão LESC, ajustando o firmware do dongle para aceitar apenas conexões LESC.
+
+O método de pareamento dentro os definidos na tabela \ref{lesc:metodos} será o Just Works, devido ao fato de o dongle não
+ter nenhuma capacidade de Input/Ouput. Isso expõe a conexão ao ataque A1.2, de \textit{Man in The Middle}, modelado na seção
+\ref{secsec:comunicacao-wireless} para um adversário do tipo AD1, que está perto do carro no momento da conexão. 
+
+No entanto, são tomadas algumas medidas para diminuir esse risco:
+o dongle aceita pareamentos apenas em um intervalo de tempo definido depois de apertar um botão físico no dongle, o que deixa menos
+margem para o atacante conseguir interceptar a conexão; além disso, é permitido apenas um bond (pareamento) por vez, sendo que apertar o 
+botão derruba todos os pareamentos feitos, o que desconecta um atacante. Essas medidas também evitam ataque do tipo DoS, modelados 
+na seção \ref{secsec:comunicacao-wireless} como A1.5
+
+
+
+Os comandos ELM327, incluindo os comandos customizados de configuração definidos no projeto, são enviados do app para o dongle a partir 
+do serviço NUS. Enquanto isso, os comandos de handshake e envio de blocos passam por um outro serviço criado para o projeto, chamado 
+SYNC. Assim como o NUS, o SYNC expõem uma característica RX, na qual o dongle recebe dados do app, e uma característica TX, na qual 
+o dongle envia dados para o app; no entanto, enquanto o NUS recebe texto, o serviço SYNC envia e recebe dados binários. Com essa separação,
+cada fluxo de dados entre app e dongle fica separado e com sua própria responsabilidades, ajudando na remontagem de blocos a partir dos fragmentos.
+
+
 
 \subsection{Envio de dados do app para o servidor}
 
 \section{Implementação do servidor}
 
-\subsection{Estrutura de dados}
+O servidor será um VPS com uma API em GoLang que responderá as requisições de desafio para o dongle feitas pelo app, processará e validará
+as respostas desses desafios, e também receberá os blocos de dados medidos pelo dongle vindos do app. A ideia de usar GoLang é permitir 
+rápido processamento das requisições e capacidade maior de carga de requisições.
 
-\subsection{Servidor de aplicação}
+A API terá 3 endpoints principais:
 
-\subsection{Servidor KMS}
+\begin{itemize}
+	\item POST \textbf{/v1/dongles/\{DevId\}/desafio}: Pedido de desafio, retorna bloco de desafio no formato binário (\textit{application/octet-stream})
+	\item POST \textbf{/v1/dongles/\{DevId\}/desafio/resposta}: Processa a resposta ao desafio e retorna JSON contendo um bloco ACK em string base64 e um token JWT válido para envio de blocos.
+	\item POST \textbf{/v1/dongles/blocos}: endpoint que recebe blocos em lote no formato de JSON em lista de strings base64.
+\end{itemize}
+
+O banco de dados será PostgreSQL, com TimescaleDB e PostGIS para armazenar os dados de telemetria e localização, respectivamente.
+
+Para simplificar, no mesmo VPS, mas com configurações de acesso mais restrita, estará um servidor KMS usando HashiCorp Vault para gerenciar as
+chaves usadas nos HMACs de autenticação e de blocos de dados ($K_{auth}$ e $K_{rec}$, respetivamente), e também a chave privada para assinar os
+tokens JWT que permitirão que o app envie blocos de maneira autenticada, evitando possível sobrecarga no endpoint de recebimento de blocos. 
+
+No banco, deve haver:
+
+\begin{itemize}
+	\item Uma tabela que associa $DevId$ ao atual $ACK_{seq}$ para saber até que bloco foi reconhecido
+	\item Uma tabela que guarda os blocos brutos recebidos
+	\item Uma tabela que registra os boots registrados e hora real calculada para cada um
+	\item Uma tabela com a decodificação do bloco em posições ao longo do tempo (Hypertable do TimescaleDB)
+	\item Uma tabela com a decodificação do bloco em PIDs, havendo uma linha para cada PID do Bloco. Cada linha é associada a com o bloco bruto por seq (Hypertable do TimescaleDB)
+	\item Uma tabela com os desafios e quando foram respondidos, para ter um tracking dos nonces
+\end{itemize}
+
+O endpoint de blocos é autenticado com um token JWT com $sub=DevId$ e expiração de 30 minutos. Ele deve receber um lote de blocos,
+verificar assinatura e expiração do token e, caso esteja válido, verificar o HMAC, decodidicar os base64 e registrar, na mesma transção:
+
+\begin{itemize}
+	\item o bloco bruto
+	\item o novo valor de $ACK_{seq}$ para o DevId
+	\item as linhas nas tabelas de PID e de posições ao longo do tempo, que são decodificadas a partir do bloco bruto
+\end{itemize}
+
+%\subsection{Estrutura de dados}
+
+%\subsection{Servidor de aplicação}
+
+%\subsection{Servidor KMS}
 
 \postextual
 
