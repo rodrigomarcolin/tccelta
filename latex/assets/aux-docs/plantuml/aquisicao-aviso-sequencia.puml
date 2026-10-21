@@ -1,0 +1,46 @@
+' Diagrama de sequência do aviso de novo bloco e da decisão de handshake (com e sem conexão)
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (seq:aviso-novo-bloco)
+' Gerar PNG (Git Bash): ./generate.sh aquisicao-aviso-sequencia.puml
+@startuml aquisicao-aviso-sequencia
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam noteBackgroundColor #FFF4E0
+skinparam noteBorderColor #C77700
+
+participant "Dongle" as D
+participant "App\n(intermediário)" as A
+participant "Server" as S
+
+D -> D : flush do bloco\npara a flash (HEAD_seq++)
+D -> A : Aviso de novo bloco 0x07\n(HEAD_seq, flags, DevID) (SYNC_TX)
+
+alt flags bit 0 ou 1 ligado (sem handshake) ou app sem ACK_seq válido
+  A -> A : verifica conectividade
+  alt há conexão
+    ref over D, S : Handshake (handshake-sequencia.puml)
+    A -> D : ACK 0x04 (SYNC_RX)
+    note over D : valida tag e c_conf,\ndesliga os bits 0 e 1
+  else sem conexão
+    note over A
+      Não consegue pedir o desafio ao server:
+      * não envia Pedido de lote 0x05
+        (o dongle responderia Erro 0x05 sem sessão)
+      * guarda o handshake como pendente
+      * nos próximos avisos 0x07, só atualiza HEAD_seq
+    end note
+    note over D
+      Segue gravando blocos na flash, sem perda de dados.
+      Com flash acima de 80%, liga o bit 2 do aviso.
+    end note
+    ...
+    A -> A : internet volta ou nova tentativa\n(espera exponencial de 1 s a 5 min)
+    ref over D, S : Handshake refeito do início (desafio novo)
+    A -> D : ACK 0x04 (SYNC_RX)
+  end
+else handshake válido
+  A -> A : pendentes = HEAD_seq − ACK_seq
+  note over A : segue para o pedido de lote
+end
+@enduml

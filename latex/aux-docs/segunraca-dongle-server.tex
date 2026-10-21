@@ -839,6 +839,28 @@ para ter os blocos prontos para enviar ao servidor. Assim que o post é concluí
 Caso a requisição para o servidor falhe, o app manda um bloco de erro com parâmetro 0x07 e o dongle volta o cursor de envio para o primeiro bloco ainda não reconhecido pelo servidor, que é o $ACK_{seq} + 1$,
 e o app descarta o pacote lido anteriormente. No fim, nada se perde, pois a flash só é limpa quando o ACK é recebido.
 
+Os diagramas \ref{seq:aviso-novo-bloco} e \ref{seq:lote-envio} mostram esse processo de comunicação e troca de mensagens BLE entre dongle e app pelo serviço de SYNC.
+O primeiro cobre o aviso de novo bloco e a decisão de \textit{handshake}, inclusive quando o app está sem conexão com a internet; o segundo cobre o pedido de lote,
+a fragmentação feita pelo dongle e o envio ao servidor.
+
+\begin{figure}[H]
+	\centering
+	\caption{Diagrama de sequência do aviso de novo bloco e do \textit{handshake} com ou sem conexão}
+	\label{seq:aviso-novo-bloco}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/aquisicao-aviso-sequencia.puml
+	\includegraphics[width=\textwidth]{aux-docs/aquisicao-aviso-sequencia.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+\begin{figure}[H]
+	\centering
+	\caption{Diagrama de sequência do pedido de lote, da fragmentação e do envio ao servidor}
+	\label{seq:lote-envio}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/aquisicao-lote-sequencia.puml
+	\includegraphics[width=\textwidth]{aux-docs/aquisicao-lote-sequencia.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
 \section{Implementação do servidor}
 
 O servidor será um VPS com uma API em GoLang que responderá as requisições de desafio para o dongle feitas pelo app, processará e validará

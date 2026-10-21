@@ -1,0 +1,53 @@
+' Diagrama de sequência do pedido de lote, fragmentação BLE e envio ao server
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (seq:lote-envio)
+' Gerar PNG (Git Bash): ./generate.sh aquisicao-lote-sequencia.puml
+@startuml aquisicao-lote-sequencia
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam noteBackgroundColor #FFF4E0
+skinparam noteBorderColor #C77700
+
+participant "Dongle" as D
+participant "App\n(intermediário)" as A
+participant "Server" as S
+
+note over A
+  pendentes ≥ N_lote (6) ou N_lote × T_bloco (~60 s)
+  K = min(pendentes, 32)
+end note
+
+A -> D : Pedido de lote 0x05 (K) (SYNC_RX)
+
+loop K blocos, a partir de ACK_seq + 1
+  D -> D : lê o bloco da flash, confere o CRC\ne consolida em TLV (até 1059 B)
+  note over D
+    MTU (~272 B) não comporta o bloco: fragmentos de até MTU − 4 B,
+    com byte de controle (bit 7 = 1 no primeiro; bits 6..0 = contador)
+  end note
+  loop cada fragmento
+    D -> A : byte de controle + dados (SYNC_TX)
+  end
+  A -> A : remonta o bloco
+  opt salto no contador ou 2 s sem fragmento
+    A -> D : Erro 0x04 (mensagem incompleta)
+    D -> D : cursor volta para ACK_seq + 1
+  end
+end
+
+A -> S : POST /v1/dongles/blocos\n(K blocos 0x03, token JWT) (HTTPS)
+
+alt lote aceito (ACK_seq ≥ último seq do lote)
+  S -> A : 200 com ACK 0x04 (ACK_seq, c_conf, flags, tag)
+  A -> D : ACK 0x04 (SYNC_RX)
+  D -> D : valida a tag, avança ACK_seq\ne libera a flash
+else falha ou lote interrompido
+  note over A
+    Demais respostas (200 parcial, 401, 429, 5xx, sem rede):
+    ver tabela de erros. Em geral o app descarta o lote
+    e manda Erro 0x07; o dongle volta o cursor
+    para ACK_seq + 1 e nada é apagado da flash.
+  end note
+end
+@enduml
