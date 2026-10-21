@@ -104,9 +104,10 @@ funcionamento do carro e como ele está sendo conduzido. Assim, deve-se garantir
 ou seja, todo registro recebido pelo servidor deve ter sido gerado pelo dongle associado a ele;
 integridade, ou seja, o dado que é recebido pelo servidor não pode ter sido alterado; unicidade, 
 ou seja, os registros devem ser apenas uma única vez e a ordem em que eles foram gerados deve
-ser mantida; completude detectável, ou seja, o servidor deve saber exatamente se e quais registros
-estão faltando ao sincronizar com o \textit{dongle}; e vínculo ao veículo, o que garante que o servidor
-consigui identifica quando há troca de veículo entre os \textit{boots} do dongle.
+ser mantida; e completude detectável, ou seja, o servidor deve saber exatamente se e quais registros
+estão faltando ao sincronizar com o \textit{dongle}.
+
+%e vínculo ao veículo, o que garante que o servidor consegue identificar quando há troca de veículo entre os \textit{boots} do dongle.
 
 Nesse contexto, só é poossível confiar plenamente no dongle e no servidor. Assim, o app e os enlaces BLE
 e internet são modelados como não confiáveis, conforme a \autoref{fig:fronteiras-confianca}.
@@ -144,10 +145,10 @@ a partir do qual o ataque é executado, a vulnerabilidade que ele explora, o alv
 
 \subsubsection{Comunicação wireless}  \label{secsec:comunicacao-wireless}
 
-Esses são ataques que se concetram tanto enlace BLE entre o app e dongle quanto na conexão de rede entre o app e o server. 
+Esses são ataques que se concentram tanto no enlace BLE entre o app e dongle quanto na conexão de rede entre o app e o server. 
 Dentre eles, estão sniffing, replay, Man In The Middle (MITM), acesso direto ao dongle por um terceiro e negação de serviço do enlace.
 
-Abaixo estão modelados os ataques do ponto de vista do BLE, mas os mesmoes princípios podem ser pensados para um adverário do tipo AD4 que interfere
+Abaixo estão modelados os ataques do ponto de vista do BLE, mas os mesmos princípios podem ser pensados para um adverário do tipo AD4 que interfere
 na comunicação entre o app e o servidor.
 
 Um exemplo de ataque dessa categoria é o sniffing (A1.1), no qual o adversário do tipo AD1 pode querer obter os dados do motorista, afetando sua
@@ -244,13 +245,13 @@ completude dos registros, e o efeito é uma perda de dados invisível ao servido
 \subsection{Definição de escopo e mitigação de ataques}
 
 
-Tendo em vista todos esses possíveis ataques, é necessário alinhar o escopo do projeto de acordo com o objeito que ele se propões a cumprir.
+Tendo em vista todos esses possíveis ataques, é necessário alinhar o escopo do projeto de acordo com o objetivo que ele se propões a cumprir.
 Como a ideia é fazer com que os dados cheguem no servidor de maneira confiável e completa, foram priorizados os ataques da categoria \ref{secsec:app-malicioso},
 sendo o objetivo deste documento explicar em detalhe um protocolo que garante, nesse cenário de desconfiança no canal e no aplicativo que intermedia o envio dos dados,
 como garantir autenticidade, integridade, unicidade e completude detectável dos dados medidos pelo dongle.
 
 Além disso, para complementar a segurança da comunicação fim a fim, também será abordado o uso de segunrança entre os enlaces BLE e internet para abordar os ataques 
-modelados na seção \ref{secsec:comunicacao-wireless}. Como já existem protocolos estabelcidos para garantir essa segurança, a ideia é usá-los para garantir
+modelados na seção \ref{secsec:comunicacao-wireless}. Como já existem protocolos estabelecidos para garantir essa segurança, a ideia é usá-los para garantir
 confidenciabilidade na comunicação: para o enlace entre o dongle e o app, será utilizada a técnico LESC (LE Secure Connections) do BLE; já para o enlace entre app e dongle
 será utilizado o protocolo HTTPS/TLS, que é amplamente utilizado para garantir a segurança de comunicação entre clientes e servidores na internet.
 
@@ -264,14 +265,14 @@ localização instalados externamente à rede CAN.
 
 \subsection{BLE LESC}
 
-O LE Secure Connections (LESC) é um método de pareamento introduzido no Bluetooth 4.2 para subsituir o esquema de chave temporária de baixa entropia no paeamento legado
+O LE Secure Connections (LESC) é um método de pareamento introduzido no Bluetooth 4.2 para substituir o esquema de chave temporária de baixa entropia no pareamento legado
 do BLE, que era facilmente quebrada por força bruca. Para isso, o LESC estabelece a chave do enlace com uma troca de chaves Diffie-Hellman em curva elíptica (ECDH)
 na curva P-256. Com essa chave de enlace, cada um dos aparelhos derivam uma chave de sessão com a qual o enlace é cifrado e autenticado usando AES-CCM, o que garante 
 confidenciabilidade e integridade na comunicação. Quando os dois aparelhos são pareados, ou seja, geram a chave de enlace válida,é feito o \textit{bonding}: a chave de sessão
 é salva em cada um dos aparelhos para futuras conexões, de modo que não seja necessário repetir o processo de pareamento.
 
-Esse pareamento é feito com um total de 3 fases. Na primeira fase, os aparelhos declaram suas capacidades e requisitos de autenticação como, por exemplo, se têm capcidade
-de entrada e saída e se suportam LESC. Trocas as capacidades, os dispositivos decidem se continuam o pareamento e é escolhido um método de associação, que estão especificados
+Esse pareamento é feito com um total de 3 fases. Na primeira fase, os aparelhos declaram suas capacidades e requisitos de autenticação como, por exemplo, se têm capacidade
+de entrada e saída e se suportam LESC. Trocadas as capacidades, os dispositivos decidem se continuam o pareamento e é escolhido um método de associação, que estão especificados
 na tabela \ref{lesc:metodos}, na qual considera-se implícita a pré-condição de que ambos os lados suportam LESC.
 
 \begin{table}[H] 	\label{lesc:metodos}
@@ -296,15 +297,15 @@ na tabela \ref{lesc:metodos}, na qual considera-se implícita a pré-condição 
 
 O mesmo problema de confidenciabilidade e integridade de comunicação sem fio que é identificado entre o dongle e o app, também pode ser identificado quando o app
 vai se comunicar com o servidor: deve haver confidenciabilidade, autenticidade e integridade na troca de pacotes pela rede. Para isso, o servidor deve ter um certificado
-TLS válido a fim de que seja possível estabelecer uma troca de chaves com autenticide. Em seguida, com a chave estabelecida, há garantia de integridade, confidencialidade
+TLS válido a fim de que seja possível estabelecer uma troca de chaves com autenticidade. Em seguida, com a chave estabelecida, há garantia de integridade, confidencialidade
 e autenticidade entre a conexão app e servidor.
 
 \section{Segurança na comunicação fim a fim}
 
-Esta seção tem como propósito modelar como deve ser feita a comunicação fim a fim, entre dongle e servidor, garantindo que hava todas as propriedades de segurança previstas
+Esta seção tem como propósito modelar como deve ser feita a comunicação fim a fim, entre dongle e servidor, garantindo que haja todas as propriedades de segurança previstas
 no projeto. A ideia é comparar com benchmarks duas implementações diferentes: usando MAC (Message Authentication Code) com chave simétrica pré-compartilhada (PSK) e usando 
 assinatura digital via chave assimétrica. Em ambas as formas, a ideia é o dongle conseguir provar criptograficamente que validou os blocos antes de enviá-los para o servidor e,
-quando esses blocos chegarem no seu destivo, o servidor consiga validar que os blocos que chegaram pela rede são de fato gerados pelo dongle. 
+quando esses blocos chegarem no seu destino, o servidor consiga validar que os blocos que chegaram pela rede são de fato gerados pelo dongle. 
 
 Para entender a necessidade dessa modelagem, é importante deixar claro o motivo das camadas de LESC e HTTPS na comunicação não serem suficientes. Esses dois mecanismos garantem
 segurança na comunição entre dongle e app e entre app e servidor, respectivamente, mas não conseguem garantir que pacotes realmente foram gerados pelo dongle, uma vez que eles
@@ -312,9 +313,9 @@ serão transmitidos por meio de um intermediário que tem controle total sobre o
 
 \subsection{Geração de chaves e identificação do dongle}
 
-Na fabricação do dongle, serão gerados um \textit{DevId} de 8 bytes e duas chaver $K_{auth}$ e $K_{rec}$ de 32 bytes cada. Cada um desses elementos é sorteado usando forte
+Na fabricação do dongle, serão gerados um \textit{DevId} de 8 bytes e duas chaves $K_{auth}$ e $K_{rec}$ de 32 bytes cada. Cada um desses elementos é sorteado usando forte
 entropia ao fabricar o dongle. As chaves são gravadas na NVS do dongle e registradas em um serviço de KMS (Key Management System) em um servidor separado ($S_{KMS}$), 
-trafegando na rede criptografadas com uma chave pública fornecida por $S_{KMS}$; dessa maneira, a fica em claro apenas apenas por pouco tempo na memória da estação
+trafegando na rede criptografadas com uma chave pública fornecida por $S_{KMS}$; dessa maneira, a chave fica em claro apenas por pouco tempo na memória da estação
 de fabricação.
 
 O uso de um KMS é importante pois permite que o servidor consiga verificar e gerar MACs sem que a chave precise estar na memória do servidor de aplicação ($S_{App}$), que
@@ -326,14 +327,14 @@ gerar MAC dos blocos de dados que saem do dongle até o servidor. Assim, é poss
 MACs com $K_{auth}$, mas consiga apenas verificar MACs com $K_{rec}$. Assim, mesmo que $S_{App}$ seja comprometido, um atacante não consegue gerar MACs válidos para um dongle
 sem também comprometer o $S_{KMS}$.
 
-Enquanto do lado do servidor o KMS garante a proteção das chaves, o dongle conta com o armazenamento das chaves no NVS (Non-Volatile Storage) com excriptação. Para garntir maior segurança
+Enquanto do lado do servidor o KMS garante a proteção das chaves, o dongle conta com o armazenamento das chaves no NVS (Non-Volatile Storage) com excriptação. Para garantir maior segurança
 desse encriptação, também conta com: Secure Boot V2 para rodar apenas \textit{firmware} assinado e não permitir injeção arbitrária de código; \textit{flash encryption} para cifrar as partições
-da flash e a chave de encriptação do NVP; \textit{eFuse}, memória gravável e não editável que guarda configurações da placa como o bloquear do uso de JTAG e download pela UART, evitando depuração, 
-e também guardar a chave de encriptação da flash, contando bom bloqueio total de leitura. Mesmo com todas essas camadas de proteção, ainda há risco de ataques com atacantes extremamente qualificados.
+da flash e a chave de encriptação do NVS; \textit{eFuse}, memória gravável e não editável que guarda configurações da placa como o bloquear do uso de JTAG e download pela UART, evitando depuração, 
+e também guardar a chave de encriptação da flash, contando com bloqueio total de leitura. Mesmo com todas essas camadas de proteção, ainda há risco de ataques com atacantes extremamente qualificados.
 
 Uma evolução para guardar melhor as chaves é o uso de um elemento seguro de hardware, como o chip ATECC608B, para armazenar as chaves fora da ESP. Como, mesmo ainda muito mais difícil,
 ainda é possível extrair chaves de elementos seguros, não vale a pena o seu uso dentro desse projeto, pois agrega apenas em aumento de custo para um ataque de recuperação de chave e não configura uma
-melhoria academicamente relevante em relação a segurança dentro do escopo desde trabalho.
+melhoria academicamente relevante em relação a segurança dentro do escopo deste trabalho.
 
 \begin{figure}[H]
 	\centering
@@ -346,12 +347,12 @@ melhoria academicamente relevante em relação a segurança dentro do escopo des
 
 \subsection{Garantia das propriedades de segurança}
 
-A coleta no dongle ocorre de maneira offline-first, como mencionado em Investigação-3.pdf. Para que não seja possível alterar blocos guardadados no sistema de arquivos do dongle,
+A coleta no dongle ocorre de maneira offline-first, como mencionado em Investigação-3.pdf. Para que não seja possível alterar blocos guardados no sistema de arquivos do dongle,
 assim que o buffer em memória enche o bloco vai ser guardados na memória \textit{flash}, é calculada uma tag de autenticação de 32 bytes via HMAC-SHA256 a partir da chave $K_{rec}$, 
 que é salva concatenada ao bloco de dados. Desse modo, caso o dado seja alterado enquanto está na memória, a tag se tornará inválida.
 
-Quando um bloco chega no servidor é possível verificar a tag a partir de uma chamda ao KMS para validar a mensagem e, em seguida, salvar o bloco decodificado. Desse modo, é possível garantir 
-integridade e autenticidade do bloco no servidor. Esse desenho garante que ataques to tipo A3.3 da seção \ref{secsec:app-malicioso} não consigam alterar blocos antigos antes de enviar
+Quando um bloco chega no servidor é possível verificar a tag a partir de uma chamada ao KMS para validar a mensagem e, em seguida, salvar o bloco decodificado. Desse modo, é possível garantir 
+integridade e autenticidade do bloco no servidor. Esse desenho garante que ataques do tipo A3.3 da seção \ref{secsec:app-malicioso} não consigam alterar blocos antigos antes de enviar
 ao servidor e também garante que não seja possível fabricar novos blocos.
 
 Para que seja possível garantir unicidade, quando um bloco cujo MAC seja válido é recebido pelo servidor, é extraída a \textit{seq} do cabeçado desse bloco. O servidor verifica se um
@@ -359,12 +360,12 @@ bloco com o mesmo valor de \textit{seq} foi recebido, descartando o bloco em cas
 no servidor, como foi modelado para o adversário do tivo AD2 no ataque A3.4 da seção \ref{secsec:app-malicioso}. 
 
 Para que seja possível garantir completude detectável, é necessário que o servidor consiga identificar com exatidão qual foi o número \textit{seq} no último bloco recebido, $ACK_{seq}$, a fim
-de que seja possível comparar com o \textit{seq} do último bloco medido pelo dongle, o $HEAD_{seq}$, sendo a diferença $HEAD_{seq} - ACK_{seq}$ entre esses valores a quantida de blocos
+de que seja possível comparar com o \textit{seq} do último bloco medido pelo dongle, o $HEAD_{seq}$, sendo a diferença $HEAD_{seq} - ACK_{seq}$ entre esses valores a quantidade de blocos
 que estão com envio pendente para o server; ao mesmo tempo, todos os blocos com $seq < ACK_{seq}$ já foram recebidos e processados, podendo ser exlcuídos da \textit{flash}. Para garantir sequência e ordem, 
 o servidor apenas aceita pacotes cujo valor de seq é exatamente $ACK_{seq} + 1$, descartando pacotes fora de 
 ordem (Go-Back-N). Essa dinâmica é ilustrada na \autoref{fig:fila-ack-head}.
 
-Assim, com essa modelagem, é possível garantir ordem e completude detectável, impedindo que as medidas sejam reordenadas ou que sejam criadas lacunas entre difenretes medidas.
+Assim, com essa modelagem, é possível garantir ordem e completude detectável, impedindo que as medidas sejam reordenadas ou que sejam criadas lacunas entre diferentes medidas.
 
 \begin{figure}[H]
 	\centering
@@ -412,7 +413,7 @@ O fato de o servidor apenas aceitar valores de $seq$ exatamente iguais a $ACK_{s
 a verificação de HMAC falha no servidor e ele é rejeitado e, como não há bloco válido com aquele número de $seq$, o servidor não consegue mais receber blocos. Para abordar esses problemas, são
 criados dois blocos especiais de BOOT e de LOSS.
 
-Para o bloco de BOOT, é necessário manter uma reserva de $seq$ na NVS para que o contador retome a partir do valor da reseva semrep que perder alimentação. Uma sugestão para esse valor é sempre
+Para o bloco de BOOT, é necessário manter uma reserva de $seq$ na NVS para que o contador retome a partir do valor da reserva sempre que perder alimentação. Uma sugestão para esse valor é sempre
 armazenar o valor de $seq + 64$ na NVS a cada $64$ blocos enviados. Sempre que o dongle perder energia, ao ser religado ele deve ler o valor da reserva $seq$ da NVS, retomar a contagem a partir dele e,
 por fim, gerar um bloco de BOOT declarando que há furo na sequência entre o último bloco salvo na \textit{flash} e o valor que está na reserva de $seq$.
 
@@ -462,7 +463,7 @@ por fim, gerar um bloco de BOOT declarando que há furo na sequência entre o ú
 	\legend{Fonte: elaborado pelo autor.}
 \end{figure}
 
-Para o caro de corrompimento, é necessário verificar se houve corrompimento no bloco sempre antes de enviá-lo ao app para ir ao servidor e, caso seja detectado, deve ser gerado um bloco de LOSS 
+Para o caso de corrompimento, é necessário verificar se houve corrompimento no bloco sempre antes de enviá-lo ao app para ir ao servidor e, caso seja detectado, deve ser gerado um bloco de LOSS 
 com o valor atual de $seq$, que será reconhecido no servidor e registrado como LOSS. Seria possível verificar a integridade do bloco apenas calculando o hash, mas isso é computacionalmente custoso
 para recalcular em todo bloco. Por isso, é mais eficiente salvar um CRC32 junto da tag HMAC em todo bloco e verificar esse CRC32 antes de mandar para o app. O uso do CRC32 adiciona apenas 4 bytes por
 bloco, que é justificável depois das otimizações feitas anteriormente.
@@ -482,8 +483,8 @@ começa e segue a seguinte sequência de passos, abstraindo a intermediação do
 	\item Server envia um bloco desafio tipo 0x01 para o dongle contendo: $c_S$, $N_S$, $ACK_{seq}$, $c_{conf}$, $flags_c$, $diag_min$ e $tag$ (63 bytes) com destino ao dongle
 	\item Dongle responde um bloco tipo 0x02 contendo: $HEAD_{seq}$, $boot\_id$, $t_{ms}$, $flags_a$ e $tag$ (62 bytes) com destino ao server
 	\item Com $S2$, o server fecha a âncora de tempo para $boot\_id$ segundo algoritmo de Christian
-	\item Server envia bloco ACK tipo 0x04 contendo: $ACK_{seq}$, $c_{conf}$, $flags_a$, e $tag$ (41 bytes) com desito ao dongle
-	\item Server envia, com destivo ao app, um token JWT válido para receber blocos do app.
+	\item Server envia bloco ACK tipo 0x04 contendo: $ACK_{seq}$, $c_{conf}$, $flags_a$, e $tag$ (41 bytes) com destino ao dongle
+	\item Server envia, com destino ao app, um token JWT válido para receber blocos do app.
 \end{enumerate}
 
 \begin{figure}[H]
@@ -511,17 +512,17 @@ começa e segue a seguinte sequência de passos, abstraindo a intermediação do
 		\hline
 		$c_{conf}$ & $c_{S}$ do último desafio aceito para conferência & $S_{App}$ & 4 \\
 		\hline
-		$flags_c$ & Bit 0: indice se ativa modo dignóstico; Outros bits reservados & $S_{App}$ & 1 \\
+		$flags_c$ & Bit 0: indica se ativa modo dignóstico; Outros bits reservados & $S_{App}$ & 1 \\
 		\hline
-		$diag_min$ & Tempos em minutos que o dispositivo ficará em modo diagnóstico & $S_{App}$ & 2 \\
+		$diag_min$ & Tempo em minutos que o dispositivo ficará em modo diagnóstico & $S_{App}$ & 2 \\
 		\hline
 		$HEAD_seq$ & Valor de $seq$ do último bloco gravado no LittleFS & Dongle & 4 \\
 		\hline
 		$boot\_id$ & O valor de ID do \textit{boot} atual do dongle & Dongle & 2 \\
 		\hline
-		$t_{ms}$ & Tempo em milissegundos deste o boot no instance da resposta & Dongle & 4 \\
+		$t_{ms}$ & Tempo em milissegundos desde o boot no instante da resposta & Dongle & 4 \\
 		\hline
-		$flags_a$ & Bit 0: indica falha na sincronização de tempo, \textit{handshake} deve ser repetivo; Outros bits reservados & Dongle & 1 \\
+		$flags_a$ & Bit 0: indica falha na sincronização de tempo, \textit{handshake} deve ser repetido; Outros bits reservados & Dongle & 1 \\
 		\hline
 		$tag$ & Tag calculada via HMAC-SHA256 & Dongle ou $S_{App}$ & 16 \\
 		\hline
@@ -529,21 +530,21 @@ começa e segue a seguinte sequência de passos, abstraindo a intermediação do
 \end{table}
 
 Para emitir o desafio, o server incrementa $c_S$, sorteia $N_s$ e guarda o novo desafio no banco de dados associando ao $DevId$ que o pediu.
-Ao receber o desafio, o dongle confere a tag e verifique que $c_S$ é maior do que o último aceito, valor que está salvo na NVS, garantindo que
+Ao receber o desafio, o dongle confere a tag e verifica que $c_S$ é maior do que o último aceito, valor que está salvo na NVS, garantindo que
 não está respondendo um desafio repetido; caso $ACK_{seq}$ seja maior do que $HEAD_{seq}$, os blocos até o que foi reconhecido são removidos da 
 \textit{flash}. Na resposta do dongle, o $N_S$ ecoado serve para garantir que a resposta enviada é de um novo desafio. Ao avaliar a resposta, o 
 server confere, além da tag,se $c_{conf} = C_{seq}$; caso positivo, envia bloco $ACK$ com flags zeradas e o token JWT.
 
 Para o cálculo da tag, é usada a chave $K_{auth}$ para gerar o HMAC-SHA256 segundo a equação \ref{eq:hmac-sha256}, que é truncado em seguida para
 16 bytes a fim de economizar banda na transmissão. Aqui é possível truncar devido ao fato de o server ter permissão de gerar MACs com $K_{auth}$
-no KSM, o que possibilita o app gerar o HMAC e comparar os primeiros 16 bytes; como o server não consegue gerar HMAC para $K_{rec}$, não é possível
+no KMS, o que possibilita o servidor gerar o HMAC e comparar os primeiros 16 bytes; como o server não consegue gerar HMAC para $K_{rec}$, não é possível
 truncar o HMAC dos blocos sem perder o isolamento de responsabilidades no KMS. 
 
-No cálculo do HMAC em \ref{eq:hmac-sha256}, além da chave e do payload, são adicionadaos no cálculo da tag alguns separados de contexto para evitar
+No cálculo do HMAC em \ref{eq:hmac-sha256}, além da chave e do payload, são adicionados no cálculo da tag alguns separadores de contexto para evitar
 que uma tag válida seja reaproveitada em outro contexto para um payload de mesmo valor. O termo "MALCONG" é um rótulo fixo para esse projeto, 
 o \textit{tipo} representa o tipo de bloco que está sendo calculada no MAC. A figura \ref{fig:blocos-handshake} mostra os tipos de blocos utilizados no handshake.
 
-O diagrama de sequência da figura \ref{fig:sequencia-handshake} mostra o fluxo de comunicação, considerando a intermdiação do app. O gatilhode handshake ocorre nas seguintes
+O diagrama de sequência da figura \ref{fig:sequencia-handshake} mostra o fluxo de comunicação, considerando a intermdiação do app. O gatilho de handshake ocorre nas seguintes
 situações: boot do dongle ou nova conexão BLE, eventos que zeram a flag na RAM do dongle que indica se houve handshake, fazendo com que o dongle peça um handshake para o app
 a partir das mensagens que serão especificadas em \ref{sec:app-ble-dongle}; token JWT perto de expirar, o que força um novo handshake pra nova emissão de token JWT; ou âncora rejeitada,
 que força um novo handshake para sicronização.
@@ -610,8 +611,8 @@ O app se comunica com o dongle por meio de BLE. Como já foi modelado na seção
 a possibilidade de ataques do tipo A1.2, A1.3 e A1.4 da seção \ref{secsec:comunicacao-wireless}. Por isso, o celular se comunicará
 apenas depois de um pareamento seguindo o padrão LESC, ajustando o firmware do dongle para aceitar apenas conexões LESC.
 
-O método de pareamento dentro os definidos na tabela \ref{lesc:metodos} será o Just Works, devido ao fato de o dongle não
-ter nenhuma capacidade de Input/Ouput. Isso expõe a conexão ao ataque A1.2, de \textit{Man in The Middle}, modelado na seção
+O método de pareamento dentre os definidos na tabela \ref{lesc:metodos} será o Just Works, devido ao fato de o dongle não
+ter nenhuma capacidade de Input/Output. Isso expõe a conexão ao ataque A1.2, de \textit{Man in The Middle}, modelado na seção
 \ref{secsec:comunicacao-wireless} para um adversário do tipo AD1, que está perto do carro no momento da conexão. 
 
 No entanto, são tomadas algumas medidas para diminuir esse risco:
@@ -628,10 +629,10 @@ SYNC. Assim como o NUS, o SYNC expõem uma característica RX, na qual o dongle 
 o dongle envia dados para o app; no entanto, enquanto o NUS recebe texto, o serviço SYNC envia e recebe dados binários. Com essa separação,
 cada fluxo de dados entre app e dongle fica separado e com sua própria responsabilidades, ajudando na remontagem de blocos a partir dos fragmentos.
 
-Além dos tipos de blocos definidos no handshake, exitem mais alguns tipos que precisam ser usados para orquestrar a comunicação entre app e dongle, sendo
-todos eles aprensetados na tabela \ref{table:tipos-blocos}. Quando são enviados via BLE no SYNC\_RX, como convenção do projeto, os blocos são estruturados no formato TVL (type, length, value), 
-sendo 3 bytes concatenados no início de cada bloco, o primeiro representando o tipo e o segundo o comprimeiro total do corpo da mensagem (sem contar o tipo e comprimento). Além disso, quando são
-enviados no SYNC\_TX, também é necessário englobar o bloco TVL em um enquandramento com um byte de controle na frente, que vai ser o bit 0 valendo 1 quando for um início de mensagem; isso é necessário
+Além dos tipos de blocos definidos no handshake, existem mais alguns tipos que precisam ser usados para orquestrar a comunicação entre app e dongle, sendo
+todos eles apresentados na tabela \ref{table:tipos-blocos}. Quando são enviados via BLE no SYNC\_RX, como convenção do projeto, os blocos são estruturados no formato TVL (type, length, value), 
+sendo 3 bytes concatenados no início de cada bloco, o primeiro representando o tipo e o segundo o comprimento total do corpo da mensagem (sem contar o tipo e comprimento). Além disso, quando são
+enviados no SYNC\_TX, também é necessário englobar o bloco TVL em um enquadramento com um byte de controle na frente, que vai ser o bit 0 valendo 1 quando for um início de mensagem; isso é necessário
 pelo fato de as mensagens do SYNC\_TX poderem ser fragmentadas em vários pacotes BLE. O formato do pacote de cada característica do SYNC pode ser visto na figura \ref{fig:sync-tvl}.
 
 \begin{figure}[H]
@@ -739,15 +740,15 @@ ele calcula o valor de quantos blocos estão pendentes de envio a partir de $HEA
 
 Quando a conta de pendentes no app chegar em $N_lote$, ou quando se passar $N_lote*T_Bloco$ segundos desde o lote de blocos enviados, o app envia um bloco de Pedido de Lote (0x05) para o dongle via SYNC\_RX.
 Como a maioria das configurações tem $T_max$ de 100ms ou 200ms, um bloco se completa em aproximadamente 10s ($T_bloco=10s$), então considera-se $N_lote=6$ para enviar 6 blocos a cada 10 minutos.
-A quantida de blocos pedida na mensagem é sempre o mínimo entre o número de pendentes e a quantida de máxima de blocos aceitadas na requisição POST para o servidor, que é 32 blocos.
+A quantidade de blocos pedida na mensagem é sempre o mínimo entre o número de pendentes e a quantidade de máxima de blocos aceitadas na requisição POST para o servidor, que é 32 blocos.
 
 É importante notar que o MTU do BLE não suporta um bloco inteiro, que fica negociado em torno de 272 bytes. O bloco completo, como mostra a figura \ref{fig:bloco-completo} terá 1059 bytes, sendo 1 bytes com o 
-tipo, 2 bytes com o comprimento, 1024 bytes de dados e, por fim, 32 bytes de tag. Os bytes do CRC são conferidos antes de o dongle enviar os blocos vie BLE, então não aparecem aqui.
+tipo, 2 bytes com o comprimento, 1024 bytes de dados e, por fim, 32 bytes de tag. Os bytes do CRC são conferidos antes de o dongle enviar os blocos via BLE, então não aparecem aqui.
 Para enviar os blocos então, o app primeiro consolida no formato TVL e, em seguida, divide em tamanhos iguais de $MTU - 1$ bytes, adicionando o bytes de controle, sendo que o bit 0 do byte de controle vale 1 somente
-para no primeiro fragmento de cada bloco da flash. Esses blocos são então mandados via BLE para o app, que remonta o bloco original da flash. QUando os blocos chegam no app, são enviados via requisição POST. A resposta
+para no primeiro fragmento de cada bloco da flash. Esses blocos são então mandados via BLE para o app, que remonta o bloco original da flash. Quando os blocos chegam no app, são enviados via requisição POST. A resposta
 dessa requisição é um bloco ACK (0x04) que contém o novo valor de $ACK_{seq}$, que é usado para atualizar o app e o dongle sobre quais blocos foram reconhecidos pelo servidor.
 
-O bloco de erro carrega um byte que pode definir difenretes tipos de erros. Os erros e suas mitigações são mostrados na tabela \ref{tab:erros-bloco}.
+O bloco de erro carrega um byte que pode definir diferentes tipos de erros. Os erros e suas mitigações são mostrados na tabela \ref{tab:erros-bloco}.
 
 \begin{longtable}{|>{\raggedright\arraybackslash}p{0.13\textwidth}|>{\raggedright\arraybackslash}p{0.2\textwidth}|>{\raggedright\arraybackslash}p{0.32\textwidth}|>{\raggedright\arraybackslash}p{0.27\textwidth}|}
 	\caption{Erros e respostas de falha entre dongle, app e servidor}
@@ -839,7 +840,7 @@ A API terá 3 endpoints principais:
 O banco de dados será PostgreSQL, com TimescaleDB e PostGIS para armazenar os dados de telemetria e localização, respectivamente.
 
 Para simplificar, no mesmo VPS, mas com configurações de acesso mais restrita, estará um servidor KMS usando HashiCorp Vault para gerenciar as
-chaves usadas nos HMACs de autenticação e de blocos de dados ($K_{auth}$ e $K_{rec}$, respetivamente), e também a chave privada para assinar os
+chaves usadas nos HMACs de autenticação e de blocos de dados ($K_{auth}$ e $K_{rec}$, respectivamente), e também a chave privada para assinar os
 tokens JWT que permitirão que o app envie blocos de maneira autenticada, evitando possível sobrecarga no endpoint de recebimento de blocos. 
 
 No banco, deve haver:
@@ -854,7 +855,7 @@ No banco, deve haver:
 \end{itemize}
 
 O endpoint de blocos é autenticado com um token JWT com $sub=DevId$ e expiração de 30 minutos. Ele deve receber um lote de blocos,
-verificar assinatura e expiração do token e, caso esteja válido, verificar o HMAC, decodidicar os base64 e registrar, na mesma transção:
+verificar assinatura e expiração do token e, caso esteja válido, verificar o HMAC, decodificar os base64 e registrar, na mesma transção:
 
 \begin{itemize}
 	\item o bloco bruto
