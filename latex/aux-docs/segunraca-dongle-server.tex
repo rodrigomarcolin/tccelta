@@ -481,7 +481,7 @@ começa e segue a seguinte sequência de passos, abstraindo a intermediação do
 	\item Dongle pede que $S_{App}$ envie um desafio
 	\item Server anota $S1$
 	\item Server envia um bloco desafio tipo 0x01 para o dongle contendo: $c_S$, $N_S$, $ACK_{seq}$, $c_{conf}$, $flags_c$, $diag_min$ e $tag$ (47 bytes) com destino ao dongle
-	\item Dongle responde um bloco tipo 0x02 contendo: $HEAD_{seq}$, $boot\_id$, $t_{ms}$, e $tag$ (46 bytes) com destino ao server
+	\item Dongle responde um bloco tipo 0x02 contendo: $c_S$, $N_S$, $HEAD_{seq}$, $boot\_id$, $t_{ms}$, e $tag$ (46 bytes) com destino ao server
 	\item Com $S2$, o server fecha a âncora de tempo para $boot\_id$ segundo algoritmo de Christian
 	\item Server envia bloco ACK tipo 0x04 contendo: $ACK_{seq}$, $c_{conf}$, $flags_a$, e $tag$ (25 bytes) com destino ao dongle
 	\item Server envia, com destino ao app, um token JWT válido para receber blocos do app.
@@ -522,7 +522,7 @@ começa e segue a seguinte sequência de passos, abstraindo a intermediação do
 		\hline
 		$t_{ms}$ & Tempo em milissegundos desde o boot no instante da resposta & Dongle & 4 \\
 		\hline
-		$flags_a$ & Bit 0: indica falha na sincronização de tempo, \textit{handshake} deve ser repetido; Outros bits reservados & Dongle & 1 \\
+		$flags_a$ & Bit 0: indica falha na sincronização de tempo, \textit{handshake} deve ser repetido; Outros bits reservados & $S_{App}$ & 1 \\
 		\hline
 		$tag$ & Tag calculada via HMAC-SHA256 & Dongle ou $S_{App}$ & 16 \\
 		\hline
@@ -630,9 +630,9 @@ o dongle envia dados para o app; no entanto, enquanto o NUS recebe texto, o serv
 cada fluxo de dados entre app e dongle fica separado e com sua própria responsabilidades, ajudando na remontagem de blocos a partir dos fragmentos.
 
 Além dos tipos de blocos definidos no handshake, existem mais alguns tipos que precisam ser usados para orquestrar a comunicação entre app e dongle, sendo
-todos eles apresentados na tabela \ref{table:tipos-blocos}. Quando são enviados via BLE no SYNC\_RX, como convenção do projeto, os blocos são estruturados no formato TVL (type, length, value), 
+todos eles apresentados na tabela \ref{table:tipos-blocos}. Quando são enviados via BLE no SYNC\_RX, como convenção do projeto, os blocos são estruturados no formato TLV (type, length, value), 
 sendo 3 bytes concatenados no início de cada bloco, o primeiro representando o tipo e o segundo o comprimento total do corpo da mensagem (sem contar o tipo e comprimento). Além disso, quando são
-enviados no SYNC\_TX, também é necessário englobar o bloco TVL em um enquadramento com um byte de controle na frente, que vai ser o bit 0 valendo 1 quando for um início de mensagem; isso é necessário
+enviados no SYNC\_TX, também é necessário englobar o bloco TLV em um enquadramento com um byte de controle na frente, que vai ser o bit 0 valendo 1 quando for um início de mensagem; isso é necessário
 pelo fato de as mensagens do SYNC\_TX poderem ser fragmentadas em vários pacotes BLE. O formato do pacote de cada característica do SYNC pode ser visto na figura \ref{fig:sync-tvl}.
 
 \begin{figure}[H]
@@ -653,7 +653,7 @@ pelo fato de as mensagens do SYNC\_TX poderem ser fragmentadas em vários pacote
 		\newcommand{\seta}[2]{\draw[ponteiro] ([yshift=-0.9cm]#1.south) -- (#1.south);
 			\node[rotulo] at ([yshift=-0.9cm]#1.south) {#2};}
 
-		% SYNC_RX: formato TVL
+		% SYNC_RX: formato TLV
 		\node[titulo] at (0,0.2) {SYNC\_RX};
 		\campo{0}{0}{1.8}{T\\(1 byte)}{campo}{rt}
 		\campo{1.8}{0}{1.8}{L\\(2 bytes)}{campo}{rl}
@@ -662,7 +662,7 @@ pelo fato de as mensagens do SYNC\_TX poderem ser fragmentadas em vários pacote
 		\seta{rl}{comprimento}
 		\seta{rv}{valor}
 
-		% SYNC_TX: TVL precedido por um byte de controle
+		% SYNC_TX: TLV precedido por um byte de controle
 		\node[titulo] at (0,-3.1) {SYNC\_TX};
 		% byte de controle: 8 bits, apenas o primeiro (bit de controle) é destacado
 		\campo{0}{-4.4}{0.3}{}{controle}{tc}
@@ -744,7 +744,7 @@ A quantidade de blocos pedida na mensagem é sempre o mínimo entre o número de
 
 É importante notar que o MTU do BLE não suporta um bloco inteiro, que fica negociado em torno de 272 bytes. O bloco completo, como mostra a figura \ref{fig:bloco-completo} terá 1059 bytes, sendo 1 bytes com o 
 tipo, 2 bytes com o comprimento, 1024 bytes de dados e, por fim, 32 bytes de tag. Os bytes do CRC são conferidos antes de o dongle enviar os blocos via BLE, então não aparecem aqui.
-Para enviar os blocos então, o app primeiro consolida no formato TVL e, em seguida, divide em tamanhos iguais de $MTU - 1$ bytes, adicionando o bytes de controle, sendo que o bit 0 do byte de controle vale 1 somente
+Para enviar os blocos então, o app primeiro consolida no formato TLV e, em seguida, divide em tamanhos iguais de $MTU - 1$ bytes, adicionando o bytes de controle, sendo que o bit 0 do byte de controle vale 1 somente
 para no primeiro fragmento de cada bloco da flash. Esses blocos são então mandados via BLE para o app, que remonta o bloco original da flash. Quando os blocos chegam no app, são enviados via requisição POST. A resposta
 dessa requisição é um bloco ACK (0x04) que contém o novo valor de $ACK_{seq}$, que é usado para atualizar o app e o dongle sobre quais blocos foram reconhecidos pelo servidor.
 
@@ -821,7 +821,7 @@ Para permitir mais eficiência, o dongle usa uma estratégia de cursor de envio 
 Quando o app pede por mais blocos, mesmo o ACK ainda não tendo chegado dos blocos anteriores, o dongle manda para o app via BLE, que já lê e remonta os fragmentos
 para ter os blocos prontos para enviar ao servidor. Assim que o post é concluído, o próximo lote pode ser enviado sem esperar uma leitura do BLE, garantindo maior eficiência.
 Caso o a requisição para o servidor falhe, o app manda um bloco de erro com parâmetro 0x07 e o dongle volta o cursor de envio para o primeiro bloco ainda não reconhecido pelo servidor, que é o $ACK_{seq} + 1$,
-e o app descarta o pacote lido anteriormente. No fim, nada se perde, pois a flash só é limpa quando o ACK é recebido
+e o app descarta o pacote lido anteriormente. No fim, nada se perde, pois a flash só é limpa quando o ACK é recebido.
 
 \section{Implementação do servidor}
 
