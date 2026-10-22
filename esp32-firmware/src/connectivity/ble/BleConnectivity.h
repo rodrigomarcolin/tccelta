@@ -19,8 +19,6 @@ static const char* BLE_TX_UUID      = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
  * Esta classe realiza puramente o transporte, repassando o comando recebido
  * às claras para a classe que irá de fato processá-lo.
  *
- * Deverá ser extendida via padrão decorator para implementação de autenticação/encriptação. 
- *  SecureBleConnectivity encapsulará esta classe. 
  */
 class BleConnectivity : public IConnectivity,
                         private NimBLECharacteristicCallbacks,
@@ -32,9 +30,13 @@ public:
     void sendResponse(const uint8_t* data, size_t len) override;
     void setOnCommandReceivedCallback(CommandCallback cb) override;
 
+    /** Chamado com true ao conectar e false ao desconectar. */
+    void setConnectionCallback(std::function<void(bool)> cb) { _onConnection = std::move(cb); }
+
 private:
     const char*           _deviceName;
     CommandCallback       _callback;
+    std::function<void(bool)> _onConnection;
     NimBLECharacteristic* _txChar = nullptr;
 
     // NimBLECharacteristicCallbacks

@@ -1,6 +1,6 @@
 # ELM327 layer
 
-`Elm327` is the protocol boundary after secure BLE validation. It accepts a
+`Elm327` is the protocol boundary behind the BLE command channel. It accepts a
 small local AT subset and whitelisted OBD requests; only OBD requests call
 `IObd2`. `Elm327Task` serializes commands and sends exactly one response ending
 in `>` before the next queued command is processed.
@@ -8,19 +8,19 @@ in `>` before the next queued command is processed.
 ```mermaid
 sequenceDiagram
     participant App
-    participant Secure as Secure BLE
+    participant BLE as BLE (NUS)
     participant Task as Elm327Task
     participant ELM as Elm327
     participant OBD as IObd2
-    App->>Secure: authenticated command
-    Secure->>Task: plaintext command
+    App->>BLE: command
+    BLE->>Task: command
     Task->>ELM: process(command)
     ELM->>ELM: parse AT or OBD
     ELM->>OBD: whitelisted request
     OBD-->>ELM: one or more ECU responses
     ELM-->>Task: formatted response + >
-    Task-->>Secure: response
-    Secure-->>App: authenticated response
+    Task-->>BLE: response
+    BLE-->>App: response
 ```
 
 OBD syntax is `SSPP` or `SSPPN`, and service-only DTC syntax is `SS` or
@@ -30,5 +30,12 @@ that timeout in 4 ms units (`ATST32` is 200 ms). It does not change ISO-TP
 per-frame deadlines.
 
 `ATH1` reports the CAN ID captured from each ECU. The AT allowlist is local and
-does not permit protocol selection, address injection, raw transmission, or
-fabricated voltage/status commands.
+does not permit address injection, raw transmission, or fabricated
+voltage/status commands.
+
+With the collector, `Elm327` also receives an
+`ICollectorControl`: `ATSPh` selects one of the four ISO 15765-4 protocols
+(6–9) and restarts the dongle, `ATSThh` sets Tmax, and the `AT#` commands
+(`PID`, `DEL`, `LIST`, `DIAG`, `NET`, `GPS`, `TMAX`, `TMAX?`) configure the
+collection. Outside diagnostic mode, collected PIDs are answered from the last
+value read, without touching the bus; any other request answers `?`.

@@ -1,228 +1,94 @@
 # ESP32 OBD2 Dongle Firmware
 
-BLE-based OBD2 dongle firmware for ESP32, built with PlatformIO + FreeRTOS.
+Firmware do dongle OBD-II do TCCELTA para ESP32 (PlatformIO + FreeRTOS). O
+dongle coleta telemetria do barramento CAN do carro (modo Coletor), grava em
+blocos na flash e envia ao servidor pelo app. Pelo mesmo canal ELM327, o app
+lê os valores coletados e, no modo Diagnóstico (`AT#DIAG 1`), faz leituras
+arbitrárias (DTCs, freeze frame, outros PIDs).
 
----
+Desenho completo: [docs/plano-coleta.md](../docs/plano-coleta.md).
+Eventos de depuração: [docs/debug-events.md](../docs/debug-events.md).
 
-## Architecture
+## Ambientes
 
-```
-IConnectivity (interface)
-├── BleConnectivity                           plain BLE transport (NUS profile)
-└── SecureBleConnectivity                     abstract base (FreeRTOS queue + task)
-    ├── SecurePskBleConnectivity               AES-256-GCM, static PSK              ← USE_SECURE_PSK
-    ├── SecureHandshakeBleConnectivity         PSK handshake + HKDF session key      ← USE_SECURE_HANDSHAKE
-    └── SecureHandshakeReplayBleConnectivity   same handshake + anti-replay counter  ← USE_SECURE_HANDSHAKE_REPLAY
+A camada CAN é escolhida pelo ambiente:
 
-IObd2 (interface)
-├── Obd2Can → ICanBus
-│   ├── Mcp2515Can    (SPI)  ← USE_MCP2515
-│   └── TwaiCan       (native TWAI)  ← USE_TWAI
-└── Obd2Mock                          ← USE_MOCK
-```
-
-Inbound data flow:
-```
-BleConnectivity::onWrite()
-    └─► SecureBleConnectivity._rawQueue   (ISR-safe enqueue)
-            └─► [SecureTask]
-                    └─► onRawFrameReceived()   ← subclass decrypts
-                            └─► deliverPlaintext() → _userCallback
-                                                       └─► [Elm327Task]
-```
-
----
-
-## Build Environments
-
-Run with: `pio run -e <env>` / `pio run -e <env> -t upload`
-
-| Environment | CAN backend | Security |
-|-------------|------------|----------|
-| `mock` | Simulated | None |
-| `twai` | ESP32 TWAI | None |
-| `mcp2515` | MCP2515 SPI | None |
-| `mock_psk` | Simulated | AES-256-GCM PSK |
-| `twai_psk` | ESP32 TWAI | AES-256-GCM PSK |
-| `mcp2515_psk` | MCP2515 SPI | AES-256-GCM PSK |
-| `mock_handshake` | Simulated | PSK handshake + HKDF session key |
-| `twai_handshake` | ESP32 TWAI | PSK handshake + HKDF session key |
-| `mock_handshake_replay` | Simulated | PSK handshake + HKDF session key + anti-replay counter |
-| `twai_handshake_replay` | ESP32 TWAI | PSK handshake + HKDF session key + anti-replay counter |
-
-### Quick start (no hardware)
+| Ambiente | Camada CAN | Eventos de depuração |
+|---|---|---|
+| `collector_mock` | Simulada (sem hardware CAN) | — |
+| `collector_twai` (padrão) | TWAI nativo do ESP32 + SN65HVD230 | — |
+| `collector_mcp2515` | MCP2515 via SPI | — |
+| `collector_mock_debug` | Simulada | Serial a 921600 baud |
+| `collector_twai_debug` | TWAI | Serial a 921600 baud |
+| `collector_mcp2515_debug` | MCP2515 | Serial a 921600 baud |
 
 ```bash
-# Plain transport
-pio run -e mock
-
-# Encrypted (uses placeholder key from platformio.ini — safe for local dev/CI)
-pio run -e mock_psk
-
-# Flash to device
-pio run -e twai_psk -t upload
-
-# Open serial monitor
-pio device monitor
+pio run -e collector_mock_debug -t upload -t monitor   # gravar e acompanhar
+pio test -e native                                     # testes no host
 ```
 
----
+Para salvar os eventos num arquivo (para o visualizador):
+`pio device monitor -e collector_mock_debug --filter log2file`.
 
-## Configuration
+Impacto da escrita na flash sobre as leituras, a partir desse arquivo:
+`node ../tools/event-viewer/flash-impact.js sessao.log`. Para comparar prazos de
+bloco, grave uma sessão para cada valor de `AT#FLUSH` e passe todas ao script.
 
-### PSK Key (all `USE_SECURE_*` environments)
+## Configuração local
 
-Every secure environment — PSK, handshake, and handshake+replay — is built
-around the same 32-byte pre-shared key (`SECURE_PSK_HEX`). In PSK mode it
-encrypts data directly; in the handshake modes it only authenticates the
-handshake, and a fresh HKDF-derived session key encrypts the data.
-
-All of these environments in `platformio.ini` ship with a **placeholder key**
-that is NOT safe for production. You **must** replace it before flashing to a
-real device.
-
-**Step 1 — Generate a key**
+Porta serial e flags de teste ficam fora do git, em `platformio_local.ini`:
 
 ```bash
-# Unix / macOS / Git Bash
-openssl rand -hex 32
-# Output example: a3f1...  (64 hex chars)
+cp platformio_local.ini.example platformio_local.ini
 ```
 
-**Step 2 — Create your secrets file** (already in `.gitignore`)
+- `upload_port` / `monitor_port`: porta do ESP32 nesta máquina (`COM9`,
+  `/dev/ttyUSB0`, ...).
+- `build_flags = -DCOLLECTOR_WIPE_ON_BOOT`: teste "de fábrica" — a cada boot,
+  apaga os blocos da flash e volta o `seq` para 1 (`boot_id` e a configuração
+  são mantidos). Não deixe ligado: impede testar a recuperação após reinício.
 
-```bash
-cp platformio_secrets.ini.example platformio_secrets.ini
-```
+## Comandos
 
-Edit `platformio_secrets.ini` and uncomment / fill in the environments you use:
+Além do subconjunto ELM327 (`ATZ`, `ATE0`, `ATH1`, `ATST hh`, `ATSP h`, `01 0C`,
+...), o dongle aceita os comandos do projeto:
 
-```ini
-[env:mock_psk]
-build_flags =
-    ${env:_secure_psk_base.build_flags}
-    -DUSE_MOCK
-    -DSECURE_PSK_HEX=a3f1<...your 64 hex chars...>
-```
+| Comando | Função |
+|---|---|
+| `AT#PID pp mmmm` | Adiciona/altera o PID `pp` com período `mmmm` ms |
+| `AT#DEL pp` | Remove o PID |
+| `AT#LIST` | PIDs, períodos, Tmax, utilização e contadores |
+| `AT#DIAG b` | Liga (1) / desliga (0) o modo diagnóstico |
+| `AT#NET b` | O app informa se tem Internet |
+| `AT#GPS lat lon alt` | Posição atual (graus × 10⁷, mm); no máximo 1/s, ignorada no diagnóstico |
+| `AT#TMAX` / `AT#TMAX?` | Mede o Tmax / consulta o resultado |
+| `AT#FLUSH mmmm` | Prazo de fechamento dos blocos, de 1000 a 30000 ms (padrão 10000) |
+| `AT#ACK n` | Só nas builds de depuração: simula o ACK do servidor até o bloco `n` |
 
-**Step 3 — Build**
+`ATSP h` (6 a 9) grava o protocolo e reinicia o dongle. O simulador de ECU
+(`simulador/`) usa CAN 11 bits a 250 kbps: envie `AT SP 8` uma vez.
 
-```bash
-pio run -e mock_psk
-```
+## Hardware
 
-PlatformIO merges `platformio_secrets.ini` automatically (via `extra_configs`).
+| GPIO | Função |
+|---|---|
+| 21 | TWAI TX |
+| 22 | TWAI RX |
+| 18 / 19 / 23 | MCP2515 SCK / MISO / MOSI |
+| 5 | MCP2515 CS |
 
-### CI / CD
+Transceiver: SN65HVD230 (TWAI) ou MCP2551 (MCP2515).
 
-Export the flag as an environment variable — PlatformIO picks it up:
-
-```bash
-export PLATFORMIO_BUILD_FLAGS="-DUSE_MOCK -DSECURE_PSK_HEX=$(openssl rand -hex 32)"
-pio run -e mock_psk
-```
-
-Or inject it as a GitHub Actions secret:
-
-```yaml
-- run: pio run -e mock_psk
-  env:
-    PLATFORMIO_BUILD_FLAGS: "-DUSE_MOCK -DSECURE_PSK_HEX=${{ secrets.OBD2_PSK_HEX }}"
-```
-
----
-
-## PSK Wire Protocol (`SecurePskBleConnectivity`)
-
-All frames are ASCII hex, newline-terminated, sent over the BLE NUS RX/TX
-characteristics.
+## Organização
 
 ```
-<24 hex — IV (12 bytes)><variable hex — ciphertext><32 hex — GCM tag (16 bytes)>\n
+src/
+  collector/     núcleo da coleta em C++ puro (testado no host)
+  rtos/          adaptadores FreeRTOS, controle, log de eventos
+  tasks/         Aquisição, Flush, Upload, Sessão, ELM327
+  storage/       LittleFS (blocos) e NVS (config, boot_id, seq)
+  can/, obd2/    CAN (TWAI, MCP2515), ISO-TP e OBD-II
+  elm327/        interpretador de comandos
+  connectivity/  BLE (canal de comandos) e o contrato do canal de dados
+  app/           montagem e inicialização (CollectorApp)
 ```
-
-- **Algorithm**: AES-256-GCM (mbedTLS, bundled with ESP-IDF)
-- **IV**: 12 bytes, fresh CSPRNG (`esp_fill_random`) per message
-- **AAD**: none (may be added in a future version)
-- **No replay protection** in this version — add a counter field at the app layer if needed
-
-### Encoding example (Python)
-
-```python
-from Crypto.Cipher import AES
-import os, binascii
-
-key = bytes.fromhex("deadbeef...")   # 64 hex chars → 32 bytes
-iv  = os.urandom(12)
-cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
-ct, tag = cipher.encrypt_and_digest(b"01 00 0C\r")   # OBD2 command
-
-frame = (iv + ct + tag).hex() + "\n"
-# Send `frame` via BLE WRITE to the RX characteristic
-```
-
----
-
-## Handshake Protocol (`SecureHandshakeBleConnectivity` / `SecureHandshakeReplayBleConnectivity`)
-
-Both handshake variants use the same control exchange to mutually authenticate
-with the PSK and derive a fresh per-session key — they differ only in how the
-established session frames data afterwards.
-
-```
-App    → Dongle:  HELLO  <appNonce:32B hex>
-Dongle → App:      CHALLENGE  <dongleNonce:32B hex>
-App    → Dongle:  PROOF  <HMAC-SHA256(PSK, "PROOF" ‖ dongleNonce ‖ appNonce):hex>
-Dongle → App:      OK  <HMAC-SHA256(PSK, "OK" ‖ appNonce ‖ dongleNonce):hex>
-                   (or ERROR on verification failure)
-
-Session key = HKDF-SHA256(PSK, salt = dongleNonce ‖ appNonce, info = "session-key")
-```
-
-The `"PROOF"`/`"OK"` tags are mixed into each HMAC input so the two proofs
-can never be reflected as one another, even though they cover the same nonce
-pair in swapped order.
-
-A fresh `HELLO` at any time (re-handshake, reconnect) invalidates any
-in-progress or established session and its counters.
-
-### `SecureHandshakeBleConnectivity` — established session
-
-Same wire format as PSK mode, keyed by the derived session key instead of the
-static PSK — a fresh random IV per message, no AAD, **no replay protection**
-beyond what the GCM tag gives you (integrity, not freshness).
-
-```
-<24 hex — IV><variable hex — ciphertext><32 hex — GCM tag>\n
-```
-
-### `SecureHandshakeReplayBleConnectivity` — established session
-
-Adds a 64-bit, big-endian, strictly-increasing counter per direction, bound
-into AES-256-GCM as associated data (AAD = counter ‖ direction byte):
-
-```
-<16 hex — counter><24 hex — IV><variable hex — ciphertext><32 hex — GCM tag>\n
-```
-
-A frame is accepted only if its counter is strictly greater than the last
-counter accepted from that peer; the receive counter only advances after GCM
-authentication succeeds, so a captured valid frame can never be replayed
-within (or after) the same session. A monotonic counter was chosen over
-synchronized clocks: the dongle has no trusted time source (no RTC, no
-network), BLE delivers writes/notifications in order on a single link (so a
-strict counter never false-rejects), and a clock-tolerance window would let
-replays succeed within that window while requiring at least as much receiver
-state as a counter does.
-
----
-
-## Hardware Notes
-
-| GPIO | Role |
-|------|------|
-| 21   | TWAI TX |
-| 22   | TWAI RX |
-| 5    | MCP2515 CS |
-
-Transceiver: SN65HVD230 (TWAI) or MCP2551 (MCP2515).

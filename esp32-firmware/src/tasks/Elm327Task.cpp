@@ -1,15 +1,16 @@
 #include "Elm327Task.h"
 #include <Arduino.h>
 #include <cstring>
+#include "collector/Events.h"
 
 Elm327Task::Elm327Task(IConnectivity* connectivity, IObd2* obd2,
-                       UBaseType_t queueDepth)
-    : _connectivity(connectivity), _elm327(obd2) {
+                       collector::ICollectorControl* control, UBaseType_t queueDepth)
+    : _connectivity(connectivity), _elm327(obd2, control) {
     _commandQueue = xQueueCreate(queueDepth, sizeof(CommandMessage));
     configASSERT(_commandQueue);
 }
 
-void Elm327Task::start(UBaseType_t priority, uint32_t stackSize) {
+TaskHandle_t Elm327Task::start(UBaseType_t priority, uint32_t stackSize) {
     // Registra o callback que coloca o comando recebido na fila para ser processado.
     // O callback no contexto da conectividade deve ser leve e rápido, por isso somente coloca na fila.
     _connectivity->setOnCommandReceivedCallback([this](const uint8_t* data, size_t len) {
@@ -19,8 +20,10 @@ void Elm327Task::start(UBaseType_t priority, uint32_t stackSize) {
         this->pushToQueue(data, len);
     });
 
+    TaskHandle_t handle = nullptr;
     xTaskCreate(Elm327Task::taskFunc, "Elm327Task",
-                stackSize, this, priority, nullptr);
+                stackSize, this, priority, &handle);
+    return handle;
 }
 
 // Internal helpers
@@ -42,6 +45,21 @@ void Elm327Task::taskFunc(void* arg) {
     vTaskDelete(nullptr);  // em teoria, esta linha é inalcançável
 }
 
+void Elm327Task::emitCommand(const String& cmd) {
+    if (!collector::kEventsEnabled) return;
+    String trimmed = cmd;
+    trimmed.trim();
+    collector::Event("CMD").text("txt", trimmed.c_str(), trimmed.length());
+}
+
+void Elm327Task::emitResponse(const String& response, uint32_t durMs) {
+    if (!collector::kEventsEnabled) return;
+    static char line[collector::Event::kLargeCapacity];  // só esta tarefa usa
+    collector::Event("RESP", line, sizeof(line))
+        .text("txt", response.c_str(), response.length())
+        .num("dur", durMs);
+}
+
 void Elm327Task::run() {
     CommandMessage msg;
     while (true) {
@@ -50,7 +68,11 @@ void Elm327Task::run() {
         // chama a função do _connectivity para retornar a resposta =)
 
         String cmd(reinterpret_cast<const char*>(msg.data), msg.len);
+        emitCommand(cmd);
+
+        const uint32_t startMs = millis();
         String response = _elm327.process(cmd);
+        emitResponse(response, millis() - startMs);
 
         _connectivity->sendResponse(
             reinterpret_cast<const uint8_t*>(response.c_str()),

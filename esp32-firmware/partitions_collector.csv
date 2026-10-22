@@ -1,0 +1,8 @@
+# Coleta (esp32dev, 4 MB): um único app + 2 MB de LittleFS para o log de blocos.
+# Sem OTA: duas partições de app não cabem junto com 2 MB de dados.
+# Name,   Type, SubType,  Offset,   Size
+nvs,      data, nvs,      0x9000,   0x5000,
+phy_init, data, phy,      0xe000,   0x1000,
+factory,  app,  factory,  0x10000,  0x1E0000,
+spiffs,   data, spiffs,   0x1F0000, 0x200000,
+coredump, data, coredump, 0x3F0000, 0x10000,

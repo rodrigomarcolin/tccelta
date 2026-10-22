@@ -1,0 +1,12 @@
+; Configuração local, fora do git: copie para platformio_local.ini.
+; Vale para todos os ambientes que estendem [base].
+
+[base]
+; Porta do ESP32 nesta máquina (Windows: COMx; Linux/WSL: /dev/ttyUSB0).
+upload_port  = COM9
+monitor_port = COM9
+
+; Teste "de fábrica": apaga os blocos e o seq a cada boot (boot_id e a
+; configuração são mantidos). Não deixe ligado: impede testar a recuperação
+; após reinício.
+; build_flags = -DCOLLECTOR_WIPE_ON_BOOT

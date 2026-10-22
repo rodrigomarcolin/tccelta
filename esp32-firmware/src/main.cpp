@@ -1,103 +1,59 @@
 #include <Arduino.h>
-#include "tasks/Elm327Task.h"
+#include "app/CollectorApp.h"
 #include "connectivity/ble/BleConnectivity.h"
 
-// ── Build-time connectivity selection 
-
-//
-// Set exactly ONE of the following flags in your chosen PlatformIO environment
-// (or via platformio_secrets.ini — see README):
-//
-//   -DUSE_SECURE_PSK             AES-256-GCM with a static pre-shared key
-//   -DUSE_SECURE_HANDSHAKE       PSK-authenticated handshake + HKDF session key
-//   -DUSE_SECURE_HANDSHAKE_REPLAY  Same handshake + per-direction anti-replay counter
-//   (none)                       Plain BleConnectivity — no encryption
-//
-#if defined(USE_SECURE_PSK)
-    #include "connectivity/secure/psk/SecurePskBleConnectivity.h"
-#elif defined(USE_SECURE_HANDSHAKE)
-    #include "connectivity/secure/handshake/SecureHandshakeBleConnectivity.h"
-#elif defined(USE_SECURE_HANDSHAKE_REPLAY)
-    #include "connectivity/secure/handshake_replay/SecureHandshakeReplayBleConnectivity.h"
-#endif
-
-// ── Build-time CAN / OBD2 backend selection 
-#if defined(USE_MCP2515)
-    #include "can/bus/mcp2515/Mcp2515Can.h"
-    #include "obd2/real/Obd2Can.h"
+// ── Camada CAN, escolhida pelo ambiente do PlatformIO ───────────────────────
+#if defined(USE_MOCK)
+    #include "obd2/mock/Obd2Mock.h"
 #elif defined(USE_TWAI)
     #include "can/bus/twai/TwaiCan.h"
     #include "obd2/real/Obd2Can.h"
-#elif defined(USE_MOCK)
-    #include "obd2/mock/Obd2Mock.h"
+#elif defined(USE_MCP2515)
+    #include "can/bus/mcp2515/Mcp2515Can.h"
+    #include "obd2/real/Obd2Can.h"
 #else
-    #error "No CAN backend defined. Use: pio run -e mcp2515|twai|mock (or a variant like mock_psk)"
+    #error "Nenhuma camada CAN definida. Use: pio run -e collector_mock|collector_twai|collector_mcp2515"
 #endif
 
+#ifndef SERIAL_BAUD
+#define SERIAL_BAUD 115200
+#endif
+
+// Backend no protocolo configurado (AT SP): taxa e tamanho de ID vêm da config.
+static IObd2& makeBus(const collector::CollectorConfig& config) {
+#if defined(USE_MOCK)
+    (void)config;
+    static Obd2Mock obd2;
+#else
+    const CanBitrate bitrate = collector::uses500Kbps(config.protocol) ? CanBitrate::Kbps500
+                                                                        : CanBitrate::Kbps250;
+    const ObdAddressing addressing = collector::usesExtendedIds(config.protocol)
+                                         ? ObdAddressing::extended29Bit()
+                                         : ObdAddressing::standard11Bit();
+  #if defined(USE_TWAI)
+    static TwaiCan can(bitrate);
+  #else
+    static Mcp2515Can can(bitrate);
+  #endif
+    static Obd2Can obd2(&can, addressing);
+#endif
+    return obd2;
+}
+
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(SERIAL_BAUD);
     delay(200);
     Serial.println("\n=== OBD2 Dongle ===");
 
-    // ── CAN / OBD2 backend ───────────────────────────────────────────────────
-#if defined(USE_MCP2515)
-    static Mcp2515Can  can;
-    static Obd2Can     obd2(&can);
-    Serial.println("[main] CAN backend : MCP2515 (SPI)");
-
-#elif defined(USE_TWAI)
-    static TwaiCan     can;
-    static Obd2Can     obd2(&can);
-    Serial.println("[main] CAN backend : TWAI (native)");
-
-#elif defined(USE_MOCK)
-    static Obd2Mock    obd2;
-    Serial.println("[main] CAN backend : MOCK (simulated)");
-#endif
-
-    // ── Connectivity stack 
-    static BleConnectivity raw("TCCeltaDongle");
-
-#if defined(USE_SECURE_PSK)
-    static SecurePskBleConnectivity     secureLayer(&raw);
-    IConnectivity* ble = &secureLayer;
-    Serial.println("[main] Security     : AES-256-GCM PSK");
-
-#elif defined(USE_SECURE_HANDSHAKE)
-    static SecureHandshakeBleConnectivity secureLayer(&raw);
-    IConnectivity* ble = &secureLayer;
-    Serial.println("[main] Security     : Handshake + HKDF session key");
-
-#elif defined(USE_SECURE_HANDSHAKE_REPLAY)
-    static SecureHandshakeReplayBleConnectivity secureLayer(&raw);
-    IConnectivity* ble = &secureLayer;
-    Serial.println("[main] Security     : Handshake + HKDF session key + anti-replay counter");
-
-#else
-    IConnectivity* ble = &raw;
-    Serial.println("[main] Security     : none (plain transport)");
-#endif
-
-    // ── Wire everything together ─────────────────────────────────────────────
-    static Elm327Task task(ble, &obd2);
-
-    if (!obd2.begin()) {
-        Serial.println("[main] OBD2 init failed — halting");
+    static BleConnectivity ble("TCCeltaDongle");
+    if (!app::startCollector(makeBus, ble)) {
+        Serial.println("[main] Collector init failed — halting");
         while (true) delay(1000);
     }
-
-    if (!ble->begin()) {
-        Serial.println("[main] BLE init failed — halting");
-        while (true) delay(1000);
-    }
-
-    task.start(/* priority */ 5, /* stackSize */ 8192);
-    Serial.println("[main] Elm327Task started");
+    Serial.println("[main] Collector started");
 }
 
-
-
 void loop() {
-    // Processing happens in the Elm327Task FreeRTOS task.
+    // Todo o processamento acontece nas tarefas FreeRTOS.
     vTaskDelay(portMAX_DELAY);
 }

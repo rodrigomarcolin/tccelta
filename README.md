@@ -44,15 +44,3 @@ O funcionamento típico é o seguinte:
 6. Consequentemente, pode ser gerada uma requisição à camada OBD-II. Se a implementação escolhida for a mockada, alguma lógica executará no sentido de gerar uma resposta coerente. Se a implementação escolhida for a real, será construída uma requisição OBD-II (que, conforme a [documentação CAN e OBD-II](docs/can-e-obd2.md), viverá no campo DATA da mensagem CAN). Então, será repassada para a camada CAN, que interagirá com o componente CAN relevante para colocar a requisição no barramento, esperar uma resposta, e retornar seu conteúdo.
 7. A resposta OBD-II será processada e colocada no TX do BLE.
 8. O cliente será notificado e poderá fazer o que bem entender com a resposta do DONGLE ao seu comando ELM-327 =)
-
-# Segurança [↩](#sumário)
-
-Uma consequência interessante da organização em camadas é que, para implementação da segurança na comunicação ESP32 - App, só é necessário intervir na camada BLE. 
-
-Neste projeto, a abordagem escolhida foi a implementação do Padrão Decorator, na qual uma nova classe, `SecureBLEConnectivity`, encapsulará a classe `BLEConnectivity`, interceptando chamadas à mesma, executando operações antes de chamar a classe interna, com o intuito de fornecer serviços de segurança. Um esquema simplificado é apresentado abaixo:
-
-![Esquema simplificado da segurança do Firmware, no qual a classe SecureBLEConnectivity intercepta o comando cifrado recebido via RX, decifrando-o antes de repassar para a camada abaixo. Além disso, esta classe também intercepta a resposta devolvida, cifrando-a antes de colocá-la no TX.](docs/images/firmware-security-simplified.png)
-
-Fica claro que as capacidades BLE implementadas pela `BLEConnectivity`, como configuração das características, transmissão da resposta via TX e recebimento de comandos via RX, são preservadas. A classe `SecureBLEConnectivity` é transparente para as outras camadas.
-
-Esta classe deverá implementar as operações de cifração e decifração; verificar a autenticidade das mensagens recebidas e autenticar as mensagens enviadas; e autenticar o cliente antes de aceitar sua conexão. 
