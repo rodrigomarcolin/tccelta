@@ -24,9 +24,11 @@ private:
     collector::DataProtocol& _protocol;
     IDataChannel&            _channel;
     collector::UploadCursor  _cursor;
+    uint32_t                 _connection = 0;
     collector::Block         _block = {};
     uint8_t                  _message[collector::kMaxMessageSize] = {};
 
+    void rewind(const char* reason);
     void sendWindow();
     void receiveAck();
     void updatePendingBit();

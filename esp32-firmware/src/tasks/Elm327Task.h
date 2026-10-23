@@ -53,5 +53,6 @@ private:
     static void taskFunc(void* arg);
     void run();
     void pushToQueue(const uint8_t* data, size_t len);
+    static void emitCommand(const String& cmd);
     static void emitResponse(const String& response, uint32_t durMs);
 };

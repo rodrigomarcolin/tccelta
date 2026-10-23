@@ -1,4 +1,5 @@
 #pragma once
+#include "collector/DataProtocol.h"
 #include "collector/ICollectorControl.h"
 #include "rtos/Adapters.h"
 #include "rtos/CollectorContext.h"
@@ -14,8 +15,9 @@ class CollectorControl : public collector::ICollectorControl {
 public:
     CollectorControl(CollectorContext& ctx, NvsStore& nvs, const SharedValues& values,
                      const SharedTmaxReport& tmax, const QueueBlockPool& pool,
-                     const collector::CollectorConfig& config)
-        : _ctx(ctx), _nvs(nvs), _values(values), _tmax(tmax), _pool(pool), _config(config) {}
+                     collector::DataProtocol& protocol, const collector::CollectorConfig& config)
+        : _ctx(ctx), _nvs(nvs), _values(values), _tmax(tmax), _pool(pool), _protocol(protocol),
+          _config(config) {}
 
     bool diagMode() const override { return _ctx.hasBits(DIAG_MODE); }
     bool setDiagMode(bool on) override;
@@ -24,6 +26,7 @@ public:
     collector::ConfigError setPid(uint8_t pid, uint32_t periodMs) override;
     bool deletePid(uint8_t pid) override;
     collector::ConfigError setTmax(uint32_t tmaxMs) override;
+    collector::ConfigError setFlushInterval(uint32_t intervalMs) override;
     bool setProtocol(uint8_t number) override;
 
     bool currentValue(uint8_t pid, collector::CurrentValues::Value& out) const override;
@@ -35,6 +38,7 @@ public:
     collector::TmaxReport tmaxReport() const override { return _tmax.get(); }
 
     collector::CollectorStats stats() const override;
+    bool injectAck(uint32_t seq) override;
 
 private:
     CollectorContext&          _ctx;
@@ -42,6 +46,7 @@ private:
     const SharedValues&        _values;
     const SharedTmaxReport&    _tmax;
     const QueueBlockPool&      _pool;
+    collector::DataProtocol&   _protocol;
     collector::CollectorConfig _config;
 
     /** Valida, grava e aplica; só troca `_config` se tudo der certo. */

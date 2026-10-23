@@ -1,5 +1,6 @@
 #pragma once
 #include "collector/Collector.h"
+#include "collector/GpsGate.h"
 #include "collector/TmaxMeter.h"
 #include "obd2/IObd2.h"
 #include "rtos/Adapters.h"
@@ -27,6 +28,7 @@ private:
     rtos::SharedTmaxReport&    _tmaxReport;
     collector::CollectorConfig _config;
     collector::TmaxMeter       _meter;
+    collector::GpsGate         _gpsGate;
     bool _diag      = false;
     bool _stopped   = false;
     bool _measuring = false;
@@ -37,4 +39,5 @@ private:
     void measureOnce();
     void resumeCollection() { _collector.setRunning(!_diag && !_stopped && !_measuring); }
     void emitMode() const;
+    void emitBus(uint32_t startMs) const;
 };

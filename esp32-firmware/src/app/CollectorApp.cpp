@@ -24,12 +24,19 @@ namespace app {
 
 namespace {
 
+#if defined(COLLECTOR_WIPE_ON_BOOT)
+constexpr bool kWipeOnBoot = true;   // teste "de fábrica": apaga blocos e seq a cada boot
+#else
+constexpr bool kWipeOnBoot = false;
+#endif
+
 constexpr UBaseType_t kElm327Priority = 5;
 constexpr uint32_t    kElm327Stack    = 8192;
 
 void onConnection(rtos::CollectorContext& ctx, bool connected) {
     collector::Event("CONN").flag("up", connected);
     if (connected) {
+        ++ctx.connections;  // o Upload percebe a reconexão e reenvia o que estava em trânsito
         xEventGroupSetBits(ctx.events, rtos::APP_CONNECTED);
     } else {
         xEventGroupClearBits(ctx.events, rtos::APP_CONNECTED | rtos::INTERNET | rtos::SESSION_OK);
@@ -49,14 +56,18 @@ bool startCollector(BusFactory makeBus, BleConnectivity& ble) {
     const collector::CollectorConfig config = nvs.loadConfig();
     const uint16_t bootId = nvs.nextBootId();
 
-    // 2. Log de blocos e seq = max(NVS, log) + 1.
+    // 2. Log de blocos e seq = max(NVS, log) + 1. Com o wipe, começa do zero
+    //    (boot_id e configuração são mantidos).
     static LittleFsBlockStore store;
-    if (!store.begin()) return false;
+    if (!store.begin(kWipeOnBoot)) return false;
+    if (kWipeOnBoot) nvs.saveLastSeq(0);
     const uint32_t nvsLastSeq = nvs.loadLastSeq();
     const collector::SeqCounter seq = collector::SeqCounter::recover(nvsLastSeq, store.newestSeq());
-    collector::Event("BOOT").num("boot", bootId).num("seq_next", seq.peek()).num("nvs_last", nvsLastSeq)
-        .num("log_oldest", store.oldestSeq()).num("log_newest", store.newestSeq())
-        .num("lost", store.lostBlocks());
+    if (collector::kEventsEnabled) {
+        collector::Event("BOOT").num("boot", bootId).flag("wiped", kWipeOnBoot).num("seq_next", seq.peek())
+            .num("nvs_last", nvsLastSeq).num("log_oldest", store.oldestSeq())
+            .num("log_newest", store.newestSeq()).num("lost", store.lostBlocks());
+    }
     Serial.printf("[collector] boot %u, next seq %lu\n", bootId, static_cast<unsigned long>(seq.peek()));
 
     // 3. Barramento no protocolo configurado.
@@ -66,6 +77,9 @@ bool startCollector(BusFactory makeBus, BleConnectivity& ble) {
     // 4. Filas, eventos e pool de blocos.
     static rtos::CollectorContext ctx;
     ctx.create();
+    // Blocos que sobraram do boot anterior também precisam subir, mesmo que
+    // nenhum bloco novo seja gravado (ex.: carro desligado).
+    if (!store.empty()) xEventGroupSetBits(ctx.events, rtos::BLOCKS_PENDING);
 
     // 5. Objetos.
     static rtos::ArduinoClock clock;
@@ -79,7 +93,7 @@ bool startCollector(BusFactory makeBus, BleConnectivity& ble) {
     static collector::DataProtocol protocol(auth);
     static SerialDataChannel dataChannel;  // TODO: canal BLE de dados (ver connectivity/README.md)
     static rtos::QueuedObd2 queuedObd2(ctx);
-    static rtos::CollectorControl control(ctx, nvs, values, tmaxReport, pool, config);
+    static rtos::CollectorControl control(ctx, nvs, values, tmaxReport, pool, protocol, config);
 
     // 6. BLE, com as filas já prontas.
     ble.setConnectionCallback([](bool connected) { onConnection(ctx, connected); });

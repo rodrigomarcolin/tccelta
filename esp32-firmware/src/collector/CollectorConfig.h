@@ -15,6 +15,12 @@ constexpr uint32_t kTmaxStepMs      = 4;      // AT ST hh → hh × 4 ms
 constexpr uint32_t kMinPeriodMs     = 100;    // piso de Pᵢ e Pᵢᵐⁱⁿ
 constexpr double   kMaxUtilization  = 0.8;    // Umax
 
+// Prazo de fechamento de um bloco (T_flush). O teto vem do Δt dos registros
+// (int16, ±32,7 s), com folga para uma leitura em andamento.
+constexpr uint32_t kDefaultFlushIntervalMs = 10000;
+constexpr uint32_t kMinFlushIntervalMs     = 1000;
+constexpr uint32_t kMaxFlushIntervalMs     = 30000;
+
 /** Protocolos aceitos pelo AT SP (ISO 15765-4, Tabela 9). */
 enum class CanProtocol : uint8_t {
     Id11Kbps500 = 6,
@@ -37,6 +43,7 @@ struct PidSetting {
 struct CollectorConfig {
     CanProtocol protocol = CanProtocol::Id11Kbps500;
     uint32_t    tmaxMs   = kDefaultTmaxMs;
+    uint32_t    flushIntervalMs = kDefaultFlushIntervalMs;
     PidSetting  pids[kMaxPids] = {};
     size_t      pidCount = 0;
 
@@ -57,6 +64,7 @@ enum class ConfigError : uint8_t {
     TooManyPids,
     PeriodTooSmall,
     Infeasible,       // U > Umax
+    FlushOutOfRange,  // prazo de fechamento fora de [1 s, 30 s]
     Busy,             // Aquisição recusou (ex.: medindo Tmax)
 };
 

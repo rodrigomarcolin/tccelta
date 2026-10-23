@@ -29,6 +29,7 @@ void recordValue(const ReadResult& result, uint8_t out[2]) {
 void Collector::applyConfig(const CollectorConfig& config, ConfigReason reason) {
     closeBlock(CloseReason::Config);
     _tmaxMs = config.tmaxMs;
+    _flushIntervalMs = config.flushIntervalMs;
     _scheduler.apply(config, _clock.nowMs());
     emitConfig(config, reason);
 }
@@ -41,6 +42,7 @@ void Collector::emitConfig(const CollectorConfig& config, ConfigReason reason) c
         .token("reason", reason == ConfigReason::Boot ? "boot" : "apply")
         .num("proto", static_cast<int>(config.protocol))
         .num("tmax", config.tmaxMs)
+        .num("flush", config.flushIntervalMs)
         .num("u", static_cast<int64_t>(std::lround(utilization(config) * 1000.0)))
         .hexList("pids", pids, config.pidCount);
 
@@ -63,19 +65,15 @@ void Collector::setRunning(bool running, CloseReason why) {
 void Collector::closeBlock(CloseReason why) {
     if (!_builder.isOpen()) return;
     const bool empty = _builder.empty();
-    const uint32_t ageMs = _clock.nowMs() - _builder.startMs();
     Block* block = _builder.close();
-    const int buf = _pool.indexOf(block);
     _openBlock = nullptr;
+    emitBlockClose(*block, why, empty);
 
     if (empty) {
-        Event("BLK_RELEASE").num("buf", buf);
         _pool.release(block);  // bloco vazio não é gravado
-        return;
+    } else {
+        _pool.submit(block);
     }
-    Event("BLK_CLOSE").num("buf", buf).token("reason", toString(why))
-        .num("len", static_cast<int64_t>(block->length)).num("recs", _openRecords).num("age", ageMs);
-    _pool.submit(block);
 }
 
 void Collector::closeIfDue(uint32_t nowMs) {
@@ -94,12 +92,7 @@ uint32_t Collector::poll() {
         return decision.waitMs < untilClose ? decision.waitMs : untilClose;
     }
 
-    {
-        Event e("DECIDE");
-        e.token("rule", decision.early ? "early" : "due").hexList("pids", decision.pids, decision.count);
-        if (decision.early) e.absent("late").num("slack", decision.slackMs);
-        else                e.num("late", decision.lateMs).absent("slack");
-    }
+    emitDecide(decision);
 
     ReadResult results[kMaxPidsPerRequest];
     _reader.read(decision.pids, decision.count, results, _tmaxMs);
@@ -108,30 +101,14 @@ uint32_t Collector::poll() {
 
     for (size_t i = 0; i < decision.count; ++i) {
         const ReadResult& result = results[i];
-        {
-            Event e("READ");
-            e.at(now).hex8("pid", result.pid).flag("ok", result.ok);
-            if (result.ok) e.hex("val", result.value, result.len);
-            else           e.absent("val");
-            e.num("start", result.startMs).num("dur", now - result.startMs)
-             .flag("early", decision.early).num("next_due", _scheduler.nextDue(result.pid));
-        }
+        emitRead(result, decision.early, now);
         if (!result.ok) continue;
 
         _values.update(result);
         const bool stored = append(result.tMs, [&](BlockBuilder& b) {
             return b.addPid(result.pid, result.value, result.len, result.tMs);
         });
-        uint8_t value[2];
-        recordValue(result, value);
-        if (stored) {
-            Event("REC").token("kind", "pid").hex8("pid", result.pid)
-                .num("dt", result.tMs - _builder.startMs())
-                .hex("val", value, 2).absent("lat").absent("lon").absent("alt")
-                .num("len", static_cast<int64_t>(_openBlock->length));
-        } else {
-            Event("REC_DROP").token("kind", "pid").hex8("pid", result.pid).token("reason", "no_buffer");
-        }
+        emitPidRecord(result, stored);
     }
     closeIfDue(now);
     return 0;
@@ -139,14 +116,7 @@ uint32_t Collector::poll() {
 
 void Collector::addGps(const GpsFix& fix, uint32_t tMs) {
     const bool stored = append(tMs, [&](BlockBuilder& b) { return b.addGps(fix, tMs); });
-    if (stored) {
-        const int32_t dt = static_cast<int32_t>(tMs - _builder.startMs());
-        Event("REC").token("kind", "gps").absent("pid").num("dt", dt)
-            .absent("val").num("lat", fix.latE7).num("lon", fix.lonE7).num("alt", fix.altMm)
-            .num("len", static_cast<int64_t>(_openBlock->length));
-    } else {
-        Event("REC_DROP").token("kind", "gps").absent("pid").token("reason", "no_buffer");
-    }
+    emitGpsRecord(fix, tMs, stored);
 }
 
 template <typename AddFn>
@@ -155,10 +125,10 @@ bool Collector::append(uint32_t tMs, AddFn add) {
         if (!_builder.isOpen()) {
             Block* block = _pool.acquire();
             if (!block) break;
-            _builder.open(*block, tMs);
+            _builder.open(*block, tMs, _flushIntervalMs);
             _openBlock   = block;
             _openRecords = 0;
-            Event("BLK_OPEN").num("buf", _pool.indexOf(block)).num("t0", tMs);
+            emitBlockOpen(*block, tMs);
         }
         if (add(_builder)) {
             ++_openRecords;
@@ -168,6 +138,70 @@ bool Collector::append(uint32_t tMs, AddFn add) {
     }
     ++_droppedRecords;
     return false;
+}
+
+// ── Eventos de depuração (docs/debug-events.md) ─────────────────────────────
+// Cada um sai na hora se os eventos estão desligados, sem avaliar argumentos.
+
+void Collector::emitDecide(const Scheduler::Decision& decision) const {
+    if (!kEventsEnabled) return;
+    Event e("DECIDE");
+    e.token("rule", decision.early ? "early" : "due").hexList("pids", decision.pids, decision.count);
+    if (decision.early) e.absent("late").num("slack", decision.slackMs);
+    else                e.num("late", decision.lateMs).absent("slack");
+}
+
+void Collector::emitRead(const ReadResult& result, bool early, uint32_t endMs) const {
+    if (!kEventsEnabled) return;
+    Event e("READ");
+    e.at(endMs).hex8("pid", result.pid).flag("ok", result.ok);
+    if (result.ok) e.hex("val", result.value, result.len);
+    else           e.absent("val");
+    e.num("start", result.startMs).num("dur", endMs - result.startMs)
+     .flag("early", early).num("next_due", _scheduler.nextDue(result.pid));
+}
+
+void Collector::emitPidRecord(const ReadResult& result, bool stored) const {
+    if (!kEventsEnabled) return;
+    if (!stored) {
+        Event("REC_DROP").token("kind", "pid").hex8("pid", result.pid).token("reason", "no_buffer");
+        return;
+    }
+    uint8_t value[2];
+    recordValue(result, value);
+    Event("REC").token("kind", "pid").hex8("pid", result.pid)
+        .num("dt", static_cast<int32_t>(result.tMs - _builder.startMs()))
+        .hex("val", value, 2).absent("lat").absent("lon").absent("alt")
+        .num("len", static_cast<int64_t>(_openBlock->length));
+}
+
+void Collector::emitGpsRecord(const GpsFix& fix, uint32_t tMs, bool stored) const {
+    if (!kEventsEnabled) return;
+    if (!stored) {
+        Event("REC_DROP").token("kind", "gps").absent("pid").token("reason", "no_buffer");
+        return;
+    }
+    Event("REC").token("kind", "gps").absent("pid")
+        .num("dt", static_cast<int32_t>(tMs - _builder.startMs()))
+        .absent("val").num("lat", fix.latE7).num("lon", fix.lonE7).num("alt", fix.altMm)
+        .num("len", static_cast<int64_t>(_openBlock->length));
+}
+
+void Collector::emitBlockOpen(const Block& block, uint32_t t0) const {
+    if (!kEventsEnabled) return;
+    Event("BLK_OPEN").num("buf", _pool.indexOf(&block)).num("t0", t0);
+}
+
+void Collector::emitBlockClose(const Block& block, CloseReason why, bool empty) const {
+    if (!kEventsEnabled) return;
+    const int buf = _pool.indexOf(&block);
+    if (empty) {
+        Event("BLK_RELEASE").num("buf", buf);
+        return;
+    }
+    Event("BLK_CLOSE").num("buf", buf).token("reason", toString(why))
+        .num("len", static_cast<int64_t>(block.length)).num("recs", _openRecords)
+        .num("age", _clock.nowMs() - _builder.startMs());
 }
 
 }  // namespace collector

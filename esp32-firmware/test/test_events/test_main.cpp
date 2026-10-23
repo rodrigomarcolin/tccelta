@@ -75,7 +75,7 @@ void test_collector_emits_config_decide_read_and_record() {
     collector.setRunning(true);
     collector.poll();
 
-    TEST_ASSERT_EQUAL_STRING("CONFIG reason=boot proto=6 tmax=50 u=200 pids=0C", sink.of("CONFIG").at(0).c_str());
+    TEST_ASSERT_EQUAL_STRING("CONFIG reason=boot proto=6 tmax=50 flush=10000 u=200 pids=0C", sink.of("CONFIG").at(0).c_str());
     TEST_ASSERT_EQUAL_STRING("CVT pid=0C p=250 pmin=125 due=1000 last=875 val=-", sink.of("CVT").at(0).c_str());
     TEST_ASSERT_EQUAL_STRING("DECIDE rule=due pids=0C late=0 slack=-", sink.of("DECIDE").at(0).c_str());
     TEST_ASSERT_EQUAL_STRING("READ pid=0C ok=1 val=0CAB start=1000 dur=10 early=0 next_due=1250",
@@ -99,7 +99,7 @@ void test_collector_logs_block_close_reason_and_age() {
     collector.applyConfig(config);
     collector.setRunning(true);
     collector.poll();               // um registro abre o bloco em 1010
-    clock.advance(kFlushIntervalMs);
+    clock.advance(kDefaultFlushIntervalMs);
     collector.poll();               // passou o prazo
 
     TEST_ASSERT_EQUAL_STRING("BLK_CLOSE buf=1 reason=deadline len=17 recs=1 age=10000",

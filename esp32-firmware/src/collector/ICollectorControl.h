@@ -31,6 +31,7 @@ public:
     virtual ConfigError setPid(uint8_t pid, uint32_t periodMs) = 0;
     virtual bool deletePid(uint8_t pid) = 0;
     virtual ConfigError setTmax(uint32_t tmaxMs) = 0;
+    virtual ConfigError setFlushInterval(uint32_t intervalMs) = 0;
     /** Grava o protocolo, espera os blocos irem para a flash e reinicia. */
     virtual bool setProtocol(uint8_t number) = 0;
 
@@ -44,6 +45,12 @@ public:
     virtual TmaxReport tmaxReport() const = 0;
 
     virtual CollectorStats stats() const = 0;
+
+    /**
+     * Bancada (só builds de depuração): entrega ao Upload um ACK(seq) como se
+     * viesse do servidor, para testar o upload sem o canal BLE de dados.
+     */
+    virtual bool injectAck(uint32_t seq) = 0;
 };
 
 }  // namespace collector

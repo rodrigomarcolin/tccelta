@@ -45,6 +45,13 @@ void Elm327Task::taskFunc(void* arg) {
     vTaskDelete(nullptr);  // em teoria, esta linha é inalcançável
 }
 
+void Elm327Task::emitCommand(const String& cmd) {
+    if (!collector::kEventsEnabled) return;
+    String trimmed = cmd;
+    trimmed.trim();
+    collector::Event("CMD").text("txt", trimmed.c_str(), trimmed.length());
+}
+
 void Elm327Task::emitResponse(const String& response, uint32_t durMs) {
     if (!collector::kEventsEnabled) return;
     static char line[collector::Event::kLargeCapacity];  // só esta tarefa usa
@@ -61,9 +68,7 @@ void Elm327Task::run() {
         // chama a função do _connectivity para retornar a resposta =)
 
         String cmd(reinterpret_cast<const char*>(msg.data), msg.len);
-        String trimmed = cmd;
-        trimmed.trim();
-        collector::Event("CMD").text("txt", trimmed.c_str(), trimmed.length());
+        emitCommand(cmd);
 
         const uint32_t startMs = millis();
         String response = _elm327.process(cmd);

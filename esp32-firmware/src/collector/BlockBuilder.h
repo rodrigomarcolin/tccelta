@@ -11,7 +11,8 @@ namespace collector {
  */
 class BlockBuilder {
 public:
-    void open(Block& block, uint32_t tStartMs);
+    /** Abre `block` com o primeiro registro em `tStartMs`; fecha `closeAfterMs` depois. */
+    void open(Block& block, uint32_t tStartMs, uint32_t closeAfterMs);
     bool isOpen() const { return _block != nullptr; }
     bool empty() const { return !_block || _block->length == kHeaderSize; }
 
@@ -19,7 +20,7 @@ public:
     uint32_t startMs() const { return _tStartMs; }
 
     /** Instante em que o bloco aberto deve fechar (tStart + T_flush). */
-    uint32_t deadlineMs() const { return _tStartMs + kFlushIntervalMs; }
+    uint32_t deadlineMs() const { return _tStartMs + _closeAfterMs; }
 
     /** false = não cabe (espaço ou Δt fora de ±32 s); o chamador fecha e abre outro. */
     bool addPid(uint8_t pid, const uint8_t* value, uint8_t len, uint32_t tMs);
@@ -31,6 +32,7 @@ public:
 private:
     Block*   _block    = nullptr;
     uint32_t _tStartMs = 0;
+    uint32_t _closeAfterMs = 0;
 
     /** Δt (com sinal) a partir do início; false se não cabe em 16 bits. */
     bool deltaFor(uint32_t tMs, int16_t& delta) const;

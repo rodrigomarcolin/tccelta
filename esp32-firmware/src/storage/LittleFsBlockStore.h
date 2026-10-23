@@ -15,8 +15,11 @@ class LittleFsBlockStore : public collector::IBlockStore {
 public:
     LittleFsBlockStore();
 
-    /** Monta a partição (formatando se preciso) e reconstrói o índice. */
-    bool begin();
+    /**
+     * Monta a partição (formatando se preciso) e reconstrói o índice.
+     * `wipe` = apagar todos os blocos antes (COLLECTOR_WIPE_ON_BOOT).
+     */
+    bool begin(bool wipe = false);
 
     bool append(const collector::Block& block) override;
     bool read(uint32_t seq, collector::Block& out) override;
@@ -49,6 +52,7 @@ private:
 
     bool loadSegment(const char* path, Segment& out);
     void pushSegment(const Segment& segment);
-    void dropOldest();
+    void dropOldest();      // remove o segmento mais antigo, sem contar perda
+    void discardOldest();   // idem, contando como perda (SEG_DROP)
     void ensureSpace(size_t bytes);
 };

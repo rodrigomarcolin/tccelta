@@ -27,7 +27,7 @@ Key concepts used by the events:
 | Scheduler table (CVT) | Per PID: `p`, `pmin`, `due` (when it must be read next), `last` (when it was last read), `val` (last value). |
 | Scheduler rules | 1. If any PID is due (`now ≥ due`), read the one most overdue. 2. Otherwise, if the earliest `due` is more than `Tmax` away, read early the eligible PID (`now − last ≥ pmin`) with the earliest `due`. 3. Otherwise wait. |
 | Rescheduling | After a due read: `due += p` (if still in the past, `due = now`). After an early read: `due = now + p`. Always `last = now` (time the read finished). |
-| Block | Header + records. Opened on its first record. Closed when full, 10 s after opening, or on mode/config change. |
+| Block | Header + records. Opened on its first record. Closed when full, `flush` ms after opening (10 s by default, `CONFIG.flush`), or on mode/config change. |
 | Double buffer | Two block buffers (`buf=0`, `buf=1`). One is being filled while the other may be being written to flash. If none is free, records are dropped. |
 | `seq` | Sequence number of a block, assigned only when it is written to flash. Strictly increasing, no gaps unless blocks are lost. |
 | `boot` | Boot counter, incremented on every restart. Timestamps restart from 0 on each boot. |
@@ -35,9 +35,19 @@ Key concepts used by the events:
 
 ## 2. Enabling
 
-Compile-time only. The PlatformIO environments `collector_mock_debug` and
-`collector_twai_debug` define `COLLECTOR_EVENTS`; without it, no event code is
-compiled in. Debug builds use the serial port at **921600 baud**.
+Compile-time only. The PlatformIO environments `collector_mock_debug`,
+`collector_twai_debug` and `collector_mcp2515_debug` define `COLLECTOR_EVENTS`;
+without it, no event code is compiled in. Debug builds use the serial port at
+**921600 baud**.
+
+Two bench aids interact with the stream:
+
+- `COLLECTOR_WIPE_ON_BOOT` (build flag, off by default): every boot starts
+  with an empty flash log and `seq` back at 1; `boot` keeps increasing.
+  Visible as `BOOT wiped=1`.
+- `AT#ACK n` (debug builds only): simulates the server confirming all blocks
+  up to `n`, so upload can be exercised without the BLE data channel. It
+  appears as `CMD txt="AT#ACK n"` followed by `UP_ACK`.
 
 ## 3. Line grammar
 
@@ -98,8 +108,8 @@ rely on it.
 | Event | Fields | Meaning |
 |---|---|---|
 | `FORMAT` | `v:int` | First event of a boot. `v=1` for this spec. |
-| `BOOT` | `boot:int` `seq_next:int` `nvs_last:int` `log_oldest:int` `log_newest:int` `lost:int` | Persistent counters at start. `seq_next = max(nvs_last, log_newest) + 1`. `log_oldest/log_newest` are 0 if the flash log is empty. `lost` = blocks dropped for lack of space so far (this boot). |
-| `CONFIG` | `reason:enum(boot,apply)` `proto:int` `tmax:int` `u:int` `pids:list` | Active configuration. `proto` 6–9 (CAN 11/29 bit, 500/250 kbps). `u` = planned bus utilization **in permille** (`Σ tmax/p × 1000`, e.g. `782`). Followed by one `CVT` line per PID. |
+| `BOOT` | `boot:int` `wiped:bool` `seq_next:int` `nvs_last:int` `log_oldest:int` `log_newest:int` `lost:int` | Persistent counters at start. `wiped=1`: the flash log and `seq` were erased at this boot (bench builds only). `seq_next = max(nvs_last, log_newest) + 1`. `log_oldest/log_newest` are 0 if the flash log is empty. `lost` = blocks dropped for lack of space so far (this boot). |
+| `CONFIG` | `reason:enum(boot,apply)` `proto:int` `tmax:int` `flush:int` `u:int` `pids:list` | Active configuration. `proto` 6–9 (CAN 11/29 bit, 500/250 kbps). `flush` = block deadline in ms (1000–30000, default 10000; absent in older logs = 10000). `u` = planned bus utilization **in permille** (`Σ tmax/p × 1000`, e.g. `782`). Followed by one `CVT` line per PID. |
 | `CVT` | `pid:hex` `p:int` `pmin:int` `due:ms` `last:ms` `val:hex\|-` | Full snapshot of one scheduler table row. Emitted for every PID right after `CONFIG`. |
 
 ### 5.2 Scheduler and bus
@@ -108,7 +118,7 @@ rely on it.
 |---|---|---|
 | `DECIDE` | `rule:enum(due,early)` `pids:list` `late:int\|-` `slack:int\|-` | The scheduler decided to read. `rule=due`: rule 1, `late` = ms past the earliest `due` among `pids` (`slack=-`). `rule=early`: rule 2, `slack` = ms until the earliest `due` of the whole table (`late=-`). Waits are **not** logged. |
 | `READ` | `pid:hex` `ok:bool` `val:hex\|-` `start:ms` `dur:int` `early:bool` `next_due:ms` | One PID was read. `t` = end of the read = the new `last` of that row. `start` = request sent, `dur = t − start` (bus occupancy). `ok=0` means no answer (`dur ≈ tmax`). `next_due` = new `due` of the row after rescheduling. One `READ` per PID in the preceding `DECIDE`. |
-| `BUS` | `kind:enum(diag)` `start:ms` `dur:int` `ok:bool` | The bus was used for something other than a scheduled read (a diagnostic request from the app). |
+| `BUS` | `kind:enum(diag)` `start:ms` `dur:int` | The bus was used for something other than a scheduled read (a diagnostic request from the app). Whether the car answered is in the following `RESP`. |
 
 ### 5.3 Blocks (RAM)
 
@@ -117,7 +127,7 @@ rely on it.
 | `BLK_OPEN` | `buf:int` `t0:ms` | A buffer was taken and a block opened. `t0` = block start time = time of its first record. |
 | `REC` | `kind:enum(pid,gps)` `pid:hex\|-` `dt:int` `val:hex\|-` `lat:int\|-` `lon:int\|-` `alt:int\|-` `len:int` | A record was appended to the open block. `dt` = record time − `t0`; it can be **negative** for GPS (position received just before the block was opened). PID record: `pid`, `val` (always 2 bytes, 4 hex digits; 1-byte PIDs have `00` as second byte). GPS record: `lat`/`lon` in degrees × 10⁷, `alt` in mm. `len` = bytes used in the block after this record, header included. |
 | `REC_DROP` | `kind:enum(pid,gps)` `pid:hex\|-` `reason:enum(no_buffer)` | A record could not be stored: no free buffer. |
-| `BLK_CLOSE` | `buf:int` `reason:enum(full,deadline,config,mode,stop)` `len:int` `recs:int` `age:int` | The open block was closed. `age = t − t0`. `full`: the next record did not fit. `deadline`: 10 s elapsed. Others: closed by a configuration change, a mode change, or a restart. The block is handed to the flash writer. |
+| `BLK_CLOSE` | `buf:int` `reason:enum(full,deadline,config,mode,stop)` `len:int` `recs:int` `age:int` | The open block was closed. `age = t − t0`. `full`: the next record did not fit. `deadline`: `CONFIG.flush` ms elapsed. Others: closed by a configuration change, a mode change, or a restart. The block is handed to the flash writer. |
 | `BLK_RELEASE` | `buf:int` | An empty block was closed and its buffer returned without writing. |
 
 ### 5.4 Flash
@@ -139,7 +149,8 @@ rely on it.
 | Event | Fields | Meaning |
 |---|---|---|
 | `MODE` | `diag:bool` `running:bool` | Mode changed. `running=1` = scheduler active. It is 0 in diagnostic mode, during Tmax measurement, and after a stop (before a restart). |
-| `GPS` | `lat:int` `lon:int` `alt:int` `t_rx:ms` | A GPS position from the app reached the acquisition task. `t_rx` = when the command was received. Followed by `REC kind=gps` or `REC_DROP`. |
+| `GPS` | `lat:int` `lon:int` `alt:int` `t_rx:ms` | A GPS position from the app was accepted. `t_rx` = when the command was received. Followed by `REC kind=gps` or `REC_DROP`. GPS only exists while the app is connected (the app sends it). |
+| `GPS_DROP` | `reason:enum(diag,rate,queue)` `t_rx:ms` | A GPS position was discarded: `diag` = diagnostic mode; `rate` = less than 1 s (minus 100 ms of tolerance) after the last accepted one; `queue` = the acquisition task's queue was full. |
 | `TMAX_START` | `pids:list` `samples:int` | Tmax measurement started (`samples` per PID). |
 | `TMAX_SAMPLE` | `pid:hex` `ok:bool` `lat:int` | One measurement request. `lat` = response latency in ms (bus occupancy). |
 | `TMAX_DONE` | `tmax:int` | Measurement finished; suggested Tmax in ms. |
@@ -152,7 +163,7 @@ rely on it.
 | `NET` | `up:bool` | The app reported Internet available / unavailable. |
 | `UP_SEND` | `seq:int` `oldest:int` `len:int` | A block was sent towards the server. `oldest` = oldest block still in flash. |
 | `UP_ACK` | `seq:int` `advanced:bool` `deleted_upto:int\|-` | The server confirmed all blocks up to `seq`. `advanced=0`: stale ACK, ignored. |
-| `UP_REWIND` | `reason:enum(timeout,disconnect)` `from:int` | No ACK in 5 s, or app disconnected: resend from `seq=from`. |
+| `UP_REWIND` | `reason:enum(timeout,reconnect)` `from:int` | Blocks in flight are resent from `seq=from`: no ACK in 5 s, or the app reconnected (whatever was in flight on the previous connection was lost). |
 | `TIME_REQ` | `boot:int` `t1:ms` | Time sync request sent. |
 | `TIME_RESP` | `ok:bool` | Time sync response received; `ok=0` if it did not match the pending request. |
 | `TIME_REPORT` | `t1:ms` `t2:ms` | Round trip complete; sent to the server. |
@@ -238,8 +249,8 @@ PID record.
 
 ```
 EV 0 812 FORMAT v=1
-EV 1 812 BOOT boot=3 seq_next=128 nvs_last=127 log_oldest=65 log_newest=127 lost=0
-EV 2 812 CONFIG reason=boot proto=6 tmax=50 u=782 pids=0C,0D,49,04,10,05,2F
+EV 1 812 BOOT boot=3 wiped=0 seq_next=128 nvs_last=127 log_oldest=65 log_newest=127 lost=0
+EV 2 812 CONFIG reason=boot proto=6 tmax=50 flush=10000 u=782 pids=0C,0D,49,04,10,05,2F
 EV 3 812 CVT pid=0C p=250 pmin=125 due=812 last=687 val=-
 EV 4 812 CVT pid=0D p=250 pmin=125 due=812 last=687 val=-
 ...

@@ -21,8 +21,6 @@ O app se comunica com o dongle via **BLE usando o Nordic UART Service**. Este é
 - **RX** `6E400002-…` (WRITE) — o app escreve aqui **comandos de texto ELM327**, ex.: `010C\r` (ler PID 0x0C = RPM do motor).
 - **TX** `6E400003-…` (NOTIFY) — o dongle envia **respostas de texto ELM327**, ex.: `41 0C 17 70\r>`.
 
-Os payloads são texto ASCII sobre BLE — não JSON/protobuf. A fila de comandos do firmware tem profundidade finita e **descarta comandos sob back-pressure**, então o app precisa lidar com timeouts/respostas ausentes de forma graciosa. Criptografia/autenticação (`SecureBleConnectivity`) está apenas esboçada (stub) no firmware hoje. Para testes sem hardware, o firmware pode rodar seu perfil PlatformIO `env:mock`.
-
 
 ## Comandos
 

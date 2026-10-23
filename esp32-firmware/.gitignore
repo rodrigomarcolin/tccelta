@@ -4,5 +4,5 @@
 .vscode/launch.json
 .vscode/ipch
 
-# Local secret overrides — never commit real keys
-platformio_secrets.ini
+# Configuração local (porta, flags de teste) — ver platformio_local.ini.example
+platformio_local.ini

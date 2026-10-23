@@ -234,6 +234,10 @@ String Elm327::processAtHash(const String& upper) {
             return _control->startTmaxMeasurement() ? ok : fail;
         case Kind::TmaxQuery:
             return formatTmaxReport(_control->tmaxReport()) + prompt();
+        case Kind::Flush:
+            return _control->setFlushInterval(cmd.periodMs) == collector::ConfigError::None ? ok : fail;
+        case Kind::Ack:
+            return _control->injectAck(cmd.seq) ? ok : fail;
         case Kind::Invalid:
             break;
     }
@@ -253,8 +257,8 @@ String Elm327::formatList() const {
                  static_cast<unsigned long>(p.minIntervalMs));
         out += line + sep;
     }
-    snprintf(line, sizeof(line), "TMAX %lu U %.2f", static_cast<unsigned long>(config.tmaxMs),
-             collector::utilization(config));
+    snprintf(line, sizeof(line), "TMAX %lu U %.2f FLUSH %lu", static_cast<unsigned long>(config.tmaxMs),
+             collector::utilization(config), static_cast<unsigned long>(config.flushIntervalMs));
     out += line + sep;
     snprintf(line, sizeof(line), "DROP %lu GPS %lu FAIL %lu LOST %lu",
              static_cast<unsigned long>(stats.droppedRecords),

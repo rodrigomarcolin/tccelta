@@ -47,6 +47,12 @@ collector::ConfigError CollectorControl::setTmax(uint32_t tmaxMs) {
     return commit(candidate);
 }
 
+collector::ConfigError CollectorControl::setFlushInterval(uint32_t intervalMs) {
+    collector::CollectorConfig candidate = _config;
+    candidate.flushIntervalMs = intervalMs;
+    return commit(candidate);
+}
+
 bool CollectorControl::setProtocol(uint8_t number) {
     if (!collector::isValidProtocol(number)) return false;
     collector::CollectorConfig candidate = _config;
@@ -79,7 +85,10 @@ void CollectorControl::reportGps(const collector::GpsFix& fix) {
     request.op        = AcqOp::Gps;
     request.gps       = fix;
     request.gpsTimeMs = millis();  // marcado ao receber, não ao processar
-    if (!postAcquisition(_ctx, request)) ++_ctx.counters.droppedGps;
+    if (!postAcquisition(_ctx, request)) {
+        ++_ctx.counters.droppedGps;
+        collector::Event("GPS_DROP").token("reason", "queue").num("t_rx", request.gpsTimeMs);
+    }
 }
 
 bool CollectorControl::startTmaxMeasurement() {
@@ -87,6 +96,13 @@ bool CollectorControl::startTmaxMeasurement() {
     AcqRequest request = {};
     request.op = AcqOp::MeasureTmax;
     return callAcquisition(_ctx, request);
+}
+
+bool CollectorControl::injectAck(uint32_t seq) {
+    if (!collector::kEventsEnabled) return false;
+    DataMessage message = {};
+    message.len = _protocol.encodeAck(seq, message.bytes, sizeof(message.bytes));
+    return message.len > 0 && xQueueSend(_ctx.uploadRx, &message, 0) == pdTRUE;
 }
 
 collector::CollectorStats CollectorControl::stats() const {

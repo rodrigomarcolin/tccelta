@@ -90,6 +90,14 @@ AtHashCommand parseArgs(Kind kind, const char* rest) {
         case Kind::DeletePid:
             ok = args.hexByte(cmd.pid);
             break;
+        case Kind::Flush:
+            ok = args.decimal(a, 1, UINT32_MAX);
+            cmd.periodMs = static_cast<uint32_t>(a);
+            break;
+        case Kind::Ack:
+            ok = args.decimal(a, 1, UINT32_MAX);
+            cmd.seq = static_cast<uint32_t>(a);
+            break;
         case Kind::Diag:
         case Kind::Net:
             ok = args.flag(cmd.flag);
@@ -120,6 +128,7 @@ AtHashCommand parseAtHash(const char* text) {
         {"AT#LIST", Kind::List},      {"AT#DIAG", Kind::Diag},
         {"AT#NET", Kind::Net},        {"AT#GPS", Kind::Gps},
         {"AT#TMAX?", Kind::TmaxQuery}, {"AT#TMAX", Kind::Tmax},
+        {"AT#ACK", Kind::Ack},        {"AT#FLUSH", Kind::Flush},
     };
 
     for (const auto& command : kCommands) {
