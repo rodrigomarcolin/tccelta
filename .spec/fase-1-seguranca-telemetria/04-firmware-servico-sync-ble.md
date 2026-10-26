@@ -317,6 +317,10 @@ recepção. Por isso:
 - `[base]` do `platformio.ini` ganha `-DCONFIG_BT_NIMBLE_MSYS1_BLOCK_COUNT=24`
   (o nome do macro em `nimconfig.h` é `MSYS1`, sem `_` entre `MSYS` e `1`;
   `MSYS_1_BLOCK_COUNT` seria ignorado em silêncio). Custo: +3 KB de RAM.
+  Com o *build* Arduino + ESP-IDF (spec 01 §9), o `-D` só continua valendo
+  porque o `sdkconfig.defaults` mantém o host BT do IDF em Bluedroid e o
+  NimBLE do IDF desligado (nenhum `CONFIG_BT_NIMBLE_*` no `sdkconfig.h`);
+  **[verificar]** no *checkpoint* do passo 0 que o pool efetivo é 24.
 - `credits(mtu) = clamp((poolBlocks − 4) / blocksPerFragment(mtu), 1, kMaxCredits)`
   → 4 com MTU 247 ou 517 e pool 24; 2 com MTU 517 e pool 12.
 - Variável de benchmark: `-DSYNC_TX_MAX_CREDITS=<n>` (padrão 4) e o tamanho

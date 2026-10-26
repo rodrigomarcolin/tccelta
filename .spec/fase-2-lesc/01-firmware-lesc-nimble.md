@@ -52,10 +52,10 @@ Fora (outras specs/fases):
 | Ligação com a coleta | `esp32-firmware/src/app/CollectorApp.cpp` (`onConnection`) | Emite `CONN up`, incrementa `ctx.connections` e liga/desliga `APP_CONNECTED` (e limpa `INTERNET`, `SESSION_OK`). Hoje dispara na conexão **crua**. |
 | Fila de comandos | `esp32-firmware/src/tasks/Elm327Task.cpp` | Callback do RX só copia para a fila (prioridade 5, sem afinidade). |
 | Nome anunciado | `esp32-firmware/src/main.cpp` | `BleConnectivity ble("TCCeltaDongle")`. |
-| NVS da coleta | `esp32-firmware/src/storage/NvsStore.cpp` | Namespace `collector` (chaves `config`, `config_ver`, `boot_id`, `last_seq`). Partição `nvs` 0x9000/0x5000 (`partitions_collector.csv`). |
+| NVS da coleta | `esp32-firmware/src/storage/NvsStore.cpp` | Namespace `collector` (chaves `config`, `config_ver`, `boot_id`, `last_seq`). Partição `nvs` 0x9000/0x5000 (`partitions_collector.csv`) hoje; depois do passo 0 da Fase 1 (tabela única, spec 01 §9.4), `nvs` 0x12000/0x5000, cifrada por NVS encryption. |
 | Camada segura antiga | `docs/seguranca-ble-modelagem-ameacas.md` §4 | Cita `connectivity/secure/`, que **não existe** em `esp32-firmware/src`. |
 | Biblioteca | `platformio.ini` `[base] lib_deps = h2zero/NimBLE-Arduino@2.5.1` | O pacote instalado em `.pio/libdeps/base/NimBLE-Arduino` está na **2.5.0** (`.piopm`, `NimBLECppVersion.h`). **[verificar]** após `pio pkg install -e collector_twai` que a 2.5.1 foi baixada; as APIs abaixo foram conferidas na 2.5.0. |
-| Framework | `~/.platformio/packages/framework-arduinoespressif32` | Arduino-ESP32 2.0.17; `sdkconfig.h` pré-compilado usa Bluedroid e **não** define `CONFIG_BT_NIMBLE_*` nem `CONFIG_NVS_ENCRYPTION`, logo o NimBLE-Arduino usa os padrões de `src/nimconfig.h` e aceita `-DCONFIG_BT_NIMBLE_*` por build flag. |
+| Framework | `~/.platformio/packages/framework-arduinoespressif32` | Arduino-ESP32 2.0.17; `sdkconfig.h` pré-compilado usa Bluedroid e **não** define `CONFIG_BT_NIMBLE_*` nem `CONFIG_NVS_ENCRYPTION`, logo o NimBLE-Arduino usa os padrões de `src/nimconfig.h` e aceita `-DCONFIG_BT_NIMBLE_*` por build flag. Depois do passo 0 da Fase 1, todos os envs são Arduino como componente do ESP-IDF 4.4.7 (spec 01 §9); o `sdkconfig.defaults` mantém Bluedroid no IDF e o NimBLE do IDF desligado justamente para os `-DCONFIG_BT_NIMBLE_*` (`[pairing]`, spec 02 §5.1) continuarem valendo — **[verificar]** no *checkpoint* do passo 0. |
 | Fase 1 (SYNC) | Pasta `.spec/fase-1-seguranca-telemetria/` | Cria o serviço SYNC (`7A3C0001-…`, RX `…0002`, TX `…0003`). Esta spec assume a Fase 1 implementada (ordem recomendada no `.spec/README.md`); se não estiver, aplica-se só ao NUS e o §5.4 vira contrato para a Fase 1. |
 
 ### 3.1 Fatos verificados na NimBLE-Arduino (2.5.0)
@@ -331,7 +331,8 @@ nunca toma decisão destrutiva só com ele (spec 04, D16).
 - **Higiene no boot** (`BleSecurity::sanitizeBondsAtBoot()`): se
   `getNumBonds() > 1` (resto de firmware antigo) ou se o único bond tem
   `sc == 0`, apagar todos (`BOND_DELETE reason=policy`). Na primeira gravação
-  deste firmware, a instrução de bancada também é `pio run -t erase`.
+  deste firmware, a instrução de bancada também é `pio run -t erase`
+  (só perfil `dev`: apaga também `nvs_key`/`secnvs`, ver README da fase).
 - `deleteAllBonds` continua usando `deleteBond` (que chama `ble_gap_unpair`),
   **não** `ble_store_clear` (que apagaria o IRK local fora do caso de
   recuperação acima).
@@ -364,19 +365,22 @@ Roda na tarefa *host*, antes do `onAuthenticationComplete` da mesma conexão
   a verificação de gravação do §5.6).
 - **Cobertura pela NVS encryption da Fase 1.** A *flash encryption* do ESP32
   **não** cifra partições NVS; elas só ficam cifradas com *NVS encryption*
-  (chave na partição `nvs_keys`, protegida pela flash encryption). O store do
-  NimBLE abre a partição **padrão** (`nvs_open`, sem `_from_partition`). O
-  que a Fase 1 (spec 01 §7) fixou:
-  - **perfil de produção** (Arduino como componente do ESP-IDF,
-    `CONFIG_NVS_ENCRYPTION=y`, chaves XTS na partição `nvs_key`): a NVS
-    encryption cobre a `secnvs` **e** a `nvs` padrão, então os bonds ficam
-    cifrados automaticamente;
-  - **perfil de desenvolvimento** (Arduino 2.0.17 pré-compilado, sem
-    `nvs_flash_secure_init`): nada é cifrado, e **os bonds (LTK/IRK) ficam em
-    claro** na `nvs`, assim como as chaves na `secnvs`. Com acesso físico à
-    flash (A3), o atacante obtém a LTK do par corrente: decifra capturas desse
-    par e pode se passar pelo celular até o próximo botão. Não afeta outros
-    dongles. Risco residual só de bancada; ver [Aberto] A2.
+  (chave na partição `nvs_key`, protegida pela flash encryption quando esta
+  está ligada). O store do NimBLE abre a partição **padrão** (`nvs_open`, sem
+  `_from_partition`), que o `initArduino` inicializa por `nvs_flash_init()`
+  — com NVS encryption, já cifrada. O que a Fase 1 (spec 01 §7–§9) fixou:
+  **mesmo firmware e NVS encryption ligada nos três perfis de hardware**, logo
+  os bonds ficam cifrados sem código nesta fase; o que muda é a proteção da
+  chave XTS:
+  - **`prod`** (FE *release*, chave FE gerada no chip): `nvs_key` cifrada e
+    ilegível pela serial (*download* da ROM desabilitado); bonds protegidos;
+  - **`devsec`** (FE de desenvolvimento, chave FE gerada no host): bonds
+    protegidos contra quem não tem o arquivo da chave FE de ensaio;
+  - **`dev`**: a `nvs_key` fica **em claro** na flash, então a cifra não
+    protege nada — quem lê a flash (A3) lê a `nvs_key`, decifra a `nvs` e
+    obtém a LTK/IRK do par corrente: decifra capturas desse par e pode se
+    passar pelo celular até o próximo botão. Não afeta outros dongles. Risco
+    residual só de bancada; ver [Aberto] A2.
 
 ## 7. Plano arquivo por arquivo
 

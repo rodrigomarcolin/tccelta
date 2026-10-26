@@ -68,10 +68,13 @@ pareamentos e conexões. Isso fecha A1.1/A1.2/A1.4 e reduz A1.3 (MITM) e A1.5
   `--dart-define=LEGACY_PSK_TRANSPORT` e **não apaga arquivo nenhum**; esse
   é o estado intermediário. A remoção (ou isolamento) é desta fase (spec 04
   §5.7, A8), que também retira a flag.
-- NVS encryption da Fase 1 (spec 01 §7): no perfil de **produção** cifra a
-  `nvs` padrão além da `secnvs`, cobrindo os bonds do NimBLE; no perfil de
-  **desenvolvimento** (Arduino puro) nada é cifrado e os bonds ficam em claro
-  (risco residual aceito, spec 01 §6, A2).
+- NVS encryption da Fase 1 (spec 01 §7–§9): mesmo firmware (Arduino como
+  componente do ESP-IDF) e NVS encryption ligada nos três perfis de hardware
+  (`dev`, `devsec`, `prod`), cobrindo a `nvs` padrão além da `secnvs` — logo
+  os bonds do NimBLE ficam cifrados sem código nesta fase. Proteção real só
+  em `devsec`/`prod`, onde a chave XTS (`nvs_key`) é protegida pela *flash
+  encryption*; no `dev` a `nvs_key` fica legível na flash e os bonds são, na
+  prática, recuperáveis (risco residual aceito, spec 01 §6, A2).
 
 ## Critérios de aceite da fase
 
@@ -97,7 +100,10 @@ pareamentos e conexões. Isso fecha A1.1/A1.2/A1.4 e reduz A1.3 (MITM) e A1.5
 Material: ESP32 DevKit (botão BOOT/GPIO0), firmware `collector_*_debug` com a
 serial gravada em arquivo, Android ≥ 10 e iPhone com o app, nRF Connect e
 LightBlue; opcional nRF52840 Dongle + nRF Sniffer no Wireshark e `crackle`.
-Antes da primeira gravação: `pio run -t erase` e esquecer o dongle nos
+Antes da primeira gravação: `pio run -t erase` (com a NVS encryption da Fase 1
+isso também apaga `nvs_key` e `secnvs`: a placa volta às chaves fixas de
+bancada ou precisa de `provision.py --profile dev --flash`, Fase 1 spec 01
+§11; em `devsec` não usar `erase`) e esquecer o dongle nos
 celulares. Cenários completos, eventos esperados e métricas (tempo de
 pareamento, de restauração e até a sessão, N = 10 por SO) na spec 03 §4:
 
@@ -129,7 +135,7 @@ central sem LESC (opcional).
 | D13–D15 | 03 | `FORMAT v` inalterado; `CONN` = sessão autorizada; `LINK_UP` registra o RPA. |
 | D16–D20 | 04 | Anúncio só como dica; pareamento no `ConnectingViewModel`; plano automático; `createBond` explícito no Android; sem novas tentativas após erro de segurança. |
 | A1 | 01 | Manter o bit "há bond" no anúncio? Rec.: manter. |
-| A2 | 01 | Bonds em claro só no perfil de desenvolvimento da Fase 1 (Arduino puro); o perfil de produção cifra a `nvs` padrão. Rec.: aceitar e documentar o risco residual do perfil dev. |
+| A2 | 01 | Bonds na `nvs` cifrada nos três perfis da Fase 1, mas no perfil `dev` a chave XTS (`nvs_key`) fica legível na flash (sem proteção real); `devsec`/`prod` protegem a chave com *flash encryption*. Rec.: aceitar e documentar o risco residual do perfil `dev`. |
 | A3 | 01 | Endereço do dongle público × RPA. Rec.: público nesta fase. |
 | A4 | 01 | *Fork* da NimBLE para recusar `REPEAT_PAIRING`. Rec.: desnecessário (D3 recusa antes). |
 | A5 | 02 | Janela automática no primeiro boot. Rec.: não. |

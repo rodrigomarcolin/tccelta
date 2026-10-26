@@ -80,7 +80,7 @@ formatação e fila do *logger* nunca entram em `_us`.
 | Evento | Campos | Significado | Onde |
 |---|---|---|---|
 | `FORMAT` | `v:int` | `v=2`. | `SerialEventLog::begin` |
-| `KEYS` | `profile:enum(none,hmac,asym)` `source:enum(partition,dev_fixed,mac_derived,missing)` `dev_id:hex` `tag_len:int` `load_us:us` | Chaves carregadas (spec 01 §7). `tag_len` = tag de bloco do perfil (0/32/64). Nunca mostra chave. | `CollectorApp` passo 0.5 |
+| `KEYS` | `profile:enum(none,hmac,asym)` `source:enum(partition,dev_fixed,mac_derived,missing)` `dev_id:hex` `tag_len:int` `fe:enum(off,dev,release)` `sb:int` `load_us:us` | Chaves carregadas (spec 01 §7). `tag_len` = tag de bloco do perfil (0/32/64). `source=partition` = lida da `secnvs` por NVS encryption (todos os perfis). `fe`/`sb` = estado da *flash encryption*/Secure Boot (`dev` → `off`/0; `devsec` → `dev`/1; `prod` → `release`/1). Nunca mostra chave. | `CollectorApp` passo 0.5 |
 | `BOOT` (alterado) | `boot:int` `wiped:bool` `rsv:int` `rsv_new:int` `legacy_last:int\|-` `boot_seq:int` `from:int` `to:int` `seq_next:int` `log_oldest:int` `log_newest:int` `lost:int` | Recuperação de `seq` (spec 03). `rsv` = reserva lida (0 = ausente); `rsv_new` = `R + N` gravada; `boot_seq` = `R`; `[from,to]` = faixa do BOOT (vazia se `to = from − 1`); `seq_next` = próximo após o BOOT. **Removido:** `nvs_last`. | `CollectorApp` passo 7 |
 | `LOG_MIGRATE` | `removed:int` | Arquivos do log v1 (`/log`) apagados. | `LittleFsBlockStore::begin` |
 
@@ -148,7 +148,7 @@ formatação e fila do *logger* nunca entram em `_us`.
 
 ```
 EV 0 640 FORMAT v=2
-EV 1 641 KEYS profile=hmac source=dev_fixed dev_id=544343454C544101 tag_len=32 load_us=412
+EV 1 641 KEYS profile=hmac source=dev_fixed dev_id=544343454C544101 tag_len=32 fe=off sb=0 load_us=412
 EV 2 655 MARKER kind=boot seq=192 from=131 to=191 reason=boot
 EV 3 671 FLUSH buf=- kind=boot seq=192 boot=4 len=23 tag_len=32 ok=1 attempts=1 reserved=1 reserve_us=5210 sign_us=61 crc_us=4 write_us=9890 dur=15 crc=B294D366 hex=C00000000400… tag=E55ECDF1…
 EV 4 671 BOOT boot=4 wiped=0 rsv=192 rsv_new=256 legacy_last=- boot_seq=192 from=131 to=191 seq_next=193 log_oldest=65 log_newest=192 lost=0
@@ -219,6 +219,15 @@ fica no servidor).
 
 Seções reutilizáveis `[sec_none]`, `[sec_hmac]`, `[sec_asym]`, `[bench]` para
 não repetir flags. Os envs `*_debug` continuam `hmac` com `hex` completo.
+
+Todos os envs de benchmark são do perfil de hardware `dev` (spec 01 §8):
+mesmo `framework = arduino, espidf`, mesmo `sdkconfig.defaults` e, portanto,
+**NVS encryption ligada nos três perfis de `SECURITY_PROFILE`** — `none`
+desliga só as tags de bloco/handshake, não a cifra da NVS. As durações de
+NVS (`reserve_us`, `nvs_us`) incluem o AES-XTS em todos os perfis e não
+entram na diferença "com × sem segurança"; registrar no relatório. Cada env
+gera o próprio `sdkconfig.<env>` e compila o IDF inteiro (tempo de *build*
+maior que no Arduino puro).
 
 #### 7.2 Protocolo de medição
 

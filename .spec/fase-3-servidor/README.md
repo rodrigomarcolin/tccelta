@@ -133,7 +133,7 @@ Ordem sugerida de execução: **01 → 02 + 03 (protocolo) → 07 (checkpoint do
 
 ### C. Dongle real ⇒ app ⇒ API ⇒ banco
 
-1. `make kms-wrapping` → na estação, `provision.py --profile dev|prod --kms-wrapping kms_wrapping.json --flash` (Fase 1, spec 01 §11) → `make kms-importar ARQ=out/<hex>/kms_record.json`. (Alternativa só de bancada: `make provisionar N=1` → `saida/<hex>/secnvs.csv` → `provision.py --import` → `shred -u`.)
+1. `make kms-wrapping` → na estação, `provision.py --profile dev|devsec --kms-wrapping kms_wrapping.json --flash` (Fase 1, spec 01 §11; no perfil `prod` não há `--flash`: a gravação segue o procedimento da spec 01 §10.3) → `make kms-importar ARQ=out/<hex>/kms_record.json`. (Alternativa só de bancada: `make provisionar N=1` → `saida/<hex>/secnvs.csv` → `provision.py --import` → `shred -u`.)
 2. Dongle no carro ou na bancada com o simulador de ECU (`simulador/`); app pareado (LESC, Fase 2) e com o SYNC da Fase 1.
 3. Ligar o dongle. Esperado:
    - o aviso 0x07 tem bit 0/1 ⇒ o app faz o handshake;

@@ -172,7 +172,11 @@ Invariantes (garantidas na escrita, conferidas na varredura do boot):
 **[Decisão] Versionar por diretório + cabeçalho.** `/log` (v1, sem tag) é
 apagado inteiro no primeiro boot do firmware novo (evento `LOG_MIGRATE`): são
 dados de bancada que não podem ser autenticados. Nenhum dongle de campo tem
-log v1.
+log v1. Na prática o caminho é defensivo: o passo 0 da fase (spec 01 §9.5,
+tabela única) exige `erase_flash` em toda placa, então o `/log` v1 não chega
+ao firmware novo; o teste em placa "boot com `/log` antigo" passa a usar um
+`/log` preparado à mão (imagem LittleFS com `data/log/…` gravada por
+`pio run -t uploadfs`).
 
 ### 7. Efeito do tamanho da tag (`tagSize()`) em cada camada
 
@@ -389,7 +393,7 @@ Nativos (`pio test -e native -f test_block_format`):
 - `validate` rejeita `AT#PID FD …`, `FE`, `FF`.
 
 Em placa (`collector_mock_debug`):
-- Boot com `/log` antigo → `LOG_MIGRATE`; depois só `/log2`.
+- Boot com `/log` antigo (preparado por `uploadfs`, §6) → `LOG_MIGRATE`; depois só `/log2`.
 - 200 blocos gravados, reboot: índice reconstruído, `log_newest` igual.
 - `AT#CORRUPT n` (spec 05) e reboot: varredura continua válida (o byte
   invertido é de registro, não de cabeçalho).

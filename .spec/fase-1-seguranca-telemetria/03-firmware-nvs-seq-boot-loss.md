@@ -58,6 +58,22 @@ Chaves ficam na partição `secnvs` (spec 01). A NVS do ESP-IDF serializa o
 acesso internamente; o mesmo objeto `NvsStore` (`Preferences` aberto uma vez)
 é usado pelas três tarefas sem mutex próprio, como hoje.
 
+**[Decisão] `NvsStore` continua em `Preferences`, e a `nvs` fica cifrada
+nos três perfis sem mudança de código** (spec 01 §7): o `initArduino`
+inicializa a `nvs` padrão com `nvs_flash_init()`, que, com NVS encryption
+(spec 01 §9.3), usa as chaves XTS da `nvs_key`; `Preferences::begin("collector")`
+sem rótulo só abre essa partição. Custo: cada leitura/escrita passa por
+AES-XTS (com o AES de hardware), incluído nos tempos `FLUSH reserve_us` e
+`HS_RESPONSE nvs_us` (spec 06) de **todos** os perfis. A tabela única
+(spec 01 §9.4) põe a `nvs` em `0x12000` (20 KB, mesmo tamanho de hoje).
+
+**Transição:** o passo 0 da fase (spec 01 §9.5) exige `erase_flash` em toda
+placa (a tabela muda de offset). Por isso a migração de `last_seq` (abaixo)
+não roda nas placas de bancada — elas começam do primeiro boot (`R = 1`).
+**[Decisão]** manter o código de migração mesmo assim: é uma função pura já
+coberta pelos testes nativos e protege qualquer placa atualizada por outro
+caminho; o *checkpoint* em placa da migração deixa de ser exigido.
+
 ### 2. `SeqReserve` (`src/collector/SeqReserve.h`, puro)
 
 ```cpp
@@ -288,8 +304,10 @@ Em placa (`collector_mock_debug`):
 2. `BlockWriter` com reserva (junto com o passo 3 da spec 02) + teste de propriedade.
    *Checkpoint:* propriedade verde com 10 000 iterações.
 3. `NvsStore` v2 e ordem de boot. *Checkpoint:* em placa, primeiro `FLUSH`
-   de cada boot é `kind=boot` com a faixa correta; `last_seq` some da NVS
-   após a migração (conferir com `AT#SYNC?`, spec 05, que mostra `rsv`).
+   de cada boot é `kind=boot` com a faixa correta; `seq_rsv` sobrevive a
+   reboot com a `nvs` cifrada (conferir com `AT#SYNC?`, spec 05, que mostra
+   `rsv`). A migração de `last_seq` só é verificada no native (placas passam
+   por `erase_flash` no passo 0 da spec 01).
 4. Ensaio de 30 quedas. *Checkpoint:* `seq_audit` sem violação.
 
 ## Critérios de aceite
@@ -300,7 +318,7 @@ Em placa (`collector_mock_debug`):
   `boot_id` novo no cabeçalho, antes de qualquer bloco de dados.
 - Invariantes R1–R3 verdadeiros no teste de propriedade e no ensaio de quedas.
 - `last_cs` persistido e lido pelo `SyncEngine` (spec 05).
-- Migração de `last_seq` funciona uma única vez.
+- Migração de `last_seq` funciona uma única vez (teste nativo).
 
 ## Riscos e decisões em aberto
 
@@ -309,6 +327,7 @@ Em placa (`collector_mock_debug`):
 | Falha persistente da NVS | Nenhum bloco é gravado (invariante preservado, coleta perdida) | Contar em `failedBlocks`; aparece no `AT#LIST`. Melhor perder do que repetir `seq`. |
 | BOOT não gravado (flash cheia/erro) | Dados bloqueados até gravar o BOOT | Pendente com nova tentativa a cada `write` (spec 02 §8). |
 | `boot_id` dá a volta (65 535 boots) | Ambiguidade no servidor | Limite do documento (2¹⁶ boots); pular o 0 evita colisão com LOSS. |
-| Reflash com NVS apagada (`erase_flash`) em placa já registrada | `seq` recomeça; servidor rejeita (HEAD menor que o salvo) | Procedimento: reprovisionar e zerar o estado do dongle no servidor; nunca `erase_flash` em placa de campo. |
+| Reflash com NVS apagada (`erase_flash`) em placa já registrada | `seq` recomeça; servidor rejeita (HEAD menor que o salvo) | Procedimento: reprovisionar e zerar o estado do dongle no servidor; nunca `erase_flash` em placa de campo. Com NVS encryption, `erase_flash` também apaga a `nvs_key`: o dongle gera outra e a `secnvs` antiga fica ilegível — reprovisionar sempre (spec 01 §11). |
+| Trocar a `nvs_key` (`provision.py --nvs-key new`) numa placa em uso | A `nvs` fica ilegível e é recriada: mesma consequência do `erase_flash` | Usar `--nvs-key auto`/`board` no reprovisionamento (spec 01 §11). |
 | **[Aberto]** Faixa vazia `[R, R−1]` no BOOT | A Fase 3 precisa tratar como "sem lacuna" | Combinado no §3; confirmar com a spec de ingestão da Fase 3. |
 | **[Aberto]** `c_S` a partir da época no servidor de bancada × servidor real | Placa usada na bancada recusa desafios do servidor real (0x02) | *Wipe* zera `last_cs` (§7); recomendar à Fase 3 emitir `c_S = max(c_S_banco + 1, segundos desde a época)`, o que também cobre placas reaproveitadas. |

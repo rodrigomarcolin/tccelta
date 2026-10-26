@@ -7,9 +7,14 @@ Levar ao firmware do dongle e ao app tudo o que o documento de segurança
 especifica para o trecho **dongle ↔ app**, deixando o app pronto para o
 servidor da Fase 3:
 
+- **passo 0:** firmware inteiro migrado para Arduino como componente do
+  ESP-IDF, para que **o mesmo código, o mesmo *build* e a mesma tabela de
+  partições** sirvam a desenvolvimento, ensaio (`devsec`) e produção — a
+  diferença entre eles é só um arquivo de *defaults* do `sdkconfig` e o
+  procedimento de gravação/queima de eFuse;
 - identidade e chaves do dongle (`DevId`, `K_auth`, `K_rec`) em NVS
-  encriptada, com as camadas de *flash encryption*, Secure Boot V2 e eFuse
-  planejadas em perfis de desenvolvimento e de produção;
+  encriptada nos três perfis, com as camadas de *flash encryption*, Secure
+  Boot V2 e eFuse ensaiadas no `devsec` e documentadas para o `prod`;
 - bloco de dados no formato das Figs. 8–11, autenticado na gravação
   (HMAC-SHA256 com `K_rec` + CRC32), atrás de uma interface genérica com
   perfis `none`/`hmac`/`asym` para benchmark;
@@ -38,7 +43,7 @@ embutido, mais os testes nativos e do Flutter verdes.
 
 | # | Spec | Resumo |
 |---|---|---|
-| 01 | [`01-firmware-chaves-e-autenticacao.md`](01-firmware-chaves-e-autenticacao.md) | Perfis `SECURITY_PROFILE`, primitivas (SHA-256, HMAC, CRC32, tempo constante), `IMessageAuth` (`NoAuth`/`HmacBlockAuth`/`EcdsaBlockAuth`), `IHandshakeAuth`, `KeyStore` na partição `secnvs`, perfis de *build* dev/prod, partições, passo a passo com `espsecure`/`espefuse`/`nvs_partition_gen`, `provision.py`, vetores de teste. |
+| 01 | [`01-firmware-chaves-e-autenticacao.md`](01-firmware-chaves-e-autenticacao.md) | **Passo 0: build único Arduino + ESP-IDF** (§9); perfis `SECURITY_PROFILE`, primitivas (SHA-256, HMAC, CRC32, tempo constante), `IMessageAuth` (`NoAuth`/`HmacBlockAuth`/`EcdsaBlockAuth`), `IHandshakeAuth`, `KeyStore` na partição `secnvs` sempre por NVS encryption, perfis de hardware `dev`/`devsec`/`prod` (mesmo firmware, diferença = `sdkconfig.*.defaults` + procedimento), tabela de partições única, passo a passo com `espsecure`/`espefuse`/`nvs_partition_gen`, `provision.py`, vetores de teste. |
 | 02 | [`02-firmware-formato-bloco-flash.md`](02-firmware-formato-bloco-flash.md) | Área de dados (Fig. 10), registros e marcadores (Fig. 11), `Block` com tag/CRC, registro na flash `dados\|tag\|CRC`, segmento v2 versionado, `BlockWriter` (assina + CRC), `IBlockStore` v2, `LittleFsBlockStore` v2 e migração. |
 | 03 | [`03-firmware-nvs-seq-boot-loss.md`](03-firmware-nvs-seq-boot-loss.md) | `SeqReserve` (`seq + N` a cada N), recuperação no boot, bloco BOOT em todo boot, `last_cs`, `boot_id` sem zero, migração de `last_seq`, quedas de energia. |
 | 04 | [`04-firmware-servico-sync-ble.md`](04-firmware-servico-sync-ble.md) | GATT SYNC, layouts byte a byte das mensagens 0x01–0x07, TLV, byte de controle e fragmentação, `BleSyncLink` com créditos de notificação, fila `syncRx`, remoção do canal antigo. |
@@ -52,7 +57,8 @@ embutido, mais os testes nativos e do Flutter verdes.
 
 ```mermaid
 flowchart LR
-    F01[01 chaves/auth] --> F02[02 bloco/flash]
+    F00[01 passo 0: build Arduino + ESP-IDF] --> F01[01 chaves/auth]
+    F01 --> F02[02 bloco/flash]
     F03a[03 passo 1: SeqReserve] --> F02
     F02 --> F03[03 boot/NVS]
     F03 --> F04[04 SYNC BLE]
@@ -65,12 +71,20 @@ flowchart LR
 ```
 
 Firmware (um engenheiro):
-1. **01** passos 1–4 (primitivas, interfaces, mbedTLS, `KeyStore`, partições dev).
+0. **01 passo 0** (spec 01 §9.5): todos os envs em `framework = arduino, espidf`,
+   tabela de partições única, `CMakeLists.txt`/`sdkconfig.defaults` e o ajuste
+   do `nvs_flash` (§9.3). *Timebox* de ~2 dias; *checkpoint*: o firmware atual
+   compila e roda sobre Arduino + ESP-IDF — coleta, NUS BLE, LittleFS, NVS —
+   **antes de qualquer código de segurança**; senão, planos B1/B2 do §9.5.
+   Toda placa de bancada passa por `erase_flash` uma vez.
+1. **01** passos 1–4 (primitivas, interfaces, mbedTLS, `KeyStore`, provisionamento dev).
 2. **03** passo 1 (`SeqReserve`) → **02** passos 1–5 (com **03** passos 2–4 junto do `BlockWriter`).
 3. **04** passos 1–3 (codec, fila, `BleSyncLink`).
 4. **05** passos 1–7 (motor, tarefa, bancada).
 5. **06** passos 3–5 (documento v2, scripts de benchmark, viewer) — os eventos em si entram em cada spec.
-6. **01** passos 5–6 (perfil `asym` e ensaio de produção) — pode correr em paralelo a partir do passo 3.
+6. **01** passos 5–7 (perfil `asym`, ensaio `devsec` em placa descartável e,
+   opcionalmente, `prod` de demonstração) — pode correr em paralelo a partir
+   do passo 3.
 
 App (outro engenheiro, em paralelo; usa os vetores da spec 01 e dublês até o firmware ficar pronto):
 1. **07** passos 1–2 (port/adapter com canais; PSK legado desligado).
@@ -90,30 +104,39 @@ o `FakeDongle`; a validação ponta a ponta exige o firmware até a spec 05.
 1. `pio test -e native` verde, com as suítes novas `test_crypto`,
    `test_block_format`, `test_seq_reserve`, `test_sync_protocol`,
    `test_sync_engine` e `test_events` atualizada; `pio run` verde em todos os
-   envs (`collector_*`, `*_debug`, `*_bench_*`).
+   envs (`collector_*`, `*_debug`, `*_bench_*`, `collector_mock_devsec`,
+   `collector_twai_prod`), **todos** com `framework = arduino, espidf` e a
+   mesma `partitions_collector.csv`; `devsec`/`prod` diferem do env de origem
+   só por `board_build.cmake_extra_args`.
 2. `fvm dart format --output=none --set-exit-if-changed .`,
    `fvm flutter analyze` ("No issues found!") e `fvm flutter test` verdes.
-3. Roteiro de bancada abaixo (E1–E12) executado e registrado (logs de
+3. Roteiro de bancada abaixo (E0–E12) executado e registrado (logs de
    eventos guardados em `esp32-firmware/logs/fase1/`).
 4. Auditoria `seq_audit` e reconstrução de cursor (spec 06 §6) sem
    divergência num log de 1 h de leitura contínua.
 5. Benchmark (spec 06 §7) com os três perfis e relatório `bench.md` gerado.
 6. `docs/debug-events.md` v2 e `esp32-firmware/src/connectivity/README.md`
    atualizados; `docs/plano-coleta.md` com nota de substituição.
-7. Perfil de produção: ensaio em placa descartável documentado **ou**
-   limitação registrada conforme o **[Aberto]** da spec 01 §10.
+7. Ensaio `devsec` em placa descartável (spec 01 §10.2) com `espefuse.py
+   summary` antes/depois registrado **ou** limitação registrada conforme os
+   planos B da spec 01 §9.5; `prod` documentado (§10.3) e, se houver placa
+   dedicada, demonstrado.
+8. Passo 0 concluído: firmware atual validado sobre Arduino + ESP-IDF
+   (spec 01 §9.5) antes do código de segurança.
 
 ## Roteiro de validação ponta a ponta (bancada)
 
-Montagem: dongle com `collector_mock_debug` (perfil `hmac`, chaves fixas de
-bancada) ou `collector_twai_debug` + ECUSim; serial a 921 600 baud capturada
+Montagem: dongle com `collector_mock_debug` (perfil de hardware `dev`,
+`SECURITY_PROFILE` `hmac`, chaves fixas de bancada) ou `collector_twai_debug`
++ ECUSim, gravado depois de um `erase_flash` (passo 0); serial a 921 600 baud capturada
 com `tools/event-bench/capture.py`; app em *debug* com
 `fvm flutter run --dart-define=SYNC_SERVER=bench`; na tela Sincronização,
 `T_lat = 10 s` para encurtar o roteiro.
 
 | # | Cenário | Como | Esperado (eventos do dongle / app) |
 |---|---|---|---|
-| E1 | Boot limpo | `COLLECTOR_WIPE_ON_BOOT` uma vez | `FORMAT v=2`, `KEYS source=dev_fixed`, `MARKER kind=boot seq=1 from=1 to=0`, `FLUSH kind=boot`. |
+| E0 | Build único (passo 0) | Firmware atual sobre Arduino + ESP-IDF, `erase_flash` + `upload` | Coleta, NUS, LittleFS e NVS como antes da migração; com o código da spec 01: `[sec] fe=off sb=0 … nvs_enc=1`. |
+| E1 | Boot limpo | `COLLECTOR_WIPE_ON_BOOT` uma vez | `FORMAT v=2`, `KEYS source=dev_fixed fe=off sb=0`, `MARKER kind=boot seq=1 from=1 to=0`, `FLUSH kind=boot`. |
 | E2 | Coleta offline | 2 min sem app | `FLUSH kind=data tag_len=32` a cada ≤ 10 s; nenhum `SYNC_*`. |
 | E3 | Handshake (Fig. 5) | Abrir o app e conectar | `CONN up=1`, `SYNC_SUB`, `SYNC_NOTICE flags=03`, `HS_CHALLENGE result=ok`, `HS_RESPONSE`, `HS_ACK opened=1`, `SYNC_NOTICE flags=00`; app em fase `open`. |
 | E4 | Leitura contínua (Fig. 15) | Deixar 5 min | `SYNC_REQ` após cada aviso; `SYNC_BLOCK` em ordem; a cada ~`T_lat` um `HS_ACK advanced=1` + `SYNC_FREE`; cartão do app com `ACK` acompanhando `HEAD` com atraso ≤ `T_lat + 10 s + RTT`. |
@@ -130,7 +153,9 @@ com `tools/event-bench/capture.py`; app em *debug* com
 
 | Decisão | Spec |
 |---|---|
-| Perfil de produção exige Arduino como componente do ESP-IDF (o Arduino 2.0.17 pré-compilado não tem NVS encryption, *flash encryption* nem Secure Boot); desenvolvimento segue no Arduino puro | 01 |
+| Mesmo firmware em dev, `devsec` e prod: todos os envs em Arduino como componente do ESP-IDF (o Arduino 2.0.17 pré-compilado não tem NVS encryption, *flash encryption* nem Secure Boot); diferença entre perfis = `sdkconfig.devsec.defaults`/`sdkconfig.prod.defaults` via `board_build.cmake_extra_args` + procedimento de eFuse; migração é o passo 0 da fase | 01 |
+| Tabela de partições única (tabela em `0x10000`, `nvs`, `nvs_key`, `secnvs`, app de 1,8 MB alinhado a 64 KB, 2 MB de LittleFS); `partitions_collector_prod.csv` não existe | 01 |
+| NVS encryption nos três perfis (`KeyStore` com um só caminho); no `dev` a `nvs_key` fica legível — sem proteção real, só valida o código; `Preferences`/`NvsStore` e *bonds* na `nvs` ficam cifrados sem mudança de código | 01 |
 | Chaves em partição NVS própria (`secnvs`), separada do estado do protocolo | 01 |
 | Perfil `asym` = ECDSA P-256 determinística, `r‖s` de 64 B (mbedTLS 2.28 não tem Ed25519); handshake sempre HMAC de 16 B | 01 |
 | LittleFS não cifrado (integridade pela tag) | 01 |
@@ -158,7 +183,9 @@ documento.
 
 | Ponto | Recomendação | Spec |
 |---|---|---|
-| Migração do *build* para Arduino + ESP-IDF (perfil de produção) | Env separado com *timebox*; plano B com projeto IDF mínimo para o *bootloader* | 01 §10 |
+| Migração do *build* para Arduino + ESP-IDF — agora **passo 0** da fase, para todos os envs | *Timebox* de ~2 dias com *checkpoint* (firmware atual rodando); planos B1 (NVS encryption só onde o `sdkconfig` liga) e B2 (Arduino puro + projeto IDF mínimo para demonstrar as camadas de hardware) | 01 §9.5 |
+| NVS encryption no `dev` sem *flash encryption* (no IDF 4.4 `CONFIG_NVS_ENCRYPTION` depende de FE) | Ajuste do componente `nvs_flash` no `CMakeLists.txt` raiz, com *checkpoint* [verificar]; senão plano B1 | 01 §9.3 |
+| Sem OTA na tabela | Bancada em `dev`/`devsec`; `prod` só como demonstração; decidir antes de queimar `prod` se adota dois *slots* de 896 KB (cabem com o app atual de ~630 KB) | 01 §9.6 |
 | Envelope de registro no KMS — **resolvido** | `kms_record.json` no formato BYOK do Vault Transit; `tccelta provisionar importar-registro` (Fase 3) consome | 01 §11 |
 | Faixa vazia no BOOT e regra de robustez "`seq = ACK + 1` sempre aceito" — **resolvido** | A ingestão da Fase 3 (spec 05) aceita BOOT de faixa vazia sem lacuna, BOOT com `from ≤ ACK + 1`, LOSS com `from ≤ seq ≤ to`, ignora `seq ≤ ACK` e sempre aceita `seq = ACK + 1` | 03, 05 |
 | Ativação do diagnóstico pelo desafio (`flags_c`, `diag_min`) | Gancho `IDiagGate` vazio na Fase 1 | 05 §11 |
@@ -182,9 +209,12 @@ documento.
   do app fica atrás de `LEGACY_PSK_TRANSPORT` (spec 07 §1) como **estado
   intermediário**: a remoção dos arquivos é da Fase 2 (spec 04 §5.7, A8);
   esta fase não apaga nada.
-- **NVS:** no perfil de desenvolvimento (Arduino puro) nada é cifrado; no
-  perfil de produção (spec 01 §7) a NVS encryption cobre `secnvs` **e** a
-  `nvs` padrão, o que inclui os *bonds* do NimBLE (Fase 2, spec 01 §6).
+- **NVS:** nos três perfis de hardware (spec 01 §7–§8) a NVS encryption
+  cobre `secnvs` **e** a `nvs` padrão, o que inclui os *bonds* do NimBLE
+  (Fase 2, spec 01 §6). No `dev` a chave XTS (`nvs_key`) fica legível na
+  flash, então a cifra não protege nada ali; no `devsec`/`prod` ela é
+  protegida pela *flash encryption*. A `nvs` fica em `0x12000` (20 KB) na
+  tabela única.
 - **Fase 3 (servidor + HTTPS):** formatos de fio (spec 04 §3) e de bloco
   (spec 02 §1–3, §5) — idênticos ao contrato já descrito em
   `.spec/fase-3-servidor/03-api-go-arquitetura.md`; vetores de teste (spec 01
