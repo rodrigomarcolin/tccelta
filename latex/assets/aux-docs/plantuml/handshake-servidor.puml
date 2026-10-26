@@ -77,7 +77,7 @@ group transação (pg_advisory_xact_lock(dongle_id))
   S -> DB : BEGIN
   S -> DB : pg_advisory_xact_lock(dongle_id)
   alt TAIL_seq > seq_contiguo + 1
-    S -> DB : UPDATE desafio\nperda_ini, perda_fim
+    S -> DB : INSERT INTO lacuna\n(causa = OVERFLOW, from_seq, to_seq, c_s)
     S -> DB : avança seq_contiguo\npara TAIL_seq - 1
     note right of DB
       Flash cheia descartou blocos:

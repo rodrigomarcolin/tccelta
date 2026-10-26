@@ -39,8 +39,6 @@ class desafio << (T,#3949AB) table >> {
   tail_seq : bigint
   resultado : text
   ack_seq : bigint
-  perda_ini : bigint
-  perda_fim : bigint
   token_jti : uuid
 }
 
@@ -54,9 +52,28 @@ class ancora_tempo << (T,#3949AB) table >> {
   s2 : timestamptz
 }
 
+class lacuna << (T,#3949AB) table >> {
+  + id : bigint
+  --
+  dongle_id : int
+  from_seq : bigint
+  to_seq : bigint
+  causa : text
+  registrado_em : timestamptz
+  c_s : bigint <<FK, nullable>>
+  seq_bloco : bigint <<nullable>>
+}
+
 desafio "1" -- "0..1" ancora_tempo : nonce (FK)
 desafio "0..*" -- "1" boot : dongle_id, boot_id\n(via resposta 0x02)
 ancora_tempo "0..*" -- "1" boot : dongle_id, boot_id
+lacuna "0..*" -- "0..1" desafio : c_s (FK, causa OVERFLOW)
+
+note bottom of lacuna
+  causa OVERFLOW referencia c_s (handshake);
+  causa BOOT ou LOSS referencia seq_bloco
+  (bloco marcador 0x03 na ingestão).
+end note
 
 note left of desafio
   c_S obtido de dongle_estado.ultimo_c_s

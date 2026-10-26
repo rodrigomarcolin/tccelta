@@ -29,7 +29,7 @@ note over D
   e **boot_id** da NVS
 end note
 
-D -> A : Resposta 0x02\n(c_S, N_S, HEAD_seq, boot_id, t_ms, tag)
+D -> A : Resposta 0x02\n(c_S, N_S, TAIL_seq, HEAD_seq, boot_id, t_ms, tag)
 A -> S : Resposta 0x02 (HTTPS)
 
 note over S
@@ -41,6 +41,7 @@ group Âncora de tempo (algoritmo de Cristian)
   S -> S : valida tag e eco de c_S e N_S
   S -> S : RTT = S2 − S1
   S -> S : âncora do boot_id:\nt_ms ↔ S1 + RTT / 2
+  S -> S : verifica TAIL_seq e atualiza ACK_seq
 end
 
 S -> A : ACK 0x04\n(ACK_seq, c_conf, flags, tag)

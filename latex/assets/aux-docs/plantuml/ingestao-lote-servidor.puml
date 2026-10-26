@@ -40,8 +40,9 @@ note over S
   recebidos viram no-op
 end note
 
-S -> S : decodifica apenas os blocos novos
+S -> S : decodifica apenas os blocos novos\n(ignora marcadores BOOT e LOSS)
 S -> DB : COPY leitura, posicao
+S -> DB : INSERT INTO lacuna\n(causa BOOT ou LOSS, para cada marcador)
 
 S -> DB : UPDATE dongle_estado\n(seq_contiguo, maior_seq_visto,\nhead_seq se avançou)
 S -> DB : marca boot como pendente
