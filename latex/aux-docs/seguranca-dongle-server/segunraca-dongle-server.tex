@@ -790,6 +790,38 @@ A quantidade de blocos pedida na mensagem é sempre o mínimo entre o número de
 
 É importante notar que o MTU do BLE não suporta um bloco inteiro, que fica negociado em torno de 272 bytes. O bloco completo, como mostra a figura \ref{fig:bloco-completo} terá 1059 bytes, sendo 1 byte com o 
 tipo, 2 bytes com o comprimento, 1024 bytes de dados e, por fim, 32 bytes de tag. Os bytes do CRC são conferidos antes de o dongle enviar os blocos via BLE, então não aparecem aqui.
+
+A figura \ref{fig:bloco-completo} mostra o bloco já pronto para a transmissão, enquanto o que é diferente do que fica gravado na \textit{flash} , como mostra a figura \ref{fig:bloco-flash}. O bloco salvo não tem o
+envelope de tipo e comprimento, que é só uma convenção para o enquadramento no SYNC\_RX e é montado na hora de enviar; em compensação, tem mais 4 bytes de CRC32 no final, calculados sobre os dados e a tag
+(seção \ref{subsec:riscos-sincronizacao}), usados para detectar corrompimento antes do envio. Para montar o bloco da figura \ref{fig:bloco-completo} a partir do que está na flash, o dongle então descarta
+o CRC já verificado e acrescenta o envelope TLV com tipo 0x03 e o comprimento.
+
+\begin{figure}[H]
+	\centering
+	\caption{Estrutura do bloco como gravado na \textit{flash}}
+	\label{fig:bloco-flash}
+	\begin{tikzpicture}[
+		campo/.style={draw, minimum height=0.9cm, inner sep=1pt, font=\small, align=center},
+		posini/.style={font=\scriptsize, anchor=north west, inner sep=1pt},
+		posfim/.style={font=\scriptsize, anchor=north east, inner sep=1pt},
+		titulo/.style={font=\small\bfseries, anchor=south west}
+	]
+		% \campo{x}{y}{largura}{texto}{posição inicial}
+		\newcommand{\campo}[5]{%
+			\node[campo, anchor=north west, minimum width=#3 cm] at (#1,#2) {#4};
+			\node[posini] at (#1,#2-0.9) {#5};}
+		% \fim{x}{y}{posição final}
+		\newcommand{\fim}[3]{\node[posfim] at (#1,#2-0.9) {#3};}
+
+		\node[titulo] at (0,0.2) {Bloco na \textit{flash} (até 1060 bytes)};
+		\campo{0}{0}{6.6}{dados\\(1024 bytes, cabeçalho + registros) $\cdots$}{0}
+		\campo{6.6}{0}{3.4}{$tag$ ($K_{rec}$)\\(32 bytes)}{1024}
+		\campo{10.0}{0}{1.6}{CRC32\\(4 bytes)}{1056}
+		\fim{11.6}{0}{1060}
+	\end{tikzpicture}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
 Para enviar os blocos então, o dongle primeiro consolida no formato TLV e, em seguida, divide em fragmentos de até $MTU - 4$ bytes, adicionando o byte de controle, sendo que o bit 7 do byte de controle vale 1 somente
 no primeiro fragmento de cada bloco da flash. Esses blocos são então mandados via BLE para o app, que remonta o bloco original da flash. Quando os blocos chegam no app, são enviados via requisição POST. A resposta
 dessa requisição é um bloco ACK (0x04) que contém o novo valor de $ACK_{seq}$, que é usado para atualizar o app e o dongle sobre quais blocos foram reconhecidos pelo servidor.
@@ -859,6 +891,97 @@ O bloco de erro carrega um byte que pode definir diferentes tipos de erros. Os e
 		\campo{4.6}{0}{5.4}{dados\\(1024 bytes) $\cdots$}{3}
 		\campo{10.0}{0}{3.4}{$tag$ ($K_{rec}$)\\(32 bytes)}{1027}
 		\fim{13.4}{0}{1059}
+	\end{tikzpicture}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+A área de dados do bloco (figura \ref{fig:bloco-completo}), de até 1024 bytes, não é só registros: como mostra a figura \ref{fig:divisao-dados-bloco}, ela começa com o cabeçalho de 12 bytes do próprio
+bloco, composto por $seq$ (4 bytes), $boot\_id$ (2 bytes), $t_{ms}$ inicial (4 bytes) e \textit{tamanho} (2 bytes), e só depois vêm os registros, em até 1012 bytes. É nesse cabeçalho que $seq$ fica: ele não é um
+registro de medida, é o identificador de posição do bloco na sequência, usado para contar $HEAD_{seq}$ e para ordenar e detectar lacunas no servidor.
+
+Os registros que seguem o cabeçalho são concatenados até o limite indicado pelo próprio campo \textit{tamanho}. Todo registro começa com \textit{tipo} (1 byte) e $\Delta t$ (2 bytes, deslocamento em
+milissegundos a partir do $t_{ms}$ inicial do cabeçalho); o restante depende do \textit{tipo}. No caso de medida, cada leitura de PID ocupa 5 bytes (\textit{tipo}, $\Delta t$ e valor) e cada posição GPS
+ocupa 15 bytes (\textit{tipo} 0xFF, $\Delta t$, latitude, longitude e altitude), e os registros se repetem até o bloco ser fechado. No caso de marcador, o bloco carrega um único registro de 11 bytes no
+lugar das leituras: BOOT (\textit{tipo} 0xFE) ou LOSS (\textit{tipo} 0xFD), com $from\_seq$ e $to\_seq$ em vez do valor medido; o restante da área de 1024 bytes simplesmente não é escrito, pois o
+\textit{tamanho} do bloco reflete só os 12 bytes do cabeçalho mais os 11 bytes do registro (seção \ref{sec:app-ble-dongle}).
+
+\begin{figure}[H]
+	\centering
+	\caption{Divisão dos 1024 bytes da área de dados: cabeçalho do bloco e registros}
+	\label{fig:divisao-dados-bloco}
+	\begin{tikzpicture}[
+		campo/.style={draw, minimum height=0.9cm, inner sep=1pt, font=\small, align=center},
+		cabecalho/.style={campo, fill=blue!15},
+		registros/.style={campo, fill=orange!20},
+		posini/.style={font=\scriptsize, anchor=north west, inner sep=1pt},
+		posfim/.style={font=\scriptsize, anchor=north east, inner sep=1pt},
+		titulo/.style={font=\small\bfseries, anchor=south west}
+	]
+		% \campo{x}{y}{largura}{texto}{estilo}{posição inicial}
+		\newcommand{\campo}[6]{%
+			\node[#5, anchor=north west, minimum width=#3 cm] at (#1,#2) {#4};
+			\node[posini] at (#1,#2-0.9) {#6};}
+		% \fim{x}{y}{posição final}
+		\newcommand{\fim}[3]{\node[posfim] at (#1,#2-0.9) {#3};}
+
+		\node[titulo] at (0,0.2) {Área de dados do bloco 0x03 (1024 bytes)};
+		\campo{0}{0}{1.4}{$seq$}{cabecalho}{0}
+		\campo{1.4}{0}{1.4}{$boot_{id}$}{cabecalho}{4}
+		\campo{2.8}{0}{1.6}{$t_{ms}$ inicial}{cabecalho}{6}
+		\campo{4.4}{0}{1.6}{tamanho}{cabecalho}{10}
+		\campo{6.0}{0}{5.4}{registros $\cdots$\\(até 1012 bytes)}{registros}{12}
+		\fim{11.4}{0}{1024}
+
+		\draw[decorate, decoration={brace, amplitude=6pt, mirror}, thick]
+			(0,-1.3) -- (6.0-0.05,-1.3)
+			node[midway, below=6pt, align=center, font=\footnotesize] {cabeçalho do bloco\\(12 bytes)};
+		\draw[decorate, decoration={brace, amplitude=6pt, mirror}, thick]
+			(6.0+0.05,-1.3) -- (11.4,-1.3)
+			node[midway, below=6pt, align=center, font=\footnotesize] {registros de medida\\ou registro marcador};
+	\end{tikzpicture}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+\begin{figure}[H]
+	\centering
+	\caption{Estrutura dos registros na área de dados: casos de medida e de marcador}
+	\label{fig:registros-dados-bloco}
+	\begin{tikzpicture}[
+		campo/.style={draw, minimum height=0.9cm, inner sep=1pt, font=\small, align=center},
+		posini/.style={font=\scriptsize, anchor=north west, inner sep=1pt},
+		posfim/.style={font=\scriptsize, anchor=north east, inner sep=1pt},
+		titulo/.style={font=\small\bfseries, anchor=south west}
+	]
+		% \campo{x}{y}{largura}{texto}{posição inicial}
+		\newcommand{\campo}[5]{%
+			\node[campo, anchor=north west, minimum width=#3 cm] at (#1,#2) {#4};
+			\node[posini] at (#1,#2-0.9) {#5};}
+		% \fim{x}{y}{posição final}
+		\newcommand{\fim}[3]{\node[posfim] at (#1,#2-0.9) {#3};}
+
+		% Leitura de PID (caso de medida)
+		\node[titulo] at (0,0.2) {Leitura de PID (5 bytes)};
+		\campo{0}{0}{1.4}{tipo\\(PID)}{0}
+		\campo{1.4}{0}{1.6}{$\Delta t$}{1}
+		\campo{3.0}{0}{1.4}{valor}{3}
+		\fim{4.4}{0}{5}
+
+		% Posição GPS (caso de medida)
+		\node[titulo] at (0,-2.4) {Posição GPS (15 bytes, tipo 0xFF)};
+		\campo{0}{-2.4}{1.4}{0xFF}{0}
+		\campo{1.4}{-2.4}{1.6}{$\Delta t$}{1}
+		\campo{3.0}{-2.4}{1.4}{lat}{3}
+		\campo{4.4}{-2.4}{1.4}{lon}{7}
+		\campo{5.8}{-2.4}{1.4}{alt}{11}
+		\fim{7.2}{-2.4}{15}
+
+		% Marcador BOOT/LOSS (caso de marcador)
+		\node[titulo] at (0,-4.8) {Marcador: BOOT (0xFE) ou LOSS (0xFD) -- 11 bytes};
+		\campo{0}{-4.8}{1.4}{tipo}{0}
+		\campo{1.4}{-4.8}{1.6}{$\Delta t$}{1}
+		\campo{3.0}{-4.8}{1.8}{$from_{seq}$}{3}
+		\campo{4.8}{-4.8}{1.8}{$to_{seq}$}{7}
+		\fim{6.6}{-4.8}{11}
 	\end{tikzpicture}
 	\legend{Fonte: elaborado pelo autor.}
 \end{figure}
