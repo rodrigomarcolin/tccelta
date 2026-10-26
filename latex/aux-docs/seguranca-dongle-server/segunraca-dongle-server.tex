@@ -968,13 +968,37 @@ O servidor será um VPS com uma API em GoLang que responderá as requisições d
 as respostas desses desafios, e também receberá os blocos de dados medidos pelo dongle vindos do app. A ideia de usar GoLang é permitir 
 rápido processamento das requisições e capacidade maior de carga de requisições.
 
-A API terá 3 endpoints principais:
+A tabela \ref{table:endpoints-api} resume os endpoints da API, quando o app os chama, e o que cada um recebe e devolve. No sentido dongle
+$\rightarrow$ servidor, tudo é assinado pelo dongle: blocos e respostas a desafios. No sentido servidor $\rightarrow$ dongle, tudo é assinado
+pelo servidor: desafio, confirmação de recebimento e token de diagnóstico. O app apenas transporta os bytes; a autenticação do app no
+servidor serve para identificar o usuário e limitar abusos, nunca para dar confiança aos dados.
 
-\begin{itemize}
-	\item POST \textbf{/v1/dongles/\{DevId\}/desafio}: Pedido de desafio, retorna bloco de desafio no formato binário (\textit{application/octet-stream})
-	\item POST \textbf{/v1/dongles/\{DevId\}/desafio/resposta}: Processa a resposta ao desafio e retorna JSON contendo um bloco ACK em string base64 e um token JWT válido para envio de blocos.
-	\item POST \textbf{/v1/dongles/blocos}: endpoint que recebe blocos em lote no formato de JSON em lista de strings base64.
-\end{itemize}
+\begin{longtable}{|>{\raggedright\arraybackslash}p{0.23\textwidth}|>{\raggedright\arraybackslash}p{0.16\textwidth}|>{\raggedright\arraybackslash}p{0.27\textwidth}|>{\raggedright\arraybackslash}p{0.24\textwidth}|}
+	\caption{Endpoints da API (/v1/dongles)}
+	\label{table:endpoints-api} \\
+	\hline
+	\textbf{Endpoint} & \textbf{Quando o app chama} & \textbf{Entrada} & \textbf{Saída} \\
+	\hline
+	\endfirsthead
+	\hline
+	\textbf{Endpoint} & \textbf{Quando o app chama} & \textbf{Entrada} & \textbf{Saída} \\
+	\hline
+	\endhead
+	\hline
+	\endfoot
+	POST \texttt{/\{id\}/desafio} & Ao conectar com internet; o dongle pede o desafio & $DevId$, informado pelo app, sem autenticação & Desafio 0x01: $c_S$, $N_S$ e tag $K_{auth}$ \\
+	\hline
+	POST \texttt{/\{id\}/desafio} \newline \texttt{/resposta} & Ao dongle responder & Resposta 0x02: $c_S$, $N_S$, $TAIL_{seq}$, $HEAD_{seq}$, $boot\_id$, $t_{ms}$ e tag $K_{auth}$ & ACK 0x04 com $ACK_{seq}$ e o token JWT \\
+	\hline
+	POST \texttt{/blocos} & Em lotes, a partir da última confirmação & Lote de blocos assinados; $DevId$ identificado pelo token JWT, não pela URL & Confirmação assinada com $seq\_contiguo$ \\
+	\hline
+	GET \texttt{/\{id\}/confirmacao} & Ao reconectar, antes de enviar & --- & A confirmação assinada mais recente \\
+\end{longtable}
+
+Os corpos são em binário (\textit{application/octet-stream}), repassados pelo app sem conversão: converter para JSON no app abriria espaço
+para alterações e custaria CPU no servidor. As respostas de erro seguem a convenção: \texttt{400} para lote malformado, \texttt{422} para
+assinatura inválida (o bloco vai para a tabela de rejeitados), \texttt{409} para nonce já usado ou expirado e \texttt{503} com
+\texttt{Retry-After} sob sobrecarga.
 
 O banco de dados será PostgreSQL, com TimescaleDB e PostGIS para armazenar os dados de telemetria e localização, respectivamente.
 
@@ -982,27 +1006,136 @@ Para simplificar, no mesmo VPS, mas com configurações de acesso mais restritas
 chaves usadas nos HMACs de autenticação e de blocos de dados ($K_{auth}$ e $K_{rec}$, respectivamente), e também a chave privada para assinar os
 tokens JWT que permitirão que o app envie blocos de maneira autenticada, evitando possível sobrecarga no endpoint de recebimento de blocos. 
 
-No banco, deve haver:
+\subsection{Estrutura de dados}
 
-\begin{itemize}
-	\item Uma tabela que associa $DevId$ ao atual $ACK_{seq}$ para saber até que bloco foi reconhecido
-	\item Uma tabela que guarda os blocos brutos recebidos
-	\item Uma tabela que registra os boots registrados e hora real calculada para cada um
-	\item Uma tabela com a decodificação do bloco em posições ao longo do tempo (Hypertable do TimescaleDB)
-	\item Uma tabela com a decodificação do bloco em PIDs, havendo uma linha para cada PID do Bloco. Cada linha é associada o bloco bruto por seq (Hypertable do TimescaleDB)
-	\item Uma tabela com os desafios e quando foram respondidos, para ter um tracking dos nonces
-\end{itemize}
+Os dados passam por camadas, da evidência bruta até as leituras já decodificadas, de modo que cada camada possa ser reconstruída a
+partir da anterior. A camada bronze guarda exatamente o que foi recebido, sem decodificar nada: a tabela \texttt{bloco\_bruto} tem
+chave primária $(dongle\_id, seq)$, o que neutraliza tanto a repetição quanto a reordenação de blocos diretamente no banco, e a tabela
+\texttt{dongle\_estado} guarda o estado operacional de cada dongle visto pelo servidor: o maior \textit{seq} contíguo já confirmado
+($seq\_contiguo$), o maior \textit{seq} já visto, a faixa $[TAIL_{seq}, HEAD_{seq}]$ que o dongle ainda guarda na \textit{flash}
+segundo o último \textit{handshake} aceito, e o contador $ultimo\_c\_S$ usado para emitir desafios com $c_S$ estritamente crescente.
+A \autoref{fig:modelo-bronze} mostra essas duas tabelas.
 
-O endpoint de blocos é autenticado com um token JWT com $sub=DevId$ e expiração de 30 minutos. Ele deve receber um lote de blocos,
-verificar assinatura e expiração do token e, caso esteja válido, verificar o HMAC, decodificar os base64 e registrar, na mesma transação:
+\begin{figure}[H]
+	\centering
+	\caption{Modelo de dados da camada bronze}
+	\label{fig:modelo-bronze}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/modelo-dados-bronze.puml
+	\includegraphics[width=0.75\textwidth]{../../assets/aux-docs/modelo-dados-bronze.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
 
-\begin{itemize}
-	\item o bloco bruto
-	\item o novo valor de $ACK_{seq}$ para o DevId
-	\item as linhas nas tabelas de PID e de posições ao longo do tempo, que são decodificadas a partir do bloco bruto
-\end{itemize}
+A camada de contexto guarda os \textit{boots} e o rastro de cada \textit{handshake}. A tabela \texttt{boot} tem uma linha por
+\textit{boot}, com a configuração vigente e a reta de tempo (recalculada pelo worker). A tabela \texttt{desafio} guarda todo desafio
+emitido, respondido ou não, identificado por $(dongle\_id, c_S)$, com os campos trazidos pela Resposta 0x02 ($boot\_id$, $t\_ms$,
+$HEAD_{seq}$, $TAIL_{seq}$), o resultado do \textit{handshake} e os efeitos de um \textit{handshake} aceito: $ACK_{seq}$, a faixa de
+perda declarada ($perda\_ini$, $perda\_fim$) e o identificador do JWT emitido ($token\_jti$). A tabela \texttt{ancora\_tempo} guarda
+apenas as medições com $S_2 - S_1 \leq 2$ s, cada uma referenciando o nonce do desafio que a gerou. A \autoref{fig:modelo-contexto}
+mostra essas três tabelas.
 
-%\subsection{Estrutura de dados}
+\begin{figure}[H]
+	\centering
+	\caption{Modelo de dados da camada de contexto}
+	\label{fig:modelo-contexto}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/modelo-dados-contexto.puml
+	\includegraphics[width=\textwidth]{../../assets/aux-docs/modelo-dados-contexto.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+A camada silver guarda as leituras já decodificadas. A tabela \texttt{pid} é a fonte da verdade de como decodificar cada PID (fator,
+deslocamento e faixa válida), carregada em memória pela API para decodificar cada leitura sem fórmulas fixas no código. As tabelas
+\texttt{leitura} e \texttt{posicao} são \textit{hypertables} do TimescaleDB, particionadas por \texttt{recebido\_em}, com índice em
+$(dongle\_id, boot\_id, t\_ms)$ para consultas por viagem. A \autoref{fig:modelo-silver} mostra essas três tabelas.
+
+\begin{figure}[H]
+	\centering
+	\caption{Modelo de dados da camada silver}
+	\label{fig:modelo-silver}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/modelo-dados-silver.puml
+	\includegraphics[width=0.85\textwidth]{../../assets/aux-docs/modelo-dados-silver.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+\subsection{Ingestão de um lote}
+
+O custo de escala do servidor está na escrita no banco, não na verificação de assinaturas nem na decodificação dos blocos. Por isso, a
+ingestão processa um lote inteiro por transação, em vez de um bloco por vez, o que divide o custo do \textit{commit} por dezenas de
+blocos. O fluxo segue os passos descritos na \autoref{fig:ingestao-lote-servidor}: o lote chega, as assinaturas são verificadas em
+paralelo, blocos inválidos vão para a tabela de rejeitados, e os blocos válidos são inseridos em \texttt{bloco\_bruto} com
+\texttt{ON CONFLICT DO NOTHING}, o que torna a ingestão idempotente, já que o dongle reenvia a partir do último ACK. Como cada dongle
+tem seus blocos travados por um \texttt{pg\_advisory\_xact\_lock}, lotes do mesmo dongle ficam em série, mas dongles diferentes seguem
+em paralelo. Ao final, a API atualiza $seq\_contiguo$ e $maior\_seq\_visto$ em \texttt{dongle\_estado}, avançando também $HEAD_{seq}$
+caso algum bloco novo tenha $seq$ maior que o salvo.
+
+\begin{figure}[H]
+	\centering
+	\caption{Diagrama de sequência da ingestão de um lote de blocos}
+	\label{fig:ingestao-lote-servidor}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/ingestao-lote-servidor.puml
+	\includegraphics[width=\textwidth]{../../assets/aux-docs/ingestao-lote-servidor.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+\subsection{Handshake}
+
+Do lado do servidor, o \textit{handshake} são duas requisições do app, com o estado guardado entre elas na tabela \texttt{desafio}, como
+mostra a \autoref{fig:handshake-servidor}. Ele serve a quatro propósitos: provar que a resposta do dongle é nova, por meio de $c_S$ e
+$N_S$; medir a âncora de tempo do boot, a partir de $S_1$, $S_2$ e do $t\_ms$ do dongle; receber $HEAD_{seq}$ e $TAIL_{seq}$ atestados
+pelo dongle; e emitir o token JWT que autoriza o envio de blocos. Desafio, resposta e ACK são autenticados com $K_{auth}$.
+
+No \texttt{POST /v1/dongles/\{id\}/desafio}:
+
+\begin{enumerate}
+	\item O servidor lê o $DevId$ informado pelo app. O pedido não é autenticado, porque o JWT ainda não existe; isso é seguro, pois
+	apenas o dongle com $K_{auth}$ consegue responder ao desafio.
+	\item A taxa é limitada por $DevId$: se ele já pediu desafios demais no último minuto, o servidor responde \texttt{429}, evitando
+	que um app malicioso encha a tabela \texttt{desafio}.
+	\item O servidor obtém $c_S$ com um \texttt{UPDATE} atômico sobre $ultimo\_c\_S$ em \texttt{dongle\_estado}, mantendo-o
+	estritamente crescente mesmo com pedidos simultâneos; o dongle recusa um desafio cujo $c_S$ não seja maior que o último aceito.
+	\item É gerado $N_S$ com 16 bytes aleatórios (\texttt{crypto/rand}).
+	\item O servidor anota $S_1$, insere a linha em \texttt{desafio} e responde o Desafio 0x01 ($c_S$, $N_S$ e tag $K_{auth}$).
+\end{enumerate}
+
+No \texttt{POST /v1/dongles/\{id\}/desafio/resposta}:
+
+\begin{enumerate}
+	\item O servidor anota $S_2$ assim que a requisição chega, antes de qualquer outro processamento.
+	\item Lê a Resposta 0x02 ($c_S$, $N_S$, $TAIL_{seq}$, $HEAD_{seq}$, $boot\_id$, $t\_ms$) e verifica a tag com o $K_{auth}$ do
+	dongle; se for inválida, marca o desafio como \texttt{tag\_invalida} e responde \texttt{422}.
+	\item Consome o desafio com um \texttt{UPDATE} que confere, numa única instrução, se ele pertence àquele dongle, está pendente e
+	dentro do prazo, impedindo duas respostas simultâneas ao mesmo desafio; se nenhuma linha voltar, responde \texttt{409}.
+	\item Confere a consistência: $TAIL_{seq}$ de até $HEAD_{seq} + 1$ e $HEAD_{seq}$ não menor que o valor salvo. Se falhar, marca
+	como \texttt{inconsistente} e responde \texttt{422}.
+	\item Confere se $S_2 - S_1$ é de até 2 s. Se for maior, o \textit{handshake} segue, mas sem âncora: o desafio fica como
+	\texttt{aceito\_sem\_ancora}, e o ACK pede um novo desafio.
+	\item Abre uma transação e toma \texttt{pg\_advisory\_xact\_lock(dongle\_id)}. Aplica a regra do $TAIL_{seq}$: se
+	$TAIL_{seq} > seq\_contiguo + 1$, os blocos entre $seq\_contiguo + 1$ e $TAIL_{seq} - 1$ foram descartados pelo dongle com a
+	\textit{flash} cheia, e a faixa exata é gravada em $perda\_ini$ e $perda\_fim$, avançando $seq\_contiguo$ para $TAIL_{seq} - 1$.
+	Em seguida, atualiza $HEAD_{seq}$, $TAIL_{seq}$ e $head\_relatado\_em$ em \texttt{dongle\_estado}, grava a âncora em
+	\texttt{ancora\_tempo} quando houver, cria a linha de \texttt{boot} se ainda não existir e marca o boot como pendente para o
+	worker.
+	\item Faz o \textit{commit}, avisa o worker com \texttt{NOTIFY}, emite o JWT ($sub = DevId$, com o $jti$ gravado em
+	\texttt{desafio}) e responde o ACK 0x04 com o $ACK_{seq}$ resultante, a tag $K_{auth}$ e o token.
+\end{enumerate}
+
+$S_1$ e $S_2$ vêm do relógio da API (\texttt{time.Now()}), sincronizado por NTP, e não do \texttt{now()} do PostgreSQL, que devolve o
+início da transação e poderia atrasar a medida. $S_1$ é anotado antes do \texttt{INSERT}, um pouco antes de a resposta sair, o que só
+alarga o intervalo $[S_1, S_2]$ e deixa a âncora mais conservadora, nunca errada; $S_2$ é anotado na chegada pelo mesmo motivo, para
+que o tempo gasto verificando a assinatura não entre na medida.
+
+O pedido de desafio não toma o \textit{lock} do dongle, mas o passo 6 da resposta toma, porque a regra do $TAIL_{seq}$ pode avançar
+$seq\_contiguo$ e essa mudança não pode se misturar com um lote do mesmo dongle sendo gravado ao mesmo tempo. Como o $TAIL_{seq}$ é
+autenticado com $K_{auth}$ e amarrado a $N_S$, o app não consegue forjar uma perda; ele pode provocá-la deixando de pedir lotes
+(A3.2), mas a perda chega ao servidor declarada, com a faixa exata.
+
+\begin{figure}[H]
+	\centering
+	\caption{Diagrama de sequência do \textit{handshake} no servidor}
+	\label{fig:handshake-servidor}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/handshake-servidor.puml
+	\includegraphics[width=\textwidth]{../../assets/aux-docs/handshake-servidor.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
 
 %\subsection{Servidor de aplicação}
 

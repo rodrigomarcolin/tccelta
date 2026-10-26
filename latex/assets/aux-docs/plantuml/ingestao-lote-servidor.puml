@@ -1,0 +1,60 @@
+' Diagrama de sequência da ingestão de um lote de blocos no servidor
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:ingestao-lote-servidor)
+' Gerar PNG (Git Bash): ./generate.sh ingestao-lote-servidor.puml
+@startuml ingestao-lote-servidor
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam noteBackgroundColor #FFF4E0
+skinparam noteBorderColor #C77700
+
+participant "App" as A
+participant "API" as S
+database "PostgreSQL" as DB
+
+A -> S : POST /v1/dongles/blocos\n(lote de blocos assinados)
+
+S -> S : valida o token JWT\ne extrai o DevId (dongle_id)
+S -> S : separa os blocos do lote
+
+note over S
+  Verifica assinaturas em paralelo
+  (comparação em tempo constante)
+end note
+
+S -> S : descarta blocos inválidos\n(tabela de rejeitados)
+
+S -> DB : BEGIN
+S -> DB : pg_advisory_xact_lock(dongle_id)
+note right of DB
+  Lotes do mesmo dongle ficam em série;
+  dongles diferentes seguem em paralelo.
+end note
+
+S -> DB : COPY para tabela temporária
+S -> DB : INSERT INTO bloco_bruto\nON CONFLICT DO NOTHING
+
+note over S
+  Idempotência: blocos já
+  recebidos viram no-op
+end note
+
+S -> S : decodifica apenas os blocos novos
+S -> DB : COPY leitura, posicao
+
+S -> DB : UPDATE dongle_estado\n(seq_contiguo, maior_seq_visto,\nhead_seq se avançou)
+S -> DB : marca boot como pendente
+
+S -> DB : COMMIT
+
+S -> A : 200 confirmação assinada\n(seq_contiguo)
+
+alt lote interrompido (tag inválida, salto ou fora de ordem)
+  S -> A : ACK com seq_contiguo menor\n+ Erro 0x07
+end
+
+alt sobrecarga
+  S -> A : 503 Retry-After
+end
+@enduml
