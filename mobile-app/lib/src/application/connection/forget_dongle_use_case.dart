@@ -7,9 +7,6 @@ import 'package:tccelta_mobile/src/domain/repositories/last_dongle_repository.da
 /// Orquestra dois repositories (`DongleRepository` + `LastDongleRepository`),
 /// que não se conhecem entre si — por isso vive em `application/` em vez de
 /// um view_model falar com os dois diretamente (regra do `CLAUDE.md` §5.1).
-///
-/// Independente das configurações de criptografia: PSK e modo de segurança
-/// (`SettingsService`) não são tocados aqui de propósito.
 class ForgetDongleUseCase {
   /// Cria o use case sobre os repositories de conexão e do dongle salvo.
   ForgetDongleUseCase(this._dongle, this._lastDongle);

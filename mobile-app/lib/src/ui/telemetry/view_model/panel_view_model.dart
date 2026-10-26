@@ -18,10 +18,9 @@ final RegExp _panelIdSeq = RegExp(r'^panel_(\d+)$');
 /// estes métodos.
 ///
 /// `AsyncNotifier`: `build()` carrega os painéis salvos via
-/// [PanelPersistenceUseCase] (mesmo idioma de `PskNotifier`/
-/// `SecurityModeNotifier` em `settings_providers.dart`); cada mutação grava
-/// o novo estado como `AsyncData` e dispara a persistência em
-/// fire-and-forget — falha ao salvar não deve travar a edição do painel.
+/// [PanelPersistenceUseCase]; cada mutação grava o novo estado como
+/// `AsyncData` e dispara a persistência em fire-and-forget — falha ao salvar
+/// não deve travar a edição do painel.
 class PanelViewModel extends AsyncNotifier<PanelsState> {
   late final PanelPersistenceUseCase _persistence;
 

@@ -69,7 +69,6 @@ class ConnectionGuard extends HookConsumerWidget {
     AppRoutes.blePermissions,
     AppRoutes.bluetoothOff,
     AppRoutes.scan,
-    AppRoutes.pskSetup,
     AppRoutes.connecting,
     AppRoutes.connectionLost,
   };
@@ -80,7 +79,6 @@ class ConnectionGuard extends HookConsumerWidget {
     AppRoutes.blePermissions,
     AppRoutes.bluetoothOff,
     AppRoutes.scan,
-    AppRoutes.pskSetup,
   };
 
   /// Janela para o estado do adaptador assentar antes de decidir por "Conexão

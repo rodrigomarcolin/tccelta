@@ -2,7 +2,7 @@
 
 ## Goal
 
-Evolve the mobile app from a single-response ELM327 client into a secure, ECU-aware client that can consume the dongle's multi-ECU and ISO-TP responses without breaking the existing live-data, DTC, and freeze-frame flows.
+Evolve the mobile app from a single-response ELM327 client into an ECU-aware client that can consume the dongle's multi-ECU and ISO-TP responses without breaking the existing live-data, DTC, and freeze-frame flows. The app talks to the dongle over plain-text ELM327 commands/responses — no app-side cryptography is in scope.
 
 ## Target architecture
 
@@ -15,7 +15,6 @@ flowchart TD
     OBD[Obd2Datasource]
     Parser[ElmResponseParser]
     Client[Elm327Client]
-    Secure[Secure BLE connection]
     Dongle[ELM327 dongle]
 
     UI --> Repo
@@ -25,8 +24,7 @@ flowchart TD
     DTC --> Parser
     OBD --> Parser
     Parser --> Client
-    Client --> Secure
-    Secure --> Dongle
+    Client --> Dongle
 ```
 
 The important boundary is `ElmResponseParser`: raw ELM text should be parsed once into structured responses, rather than each datasource searching for the first service/PID marker independently.
@@ -70,25 +68,7 @@ Acceptance criteria:
 - A response ending in `>` is the only successful command boundary.
 - A new request is not sent while the previous response is incomplete.
 
-## Phase 1 — secure transport integration
-
-Before expanding protocol parsing, make sure every production request uses the selected secure firmware protocol.
-
-Tasks:
-
-1. Choose one production protocol: static PSK, handshake session keys, or handshake plus replay counter.
-2. Align app and firmware framing, nonce sizes, HKDF inputs, authentication tags, and counter direction.
-3. Remove or disable the plaintext fallback in the production data source.
-4. Return typed security failures instead of converting them into generic `?` or empty data.
-5. Add tests for invalid tag, wrong nonce/session, replayed frame, counter gap, and reconnect/session reset.
-
-Acceptance criteria:
-
-- No unauthenticated ELM command reaches the dongle.
-- Replay protection is verified across repeated and reordered messages.
-- A failed secure request leaves the dongle ready for the next valid request.
-
-## Phase 2 — robust ELM client
+## Phase 1 — robust ELM client
 
 Modify `Elm327Client` so it preserves the response structure instead of returning only normalized text.
 
@@ -110,7 +90,7 @@ Tests:
 - Response arrives while the app is attempting a second request.
 - Rejected command does not leave stale bytes in the next response.
 
-## Phase 3 — response parser and ECU identity
+## Phase 2 — response parser and ECU identity
 
 Create `ElmResponseParser` and use it from both OBD and DTC datasources.
 
@@ -132,7 +112,7 @@ Acceptance criteria:
 - A single-frame response and a multi-frame response can coexist.
 - One malformed ECU response does not corrupt another ECU's response.
 
-## Phase 4 — ECU-aware domain models
+## Phase 3 — ECU-aware domain models
 
 Extend the app models without forcing the UI to change immediately.
 
@@ -171,7 +151,7 @@ Repository behavior:
 - Define a deterministic duplicate policy, preferably `all`, with an explicit primary-value policy only where the UI requires one.
 - Surface partial results instead of silently presenting the first ECU response as complete.
 
-## Phase 5 — OBD and diagnostic datasource changes
+## Phase 4 — OBD and diagnostic datasource changes
 
 ### Live data
 
@@ -195,7 +175,7 @@ Repository behavior:
 - Associate each freeze-frame value with its ECU and origin DTC where available.
 - Add arbitrary Mode 02 PID support only after supported-PID discovery and whitelist agreement are defined.
 
-## Phase 6 — useful safe AT support
+## Phase 5 — useful safe AT support
 
 Add only commands that inspect or format responses without changing vehicle behavior:
 
@@ -212,7 +192,7 @@ Do not add app controls for:
 - voltage control or arbitrary AT passthrough;
 - DTC clearing.
 
-## Phase 7 — UI and state handling
+## Phase 6 — UI and state handling
 
 Update screens only after the parser and models are stable.
 
@@ -227,7 +207,7 @@ Display:
 
 The dashboard may continue showing one selected value, but that selection must be explicit and testable rather than “first response wins.”
 
-## Phase 8 — test matrix
+## Phase 7 — test matrix
 
 ### Client and parser
 
@@ -251,30 +231,27 @@ The dashboard may continue showing one selected value, but that selection must b
 - DTCs from multiple ECUs are not dropped;
 - freeze-frame values retain source ECU;
 - partial results are visible to repository/UI;
-- no request is issued before the previous `>` prompt;
-- secure failure blocks the request and does not poison the next request.
+- no request is issued before the previous `>` prompt.
 
 ### Hardware/system tests
 
-- real BLE secure session;
+- real BLE session;
 - real dongle with one ECU simulator;
 - two simulated ECUs;
 - mixed ISO-TP traffic;
-- reconnect and session-key rotation;
-- replayed encrypted frame;
+- reconnect handling;
 - timeout under bus load.
 
 ## Delivery order
 
 1. Add contract types and parser tests.
-2. Integrate secure protocol and remove plaintext production fallback.
-3. Refactor `Elm327Client` to return structured responses.
-4. Refactor OBD/DTC datasources to consume the parser.
-5. Add ECU-aware domain fields with backward-compatible repository methods.
-6. Add response-count optimization and bounded `ATST`.
-7. Update UI and diagnostics screens.
-8. Run simulator and hardware matrix; document any vehicle-specific limitations.
+2. Refactor `Elm327Client` to return structured responses.
+3. Refactor OBD/DTC datasources to consume the parser.
+4. Add ECU-aware domain fields with backward-compatible repository methods.
+5. Add response-count optimization and bounded `ATST`.
+6. Update UI and diagnostics screens.
+7. Run simulator and hardware matrix; document any vehicle-specific limitations.
 
 ## Definition of done
 
-The app is ready when it can authenticate every request, wait for the prompt boundary, parse all ECU responses from a command, handle mixed ISO-TP response types, preserve ECU identity when available, report partial/error completion explicitly, and retain compatibility with the current single-ECU dashboard flows.
+The app is ready when it can wait for the prompt boundary, parse all ECU responses from a command, handle mixed ISO-TP response types, preserve ECU identity when available, report partial/error completion explicitly, and retain compatibility with the current single-ECU dashboard flows.

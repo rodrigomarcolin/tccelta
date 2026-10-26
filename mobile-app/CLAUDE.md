@@ -140,7 +140,7 @@ Peças da slice (todas já no código):
 - `infra/ble/ble_plus.dart` — **adapter** concreto sobre `flutter_blue_plus`; única camada que conhece a lib. Trocar de lib BLE = reescrever só aqui + trocar 1 provider.
 - `data/datasources/{dongle,ble_permissions}_datasource.dart` — envolvem o port/plugins.
 - `data/repositories/{dongle,ble_permissions}_repository_impl.dart` — impls; *source of truth* da conexão/permissões; mapeiam erro cru → `Failure`/`BleFailure` (`src/core/errors/`).
-- `ui/connection/view_model/*.dart` — ViewModels `Notifier<Estado>`: `ScanViewModel` (estado `ScanState` imutável + `copyWith`), `ConnectingViewModel` (fase `BleConnectionPhase`), `BlePermissionsViewModel` (fase `BlePermissionFlowState`). **Toda a lógica vive aqui.** O prefixo `Ble`/`ble_` existe porque a feature `settings` (PSK) tem seu próprio par irmão `CameraPermissions*` para a permissão de câmera do scanner de QR — sem o prefixo os dois "permissions" seriam ambíguos.
+- `ui/connection/view_model/*.dart` — ViewModels `Notifier<Estado>`: `ScanViewModel` (estado `ScanState` imutável + `copyWith`), `ConnectingViewModel` (fase `BleConnectionPhase`), `BlePermissionsViewModel` (fase `BlePermissionFlowState`). **Toda a lógica vive aqui.**
 - `ui/connection/view/*.dart` — 6 telas `ConsumerWidget`/`ConsumerStatefulWidget` "burras" (só `ref.watch` + render).
 - `ui/connection/widgets/*.dart` — componentes específicos do módulo (`ConnectionGuard`, `ConnectionBackground`, `ConnectionStateView`).
 - `ui/connection/connection_providers.dart` — toda a DI via Riverpod (port → adapter, datasource → repository → view_model).
