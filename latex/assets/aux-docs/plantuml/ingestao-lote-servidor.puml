@@ -1,4 +1,7 @@
 ' Diagrama de sequência da ingestão de um lote de blocos no servidor
+' Cada tabela do banco aparece como uma entidade própria, recebendo métodos que
+' representam a ação (não SQL cru), no mesmo padrão dos diagramas de handshake
+' (handshake-servidor-desafio.puml, -resposta.puml, -worker.puml).
 ' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:ingestao-lote-servidor)
 ' Gerar PNG (Git Bash): ./generate.sh ingestao-lote-servidor.puml
 @startuml ingestao-lote-servidor
@@ -11,9 +14,18 @@ skinparam noteBorderColor #C77700
 
 participant "App" as A
 participant "API" as S
-database "PostgreSQL" as DB
+entity "bloco_bruto" as BlocoBruto
+entity "dongle_estado" as DongleEstado
+entity "lacuna" as Lacuna
+entity "leitura" as Leitura
+entity "posicao" as Posicao
+entity "boot" as Boot
 
 A -> S : POST /v1/dongles/blocos\n(lote de blocos assinados)
+
+break servidor sobrecarregado
+  S --> A : 503 Retry-After
+end
 
 S -> S : valida o token JWT\ne extrai o DevId (dongle_id)
 S -> S : separa os blocos do lote
@@ -25,37 +37,32 @@ end note
 
 S -> S : descarta blocos inválidos\n(tabela de rejeitados)
 
-S -> DB : BEGIN
-S -> DB : pg_advisory_xact_lock(dongle_id)
-note right of DB
-  Lotes do mesmo dongle ficam em série;
-  dongles diferentes seguem em paralelo.
-end note
+critical transação (lock por dongle_id)
+  S -> DongleEstado : travar(dongle_id)
+  note right of DongleEstado
+    Lotes do mesmo dongle ficam em série;
+    dongles diferentes seguem em paralelo.
+  end note
 
-S -> DB : COPY para tabela temporária
-S -> DB : INSERT INTO bloco_bruto\nON CONFLICT DO NOTHING
+  S -> BlocoBruto : inserir(lote)
+  note right of BlocoBruto
+    Idempotente: blocos já
+    recebidos viram no-op
+  end note
 
-note over S
-  Idempotência: blocos já
-  recebidos viram no-op
-end note
-
-S -> S : decodifica apenas os blocos novos\n(ignora marcadores BOOT e LOSS)
-S -> DB : COPY leitura, posicao
-S -> DB : INSERT INTO lacuna\n(causa BOOT ou LOSS, para cada marcador)
-
-S -> DB : UPDATE dongle_estado\n(seq_contiguo, maior_seq_visto,\nhead_seq se avançou)
-S -> DB : marca boot como pendente
-
-S -> DB : COMMIT
-
-S -> A : 200 confirmação assinada\n(seq_contiguo)
-
-alt lote interrompido (tag inválida, salto ou fora de ordem)
-  S -> A : ACK com seq_contiguo menor\n+ Erro 0x07
+  S -> S : decodifica apenas os blocos novos\n(ignora marcadores BOOT e LOSS)
+  S -> Leitura : inserir(leituras decodificadas)
+  S -> Posicao : inserir(posições decodificadas)
+  opt bloco marcador (BOOT ou LOSS)
+    S -> Lacuna : registrar(causa, from_seq,\nto_seq, seq_bloco)
+  end
+  S -> DongleEstado : atualizarIngestao(seq_contiguo,\nmaior_seq_visto, head_seq)
+  S -> Boot : marcarPendente()
 end
 
-alt sobrecarga
-  S -> A : 503 Retry-After
+alt lote aceito por completo
+  S --> A : 200 confirmação assinada\n(seq_contiguo)
+else lote interrompido (tag inválida, salto ou fora de ordem)
+  S --> A : ACK com seq_contiguo menor\n+ Erro 0x07
 end
 @enduml
