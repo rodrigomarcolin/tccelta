@@ -28,22 +28,8 @@ abstract final class AppRoutes {
   /// Aba de Diagnóstico — códigos de falha (DTCs) do veículo (`DtcScreen`).
   static const String dtc = '/dtc';
 
-  /// Tela de configuração de criptografia (PSK).
-  static const String settings = '/settings';
-
   /// Tela de opções ("Mais"), aberta pela aba homônima da tab bar.
   static const String more = '/more';
-
-  /// Configuração da PSK dentro do fluxo de conexão (antes de conectar).
-  static const String pskSetup = '/psk-setup';
-
-  /// Pedir permissão de câmera antes do scanner de QR da PSK
-  /// (`CameraPermissionsScreen`), empilhada pela tela de configuração da PSK.
-  static const String cameraPermissions = '/psk-setup/scan-qr/permissions';
-
-  /// Leitura do QR code da PSK (`QrScanScreen`), alcançada só depois de
-  /// [cameraPermissions] conceder a câmera.
-  static const String pskScanQr = '/psk-setup/scan-qr';
 
   /// Lista de sensores (`SensorPickerScreen`). Dois modos de entrada: o
   /// botão "Adicionar indicador" do Painel empilha com `context.push` (sem

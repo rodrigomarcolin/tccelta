@@ -49,7 +49,7 @@ class ScanScreen extends HookConsumerWidget {
     Future<void> select(BleDevice device) async {
       ref.read(selectedDongleProvider.notifier).select(device);
       await ref.read(scanViewModelProvider.notifier).stopScan();
-      if (context.mounted) unawaited(context.push(AppRoutes.pskSetup));
+      if (context.mounted) unawaited(context.push(AppRoutes.connecting));
     }
 
     final state = ref.watch(scanViewModelProvider);
