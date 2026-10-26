@@ -1,4 +1,4 @@
-' Diagrama de sequência do pedido de lote, fragmentação BLE e envio ao server
+' Diagrama de sequência da leitura contínua, do buffer no app e do envio ao server
 ' Usado em: latex/aux-docs/segunraca-dongle-server.tex (seq:lote-envio)
 ' Gerar PNG (Git Bash): ./generate.sh aquisicao-lote-sequencia.puml
 @startuml aquisicao-lote-sequencia
@@ -11,16 +11,19 @@ skinparam noteBorderColor #C77700
 
 participant "Dongle" as D
 participant "App\n(intermediário)" as A
+queue "Buffer" as BUF
 participant "Server" as S
 
-note over A
-  pendentes ≥ N_lote (6) ou N_lote × T_bloco (~60 s)
-  K = min(pendentes, 32)
+note over D, S
+  Leitura (acima) e envio (abaixo) são independentes: a leitura segue o
+  ritmo de fechamento dos blocos, o envio segue o ritmo de T_lat.
 end note
 
-A -> D : Pedido de lote 0x05 (K) (SYNC_RX)
+D -> D : flush do bloco\npara a flash (HEAD_seq++)
+D -> A : Aviso de novo bloco 0x07 (SYNC_TX)
+A -> D : Pedido de lote 0x05\n(K = blocos não lidos) (SYNC_RX)
 
-loop K blocos, a partir de ACK_seq + 1
+loop K blocos, a partir do cursor de envio
   D -> D : lê o bloco da flash, confere o CRC\ne consolida em TLV (até 1059 B)
   note over D
     MTU (~272 B) não comporta o bloco: fragmentos de até MTU − 4 B,
@@ -34,20 +37,26 @@ loop K blocos, a partir de ACK_seq + 1
     A -> D : Erro 0x04 (mensagem incompleta)
     D -> D : cursor volta para ACK_seq + 1
   end
+  A -> BUF : guarda o bloco remontado
 end
 
-A -> S : POST /v1/dongles/blocos\n(K blocos 0x03, token JWT) (HTTPS)
+opt bloco mais antigo no buffer >= T_lat, ou buffer >= 32 (máximo por POST)
+  A -> BUF : lê até 32 blocos, em ordem
+  BUF --> A : blocos
+  A -> S : POST /v1/dongles/blocos\n(até 32 blocos 0x03, token JWT) (HTTPS)
 
-alt lote aceito (ACK_seq ≥ último seq do lote)
-  S -> A : 200 com ACK 0x04 (ACK_seq, c_conf, flags, tag)
-  A -> D : ACK 0x04 (SYNC_RX)
-  D -> D : valida a tag, avança ACK_seq\ne libera a flash
-else falha ou lote interrompido
-  note over A
-    Demais respostas (200 parcial, 401, 429, 5xx, sem rede):
-    ver tabela de erros. Em geral o app descarta o lote
-    e manda Erro 0x07; o dongle volta o cursor
-    para ACK_seq + 1 e nada é apagado da flash.
-  end note
+  alt lote aceito (ACK_seq >= último seq do lote)
+    S --> A : 200 com ACK 0x04 (ACK_seq, c_conf, flags, tag)
+    A -> BUF : remove do buffer até ACK_seq
+    A -> D : ACK 0x04 (SYNC_RX)
+    D -> D : valida a tag, avança ACK_seq\ne libera a flash
+  else falha ou lote interrompido
+    note over A
+      Demais respostas (200 parcial, 401, 429, 5xx, sem rede):
+      ver tabela de erros. O lote fica no buffer e o app
+      reenvia com espera exponencial de 1 s a 5 min;
+      nada é apagado da flash nem do buffer.
+    end note
+  end
 end
 @enduml

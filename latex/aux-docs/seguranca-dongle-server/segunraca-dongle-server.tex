@@ -741,7 +741,7 @@ Isso é necessário pelo fato de as mensagens do SYNC\_TX poderem ser fragmentad
 		\hline
 		0x04 & ACK & 25 & $ACK_{seq}$ (4), $c_{conf}$ (4), $flags$ (1), $tag$ (16) \\
 		\hline
-		0x05 & Pedido de lote & 2 & $K$ (2) \\
+		0x05 & Pedido de lote & 2 & $K$ (2): blocos ainda não lidos pelo app, limitados pelo espaço livre no \textit{buffer} \\
 		\hline
 		0x06 & Erro & 1 & código (1) \\
 		\hline
@@ -777,16 +777,16 @@ ele calcula o valor de quantos blocos estão pendentes de envio a partir de $HEA
 		\hline
 		1 & Sem \textit{handshake} neste \textit{boot} & A cada \textit{boot} & Igual ao bit 0 & Faz o \textit{handshake}, para o \textit{boot} ganhar uma âncora de tempo \\
 		\hline
-		2 & \textit{Flash} acima de 80\% & Quando a ocupação da \textit{flash} passa de 80\% & Quando cai abaixo disso, depois que ACKs liberam espaço & Prioriza o envio: pede lotes de 32 em seguida e pode avisar o usuário \\
+		2 & \textit{Flash} acima de 80\% & Quando a ocupação da \textit{flash} passa de 80\% & Quando cai abaixo disso, depois que ACKs liberam espaço & Prioriza o envio: lê até encher o \textit{buffer} e envia lotes de 32 em seguida, sem esperar $T_{lat}$, e pode avisar o usuário \\
 		\hline
 		3 a 7 & Reservados & --- & --- & Ignora \\
 		\hline
 	\end{tabular}
 \end{table}
 
-Quando a conta de pendentes no app chegar em $N_lote$, ou quando se passar $N_lote*T_Bloco$ segundos desde o lote de blocos enviados, o app envia um bloco de Pedido de Lote (0x05) para o dongle via SYNC\_RX.
-Como a maioria das configurações tem $T_max$ de 100ms ou 200ms, um bloco se completa em aproximadamente 10s ($T_bloco=10s$), então considera-se $N_lote=6$ para enviar 6 blocos a cada 1 minuto.
-A quantidade de blocos pedida na mensagem é sempre o mínimo entre o número de pendentes e a quantidade máxima de blocos aceitos na requisição POST para o servidor, que é 32 blocos.
+Ao receber um aviso de novo bloco, o app pede ao dongle os blocos que ainda não leu, com um bloco de Pedido de Lote (0x05) em que $K$ é o mínimo entre os blocos ainda não lidos (diferença entre $HEAD_{seq}$ e o
+último $seq$ lido) e o espaço livre no \textit{buffer} do app. Os blocos lidos ficam num \textit{buffer} em memória até serem enviados ao servidor e confirmados. O momento do envio é controlado pelo
+parâmetro de latência $T_{lat}$, descrito na seção \ref{subsec:ritmo-envio-buffer}, e cada POST leva no máximo 32 blocos.
 
 É importante notar que o MTU do BLE não suporta um bloco inteiro, que fica negociado em torno de 272 bytes. O bloco completo, como mostra a figura \ref{fig:bloco-completo} terá 1059 bytes, sendo 1 byte com o 
 tipo, 2 bytes com o comprimento, 1024 bytes de dados e, por fim, 32 bytes de tag. Os bytes do CRC são conferidos antes de o dongle enviar os blocos via BLE, então não aparecem aqui.
@@ -849,13 +849,13 @@ O bloco de erro carrega um byte que pode definir diferentes tipos de erros. Os e
 	\hline
 	Dongle $\rightarrow$ app & 0x05 sem sessão & Pedido de lote antes do ACK de abertura, ou após descarte de blocos não confirmados por \textit{flash} cheia & O app faz o \textit{handshake} ou reescreve o ACK de abertura se ainda o tiver \\
 	\hline
-	App $\rightarrow$ dongle & 0x04 mensagem incompleta & Salto no contador de fragmentos, ou 2 s sem o próximo fragmento & O dongle volta o cursor de envio para $ACK_{seq} + 1$ \\
+	App $\rightarrow$ dongle & 0x04 mensagem incompleta & Salto no contador de fragmentos, ou 2 s sem o próximo fragmento & O dongle volta o cursor de envio para $ACK_{seq} + 1$; o app mantém no \textit{buffer} só o que já foi confirmado e relê a partir daí \\
 	\hline
-	App $\rightarrow$ dongle & 0x07 reenviar desde a fronteira & POST que falhou de vez, ou ACK com $ACK_{seq}$ abaixo do último $seq$ do lote & O dongle volta o cursor de envio para $ACK_{seq} + 1$ \\
+	App $\rightarrow$ dongle & 0x07 reenviar desde a fronteira & O app descartou blocos lidos e ainda não confirmados (\textit{buffer} reiniciado) & O dongle volta o cursor de envio para $ACK_{seq} + 1$ \\
 	\hline
 	Servidor $\rightarrow$ app & 200 com ACK e $ACK_{seq} \geq$ último $seq$ do lote & Lote aceito & O app escreve o ACK no dongle e segue \\
 	\hline
-	Servidor $\rightarrow$ app & 200 com ACK e $ACK_{seq} <$ último $seq$ do lote & Lote interrompido: tag inválida, salto não declarado ou blocos fora de ordem & O app escreve o ACK no dongle, manda Erro 0x07 e descarta o lote \\
+	Servidor $\rightarrow$ app & 200 com ACK e $ACK_{seq} <$ último $seq$ do lote & Lote interrompido: tag inválida, salto não declarado ou blocos fora de ordem & O app escreve o ACK no dongle e mantém no \textit{buffer} os blocos acima do $ACK_{seq}$, que vão no próximo POST \\
 	\hline
 	Servidor $\rightarrow$ app & 401 & Token ausente, inválido ou expirado & O app faz um \textit{handshake} novo e reenvia o lote \\
 	\hline
@@ -865,7 +865,7 @@ O bloco de erro carrega um byte que pode definir diferentes tipos de erros. Os e
 	\hline
 	Servidor $\rightarrow$ app & 429 & Limite de taxa ou lote acima de 32 blocos & O app espera o Retry-After e reenvia com K menor \\
 	\hline
-	Servidor $\rightarrow$ app & 5xx, 503 ou falha de rede & Servidor indisponível ou sobrecarregado & O app tenta o mesmo lote com espera exponencial de 1 s a 5 min; o próximo K cai pela metade \\
+	Servidor $\rightarrow$ app & 5xx, 503 ou falha de rede & Servidor indisponível ou sobrecarregado & O lote continua no \textit{buffer}, e o app o reenvia com espera exponencial de 1 s a 5 min; o próximo $K$ cai pela metade \\
 \end{longtable}
 
 \begin{figure}[H]
@@ -986,11 +986,32 @@ lugar das leituras: BOOT (\textit{tipo} 0xFE) ou LOSS (\textit{tipo} 0xFD), com 
 	\legend{Fonte: elaborado pelo autor.}
 \end{figure}
 
-Para permitir mais eficiência, o dongle usa uma estratégia de \textit{cursor de envio} para enviar novos blocos para o app antes de receber o ACK dos anteriores.
-Quando o app pede por mais blocos, mesmo o ACK ainda não tendo chegado dos blocos anteriores, o dongle manda para o app via BLE, que já lê e remonta os fragmentos
-para ter os blocos prontos para enviar ao servidor. Assim que o post é concluído, o próximo lote pode ser enviado sem esperar uma leitura do BLE, garantindo maior eficiência.
-Caso a requisição para o servidor falhe, o app manda um bloco de erro com parâmetro 0x07 e o dongle volta o cursor de envio para o primeiro bloco ainda não reconhecido pelo servidor, que é o $ACK_{seq} + 1$,
-e o app descarta o pacote lido anteriormente. No fim, nada se perde, pois a flash só é limpa quando o ACK é recebido.
+O dongle mantém um cursor de envio, que é o próximo $seq$ a mandar ao app. A cada Pedido de Lote, ele envia a partir do cursor e o avança, mesmo que o ACK dos blocos anteriores ainda não tenha chegado.
+Assim o app lê cada bloco logo depois de o dongle fechá-lo e o guarda no \textit{buffer}, e o envio ao servidor não precisa esperar a leitura pelo BLE. Se um POST falhar ou o servidor interromper um lote,
+os blocos continuam no \textit{buffer} do app e são reenviados de lá, sem nova leitura. O cursor não tem prazo: ele só volta para $ACK_{seq} + 1$ no início de uma nova sessão ou quando o app manda um bloco
+de erro (0x04 ou 0x07), porque nesses casos os blocos lidos podem ter se perdido. As regras do cursor estão na tabela \ref{tab:regras-cursor}. No fim, nada se perde, pois a \textit{flash} só é limpa quando
+o ACK é recebido.
+
+\begin{table}[H]
+	\centering
+	\caption{Regras do cursor de envio}
+	\label{tab:regras-cursor}
+	\begin{tabular}{|>{\raggedright\arraybackslash}m{0.32\textwidth}|>{\raggedright\arraybackslash}m{0.48\textwidth}|}
+		\hline
+		\textbf{Evento} & \textbf{Efeito no cursor} \\
+		\hline
+		Início de sessão (nova conexão BLE) & cursor $= ACK_{seq} + 1$ \\
+		\hline
+		Envio de um bloco ao app & O cursor avança 1 \\
+		\hline
+		Pedido de Lote & Envia do cursor até $\min(\text{cursor} + K - 1,\ HEAD_{seq})$ \\
+		\hline
+		ACK ou desafio com $ACK_{seq}$ maior & Libera a \textit{flash} até $ACK_{seq}$; cursor $= \max(\text{cursor},\ ACK_{seq} + 1)$ \\
+		\hline
+		Erro 0x04 ou 0x07 vindo do app & cursor $= ACK_{seq} + 1$ \\
+		\hline
+	\end{tabular}
+\end{table}
 
 \begin{figure}[H]
 	\centering
@@ -1018,8 +1039,8 @@ e o app descarta o pacote lido anteriormente. No fim, nada se perde, pois a flas
 		\node[above] at ($(b5.north)+(0,1.1)$) {Cursor anterior};
 
 		% Cursor atual
-		\draw[seta] ($(b8.north)+(0,1.1)$) -- (b8.north);
-		\node[above] at ($(b8.north)+(0,1.1)$) {Cursor};
+		\draw[seta] ($(b9.north)+(0,1.1)$) -- (b9.north);
+		\node[above] at ($(b9.north)+(0,1.1)$) {Cursor};
 
 		% Chave sobre os blocos em envio ao servidor
 		\draw[decorate, decoration={brace, amplitude=6pt, mirror}, thick]
@@ -1027,30 +1048,30 @@ e o app descarta o pacote lido anteriormente. No fim, nada se perde, pois a flas
 			node[midway, below=9pt, align=center, font=\footnotesize]
 			{sendo enviados ao\\servidor pelo app};
 
-		% Chave sobre os blocos enviados antes do ACK
+		% Chave sobre os blocos lidos e no buffer
 		\draw[decorate, decoration={brace, amplitude=6pt, mirror}, thick]
 			($(b6.south west)+(0.05,-0.15)$) -- ($(b8.south east)+(-0.05,-0.15)$)
 			node[midway, below=9pt, align=center, font=\footnotesize]
-			{enviados ao app antes do\\ACK dos blocos anteriores};
+			{lidos pelo app e\\guardados no \textit{buffer}};
 
 		% Legenda
 		\node[font=\small, align=center] at (6.6,-3.3) {%
 			\tikz[baseline=-0.5ex]\draw[fill=green!45] (0,-0.15) rectangle (0.3,0.15); reconhecidos pelo servidor\quad
 			\tikz[baseline=-0.5ex]\draw[fill=orange!60] (0,-0.15) rectangle (0.3,0.15); em envio ao servidor\\[1mm]
-			\tikz[baseline=-0.5ex]\draw[fill=violet!40] (0,-0.15) rectangle (0.3,0.15); enviados ao app antes do ACK\quad
-			\tikz[baseline=-0.5ex]\draw[fill=white] (0,-0.15) rectangle (0.3,0.15); ainda não enviados};
+			\tikz[baseline=-0.5ex]\draw[fill=violet!40] (0,-0.15) rectangle (0.3,0.15); lidos e guardados no \textit{buffer}\quad
+			\tikz[baseline=-0.5ex]\draw[fill=white] (0,-0.15) rectangle (0.3,0.15); ainda não lidos};
 	\end{tikzpicture}
 	\legend{Fonte: elaborado pelo autor.}
 \end{figure}
 
-Na figura \ref{fig:cursor-envio}, os blocos 1 e 2 já foram reconhecidos pelo servidor, os blocos 3 a 5 estão sendo enviados ao servidor pelo app e o cursor, que antes estava no bloco 5,
-avançou para o bloco 8, pois os blocos 6 a 8 já foram enviados ao app antes do ACK dos anteriores.
-A figura \ref{fig:cursor-paralelismo} compara os dois comportamentos: sem o cursor, o dongle só transfere o lote seguinte depois do ACK do anterior; com o cursor,
-a transferência BLE do lote seguinte acontece durante o \textit{post} do lote atual.
+Na figura \ref{fig:cursor-envio}, os blocos 1 e 2 já foram reconhecidos pelo servidor, os blocos 3 a 5 estão sendo enviados ao servidor pelo app, e os blocos 6 a 8 já foram lidos pelo app e aguardam
+no \textit{buffer} o próximo POST, com o cursor no bloco 9.
+A figura \ref{fig:cursor-paralelismo} compara os dois comportamentos: sem \textit{buffer}, o dongle só transfere o lote seguinte depois do ACK do anterior; com \textit{buffer}, cada bloco é lido assim
+que fecha, e o envio ao servidor acontece no ritmo de $T_{lat}$, independente da leitura.
 
 \begin{figure}[H]
 	\centering
-	\caption{Paralelismo entre a transferência BLE e o envio ao servidor, sem e com cursor de envio}
+	\caption{Paralelismo entre a leitura pelo BLE e o envio ao servidor, sem e com \textit{buffer} no app}
 	\label{fig:cursor-paralelismo}
 	\begin{tikzpicture}[
 			lane/.style={font=\small, anchor=east},
@@ -1062,8 +1083,8 @@ a transferência BLE do lote seguinte acontece durante o \textit{post} do lote a
 		]
 		\def\tlbox#1#2#3#4#5{\node[#1, minimum width=#4cm] at (#2,#3) {#5};}
 
-		% (a) sem cursor
-		\node[titulo] at (-2.3,0.9) {(a) Sem cursor: o dongle espera o ACK para enviar o próximo lote};
+		% (a) sem buffer
+		\node[titulo] at (-2.3,0.9) {(a) Sem \textit{buffer}: o dongle espera o ACK para enviar o próximo lote};
 		\node[lane] at (-0.2,0) {BLE};
 		\node[lane] at (-0.2,-0.9) {Servidor};
 		\tlbox{ble}{0}{0}{2}{Lote 1}
@@ -1071,21 +1092,23 @@ a transferência BLE do lote seguinte acontece durante o \textit{post} do lote a
 		\tlbox{ble}{5}{0}{2}{Lote 2}
 		\tlbox{post}{7}{-0.9}{3}{\textit{Post} do lote 2}
 
-		% (b) com cursor
-		\node[titulo] at (-2.3,-2.3) {(b) Com cursor: o BLE do próximo lote ocorre durante o \textit{post}};
+		% (b) com buffer: leituras curtas e independentes, POST periódico a cada T_lat
+		\node[titulo] at (-2.3,-2.3) {(b) Com \textit{buffer}: cada bloco é lido quando fecha, e o POST sai a cada $T_{lat}$};
 		\node[lane] at (-0.2,-3.2) {BLE};
 		\node[lane] at (-0.2,-4.1) {Servidor};
-		\tlbox{ble}{0}{-3.2}{2}{Lote 1}
-		\tlbox{post}{2}{-4.1}{3}{\textit{Post} do lote 1}
-		\tlbox{ble}{2}{-3.2}{2}{Lote 2}
-		\tlbox{post}{5}{-4.1}{3}{\textit{Post} do lote 2}
-		\tlbox{futuro}{5}{-3.2}{2}{Lote 3}
+		\tlbox{ble}{0}{-3.2}{1.2}{B1}
+		\tlbox{ble}{1.8}{-3.2}{1.2}{B2}
+		\tlbox{ble}{3.6}{-3.2}{1.2}{B3}
+		\tlbox{ble}{5.4}{-3.2}{1.2}{B4}
+		\tlbox{ble}{7.2}{-3.2}{1.2}{B5}
+		\tlbox{post}{0}{-4.1}{5.4}{\textit{POST} ($T_{lat}$): B1--B3}
+		\tlbox{futuro}{5.4}{-4.1}{5.4}{\textit{POST} ($T_{lat}$): B4--B5 $\cdots$}
 
-		% Comparação de tempo
-		\draw[dashed] (10,0.5) -- (10,-4.55);
-		\draw[dashed] (8,-3.65) -- (8,-4.55);
-		\draw[seta] (8,-4.4) -- (10,-4.4);
-		\node[font=\small, below] at (9,-4.4) {tempo economizado};
+		% Período T_lat
+		\draw[dashed] (0,-3.0) -- (0,-4.9);
+		\draw[dashed] (5.4,-3.0) -- (5.4,-4.9);
+		\draw[seta] (0,-4.75) -- (5.4,-4.75);
+		\node[font=\small, below] at (2.7,-4.75) {$T_{lat}$};
 
 		% Eixo do tempo
 		\draw[-{Stealth[length=2.5mm]}, thick] (0,-5.4) -- (10.8,-5.4) node[right, font=\small] {tempo};
@@ -1094,8 +1117,8 @@ a transferência BLE do lote seguinte acontece durante o \textit{post} do lote a
 \end{figure}
 
 Os diagramas \ref{seq:aviso-novo-bloco} e \ref{seq:lote-envio} mostram esse processo de comunicação e troca de mensagens BLE entre dongle e app pelo serviço de SYNC.
-O primeiro cobre o aviso de novo bloco e a decisão de \textit{handshake}, inclusive quando o app está sem conexão com a internet; o segundo cobre o pedido de lote,
-a fragmentação feita pelo dongle e o envio ao servidor.
+O primeiro cobre o aviso de novo bloco e a decisão de \textit{handshake}, inclusive quando o app está sem conexão com a internet; o segundo cobre a leitura contínua, o \textit{buffer} no app
+e o envio ao servidor.
 
 \begin{figure}[H]
 	\centering
@@ -1108,12 +1131,73 @@ a fragmentação feita pelo dongle e o envio ao servidor.
 
 \begin{figure}[H]
 	\centering
-	\caption{Diagrama de sequência do pedido de lote, da fragmentação e do envio ao servidor}
+	\caption{Diagrama de sequência da leitura contínua, do \textit{buffer} no app e do envio ao servidor}
 	\label{seq:lote-envio}
 	% Fonte PlantUML: ../assets/aux-docs/plantuml/aquisicao-lote-sequencia.puml
 	\includegraphics[width=\textwidth]{../../assets/aux-docs/aquisicao-lote-sequencia.png}
 	\legend{Fonte: elaborado pelo autor.}
 \end{figure}
+
+\subsection{Ritmo de envio e \textit{buffer} no app} \label{subsec:ritmo-envio-buffer}
+
+O envio dos blocos do app ao servidor é controlado por um único parâmetro de latência, $T_{lat}$, que define quanto tempo, no máximo, um bloco lido pode esperar no \textit{buffer} do app antes de ser
+enviado. Ele permite trocar latência por consumo de bateria do celular e por carga no servidor, sem mudar o dongle, o servidor ou o formato das mensagens. Os parâmetros são mostrados na tabela
+\ref{tab:params-buffer}.
+
+\begin{table}[H]
+	\centering
+	\caption{Parâmetros do envio com \textit{buffer} no app}
+	\label{tab:params-buffer}
+	\begin{tabular}{|>{\raggedright\arraybackslash}m{0.2\textwidth}|>{\raggedright\arraybackslash}m{0.52\textwidth}|>{\centering\arraybackslash}m{0.16\textwidth}|}
+		\hline
+		\textbf{Parâmetro} & \textbf{Significado} & \textbf{Padrão} \\
+		\hline
+		$T_{lat}$ & Tempo máximo que um bloco espera no \textit{buffer} antes de ser enviado & 60 s (de 10 a 300 s) \\
+		\hline
+		$B_{max}$ & Máximo de blocos no \textit{buffer} do app & 64 (ao menos o dobro do máximo de 32 blocos aceito por POST) \\
+		\hline
+		Espera entre tentativas & Após falha de rede ou 5xx & Exponencial de 1 s a 5 min \\
+		\hline
+	\end{tabular}
+\end{table}
+
+O app avalia a regra de envio a cada segundo e sempre que chega um aviso, um bloco ou um ACK. Se não houver POST em andamento e o \textit{buffer} não estiver vazio, ele envia quando o bloco mais antigo
+completar $T_{lat}$ desde o seu aviso, ou quando o \textit{buffer} acumular os 32 blocos aceitos por POST, limite fixado pelo servidor (tabela \ref{tab:erros-bloco}, erro 429). O segundo caso ocorre
+quando há atraso acumulado: os lotes de 32 saem em sequência, sem esperar $T_{lat}$. Antes de cada POST, se o token estiver ausente ou a menos de 5 minutos de expirar, o app faz um novo \textit{handshake}. Ao receber o ACK, o app remove do \textit{buffer} os blocos até
+$ACK_{seq}$, escreve o ACK no dongle e volta a ler os blocos disponíveis. Se o \textit{buffer} chegar a $B_{max}$, o app para de ler até um ACK liberar espaço, e os blocos continuam seguros na
+\textit{flash} do dongle.
+
+Em regime, com conexão disponível, nenhum bloco espera mais do que o tempo da equação \ref{eq:latencia-max}:
+
+\begin{equation} \label{eq:latencia-max}
+	L_{max} = T_{bloco} + T_{lat} + t_{envio}
+\end{equation}
+
+em que $T_{bloco} = 10$ s é o tempo máximo de fechamento de um bloco e $t_{envio}$ é a ida e volta do POST. Reduzir $T_{lat}$ abaixo de cerca de 10 s não ajuda, porque o limite passa a ser o fechamento
+do bloco. A tabela \ref{tab:efeito-tlat} mostra o efeito esperado de diferentes valores.
+
+\begin{table}[H]
+	\centering
+	\caption{Efeito de $T_{lat}$ no envio (um bloco a cada 6 a 10 s; servidor com 10 mil dongles)}
+	\label{tab:efeito-tlat}
+	\begin{tabular}{|>{\centering\arraybackslash}m{0.1\textwidth}|>{\centering\arraybackslash}m{0.18\textwidth}|>{\centering\arraybackslash}m{0.18\textwidth}|>{\centering\arraybackslash}m{0.14\textwidth}|>{\centering\arraybackslash}m{0.22\textwidth}|}
+		\hline
+		\textbf{$T_{lat}$} & \textbf{Blocos por POST} & \textbf{POSTs por minuto} & \textbf{$L_{max}$} & \textbf{Requisições por segundo no servidor} \\
+		\hline
+		10 s & 1 a 2 & 6 & cerca de 20 s & cerca de 1.000 \\
+		\hline
+		30 s & 3 a 5 & 2 & cerca de 40 s & cerca de 330 \\
+		\hline
+		60 s & 6 a 10 & 1 & cerca de 70 s & cerca de 170 \\
+		\hline
+		120 s & 12 a 20 & 0,5 & cerca de 130 s & cerca de 85 \\
+		\hline
+	\end{tabular}
+\end{table}
+
+Para o TCC e o \textit{benchmark}, $T_{lat}$ é uma configuração local do app, com padrão de 60 s. Numa versão comercial, o servidor pode devolvê-lo junto com o token na resposta ao desafio, e o mínimo
+é reforçado pelo limite de taxa por DevId. Em qualquer caso, $T_{lat}$ altera apenas quando os dados chegam ao servidor, nunca se chegam ou se são aceitos: o dongle só apaga um bloco com o ACK, o
+servidor só aceita blocos em ordem e o app nunca altera os bytes de um bloco.
 
 \section{Implementação do servidor}
 
@@ -1273,7 +1357,8 @@ No \texttt{POST /v1/dongles/\{id\}/desafio/resposta}:
 	\texttt{ancora\_tempo} quando houver, cria a linha de \texttt{boot} se ainda não existir e marca o boot como pendente para o
 	worker.
 	\item Faz o \textit{commit}, avisa o worker com \texttt{NOTIFY}, emite o JWT ($sub = DevId$, com o $jti$ gravado em
-	\texttt{desafio}) e responde o ACK 0x04 com o $ACK_{seq}$ resultante, a tag $K_{auth}$ e o token.
+	\texttt{desafio}) e responde o ACK 0x04 com o $ACK_{seq}$ resultante, a tag $K_{auth}$, o token e, opcionalmente, o valor de
+	$T_{lat}$ a ser usado na sessão (seção \ref{subsec:ritmo-envio-buffer}).
 \end{enumerate}
 
 $S_1$ e $S_2$ vêm do relógio da API (\texttt{time.Now()}), sincronizado por NTP, e não do \texttt{now()} do PostgreSQL, que devolve o

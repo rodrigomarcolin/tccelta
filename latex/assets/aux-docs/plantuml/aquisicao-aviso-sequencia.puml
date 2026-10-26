@@ -41,6 +41,7 @@ alt flags bit 0 ou 1 ligado (sem handshake) ou app sem ACK_seq válido
   end
 else handshake válido
   A -> A : pendentes = HEAD_seq − ACK_seq
-  note over A : segue para o pedido de lote
+  A -> D : Pedido de lote 0x05\n(K = blocos não lidos) (SYNC_RX)
+  D -> A : blocos (SYNC_TX)
 end
 @enduml
