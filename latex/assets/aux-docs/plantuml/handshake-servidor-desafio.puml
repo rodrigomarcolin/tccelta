@@ -1,0 +1,44 @@
+' Diagrama de sequência do handshake no servidor: POST /v1/dongles/{id}/desafio
+' Cada tabela do banco aparece como uma entidade própria, recebendo métodos que
+' representam a ação (não SQL cru). Continua em handshake-servidor-resposta.puml.
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:handshake-servidor-desafio)
+' Gerar PNG (Git Bash): ./generate.sh handshake-servidor-desafio.puml
+@startuml handshake-servidor-desafio
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam noteBackgroundColor #FFF4E0
+skinparam noteBorderColor #C77700
+
+participant "App" as A
+participant "API" as S
+entity "desafio" as Desafio
+entity "dongle_estado" as DongleEstado
+
+== POST /v1/dongles/{id}/desafio ==
+
+A -> S : pedido de desafio (DevId)
+note over S
+  Sem autenticação: só o dongle
+  com K_auth consegue responder.
+end note
+
+S -> S : limita taxa por DevId\n(429 se exceder)
+S -> DongleEstado : incrementarCS()
+DongleEstado --> S : c_S
+S -> S : gera N_S (16 bytes,\ncrypto/rand)
+
+note over S
+  **S1** = relógio da API
+  (time.Now(), antes de emitir)
+end note
+
+S -> Desafio : emitir(dongle_id, c_S, nonce, s1, expira_em)
+S -> A : Desafio 0x01\n(c_S, N_S, tag K_auth)
+
+note over A
+  Continua na figura do
+  POST /desafio/resposta.
+end note
+@enduml

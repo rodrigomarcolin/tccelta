@@ -1235,7 +1235,9 @@ correspondente, sem gerar linhas nas tabelas de PID e de posições. Ao final, a
 \subsection{Handshake}
 
 Do lado do servidor, o \textit{handshake} são duas requisições do app, com o estado guardado entre elas na tabela \texttt{desafio}, como
-mostra a \autoref{fig:handshake-servidor}. Ele serve a quatro propósitos: provar que a resposta do dongle é nova, por meio de $c_S$ e
+mostram as \autoref{fig:handshake-servidor-desafio} (pedido de desafio), \autoref{fig:handshake-servidor-resposta} (resposta do dongle)
+e \autoref{fig:handshake-servidor-worker} (processamento assíncrono disparado ao final da segunda). Ele serve a quatro propósitos: provar
+que a resposta do dongle é nova, por meio de $c_S$ e
 $N_S$; medir a âncora de tempo do boot, a partir de $S_1$, $S_2$ e do $t\_ms$ do dongle; receber $HEAD_{seq}$ e $TAIL_{seq}$ atestados
 pelo dongle; e emitir o token JWT que autoriza o envio de blocos. Desafio, resposta e ACK são autenticados com $K_{auth}$.
 
@@ -1286,10 +1288,28 @@ autenticado com $K_{auth}$ e amarrado a $N_S$, o app não consegue forjar uma pe
 
 \begin{figure}[H]
 	\centering
-	\caption{Diagrama de sequência do \textit{handshake} no servidor}
-	\label{fig:handshake-servidor}
-	% Fonte PlantUML: ../assets/aux-docs/plantuml/handshake-servidor.puml
-	\includegraphics[width=\textwidth]{../../assets/aux-docs/handshake-servidor.png}
+	\caption{Diagrama de sequência do \textit{handshake} no servidor: \texttt{POST /desafio}}
+	\label{fig:handshake-servidor-desafio}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/handshake-servidor-desafio.puml
+	\includegraphics[width=0.85\textwidth]{../../assets/aux-docs/handshake-servidor-desafio.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+\begin{figure}[H]
+	\centering
+	\caption{Diagrama de sequência do \textit{handshake} no servidor: \texttt{POST /desafio/resposta}}
+	\label{fig:handshake-servidor-resposta}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/handshake-servidor-resposta.puml
+	\includegraphics[width=\textwidth]{../../assets/aux-docs/handshake-servidor-resposta.png}
+	\legend{Fonte: elaborado pelo autor.}
+\end{figure}
+
+\begin{figure}[H]
+	\centering
+	\caption{Diagrama de sequência do \textit{handshake} no servidor: processamento assíncrono do worker}
+	\label{fig:handshake-servidor-worker}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/handshake-servidor-worker.puml
+	\includegraphics[width=0.6\textwidth]{../../assets/aux-docs/handshake-servidor-worker.png}
 	\legend{Fonte: elaborado pelo autor.}
 \end{figure}
 

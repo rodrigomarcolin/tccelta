@@ -1,0 +1,31 @@
+' Diagrama de sequência do processamento assíncrono do worker após o handshake
+' Cada tabela aparece como uma entidade própria, recebendo métodos que
+' representam a ação (não SQL cru). Continuação de handshake-servidor.puml:
+' disparado pelo NOTIFY emitido pela API ao final da transação do handshake.
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:handshake-servidor-worker)
+' Gerar PNG (Git Bash): ./generate.sh handshake-servidor-worker.puml
+@startuml handshake-servidor-worker
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam noteBackgroundColor #FFF4E0
+skinparam noteBorderColor #C77700
+
+participant "Worker" as W
+entity "boot" as Boot
+entity "ancora_tempo" as AncoraTempo
+
+note over W
+  Disparado pelo NOTIFY ao final da
+  transação do handshake (figura anterior).
+end note
+
+W -> Boot : buscarPendente()
+Boot --> W : boot
+W -> AncoraTempo : listarDoBoot(boot_id)
+AncoraTempo --> W : medições
+W -> W : recalcula a_ms, b,\nincerteza_base_ms
+W -> Boot : atualizarTempo(a_ms, b,\nincerteza_base_ms)
+W -> Boot : liberar()
+@enduml
