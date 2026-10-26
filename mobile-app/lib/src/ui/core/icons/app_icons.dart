@@ -50,9 +50,6 @@ enum AppIconData {
   /// Desconectar (plugue removido) — ação destrutiva.
   desconectar('desconectar'),
 
-  /// Cadeado — criptografia/PSK.
-  cadeado('cadeado'),
-
   /// Motor — aba de DTCs / luz de falha (MIL).
   motor('motor');
 

@@ -22,7 +22,7 @@ void main() {
   });
 
   test('desconecta e apaga o dongle salvo (só os dois repositories '
-      'recebidos — não toca em configurações de criptografia)', () async {
+      'recebidos)', () async {
     await useCase.call();
 
     verify(dongle.disconnect).called(1);
