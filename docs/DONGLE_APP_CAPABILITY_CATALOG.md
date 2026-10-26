@@ -10,7 +10,7 @@ This catalog describes the current `feature/elm327-multi-ecu-isotp` firmware and
 
 ```mermaid
 flowchart LR
-    App[Mobile app] --> BLE[Secure BLE transport]
+    App[Mobile app] --> BLE[BLE transport]
     BLE --> Task[Elm327Task\nserialized request queue]
     Task --> ELM[Elm327\nAT/OBD parser + whitelist]
     ELM --> OBD[Obd2Can\nOBD service/PID mapping]
@@ -18,7 +18,7 @@ flowchart LR
     ISOTP --> CAN[CAN controller/transceiver]
 ```
 
-The security layer must authenticate a request before `Elm327` sees it. `Elm327` then validates the ELM command and whitelist, performs one synchronous CAN transaction, and returns a response ending in `>`.
+`Elm327` validates the ELM command against the whitelist, performs one synchronous CAN transaction, and returns a response ending in `>`. The app itself implements no cryptography: it talks to the dongle over plain-text ELM327 commands/responses via the BLE Nordic UART Service.
 
 ## Dongle surface and app coverage
 
@@ -79,10 +79,6 @@ The dongle supports both quiet-time completion and an expected-response count. T
 
 `ATST` is implemented in the dongle, but the app has no setting or policy for it. The app also does not expose the difference between no response, CAN error, malformed ISO-TP, and a valid empty result.
 
-### 6. Security variant compatibility
-
-The active app data source currently wraps BLE with the static-PSK encrypted connection. Handshake helper/test files exist locally, but they are not the same as proving production interoperability with every firmware security variant, especially handshake-plus-replay-counter mode. The app must select one protocol and validate its framing, nonce/session-key derivation, counter direction, and failure behavior against the firmware.
-
 ## What the app already mocks or duplicates
 
 | App mock/fixture | Real dongle capability it represents | Assessment |
@@ -92,7 +88,6 @@ The active app data source currently wraps BLE with the static-PSK encrypted con
 | Scripted ELM responses for `ATZ`, `ATE0`, `ATDP`, `0100`, live PIDs, DTCs, and freeze frames | Current textual ELM contract | Covers single-response happy paths only; it does not model multi-line, ECU headers, interleaving, timeout completion, `ATST`, or response-count suffixes. |
 | Dashboard example values and conversion formulas | Firmware `Obd2Mock`/simulator values and OBD PID formulas | Good for rendering tests; these are duplicated data, not a second implementation of CAN behavior. |
 | App DTC definitions/catalog | Decoding and display of DTC codes | This is domain metadata. It is not evidence that the dongle produced the listed codes. |
-| App static-PSK BLE fixtures | Dongle encrypted transport | Useful for transport tests, but not sufficient to validate handshake/replay-counter firmware. |
 
 ## Most important compatibility change
 
@@ -120,11 +115,10 @@ Then:
 ## Priority order
 
 1. **P0 — response parsing:** support multiple lines, headers, mixed single/multi-frame results, and explicit completion/error states.
-2. **P0 — security interoperability:** integrate and test the selected handshake/replay protocol in the production BLE data source; do not silently fall back to plaintext.
-3. **P1 — response-count optimization:** send `SSPPN`/`SSN` when the app has a valid expected count, while retaining timeout behavior for unknown counts.
-4. **P1 — ECU-aware domain models:** add ECU identity to telemetry, DTC, and freeze-frame results.
-5. **P2 — useful AT support:** expose adapter/protocol diagnostics only where they cannot alter vehicle behavior; keep configuration-changing commands rejected.
-6. **P2 — test realism:** add fixtures for two ECUs, interleaved ISO-TP, one single-frame plus one multi-frame response, missing ECU, malformed frame, and timeout completion.
+2. **P1 — response-count optimization:** send `SSPPN`/`SSN` when the app has a valid expected count, while retaining timeout behavior for unknown counts.
+3. **P1 — ECU-aware domain models:** add ECU identity to telemetry, DTC, and freeze-frame results.
+4. **P2 — useful AT support:** expose adapter/protocol diagnostics only where they cannot alter vehicle behavior; keep configuration-changing commands rejected.
+5. **P2 — test realism:** add fixtures for two ECUs, interleaved ISO-TP, one single-frame plus one multi-frame response, missing ECU, malformed frame, and timeout completion.
 
 ## Relevant implementation locations
 

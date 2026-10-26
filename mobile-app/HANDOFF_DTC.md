@@ -374,10 +374,10 @@ Para a implementação real:
 - **Sem hardware**: `FakeDtcRepositoryImpl` continua sendo o dev default
   enquanto a implementação real não estiver plugada no
   `dtcRepositoryProvider` — nada muda aqui até a troca final.
-- **Com hardware real**: grave `esp32-firmware` no perfil `-e twai` (sem
-  PSK — mais simples pra testar; ver `esp32-firmware/README.md` para os
-  perfis `_psk`/`_handshake` quando quiser testar com criptografia depois),
-  conecte ao `simulador/ECUSim` via CAN físico, e use
+- **Com hardware real**: grave `esp32-firmware` no perfil `-e twai`
+  (o app não implementa nenhuma camada de criptografia — conecta direto via
+  BLE/ELM327 em texto puro, então os demais perfis do firmware não se
+  aplicam aqui), conecte ao `simulador/ECUSim` via CAN físico, e use
   `test-scripts/hil_dongle_dtc.py --com <porta> --scenario <nome>` para
   montar os cenários (`limpo`, `falha_unica`, `multiframe`, `multi_ecu`)
   **antes** de abrir o app e ler pela tela de Diagnóstico — o script isola
