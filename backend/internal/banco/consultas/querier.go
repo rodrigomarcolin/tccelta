@@ -64,6 +64,15 @@ type Querier interface {
 	RegistrarRejeitado(ctx context.Context, arg RegistrarRejeitadoParams) error
 	// estado.sql
 	TravarDongle(ctx context.Context, dongleID int32) error
+	VerContarAlertas(ctx context.Context, dongleID int32, tipo string) (int64, error)
+	VerContarAncoras(ctx context.Context, dongleID int32) (int64, error)
+	VerContarLeituras(ctx context.Context, dongleID int32) (int64, error)
+	VerContarPosicoes(ctx context.Context, dongleID int32) (int64, error)
+	VerContarRejeitados(ctx context.Context, dongleID int32) (int64, error)
+	VerEstadoDongle(ctx context.Context, devID []byte) (VerEstadoDongleRow, error)
+	VerHoraDaLeitura(ctx context.Context, dongleID int32) (float64, error)
+	VerListarBoots(ctx context.Context, dongleID int32) ([]VerListarBootsRow, error)
+	VerListarLacunas(ctx context.Context, dongleID int32) ([]VerListarLacunasRow, error)
 }
 
 var _ Querier = (*Queries)(nil)
