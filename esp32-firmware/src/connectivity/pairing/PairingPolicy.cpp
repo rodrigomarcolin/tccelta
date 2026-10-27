@@ -111,7 +111,11 @@ PairingPolicy::Link* PairingPolicy::allocate(uint16_t conn) {
 }
 
 void PairingPolicy::addReject(Actions& out, uint16_t conn, uint8_t hci) {
-    if (out.rejectCount < kMaxLinks + 1) out.reject[out.rejectCount++] = Reject{conn, hci};
+    if (out.rejectCount < kMaxLinks + 1) {
+        Reject& r = out.reject[out.rejectCount++];
+        r.conn = conn;
+        r.hciReason = hci;
+    }
 }
 
 void PairingPolicy::addDeleteBond(Actions& out, uint16_t conn) {

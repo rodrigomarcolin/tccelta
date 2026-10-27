@@ -4,4 +4,4 @@ __pycache__/
 latex/**/*.pdf
 
 # Arquivo PDF temporário antes do LATEX
-!latex/aux-docs/firmware-coletor/Investigação-3.pdf
+!latex/aux-docs/firmware-coletor/Investigação-3.pdf*.pcapng
