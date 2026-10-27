@@ -1,0 +1,54 @@
+services:
+  banco:
+    ports: !reset []
+  vault:
+    entrypoint: ["vault", "server", "-config=/vault/config/vault.hcl"]
+    environment:
+      VAULT_ADDR: https://127.0.0.1:8200
+      VAULT_CACERT: /vault/certs/ca.pem
+    secrets: !reset []
+    volumes:
+      - ./deploy/vault/config:/vault/config:ro
+      - ./deploy/certs/vault:/vault/certs:ro
+      - vault_dados:/vault/data
+      - vault_init:/vault/init
+      - vault_auditoria:/vault/logs
+    healthcheck:
+      # 200 ativo; 429 standby; 473 perf standby; 501 nao inicializado; 503 selado
+      test: ["CMD-SHELL", "wget -q --no-check-certificate -O /dev/null 'https://127.0.0.1:8200/v1/sys/health?standbyok=true' || exit 1"]
+    ports: !reset []
+  vault-unseal:
+    image: hashicorp/vault:${VAULT_VERSAO:-1.18}
+    entrypoint: ["/bin/sh", "/vault/scripts/init-unseal.sh"]
+    environment: { VAULT_ADDR: "https://vault:8200", VAULT_CACERT: /vault/certs/ca.pem }
+    volumes:
+      - ./deploy/vault/scripts:/vault/scripts:ro
+      - ./deploy/certs/vault/ca.pem:/vault/certs/ca.pem:ro
+      - vault_init:/vault/init
+    depends_on: { vault: { condition: service_started } }
+    restart: "no"
+    networks: [kms]
+  vault-bootstrap:
+    environment: { VAULT_ADDR: "https://vault:8200", VAULT_CACERT: /vault/certs/ca.pem, PERFIL: prodlike }
+    secrets: !reset []
+    volumes:
+      - ./deploy/vault/scripts:/vault/scripts:ro
+      - ./deploy/vault/politicas:/vault/politicas:ro
+      - ./deploy/certs/vault/ca.pem:/vault/certs/ca.pem:ro
+      - vault_init:/vault/init:ro
+      - vault_approle_api:/approle/api
+      - vault_approle_ferramentas:/approle/ferramentas
+      - vault_approle_rotacao:/approle/rotacao
+    depends_on: !override
+      vault-unseal: { condition: service_completed_successfully }
+  api:
+    environment:
+      VAULT_ADDR: https://vault:8200
+      VAULT_CACERT: /run/secrets/vault_ca
+    secrets: [pg_senha_api, redis_senha, vault_ca]
+    ports: !reset []
+networks:
+  dados: { internal: true }
+  kms: { internal: true }
+secrets:
+  vault_ca: { file: ./deploy/certs/vault/ca.pem }
