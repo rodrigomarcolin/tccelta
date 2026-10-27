@@ -2,17 +2,38 @@ name: backend-ci
 
 on:
   pull_request:
-    paths: ["backend/**", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "kms/**", ".github/workflows/backend-ci.yml"]
   push:
     branches: [master]
-    paths: ["backend/**"]
+    paths: ["backend/**", "kms/**"]
 
 defaults:
   run:
     working-directory: backend
 
 jobs:
+  # lint, unit, integracao e vuln so rodam quando o backend muda; o e2e roda tambem quando o servico
+  # KMS muda, porque ele sobe API + KMS juntos (o contrato HTTP so e provado de ponta a ponta ali).
+  mudancas:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.f.outputs.backend }}
+      kms: ${{ steps.f.outputs.kms }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: f
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/backend-ci.yml'
+            kms:
+              - 'kms/**'
+
   lint:
+    needs: mudancas
+    if: needs.mudancas.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,10 +45,13 @@ jobs:
         run: go vet ./...
       - name: sqlc diff (codigo gerado em dia)
         run: docker run --rm -v "$PWD":/src -w /src sqlc/sqlc:1.27.0 diff
+      # inclui o depguard (.golangci.yml): dominio <- casodeuso <- httpapi, sem pular camadas
       - uses: golangci/golangci-lint-action@v6
         with: { version: v1.64.8, working-directory: backend }
 
   unit:
+    needs: mudancas
+    if: needs.mudancas.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +60,8 @@ jobs:
       - run: go test -race ./...
 
   integracao:
+    needs: mudancas
+    if: needs.mudancas.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,12 +70,16 @@ jobs:
       - run: go test -p 1 -tags integracao -race ./...
 
   e2e:
+    needs: mudancas
+    if: needs.mudancas.outputs.backend == 'true' || needs.mudancas.outputs.kms == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: make e2e
 
   vuln:
+    needs: mudancas
+    if: needs.mudancas.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
