@@ -1,0 +1,4 @@
+saida/
+deploy/segredos/
+deploy/certs/
+.env

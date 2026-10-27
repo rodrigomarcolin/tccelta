@@ -1,0 +1,256 @@
+name: tccelta
+
+x-backend: &backend
+  image: tccelta-backend:local
+  build: { context: ., dockerfile: Dockerfile }
+  read_only: true
+  tmpfs: [/tmp]
+  user: "65532:65532"
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  env_file: [.env]
+  restart: unless-stopped
+
+services:
+  banco:
+    image: ${IMG_TIMESCALE:-timescale/timescaledb-ha:pg17}
+    environment:
+      POSTGRES_DB: tccelta
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_senha_superusuario
+      TS_TUNE_MEMORY: ${BANCO_MEMORIA:-2GB}
+      TS_TUNE_NUM_CPUS: ${BANCO_CPUS:-2}
+    secrets: [pg_senha_superusuario, pg_senha_dono, pg_senha_api, pg_senha_worker, pg_senha_provisionador]
+    volumes:
+      - banco_dados:/home/postgres/pgdata
+      # Monta SO o arquivo, com nome que ordena depois dos scripts de init da propria imagem.
+      - ./deploy/postgres/init/00-papeis.sh:/docker-entrypoint-initdb.d/900-papeis.sh:ro
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb",
+              "-c", "max_connections=200", "-c", "log_min_duration_statement=500ms",
+              "-c", "timescaledb.telemetry_level=off"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tccelta -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    ports: ["127.0.0.1:5432:5432"]
+    networks: [dados]
+    shm_size: 512m
+
+  vault:
+    image: hashicorp/vault:${VAULT_VERSAO:-1.18}
+    cap_add: [IPC_LOCK]
+    environment:
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_ADDR: http://127.0.0.1:8200
+    secrets: [vault_dev_root_token]
+    entrypoint: ["/bin/sh", "-c",
+      "VAULT_DEV_ROOT_TOKEN_ID=$$(cat /run/secrets/vault_dev_root_token) exec vault server -dev"]
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports: ["127.0.0.1:8200:8200"]
+    networks: [kms]
+
+  vault-bootstrap:
+    image: hashicorp/vault:${VAULT_VERSAO:-1.18}
+    depends_on: { vault: { condition: service_healthy } }
+    environment:
+      VAULT_ADDR: http://vault:8200
+      PERFIL: dev
+    secrets: [vault_dev_root_token]
+    volumes:
+      - ./deploy/vault/scripts:/vault/scripts:ro
+      - ./deploy/vault/politicas:/vault/politicas:ro
+      - vault_approle_api:/approle/api
+      - vault_approle_ferramentas:/approle/ferramentas
+      - vault_approle_rotacao:/approle/rotacao
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/vault/scripts/bootstrap.sh"]
+    restart: "no"
+    networks: [kms]
+
+  migrar:
+    <<: *backend
+    command: ["migrar"]
+    environment:
+      BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
+      BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
+    secrets: [pg_senha_dono]
+    depends_on: { banco: { condition: service_healthy } }
+    restart: "no"
+    networks: [dados]
+
+  api:
+    <<: *backend
+    command: ["api"]
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+    environment:
+      BANCO_URL: postgres://tccelta_api@banco:5432/tccelta?sslmode=disable
+      BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_api
+      VAULT_ADDR: http://vault:8200
+      VAULT_APPROLE_ROLE_ID_ARQUIVO: /run/approle/api_role_id
+      VAULT_APPROLE_SECRET_ID_ARQUIVO: /run/approle/api_secret_id
+      REDIS_ENDERECO: redis:6379
+      REDIS_SENHA_ARQUIVO: /run/secrets/redis_senha
+    secrets: [pg_senha_api, redis_senha]
+    volumes: [vault_approle_api:/run/approle:ro]
+    depends_on:
+      migrar: { condition: service_completed_successfully }
+      vault-bootstrap: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/tccelta", "saude", "--url", "http://127.0.0.1:8080/saude/pronta"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    stop_grace_period: 30s
+    ports: ["127.0.0.1:8080-8081:8080"]
+    networks: [borda, dados, kms]
+
+  worker:
+    <<: *backend
+    command: ["worker"]
+    environment:
+      BANCO_URL: postgres://tccelta_worker@banco:5432/tccelta?sslmode=disable
+      BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_worker
+    secrets: [pg_senha_worker]
+    depends_on: { migrar: { condition: service_completed_successfully } }
+    healthcheck:
+      test: ["CMD", "/tccelta", "saude", "--url", "http://127.0.0.1:8090/saude/viva"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+    stop_grace_period: 30s
+    networks: [dados]
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["/bin/sh", "-c",
+      "exec redis-server --save '' --appendonly no --maxmemory 64mb --maxmemory-policy allkeys-lru --requirepass \"$$(cat /run/secrets/redis_senha)\""]
+    secrets: [redis_senha]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_senha) redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [dados]
+
+  caddy:
+    image: caddy:2.8-alpine
+    profiles: [tls, tunel]
+    environment:
+      API_HOST: ${API_HOST:-localhost}
+      API_PORTA_TLS: ${API_PORTA_TLS:-8443}
+      CADDY_TLS: ${CADDY_TLS:-internal}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_dados:/data
+    ports: ["${API_PORTA_TLS:-8443}:8443"]
+    depends_on: { api: { condition: service_healthy } }
+    networks: [borda]
+
+  cloudflared:
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSAO:-2024.12.2}
+    profiles: [tunel]
+    command: ["tunnel", "--no-autoupdate", "run", "--token-file", "/run/secrets/cloudflared_token"]
+    secrets: [cloudflared_token]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    depends_on: { caddy: { condition: service_started } }
+    networks: [borda]
+
+  jwt-rotacao:
+    <<: *backend
+    command: ["jwt", "agendar"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_APPROLE_ROLE_ID_ARQUIVO: /run/approle/rotacao_role_id
+      VAULT_APPROLE_SECRET_ID_ARQUIVO: /run/approle/rotacao_secret_id
+      JWT_ROTACAO_PERIODO: ${JWT_ROTACAO_PERIODO:-720h}
+      JWT_ROTACAO_VERIFICACAO: ${JWT_ROTACAO_VERIFICACAO:-1h}
+    volumes: [vault_approle_rotacao:/run/approle:ro]
+    depends_on: { vault-bootstrap: { condition: service_completed_successfully } }
+    healthcheck:
+      test: ["CMD", "/tccelta", "saude", "--url", "http://127.0.0.1:8092/saude/viva"]
+      interval: 30s
+      timeout: 3s
+      retries: 4
+    networks: [kms]
+
+  ferramentas:
+    <<: *backend
+    image: tccelta-ferramentas:local
+    build: { context: ., dockerfile: Dockerfile, target: ferramentas }
+    profiles: [ferramentas]
+    entrypoint: ["/tccelta"]
+    command: ["ajuda"]
+    read_only: false
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN_ARQUIVO: /run/approle/provisionador_token
+      BANCO_URL: postgres://tccelta_provisionador@banco:5432/tccelta?sslmode=disable
+      BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_provisionador
+      SIM_BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
+      SIM_BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
+      ADMIN_BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
+      ADMIN_BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
+    secrets: [pg_senha_provisionador, pg_senha_dono]
+    volumes:
+      - vault_approle_ferramentas:/run/approle:ro
+      - ./testdata:/testdata:ro
+      - ./saida:/saida
+    networks: [borda, dados, kms]
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: [observabilidade]
+    volumes:
+      - ./deploy/observabilidade/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_dados:/prometheus
+    ports: ["127.0.0.1:9099:9090"]
+    networks: [borda, dados]
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: [observabilidade]
+    volumes: [grafana_dados:/var/lib/grafana]
+    ports: ["127.0.0.1:3000:3000"]
+    networks: [borda]
+
+networks:
+  borda:
+    ipam: { config: [{ subnet: 172.30.10.0/24 }] }
+  dados: { internal: false }
+  kms: { internal: false }
+
+secrets:
+  pg_senha_superusuario: { file: ./deploy/segredos/pg_senha_superusuario }
+  pg_senha_dono: { file: ./deploy/segredos/pg_senha_dono }
+  pg_senha_api: { file: ./deploy/segredos/pg_senha_api }
+  pg_senha_worker: { file: ./deploy/segredos/pg_senha_worker }
+  pg_senha_provisionador: { file: ./deploy/segredos/pg_senha_provisionador }
+  vault_dev_root_token: { file: ./deploy/segredos/vault_dev_root_token }
+  redis_senha: { file: ./deploy/segredos/redis_senha }
+  cloudflared_token: { file: ./deploy/segredos/cloudflared_token }
+
+volumes:
+  banco_dados: {}
+  vault_dados: {}
+  vault_init: {}
+  vault_approle_api: {}
+  vault_approle_ferramentas: {}
+  vault_approle_rotacao: {}
+  vault_auditoria: {}
+  caddy_dados: {}
+  prometheus_dados: {}
+  grafana_dados: {}

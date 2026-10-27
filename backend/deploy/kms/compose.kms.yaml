@@ -1,0 +1,13 @@
+# Vault isolado para o cenario de VPN (documentado; testado manualmente).
+name: tccelta-kms
+services:
+  vault:
+    image: hashicorp/vault:${VAULT_VERSAO:-1.18}
+    cap_add: [IPC_LOCK]
+    entrypoint: ["vault", "server", "-config=/vault/config/vault.hcl"]
+    volumes:
+      - ../vault/config:/vault/config:ro
+      - ../certs/vault:/vault/certs:ro
+      - vault_dados:/vault/data
+    ports: ["${KMS_BIND_IP:?defina o IP da wg0}:8200:8200"]
+volumes: { vault_dados: {} }
