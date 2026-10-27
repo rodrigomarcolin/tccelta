@@ -1,0 +1,6 @@
+run:
+  timeout: 5m
+linters:
+  enable: [errcheck, gosec, bodyclose, sqlclosecheck, contextcheck]
+issues:
+  exclude-dirs: [internal/banco/consultas]
