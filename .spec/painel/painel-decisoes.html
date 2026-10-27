@@ -1,3 +1,4 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Decisões das Specs</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -93,6 +94,23 @@ code { background: var(--surface-2); padding: 0.05em 0.35em; border-radius: 4px;
 .rail-btn small { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rail-btn small .p { color: var(--aberto); }
 .rail-select { display: none; }
+.rail [hidden] { display: none; }
+.rail-tgl { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 2px 4px; margin: 0 0 0 -4px; border-radius: 5px; cursor: pointer; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; text-align: left; }
+.rail-tgl:hover { background: var(--surface-2); }
+.rail-tgl:focus-visible, .rail-btn:focus-visible, .rail-tools button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rail-tgl::before { content: ""; flex: none; width: 6px; height: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); margin: 0 3px 0 1px; }
+.rail-tgl[aria-expanded="true"]::before { transform: rotate(45deg); }
+@media (prefers-reduced-motion: no-preference) { .rail-tgl::before { transition: transform 0.15s; } }
+.rail-tools { display: flex; gap: 12px; font-size: 12px; }
+.rail-tools button { border: 0; background: none; padding: 2px 4px; border-radius: 5px; cursor: pointer; color: var(--muted); font: inherit; }
+.rail-tools button:hover { background: var(--surface-2); color: var(--fg); }
+.toc-block > .rail-tgl { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.toc-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: start; }
+.toc-row .rail-tgl { padding: 7px 4px; margin: 0; justify-content: center; color: var(--muted); }
+.toc-row .rail-tgl::before { margin: 0; }
+.toc-sp { width: 22px; }
+.toc-sub { display: grid; gap: 2px; margin-left: 22px; }
+.toc-btn[aria-current="location"] { font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
 .chip { border: 1px solid var(--line); background: var(--surface); padding: 5px 11px; border-radius: 999px; cursor: pointer; font-size: 13px; color: var(--fg); }
@@ -205,6 +223,27 @@ details.refs li { font-family: var(--f-mono); font-size: 12px; overflow-wrap: an
 .mk.no-item { cursor: default; opacity: .7; }
 .mk.flash { animation: flash 1.4s ease 2; }
 @keyframes flash { 50% { box-shadow: 0 0 0 4px var(--kind); } }
+.md summary > h2, .md summary > h3, .md summary > h4 { margin: 0; padding: 0; border: 0; flex: 1 1 auto; min-width: 0; }
+.md details.sec { margin: 0 0 .4em; }
+.md details.sec.lvl-2 { border-top: 1px solid var(--line); margin-top: 1.1em; padding-top: .25em; }
+.md details.sec.lvl-3, .md details.sec.lvl-4 { margin-top: .3em; }
+.md details.sec[open] { margin-left: 6px; padding-left: 14px; border-left: 2px solid var(--line); }
+.md details.sec.lvl-2[open] { border-left-color: var(--accent); }
+.md details.sec.lvl-3[open] { border-left-color: var(--muted); }
+.md details.sec > summary { list-style: none; display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 5px 6px 5px 0; border-radius: var(--r); }
+.md details.sec[open] > summary { margin-left: -14px; padding-left: 0; }
+.md details.sec > summary::-webkit-details-marker { display: none; }
+.md details.sec > summary:hover { background: var(--surface-2); }
+.md details.sec > summary::before { content: ""; flex: none; width: 7px; height: 7px; margin: 0 6px 0 4px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s ease; }
+.md details.sec[open] > summary::before { transform: rotate(45deg); }
+.md details.sec.lvl-2 > summary::before { width: 9px; height: 9px; border-color: var(--accent); }
+.md details.sec.lvl-4 > summary > h4 { color: var(--muted); }
+.sec-meta { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; font: 600 11.5px/1.6 var(--f-body); color: var(--muted); }
+.sec-meta span { padding: 0 7px; border-radius: 10px; background: var(--surface-2); white-space: nowrap; }
+.sec-meta .n-aberto { background: var(--aberto-soft); color: var(--aberto); }
+.sec-meta .n-decisao { background: var(--decisao-soft); color: var(--decisao); }
+@media (max-width: 520px) { .md details.sec[open] { margin-left: 3px; padding-left: 9px; } .md details.sec[open] > summary { margin-left: -9px; } .md details.sec > summary { flex-wrap: wrap; } .sec-meta { flex-basis: 100%; justify-content: flex-start; padding-left: 21px; } }
+@media (prefers-reduced-motion: reduce) { .md details.sec > summary::before { transition: none; } }
 .toc-btn { font-size: 13px; padding: 4px 8px; }
 .toc-btn.h3 { padding-left: 20px; color: var(--muted); }
 .raw { white-space: pre-wrap; font-family: var(--f-mono); font-size: 13px; }
@@ -278,7 +317,7 @@ details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
     choices: new Map(),           // id -> doc body
     view: "aberto", phase: "all", spec: "all", area: "all", status: "all", q: "",
     db: null, canWrite: true, uid: null,
-    readSpec: null, readItem: null, toc: [],
+    readSpec: null, readItem: null, toc: [], tocCur: null, railSpec: null,
     lineMap: new Map(),           // ".spec/…/arquivo.md" -> Map(linha -> [ids])
     pathToSpec: new Map(),        // ".spec/…/arquivo.md" -> spec
   };
@@ -378,42 +417,119 @@ details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
       v: its.filter((i) => i.tipo === "verificar").length,
     };
   }
+  // ---------- trilho colapsável (preferências por visitante em localStorage) ----------
+  const RAIL_KEY = "painel-rail-v1";
+  const railPrefs = (() => {
+    try { const o = JSON.parse(localStorage.getItem(RAIL_KEY)); if (o && o.g && typeof o.g === "object") return o; } catch { /* sem storage */ }
+    return { g: {} };
+  })();
+  function saveRail() { try { localStorage.setItem(RAIL_KEY, JSON.stringify(railPrefs)); } catch { /* sem storage */ } }
+  const railOpen = (key, def) => (typeof railPrefs.g[key] === "boolean" ? railPrefs.g[key] : def);
+  function setOpen(btn, open) {
+    btn.setAttribute("aria-expanded", String(open));
+    const el = document.getElementById(btn.getAttribute("aria-controls"));
+    if (el) el.hidden = !open;
+  }
+  function railToggle(btn) {
+    const open = btn.getAttribute("aria-expanded") !== "true";
+    setOpen(btn, open);
+    railPrefs.g[btn.dataset.tgl] = open; saveRail();
+  }
+  function railAll(open) {
+    document.querySelectorAll("#rail [data-tgl]").forEach((b) => { setOpen(b, open); railPrefs.g[b.dataset.tgl] = open; });
+    saveRail();
+  }
+  let railSeq = 0;
+  function railGroup(key, title, def, inner) {
+    const id = "rail-g" + (++railSeq), open = railOpen(key, def);
+    return `<div class="rail-group"><h3><button class="rail-tgl" type="button" data-tgl="${esc(key)}" aria-expanded="${open}" aria-controls="${id}">${esc(title)}</button></h3><div class="rail-list" id="${id}"${open ? "" : " hidden"}>${inner}</div></div>`;
+  }
+  function tocHtml(specId) {
+    const secs = [];
+    for (const t of state.toc) {
+      if (t.level === "h2") secs.push({ h2: t, subs: [] });
+      else if (secs.length) secs[secs.length - 1].subs.push(t);
+      else secs.push({ h2: null, subs: [t] });
+    }
+    const btn = (t) => `<button class="rail-btn toc-btn ${t.level}" type="button" data-toc="${esc(t.id)}"${t.id === state.tocCur ? ' aria-current="location"' : ""}><span>${esc(t.text)}</span><small></small></button>`;
+    const inner = secs.map((sec) => {
+      if (!sec.h2) return sec.subs.map(btn).join("");
+      if (!sec.subs.length) return `<div class="toc-row"><span class="toc-sp"></span>${btn(sec.h2)}</div>`;
+      const key = `s:${specId}:${sec.h2.id}`, id = "rail-s" + (++railSeq), open = railOpen(key, sec.h2.id === state.tocCur);
+      return `<div class="toc-sec"><div class="toc-row"><button class="rail-tgl" type="button" data-tgl="${esc(key)}" data-tgl-sec="${esc(sec.h2.id)}" aria-expanded="${open}" aria-controls="${id}" aria-label="Subseções de ${esc(sec.h2.text)}"></button>${btn(sec.h2)}</div><div class="toc-sub" id="${id}"${open ? "" : " hidden"}>${sec.subs.map(btn).join("")}</div></div>`;
+    }).join("");
+    const id = "rail-s" + (++railSeq), open = railOpen("toc", true);
+    return `<div class="toc-block"><button class="rail-tgl" type="button" data-tgl="toc" aria-expanded="${open}" aria-controls="${id}">Sumário</button><div class="toc-body" id="${id}"${open ? "" : " hidden"}>${inner}</div></div>`;
+  }
+  // Seção atual do sumário (destaque e expansão automática das h3 sem preferência do visitante).
+  function setTocCur(id) {
+    if (!id || id === state.tocCur) return;
+    state.tocCur = id;
+    const rail = $("#rail"); if (!rail) return;
+    rail.querySelectorAll(".toc-btn.h2[aria-current]").forEach((b) => b.removeAttribute("aria-current"));
+    const cur = rail.querySelector(`.toc-btn.h2[data-toc="${CSS.escape(id)}"]`);
+    if (cur) cur.setAttribute("aria-current", "location");
+    rail.querySelectorAll("[data-tgl-sec]").forEach((b) => {
+      if (typeof railPrefs.g[b.dataset.tgl] !== "boolean") setOpen(b, b.dataset.tglSec === id);
+    });
+  }
+  let tocObs = null;
+  function observeToc() {
+    if (tocObs) { tocObs.disconnect(); tocObs = null; }
+    if (!window.IntersectionObserver || !state.toc.length) return;
+    const heads = [], idx = new Map(); let sec = null;
+    for (const t of state.toc) {
+      if (t.level === "h2") sec = t.id;
+      const el = document.getElementById(t.id);
+      if (el && sec) { idx.set(el, heads.length); heads.push({ el, sec }); }
+    }
+    if (!heads.length) return;
+    tocObs = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        const i = idx.get(e.target); if (i === undefined) continue;
+        if (e.isIntersecting) setTocCur(heads[i].sec);
+        else if (e.rootBounds && e.boundingClientRect.top >= e.rootBounds.top && i > 0) setTocCur(heads[i - 1].sec);
+      }
+    }, { rootMargin: "0px 0px -80% 0px" });
+    heads.forEach((h) => tocObs.observe(h.el));
+  }
+  function railTools() {
+    return `<div class="rail-tools"><button type="button" data-rail-all="open">Expandir tudo</button><button type="button" data-rail-all="close">Recolher tudo</button></div>`;
+  }
   function renderRail() {
     const rail = $("#rail");
-    const parts = [];
+    const parts = [railTools()];
     if (state.view === "read") {
+      const curPhase = state.specs.get(state.readSpec)?.fase;
       for (const f of state.data.fases) {
-        parts.push(`<div><h3>${esc(f.nome)}</h3><div class="rail-list">`);
+        const inner = [];
         for (const s of state.data.specs.filter((x) => x.fase === f.id)) {
           const c = specCounts(s.id);
-          parts.push(`<button class="rail-btn" type="button" data-read="${esc(s.id)}" aria-pressed="${state.readSpec === s.id}"><span>${esc(s.titulo)}</span><small>${c.ap ? `<span class="p">${c.ap}</span>` : ""}</small></button>`);
-          if (state.readSpec === s.id && state.toc.length) {
-            parts.push(state.toc.map((t) => `<button class="rail-btn toc-btn ${t.level}" type="button" data-toc="${esc(t.id)}"><span>${esc(t.text)}</span><small></small></button>`).join(""));
-          }
+          inner.push(`<button class="rail-btn" type="button" data-read="${esc(s.id)}" aria-pressed="${state.readSpec === s.id}"><span>${esc(s.titulo)}</span><small>${c.ap ? `<span class="p">${c.ap}</span>` : ""}</small></button>`);
+          if (state.readSpec === s.id && state.toc.length) inner.push(tocHtml(s.id));
         }
-        parts.push(`</div></div>`);
+        parts.push(railGroup("r:" + f.id, f.nome, f.id === curPhase, inner.join("")));
       }
       rail.innerHTML = parts.join("");
       return;
     }
-    parts.push(`<div><h3>Fase</h3><div class="rail-list">`);
-    parts.push(railBtn("phase", "all", "Todas as fases", "", state.phase === "all"));
+    const first = [railBtn("phase", "all", "Todas as fases", "", state.phase === "all")];
     for (const f of state.data.fases) {
       const n = state.data.itens.filter((i) => i.fase === f.id && i.tipo === "aberto" && !answered(i)).length;
-      parts.push(railBtn("phase", f.id, f.nome, n ? `<span class="p">${n} abertas</span>` : "", state.phase === f.id));
+      first.push(railBtn("phase", f.id, f.nome, n ? `<span class="p">${n} abertas</span>` : "", state.phase === f.id));
     }
-    parts.push(`</div></div>`);
+    parts.push(railGroup("c:fase", "Fase", true, first.join("")));
     for (const f of state.data.fases) {
       if (state.phase !== "all" && state.phase !== f.id) continue;
       const specs = state.data.specs.filter((s) => s.fase === f.id);
       if (!specs.length) continue;
-      parts.push(`<div><h3>${esc(f.nome)}</h3><div class="rail-list">`);
+      const inner = [];
       for (const s of specs) {
         const c = specCounts(s.id);
         if (!c.a && !c.d && !c.v) continue;
-        parts.push(railBtn("spec", s.id, s.titulo, c.ap ? `<span class="p">${c.ap}</span>·${c.a + c.d + c.v}` : String(c.a + c.d + c.v), state.spec === s.id));
+        inner.push(railBtn("spec", s.id, s.titulo, c.ap ? `<span class="p">${c.ap}</span>·${c.a + c.d + c.v}` : String(c.a + c.d + c.v), state.spec === s.id));
       }
-      parts.push(`</div></div>`);
+      parts.push(railGroup("c:" + f.id, f.nome, true, inner.join("")));
     }
     rail.innerHTML = parts.join("");
   }
@@ -561,6 +677,8 @@ details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
       <div class="eyebrow">${esc(fullPath(spec))}</div>
       <div class="reader-actions">
         <select class="select rail-select" id="read-select" aria-label="Spec">${opts}</select>
+        <button class="btn" type="button" data-sec-all="open">Expandir tudo</button>
+        <button class="btn" type="button" data-sec-all="close">Recolher tudo</button>
         ${c.a || c.d || c.v ? `<button class="btn" type="button" data-open-spec="${esc(spec.id)}" data-open-phase="${esc(spec.fase)}">Ver as marcações desta spec em cartões</button>` : ""}
         <span class="meta">
           ${c.a ? `<span class="pill" style="background:var(--aberto-soft);color:var(--aberto)">${c.ap} de ${c.a} em aberto</span>` : ""}
@@ -574,8 +692,13 @@ details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
   async function renderReader() {
     const spec = state.specs.get(state.readSpec) || state.data.specs[0];
     state.readSpec = spec.id;
+    if (state.railSpec !== spec.id) {   // spec nova: o grupo da fase dela volta a abrir
+      state.railSpec = spec.id;
+      if ("r:" + spec.fase in railPrefs.g) { delete railPrefs.g["r:" + spec.fase]; saveRail(); }
+    }
+    if (tocObs) { tocObs.disconnect(); tocObs = null; }
     const tok = (renderReader.tok = (renderReader.tok || 0) + 1);
-    state.toc = []; renderRail();
+    state.toc = []; state.tocCur = null; renderRail();
     const main = $("#main");
     main.innerHTML = readerHead(spec) + `<div class="empty">Carregando ${esc(spec.arquivo)}…</div>`;
     let md;
@@ -591,11 +714,13 @@ details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
     const html = window.marked.parse(md, { gfm: true, headerIds: false, mangle: false });
     main.innerHTML = readerHead(spec) + `<article class="md" id="md">${html}</article>`;
     decorate(spec, md, $("#md"));
+    state.tocCur = state.toc.find((t) => t.level === "h2")?.id || state.toc[0]?.id || null;
     renderRail();
+    observeToc();
     if (state.readItem) {
       const m = document.querySelector(`.mk[data-mk="${CSS.escape(state.readItem)}"]`);
       state.readItem = null;
-      if (m) { m.scrollIntoView({ block: "center" }); m.classList.add("flash"); setTimeout(() => m.classList.remove("flash"), 3000); }
+      if (m) { revealAndScroll(m, { block: "center" }); m.classList.add("flash"); setTimeout(() => m.classList.remove("flash"), 3000); }
     } else window.scrollTo({ top: 0 });
   }
   function slug(t) {
@@ -625,7 +750,6 @@ details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
     // Diagramas mermaid.
     const mm = [];
     root.querySelectorAll("pre > code.language-mermaid").forEach((c) => { const p = document.createElement("pre"); p.className = "mermaid"; p.textContent = c.textContent; c.parentElement.replaceWith(p); mm.push(p); });
-    renderMermaid(mm);
     // Marcações: a k-ésima no texto renderizado corresponde à k-ésima no Markdown.
     const lines = state.lineMap.get(fullPath(spec)) || new Map();
     const src = [];
@@ -654,6 +778,46 @@ details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
       if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
       node.replaceWith(frag);
     }
+    buildSections(spec, root);
+    renderMermaid(mm);
+  }
+  // Seções recolhíveis: h2/h3/h4 viram <summary> de <details> aninhados; h1 e o que vem antes do primeiro h2 ficam fora.
+  function buildSections(spec, root) {
+    const stack = [{ lvl: 1, el: root }];
+    for (const node of Array.from(root.children)) {
+      const m = /^H([1-4])$/.exec(node.tagName);
+      const lvl = m ? +m[1] : 0;
+      if (lvl === 1) { stack.length = 1; continue; }
+      if (lvl) {
+        while (stack[stack.length - 1].lvl >= lvl) stack.pop();
+        const det = document.createElement("details"); det.className = "sec lvl-" + lvl; det.open = lvl === 2;
+        const sum = document.createElement("summary");
+        stack[stack.length - 1].el.appendChild(det); det.appendChild(sum); sum.appendChild(node);
+        stack.push({ lvl, el: det });
+      } else if (stack.length > 1) stack[stack.length - 1].el.appendChild(node);
+    }
+    root.querySelectorAll("details.sec").forEach((d) => {
+      const nA = d.querySelectorAll('.mk[data-tipo="aberto"]').length, nD = d.querySelectorAll('.mk[data-tipo="decisao"]').length;
+      const nS = d.querySelectorAll(":scope > details.sec").length;
+      const parts = [];
+      if (nA) parts.push(`<span class="n-aberto">${nA} em aberto</span>`);
+      if (nD) parts.push(`<span class="n-decisao">${nD} ${nD === 1 ? "decisão" : "decisões"}</span>`);
+      if (nS) parts.push(`<span>${nS} ${nS === 1 ? "subseção" : "subseções"}</span>`);
+      if (parts.length) { const mt = document.createElement("span"); mt.className = "sec-meta"; mt.innerHTML = parts.join(""); d.firstElementChild.appendChild(mt); }
+    });
+    // Estado lembrado por spec.
+    const key = "painel-secoes:" + spec.id;
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || "null");
+      if (Array.isArray(saved)) root.querySelectorAll("details.sec").forEach((d) => { d.open = saved.includes(d.firstElementChild.firstElementChild.id); });
+    } catch { /* sem armazenamento */ }
+    root.addEventListener("toggle", () => {
+      try { localStorage.setItem(key, JSON.stringify(Array.from(root.querySelectorAll("details.sec[open]"), (d) => d.firstElementChild.firstElementChild.id))); } catch { /* ignora */ }
+    }, true);
+  }
+  function revealAndScroll(el, opts) {
+    for (let d = el.closest("details.sec"); d; d = d.parentElement && d.parentElement.closest("details.sec")) d.open = true;
+    el.scrollIntoView(opts || { block: "start" });
   }
   function paintMark(b, item) {
     b.classList.toggle("is-applied", applied(item));
@@ -676,7 +840,10 @@ details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
       const root = document.documentElement.dataset.theme;
       const dark = root === "dark" || (root !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
       m.initialize({ startOnLoad: false, theme: dark ? "dark" : "neutral", securityLevel: "strict" });
-      await m.run({ nodes });
+      // Diagramas dentro de seções fechadas não têm tamanho: abre-as só durante a renderização.
+      const opened = [];
+      nodes.forEach((n) => { for (let d = n.closest("details.sec"); d; d = d.parentElement && d.parentElement.closest("details.sec")) if (!d.open) { d.open = true; opened.push(d); } });
+      try { await m.run({ nodes }); } finally { opened.forEach((d) => { d.open = false; }); }
     } catch { /* o diagrama fica como texto */ }
   }
   function openDrawer(id) {
@@ -722,20 +889,23 @@ details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
     if (a) {
       ev.preventDefault();
       if (a.dataset.mdlink) { state.readSpec = a.dataset.mdlink; state.view = "read"; render(); }
-      else { const h = document.getElementById(a.dataset.anchor); if (h) h.scrollIntoView({ block: "start" }); }
+      else { const h = document.getElementById(a.dataset.anchor); if (h) revealAndScroll(h); }
       return;
     }
     const t = ev.target.closest("button"); if (!t) return;
-    if (t.classList.contains("mk")) { if (t.dataset.mk) openDrawer(t.dataset.mk); return; }
+    if (t.classList.contains("mk")) { ev.preventDefault(); if (t.dataset.mk) openDrawer(t.dataset.mk); return; }
     if (t.id === "drawer-close") { closeDrawer(); return; }
+    if (t.dataset.tgl !== undefined) { railToggle(t); return; }
+    if (t.dataset.railAll) { railAll(t.dataset.railAll === "open"); return; }
     if (t.dataset.read) { state.readSpec = t.dataset.read; state.view = "read"; closeDrawer(); render(); return; }
-    if (t.dataset.toc) { const h = document.getElementById(t.dataset.toc); if (h) h.scrollIntoView({ block: "start" }); return; }
+    if (t.dataset.toc) { const h = document.getElementById(t.dataset.toc); if (h) revealAndScroll(h); return; }
+    if (t.dataset.secAll) { document.querySelectorAll("#md details.sec").forEach((d) => { d.open = t.dataset.secAll === "open"; }); return; }
     if (t.dataset.goto) {
       const s = state.pathToSpec.get(t.dataset.goto); if (!s) return;
       state.readItem = t.dataset.gotoItem; state.view = "read";
       if (state.readSpec === s.id && document.getElementById("md")) {
         const m = document.querySelector(`#md .mk[data-mk="${CSS.escape(state.readItem)}"]`); state.readItem = null;
-        if (m) { m.scrollIntoView({ block: "center" }); m.classList.add("flash"); setTimeout(() => m.classList.remove("flash"), 3000); }
+        if (m) { revealAndScroll(m, { block: "center" }); m.classList.add("flash"); setTimeout(() => m.classList.remove("flash"), 3000); }
         return;
       }
       state.readSpec = s.id; render(); return;
@@ -851,3 +1021,5 @@ details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
   load();
 })();
 </script>
+
+</body></html>
