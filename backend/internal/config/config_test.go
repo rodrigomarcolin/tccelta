@@ -42,3 +42,13 @@ func TestProducaoRecusaNone(t *testing.T) {
 		t.Fatal("duração inválida")
 	}
 }
+
+func TestKMS(t *testing.T) {
+	c, err := CarregarDe(env(map[string]string{"KMS_URL": "http://kms:8300", "KMS_TIMEOUT": "500ms", "KMS_MAX_CONCORRENCIA": "8"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.KMS.URL != "http://kms:8300" || c.KMS.Timeout.Milliseconds() != 500 || c.KMS.MaxConcorrencia != 8 || c.KMS.VerifyLote != 32 {
+		t.Fatalf("%+v", c.KMS)
+	}
+}

@@ -12,17 +12,18 @@ import (
 	"testing"
 	"time"
 
-	"tccelta/backend/internal/kms/kmsteste"
-	"tccelta/backend/internal/protocolo"
+	"tccelta/backend/internal/casodeuso/porta/portateste"
+	"tccelta/backend/internal/dominio/protocolo"
 )
 
 var dev, _ = protocolo.DevIDDeHex("0011223344556677")
 
-func novo(t *testing.T) (*kmsteste.Memoria, *Emissor, *Validador, *time.Time) {
+func novo(t *testing.T) (*portateste.Memoria, *Emissor, *Validador, *time.Time) {
 	t.Helper()
-	k := kmsteste.Nova()
+	k := portateste.Nova()
 	agora := time.Unix(1_800_000_000, 0)
-	e := &Emissor{Assinador: k, Emissor: "iss", Audiencia: "aud", Validade: time.Hour, Agora: func() time.Time { return agora }}
+	e := NovoEmissor(k, "iss", "aud", time.Hour)
+	e.DefinirRelogio(func() time.Time { return agora })
 	v, err := NovoValidador(context.Background(), k, "iss", "aud", 30*time.Second)
 	if err != nil {
 		t.Fatal(err)

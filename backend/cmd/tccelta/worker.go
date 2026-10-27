@@ -14,11 +14,13 @@ import (
 
 	"tccelta/backend/internal/banco"
 	"tccelta/backend/internal/banco/consultas"
+	"tccelta/backend/internal/casodeuso/catalogo"
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/ingestao"
-	"tccelta/backend/internal/metricas"
-	"tccelta/backend/internal/pids"
-	"tccelta/backend/internal/protocolo"
+	"tccelta/backend/internal/dominio/pid"
+	"tccelta/backend/internal/dominio/protocolo"
+	"tccelta/backend/internal/observabilidade/metricas"
+	"tccelta/backend/internal/repositorio/postgres"
+	"tccelta/backend/internal/reprocessamento"
 	"tccelta/backend/internal/worker"
 )
 
@@ -78,11 +80,11 @@ func cmdReprocessar(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("dongle não cadastrado: %w", err)
 	}
-	cat := pids.Novo(q, log)
-	if err := cat.Recarregar(ctx); err != nil {
+	cat := pid.Novo()
+	if err := catalogo.NovoSincronizar(postgres.Repositorios(q).Pids, cat, log).Recarregar(ctx); err != nil {
 		return err
 	}
-	r, err := ingestao.Reprocessar(ctx, pool, cat, ingestao.OpcoesReprocesso{DongleID: d.DongleID, DesdeSeq: *desde, AteSeq: *ate,
+	r, err := reprocessamento.Reprocessar(ctx, pool, cat, reprocessamento.OpcoesReprocesso{DongleID: d.DongleID, DesdeSeq: *desde, AteSeq: *ate,
 		Lote: int32(*lote), Aplicar: *aplicar, Operador: os.Getenv("USER")}, log, nil)
 	modo := "ENSAIO (nada foi escrito; use --aplicar)"
 	if *aplicar {

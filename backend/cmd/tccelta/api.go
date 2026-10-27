@@ -12,18 +12,23 @@ import (
 
 	"tccelta/backend/internal/banco"
 	"tccelta/backend/internal/banco/consultas"
+	"tccelta/backend/internal/casodeuso/catalogo"
+	casohs "tccelta/backend/internal/casodeuso/handshake"
+	casoing "tccelta/backend/internal/casodeuso/ingestao"
+	"tccelta/backend/internal/casodeuso/sessao"
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/dongles"
-	"tccelta/backend/internal/handshake"
+	"tccelta/backend/internal/dominio/pid"
 	"tccelta/backend/internal/httpapi"
-	"tccelta/backend/internal/ingestao"
-	"tccelta/backend/internal/kms"
+	"tccelta/backend/internal/kmsremoto"
 	"tccelta/backend/internal/limites"
-	"tccelta/backend/internal/metricas"
-	"tccelta/backend/internal/pids"
+	"tccelta/backend/internal/observabilidade/metricas"
+	"tccelta/backend/internal/repositorio/cache"
+	"tccelta/backend/internal/repositorio/postgres"
 	"tccelta/backend/internal/token"
 )
 
+// cmdAPI é a raiz de composição da API: liga os adaptadores (postgres, kmsremoto, métricas, token)
+// às portas dos casos de uso e os casos de uso ao transporte HTTP.
 func cmdAPI(ctx context.Context) error {
 	cfg, err := config.Carregar()
 	if err != nil {
@@ -38,66 +43,76 @@ func cmdAPI(ctx context.Context) error {
 	defer pool.Close()
 	met.RegistrarPool(pool)
 
-	// Vault: login AppRole com novas tentativas (o Vault pode demorar a subir)
-	var vault *kms.Vault
+	kms, err := kmsremoto.Novo(kmsremoto.Opcoes{URL: cfg.KMS.URL, CACert: cfg.KMS.CACert, ClientCert: cfg.KMS.ClientCert,
+		ClientKey: cfg.KMS.ClientKey, Timeout: cfg.KMS.Timeout, MaxConcorrencia: cfg.KMS.MaxConcorrencia}, met.PortaKMS())
+	if err != nil {
+		return err
+	}
+
+	// repositórios: o de dongles tem cache na frente; dentro das transações vale o do banco direto
+	repos := postgres.Repositorios(consultas.New(pool))
+	repos.Dongles = cache.NovoDongles(repos.Dongles, 10000, 60*time.Second)
+	tx := postgres.NovoTransacionador(pool)
+
+	cat := pid.Novo()
+	sinc := catalogo.NovoSincronizar(repos.Pids, cat, log)
+	if err := sinc.Recarregar(ctx); err != nil {
+		return err
+	}
+	go sinc.Acompanhar(ctx, banco.Escutar(ctx, pool, "pid_alterado", log, nil))
+
+	// o KMS pode demorar a subir: tenta carregar as chaves públicas do JWT por até ~1 min
+	var val *token.Validador
 	for tent := 0; ; tent++ {
-		vault, err = kms.NovoVault(ctx, cfg.Vault, log, met)
+		val, err = token.NovoValidador(ctx, kms, cfg.JWT.Emissor, cfg.JWT.Audiencia, cfg.JWT.Folga)
 		if err == nil {
 			break
 		}
 		if tent >= 30 || ctx.Err() != nil {
-			return fmt.Errorf("vault: %w", err)
+			return fmt.Errorf("kms: %w", err)
 		}
-		log.Warn("vault.indisponivel_no_boot", "erro", err)
+		log.Warn("kms.indisponivel_no_boot", "erro", err)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(2 * time.Second):
 		}
 	}
-	defer vault.Fechar()
-
-	q := consultas.New(pool)
-	cat := pids.Novo(q, log)
-	if err := cat.Recarregar(ctx); err != nil {
-		return err
-	}
-	go cat.Acompanhar(ctx, banco.Escutar(ctx, pool, "pid_alterado", log, nil))
-
-	val, err := token.NovoValidador(ctx, vault, cfg.JWT.Emissor, cfg.JWT.Audiencia, cfg.JWT.Folga)
-	if err != nil {
-		return err
-	}
 	go val.AtualizarPeriodicamente(ctx, 10*time.Minute)
-	emissor := &token.Emissor{Assinador: vault, Emissor: cfg.JWT.Emissor, Audiencia: cfg.JWT.Audiencia, Validade: cfg.JWT.Validade}
-	cache := dongles.Novo(q, 10000, 60*time.Second)
+	emissor := token.NovoEmissor(kms, cfg.JWT.Emissor, cfg.JWT.Audiencia, cfg.JWT.Validade)
 
-	local := limites.NovoLocal()
-	lim := &limites.LimitadorComFallback{Local: local, OnFalha: func() { met.RedisFalhas.Inc() }}
+	lim := &limites.LimitadorComFallback{Local: limites.NovoLocal(), OnFalha: func() { met.RedisFalhas.Inc() }}
 	if cfg.Limites.RedisEndereco != "" {
 		rc := redis.NewClient(&redis.Options{Addr: cfg.Limites.RedisEndereco, Password: cfg.Limites.RedisSenha,
 			DialTimeout: cfg.Limites.RedisTimeout, ReadTimeout: cfg.Limites.RedisTimeout, WriteTimeout: cfg.Limites.RedisTimeout, MaxRetries: -1})
 		lim.Redis = limites.NovoRedis(rc, cfg.Limites.RedisTimeout)
 	}
 
-	hs := &handshake.Servico{Pool: pool, KMS: vault, Tokens: emissor, Cfg: cfg.Protocolo, Log: log, Met: met}
-	ing := &ingestao.Servico{Pool: pool, KMS: vault, Pids: cat, LoteMax: cfg.Protocolo.LoteMaxBlocos,
-		VerifyLote: cfg.Vault.VerifyLote, VerifyParalelo: cfg.Vault.VerifyParalelo, Log: log, Met: met}
+	agora := func() time.Time { return time.Now() }
+	paramsHS := casohs.Parametros{DesafioValidade: cfg.Protocolo.DesafioValidade, MaxPendentes: cfg.Protocolo.DesafioMaxPendentes,
+		AncoraRTTMax: cfg.Protocolo.AncoraRTTMax, TLatSugerido: cfg.Protocolo.TLatSugerido, PermitirPerfilNone: cfg.PermitirPerfilNone}
+	paramsIng := casoing.Parametros{LoteMax: cfg.Protocolo.LoteMaxBlocos, VerifyLote: cfg.KMS.VerifyLote,
+		VerifyParalelo: cfg.KMS.VerifyParalelo, PermitirPerfilNone: cfg.PermitirPerfilNone}
 
 	var encerrando atomic.Bool
-	deps := &httpapi.Deps{Cfg: cfg, Log: log, Met: met, Handshake: hs, Ingestao: ing, Dongles: cache, Validador: val,
-		Limitador: lim, Semaforo: limites.NovaConcorrencia(cfg.Limites.IngestaoMaxSimultaneas, cfg.Limites.IngestaoEsperaVaga),
-		NaoPronto: &encerrando,
+	deps := &httpapi.Deps{
+		Cfg: cfg, Log: log, Met: met.PortaHTTP(),
+		PedirDesafio:     casohs.NovoEmitirDesafio(repos, kms, met.PortaHandshake(), agora, log, paramsHS),
+		ResponderDesafio: casohs.NovoResponderDesafio(repos, tx, kms, emissor, met.PortaHandshake(), agora, log, paramsHS),
+		ReceberLote:      casoing.NovoReceberLote(repos, tx, kms, cat, met.PortaIngestao(), agora, log, paramsIng),
+		ObterConfirmacao: casoing.NovoObterConfirmacao(repos, cfg.PermitirPerfilNone),
+		Autenticar:       sessao.NovoAutenticar(val, repos.Dongles, cfg.PermitirPerfilNone),
+		Limitador:        lim,
+		Semaforo:         limites.NovaConcorrencia(cfg.Limites.IngestaoMaxSimultaneas, cfg.Limites.IngestaoEsperaVaga),
+		NaoPronto:        &encerrando,
 		Prontidao: func() bool {
 			c, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			return pool.Ping(c) == nil && vault.Pronto() && cat.Carregado() && val.Pronto()
+			return pool.Ping(c) == nil && kms.Pronto() && cat.Carregado() && val.Pronto()
 		}}
 	srv := &http.Server{Addr: cfg.HTTP.Endereco, Handler: deps.Roteador(), ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 16 << 10}
-	mux := http.NewServeMux()
-	mux.Handle("GET /metricas", met.Handler())
-	msrv := &http.Server{Addr: cfg.HTTP.MetricasEndereco, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	msrv := met.Servidor(cfg.HTTP.MetricasEndereco)
 
 	erros := make(chan error, 2)
 	go func() { erros <- srv.ListenAndServe() }()

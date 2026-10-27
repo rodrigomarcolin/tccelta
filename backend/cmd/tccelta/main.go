@@ -1,4 +1,4 @@
-// Comando tccelta: binário único com os subcomandos api, worker, migrar, provisionar, jwt, simulador e saude.
+// Comando tccelta: binário único com os subcomandos api, worker, migrar, provisionar (registrar), simulador e saude.
 package main
 
 import (
@@ -24,8 +24,7 @@ uso: tccelta <subcomando> [opções]
   api                          servidor HTTP
   worker                       worker de tempo; "worker reprocessar" refaz leitura/posicao
   migrar [up|down-to N|status] migrations
-  provisionar <novo|importar|importar-registro|exportar-wrapping|verificar>
-  jwt <rotacionar|agendar>     rotação da chave do JWT
+  provisionar registrar --arquivo registro.json  cadastra no banco um dongle provisionado pelo KMS
   simulador                    dongles virtuais e cenários
   saude --url <url>            healthcheck (sai 0/1)
 `
@@ -48,8 +47,6 @@ func main() {
 		err = cmdMigrar(ctx, args)
 	case "provisionar":
 		err = cmdProvisionar(ctx, args)
-	case "jwt":
-		err = cmdJWT(ctx, args)
 	case "simulador":
 		err = cmdSimulador(ctx, args)
 	case "saude":

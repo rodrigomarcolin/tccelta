@@ -17,8 +17,8 @@ import (
 	"tccelta/backend/internal/banco"
 	"tccelta/backend/internal/banco/consultas"
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/metricas"
-	"tccelta/backend/internal/tempo"
+	"tccelta/backend/internal/observabilidade/metricas"
+	"tccelta/backend/internal/dominio/tempo"
 )
 
 // Worker processa a fila de boots pendentes.
