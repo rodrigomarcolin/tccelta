@@ -37,6 +37,7 @@ pareamentos e conexões. Isso fecha A1.1/A1.2/A1.4 e reduz A1.3 (MITM) e A1.5
 | 02 | `02-firmware-botao-e-janela-de-pareamento.md` | Detector do botão, máquina de estados da janela e das conexões (`PairingPolicy`), tarefa, timers, prioridades, build flags. |
 | 03 | `03-firmware-eventos-e-testes.md` | Catálogo de eventos para `docs/debug-events.md`, testes nativos, roteiro de bancada B1–B16 e métricas. |
 | 04 | `04-app-pareamento-just-works.md` | Port/adapter BLE, use cases, `ConnectingViewModel`, `PairingScreen`, conferência de que a camada PSK (removida na Fase 1) saiu do caminho de conexão, testes com `FakeBleService`. |
+| 05 | `05-enlace-aberto-bancada.md` | Env de bancada `collector_mock_debug_open` (`LINK_SECURITY_OPEN`): enlace sem LESC para o `sync_bench.py`; proteções de build. Nota posterior às specs 01–04. |
 
 ### Ordem de execução
 

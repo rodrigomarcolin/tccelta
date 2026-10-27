@@ -221,6 +221,7 @@ after `LINK_DOWN`). New events are additive: `FORMAT v` does not change.
 | `LINK_DOWN` | `conn:int` `rc:int` `hci:hex\|-` `auth:bool` `dur:int` | Link down. `rc` = raw NimBLE reason; `hci` = `rc - 0x200` for HCI errors (`13` remote, `16` local, `08` timeout). `auth=1` if it was the authorized session. |
 | `WRITE_DROP` | `conn:int` `chr:enum(nus_rx,sync_rx)` `len:int` | Write from an unauthorized connection, discarded. |
 | `BOND_FULL` | `event:enum(full,overflow)` `action:enum(reject,allow)` `obj:int` `conn:int\|-` `window:bool` | `full`: a Pairing Request arrived with the store full (any request when a bond exists, `MAX_BONDS=1`); `reject` outside the window (the existing bond is untouched), `allow` inside it; `obj` is `2` (peer_sec). `overflow`: attempt to write a second bond; always `reject`, `obj` = NimBLE object type (`1` our_sec, `2` peer_sec). |
+| `LINK_OPEN` | `warn:enum(no_lesc)` | Bench-only build (`LINK_SECURITY_OPEN`, env `collector_mock_debug_open`): LESC and bonds are off and every connection is authorized on connect (`CONN up=1` right after `LINK_UP`); no other pairing event appears. Emitted once at boot. The build fails with Secure Boot / flash encryption (devsec, prod). |
 
 `CONN` now means an **authorized session** (encrypted link with a valid LESC
 bond) opened/closed; a refused connection never produces `CONN`.

@@ -8,7 +8,8 @@
  *
  * Ao inicializar: configura o Security Manager (LESC Just Works), cria Server, Services e
  * características RX/TX do NUS e do SYNC. O advertising é ligado pela política de pareamento
- * (`applyAdvertising`), nunca aqui.
+ * (`applyAdvertising`), nunca aqui. Exceção: com `LINK_SECURITY_OPEN` (bancada) não há política;
+ * o anúncio é normal desde o `begin` e toda conexão é autorizada ao conectar.
  *
  * Expõe as seguintes funções para sua configuração:
  *  setOnCommandReceivedCallback: define o callback a ser executado no recebimento de um valor no RX
@@ -72,6 +73,13 @@ bool BleConnectivity::begin() {
     uint8_t manufacturer[4];
     ble_security::BleSecurity::manufacturerData(false, false, manufacturer);
     pAdv->setManufacturerData(manufacturer, sizeof(manufacturer));
+
+    if (ble_security::kLinkOpen) {
+        Serial.printf("[BLE] NimBLE %s, ENLACE ABERTO (sem LESC, so bancada)\n", NimBLEDevice::getVersion());
+        collector::Event("LINK_OPEN").token("warn", "no_lesc");
+        applyAdvertising(pairing::AdvMode::Normal, false, false);
+        return true;
+    }
 
     Serial.printf("[BLE] NimBLE %s, LESC Just Works, bonds=%d, MAX_BONDS=%d\n", NimBLEDevice::getVersion(),
                   NimBLEDevice::getNumBonds(), MYNEWT_VAL(BLE_STORE_MAX_BONDS));
@@ -147,6 +155,11 @@ void BleConnectivity::onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo)
         collector::Event("LINK_UP").num("conn", handle).hex("addr", shown, sizeof(shown))
             .token("atype", addrTypeName(air.getType())).flag("window", _pairing && _pairing->windowOpen());
     }
+    if (ble_security::kLinkOpen) {
+        Serial.println("[BLE] Link up (enlace aberto, autorizado)");
+        setAuthorized(handle);
+        return;
+    }
     Serial.println("[BLE] Link up (aguardando cifra)");
     if (!_pairing) return;
     _pairing->onLinkUp(handle);
@@ -184,6 +197,12 @@ void BleConnectivity::onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connIn
     Serial.println("[BLE] Link down");
     ble_security::BleSecurity::clearEncStatus(handle);
     forget(handle);
+    if (ble_security::kLinkOpen) {
+        // Sem política: encerra a sessão e religa o anúncio (advertiseOnDisconnect está desligado).
+        clearAuthorized(handle);
+        applyAdvertising(pairing::AdvMode::Normal, false, false);
+        return;
+    }
     // A política encerra a sessão (clearAuthorized) e religa o anúncio conforme o estado.
     if (_pairing) _pairing->onLinkDown(handle);
 }

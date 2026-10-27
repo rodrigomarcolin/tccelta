@@ -33,6 +33,9 @@ EncSlot gEncSlots[kEncSlots];
 }  // namespace
 
 void BleSecurity::configure() {
+    // Enlace aberto (bancada): sem LESC, sem bond e com o CCCD padrão da pilha (livre).
+    if (kLinkOpen) return;
+
     // Bond desligado no boot: só a janela de pareamento o liga. MITM não (Just Works); SC sim (LESC).
     NimBLEDevice::setSecurityAuth(false, false, true);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
