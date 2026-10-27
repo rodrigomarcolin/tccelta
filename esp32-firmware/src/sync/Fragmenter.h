@@ -2,7 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace sync {
+namespace datasync {
 
 /**
  * Enquadramento do SYNC_TX (spec fase-1/04 §5, Fig. 7): cada notificação é
@@ -38,4 +38,4 @@ private:
     size_t _index = 0;
 };
 
-}  // namespace sync
+}  // namespace datasync

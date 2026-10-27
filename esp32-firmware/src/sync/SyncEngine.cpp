@@ -7,7 +7,7 @@
 #include "collector/SegmentFormat.h"
 #include "security/DeviceKeys.h"
 
-namespace sync {
+namespace datasync {
 
 using collector::Block;
 using collector::Event;
@@ -509,4 +509,4 @@ void SyncEngine::injectAck(uint32_t ackSeq) {
     handleAck(v, kAckLen);
 }
 
-}  // namespace sync
+}  // namespace datasync

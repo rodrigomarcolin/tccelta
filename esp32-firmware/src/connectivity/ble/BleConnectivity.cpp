@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "BleConnectivity.h"
+#include "collector/Events.h"
 
 
 /**
@@ -22,6 +23,7 @@ BleConnectivity::BleConnectivity(const char* deviceName)
 bool BleConnectivity::begin() {
     NimBLEDevice::init(_deviceName);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // max TX power
+    NimBLEDevice::setMTU(517);               // preferido local; o efetivo é o mínimo entre os lados
 
     NimBLEServer* pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(this);
@@ -38,6 +40,17 @@ bool BleConnectivity::begin() {
         BLE_RX_UUID,
         NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
     pRxChar->setCallbacks(this);
+
+    // SYNC: criado depois do NUS, no mesmo servidor. A Fase 2 acrescenta as permissões
+    // cifradas (WRITE_ENC, CCCD cifrado) exatamente nestes dois createCharacteristic.
+    if (_syncLink) {
+        NimBLEService* pSync = pServer->createService(SYNC_SERVICE_UUID);
+        NimBLECharacteristic* syncTx = pSync->createCharacteristic(SYNC_TX_UUID, NIMBLE_PROPERTY::NOTIFY);
+        NimBLECharacteristic* syncRx = pSync->createCharacteristic(SYNC_RX_UUID, NIMBLE_PROPERTY::WRITE, 64);
+        syncTx->setCallbacks(&_syncTxCallbacks);
+        syncRx->setCallbacks(&_syncRxCallbacks);
+        _syncLink->attach(pServer, syncTx);
+    }
 
     NimBLEAdvertising* pAdv = NimBLEDevice::getAdvertising();
     pAdv->addServiceUUID(BLE_SERVICE_UUID);
@@ -72,11 +85,35 @@ void BleConnectivity::onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connI
 
 void BleConnectivity::onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) {
     Serial.println("[BLE] Client connected");
-    if (_onConnection) _onConnection(true);
+    if (_onConnection) _onConnection(true);  // incrementa a geração antes do SYNC postar Connected
+    if (_syncLink) _syncLink->onConnected(connInfo.getConnHandle());
 }
 
 void BleConnectivity::onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) {
     Serial.println("[BLE] Client disconnected — restarting advertising");
     if (_onConnection) _onConnection(false);
+    if (_syncLink) _syncLink->onDisconnected();
     NimBLEDevice::startAdvertising();
+}
+
+void BleConnectivity::onMTUChange(uint16_t mtu, NimBLEConnInfo&) {
+    if (_syncLink) _syncLink->onMtuChange(mtu);
+    // Evento no callback do NimBLE é aceitável aqui: não aloca e o MTU muda poucas vezes por conexão.
+    collector::Event("SYNC_MTU").num("mtu", mtu);
+}
+
+// SYNC
+
+void BleConnectivity::SyncRxCallbacks::onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) {
+    if (!_owner._syncLink) return;
+    const NimBLEAttValue& val = pChar->getValue();
+    _owner._syncLink->onRx(val.data(), val.size(), connInfo.getConnHandle());
+}
+
+void BleConnectivity::SyncTxCallbacks::onSubscribe(NimBLECharacteristic*, NimBLEConnInfo&, uint16_t subValue) {
+    if (_owner._syncLink) _owner._syncLink->onSubscribed(subValue);
+}
+
+void BleConnectivity::SyncTxCallbacks::onStatus(NimBLECharacteristic*, NimBLEConnInfo&, int code) {
+    if (_owner._syncLink) _owner._syncLink->onNotifyStatus(code);
 }

@@ -2,7 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace sync {
+namespace datasync {
 
 struct SendStats {
     uint16_t fragments = 0;
@@ -22,4 +22,4 @@ public:
     virtual uint16_t mtu() const = 0;
 };
 
-}  // namespace sync
+}  // namespace datasync

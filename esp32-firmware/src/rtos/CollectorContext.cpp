@@ -6,10 +6,9 @@ void CollectorContext::create() {
     acqRequests = xQueueCreate(4, sizeof(AcqRequest));
     freeBlocks  = xQueueCreate(kBlockBuffers, sizeof(collector::Block*));
     fullBlocks  = xQueueCreate(kBlockBuffers, sizeof(collector::Block*));
-    uploadRx    = xQueueCreate(4, sizeof(DataMessage));
-    sessionRx   = xQueueCreate(2, sizeof(DataMessage));
+    syncRx      = xQueueCreate(kSyncRxDepth, sizeof(SyncInput));
     events      = xEventGroupCreate();
-    configASSERT(acqRequests && freeBlocks && fullBlocks && uploadRx && sessionRx && events);
+    configASSERT(acqRequests && freeBlocks && fullBlocks && syncRx && events);
 
     for (collector::Block& block : blocks) {
         collector::Block* pointer = &block;

@@ -16,7 +16,10 @@ struct AtHashCommand {
         Tmax,        // AT#TMAX
         TmaxQuery,   // AT#TMAX?
         Flush,       // AT#FLUSH mmmm (prazo de fechamento dos blocos, ms)
-        Ack,         // AT#ACK n (só nas builds de depuração: simula o ACK do servidor)
+        Ack,         // AT#ACK n (só nas builds de depuração: ACK com tag válida, como se viesse do app)
+        SyncStatus,  // AT#SYNC? (depuração: estado do SyncEngine)
+        Corrupt,     // AT#CORRUPT n (depuração: corrompe o bloco n na flash)
+        Wipe,        // AT#WIPE (depuração: apaga log e estado do protocolo no próximo boot)
     };
 
     Kind     kind = Kind::Invalid;

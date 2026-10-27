@@ -47,10 +47,19 @@ public:
     virtual CollectorStats stats() const = 0;
 
     /**
-     * Bancada (só builds de depuração): entrega ao Upload um ACK(seq) como se
-     * viesse do servidor, para testar o upload sem o canal BLE de dados.
+     * Bancada (só builds com COLLECTOR_EVENTS): entrega à SyncTask um ACK(seq)
+     * com tag válida, como se viesse do app (spec fase-1/05 §12).
      */
     virtual bool injectAck(uint32_t seq) = 0;
+
+    /** Bancada: escreve a linha do `AT#SYNC?` (estado do SyncEngine). */
+    virtual void syncStatusLine(char* out, size_t capacity) const = 0;
+
+    /** Bancada: corrompe o bloco `seq` na flash (`AT#CORRUPT`). */
+    virtual bool corruptBlock(uint32_t seq) = 0;
+
+    /** Bancada: pede o wipe no próximo boot e reinicia (`AT#WIPE`). */
+    virtual void requestWipe() = 0;
 };
 
 }  // namespace collector

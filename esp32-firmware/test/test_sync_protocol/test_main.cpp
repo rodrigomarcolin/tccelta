@@ -8,7 +8,7 @@
 #include "sync/SyncProtocol.h"
 #include "support/vectors.h"
 
-using namespace sync;
+using namespace datasync;
 
 void setUp() {}
 void tearDown() {}

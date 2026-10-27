@@ -18,7 +18,7 @@
 #include "sync/SyncEngine.h"
 #include "sync/SyncProtocol.h"
 
-using namespace sync;
+using namespace datasync;
 using collector::Block;
 
 namespace {

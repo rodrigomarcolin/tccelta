@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-namespace sync {
+namespace datasync {
 
 using collector::getU16;
 using collector::getU32;
@@ -80,4 +80,4 @@ size_t encodeNotice(uint32_t head, uint8_t flags, const uint8_t devId[8], uint8_
     return kNoticeLen;
 }
 
-}  // namespace sync
+}  // namespace datasync

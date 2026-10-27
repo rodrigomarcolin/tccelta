@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <esp_timer.h>
 #include "collector/Clock.h"
 #include "collector/Collector.h"
 #include "collector/CurrentValues.h"
@@ -12,6 +13,7 @@ namespace rtos {
 class ArduinoClock : public collector::IClock {
 public:
     uint32_t nowMs() const override { return millis(); }
+    uint64_t nowUs() const override { return static_cast<uint64_t>(esp_timer_get_time()); }
 };
 
 /** Buffer duplo sobre `freeBlocks` / `fullBlocks`. */

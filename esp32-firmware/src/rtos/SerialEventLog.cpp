@@ -12,7 +12,7 @@ constexpr uint32_t    kStackBytes     = 4096;
 constexpr UBaseType_t kPriority       = 1;
 constexpr BaseType_t  kCore           = 0;
 constexpr uint32_t    kHealthPeriodMs = 60000;
-constexpr int         kFormatVersion  = 1;
+constexpr int         kFormatVersion  = 2;
 
 }  // namespace
 

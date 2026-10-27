@@ -14,7 +14,7 @@
  * Lado dongle do handshake, cursor de envio, lotes, avisos e erros
  * (spec fase-1/05). C++ puro: a SyncTask é a casca FreeRTOS.
  */
-namespace sync {
+namespace datasync {
 
 /** Onde o SyncEngine guarda o maior c_S aceito (NVS, spec fase-1/03 §6). */
 class ISyncStatePersistence {
@@ -123,4 +123,4 @@ private:
     uint32_t sinceUs(uint64_t t0) const { return static_cast<uint32_t>(_d.clock.nowUs() - t0); }
 };
 
-}  // namespace sync
+}  // namespace datasync

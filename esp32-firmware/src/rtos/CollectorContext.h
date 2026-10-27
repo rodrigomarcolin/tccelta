@@ -8,6 +8,7 @@
 #include "collector/BlockFormat.h"
 #include "collector/CollectorConfig.h"
 #include "obd2/IObd2.h"
+#include "sync/SyncProtocol.h"
 
 /**
  * Recursos de RTOS compartilhados pelas tarefas da coleta (plano §4.5, §4.6)
@@ -21,7 +22,6 @@ enum EventBit : EventBits_t {
     INTERNET       = BIT1,
     SESSION_OK     = BIT2,
     DIAG_MODE      = BIT3,
-    BLOCKS_PENDING = BIT4,
 };
 
 /** Trabalho executado pela Aquisição, dona do barramento, em nome de outra tarefa. */
@@ -41,11 +41,18 @@ struct AcqRequest {
     TaskHandle_t requester;                  // notificado ao terminar; nullptr = não espera
 };
 
-/** Mensagem recebida no canal de dados, ainda não verificada. */
-struct DataMessage {
-    uint8_t bytes[64];
-    size_t  len;
+/** O que a SyncTask recebe (spec fase-1/04 §6): eventos do BLE e da Flush, numa só fila. */
+enum class SyncInputKind : uint8_t { Connected, Disconnected, Subscribed, Unsubscribed, Rx, Flushed, InjectAck };
+
+struct SyncInput {
+    SyncInputKind kind;
+    uint8_t  len;         // Rx: bytes válidos em data
+    uint16_t connHandle;  // Connected/Rx
+    uint32_t value;       // Flushed: seq; InjectAck: ACK_seq; demais: geração (ctx.connections)
+    uint32_t tUs;         // esp_timer (32 bits baixos) no callback: latência de fila
+    uint8_t  data[datasync::kSyncRxMax];
 };
+constexpr UBaseType_t kSyncRxDepth = 8;
 
 constexpr size_t kBlockBuffers = 2;
 
@@ -55,16 +62,17 @@ struct Counters {
     std::atomic<uint32_t> droppedGps{0};
     std::atomic<uint32_t> failedBlocks{0};
     std::atomic<uint32_t> lostBlocks{0};
+    std::atomic<uint32_t> syncRxDropped{0};  // fila syncRx cheia (o callback do NimBLE não emite eventos)
 };
 
 struct CollectorContext {
     QueueHandle_t      acqRequests;
     QueueHandle_t      freeBlocks;
     QueueHandle_t      fullBlocks;
-    QueueHandle_t      uploadRx;
-    QueueHandle_t      sessionRx;
+    QueueHandle_t      syncRx;
     EventGroupHandle_t events;
     std::atomic<uint32_t> connections{0};  // incrementa a cada conexão do app
+    std::atomic<bool>     noticePending{false};  // a Flush não conseguiu postar `Flushed`: repetir o aviso
     collector::Block   blocks[kBlockBuffers];
     Counters           counters;
 

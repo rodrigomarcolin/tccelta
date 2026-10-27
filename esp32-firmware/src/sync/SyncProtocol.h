@@ -7,8 +7,11 @@
 /**
  * Formato de fio do serviço SYNC (spec fase-1/04 §3, §9): TLV `T(1) | L(2 LE) | V`
  * e os layouts das mensagens 0x01-0x07. Código puro, testado no native.
+ *
+ * O namespace é `datasync`, não `sync`: `sync()` é uma função do POSIX (unistd.h)
+ * e colide com o namespace no toolchain do ESP-IDF.
  */
-namespace sync {
+namespace datasync {
 
 enum class MsgType : uint8_t {
     Challenge = 0x01,
@@ -93,4 +96,4 @@ bool decodeBatchRequest(const uint8_t* v, size_t len, uint16_t& k);
 /** Aviso 0x07 só com o V (13 B). */
 size_t encodeNotice(uint32_t head, uint8_t flags, const uint8_t devId[8], uint8_t out[kNoticeLen]);
 
-}  // namespace sync
+}  // namespace datasync

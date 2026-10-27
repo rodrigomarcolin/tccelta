@@ -4,9 +4,9 @@
 #include "sync/SyncEngine.h"
 
 /** Link falso: grava os TLVs enviados; `failOnSend` (>= 0) faz o envio de índice N falhar. */
-class FakeSyncLink : public sync::ISyncLink {
+class FakeSyncLink : public datasync::ISyncLink {
 public:
-    bool send(const uint8_t* tlv, size_t len, sync::SendStats& stats) override {
+    bool send(const uint8_t* tlv, size_t len, datasync::SendStats& stats) override {
         const int index = static_cast<int>(attempts++);
         stats.fragments = 1;
         stats.mtu = mtuValue;
@@ -39,7 +39,7 @@ public:
 };
 
 /** `last_cs` em RAM; registra quantas mensagens já tinham sido enviadas ao gravar (ordem). */
-class FakeSyncPersistence : public sync::ISyncStatePersistence {
+class FakeSyncPersistence : public datasync::ISyncStatePersistence {
 public:
     uint32_t loadLastAcceptedCs() override { return lastCs; }
     bool saveLastAcceptedCs(uint32_t cs) override {
