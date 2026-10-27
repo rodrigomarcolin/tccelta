@@ -1,3 +1,4 @@
+import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
@@ -53,4 +54,9 @@ abstract interface class Obd2Repository {
   /// permanentes + MIL), Modos 03/07/0A (+ 02 para congelamento). Lança
   /// `DtcReadFailure` se não houver conexão pronta ou a leitura falhar.
   Future<DtcSnapshot> readDtc();
+
+  /// Envia a posição do celular ao dongle (`AT#GPS`). Lança
+  /// `ObdCommandFailure` se não houver conexão pronta ou o dongle responder
+  /// diferente de `OK`.
+  Future<void> reportGps(GpsFix fix);
 }

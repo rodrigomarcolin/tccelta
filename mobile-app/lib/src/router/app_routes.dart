@@ -31,6 +31,9 @@ abstract final class AppRoutes {
   /// Tela de opções ("Mais"), aberta pela aba homônima da tab bar.
   static const String more = '/more';
 
+  /// Configurações de sincronização, GPS e estado do envio ao servidor.
+  static const String syncSettings = '/sync-settings';
+
   /// Lista de sensores (`SensorPickerScreen`). Dois modos de entrada: o
   /// botão "Adicionar indicador" do Painel empilha com `context.push` (sem
   /// `extra`); a aba "Sensores" da tab bar navega com

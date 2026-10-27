@@ -6,6 +6,15 @@
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>O app usa Bluetooth para encontrar e conversar com o seu dongle OBD2.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>O app envia a posição do celular ao dongle para registrar onde cada trecho da viagem aconteceu.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>O app envia a posição do celular ao dongle para registrar onde cada trecho da viagem aconteceu, mesmo com a tela apagada.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>bluetooth-central</string>
+	</array>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>O app usa Bluetooth para encontrar e conversar com o seu dongle OBD2.</string>
 	<key>CFBundleDevelopmentRegion</key>

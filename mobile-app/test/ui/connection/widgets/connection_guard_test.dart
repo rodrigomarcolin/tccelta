@@ -11,6 +11,7 @@ import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
 import '../../../support/fake_ble_service.dart';
 import '../../../support/fake_obd2_repository.dart';
+import '../../../support/sync_provider_overrides.dart';
 
 /// [BlePermissionsRepository] falso com resposta fixa de permissão.
 class _FakeBlePermissions implements BlePermissionsRepository {
@@ -31,6 +32,7 @@ void main() {
   // caminho de permissão não ser mascarado pelo gate de "BT desligado".
   Widget app({required bool granted}) => ProviderScope(
     overrides: [
+      ...syncProviderOverrides(),
       bleServiceProvider.overrideWithValue(FakeBleService()),
       blePermissionsRepositoryProvider.overrideWithValue(
         _FakeBlePermissions(granted: granted),
