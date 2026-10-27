@@ -79,7 +79,7 @@ bool matches(const char* text, const char* name, const char*& rest) {
 AtHashCommand parseArgs(Kind kind, const char* rest) {
     AtHashCommand cmd;
     Args args(rest);
-    int64_t a, b, c;
+    int64_t a = 0, b = 0, c = 0;
     bool ok = false;
 
     switch (kind) {

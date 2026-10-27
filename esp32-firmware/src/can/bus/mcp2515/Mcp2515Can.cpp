@@ -1,3 +1,6 @@
+// Só compila no env collector_mcp2515: com ESP-IDF o build_src_filter não vale
+// (o src/CMakeLists.txt pega tudo) e a biblioteca autowp-mcp2515 só existe nele.
+#if defined(USE_MCP2515)
 #include "Mcp2515Can.h"
 #include <cstring>
 
@@ -29,3 +32,4 @@ bool Mcp2515Can::receive(CanFrame& frame) {
     memcpy(frame.data, f.data, f.can_dlc);
     return true;
 }
+#endif  // USE_MCP2515
