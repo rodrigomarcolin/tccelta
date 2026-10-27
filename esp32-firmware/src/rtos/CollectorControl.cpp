@@ -32,6 +32,7 @@ collector::ConfigError CollectorControl::commit(const collector::CollectorConfig
 
 collector::ConfigError CollectorControl::setPid(uint8_t pid, uint32_t periodMs) {
     collector::CollectorConfig candidate = _config;
+    if (pid > collector::kPidRecordTypeMax) return collector::ConfigError::InvalidPid;
     if (!candidate.setPid(pid, periodMs)) return collector::ConfigError::TooManyPids;
     return commit(candidate);
 }

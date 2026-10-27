@@ -16,7 +16,7 @@ constexpr uint32_t kMinPeriodMs     = 100;    // piso de Pᵢ e Pᵢᵐⁱⁿ
 constexpr double   kMaxUtilization  = 0.8;    // Umax
 
 // Prazo de fechamento de um bloco (T_flush). O teto vem do Δt dos registros
-// (int16, ±32,7 s), com folga para uma leitura em andamento.
+// (u16, 65,5 s), com folga para uma leitura em andamento.
 constexpr uint32_t kDefaultFlushIntervalMs = 10000;
 constexpr uint32_t kMinFlushIntervalMs     = 1000;
 constexpr uint32_t kMaxFlushIntervalMs     = 30000;
@@ -53,7 +53,7 @@ struct CollectorConfig {
     const PidSetting* find(uint8_t pid) const;
 
     /** Adiciona ou altera um PID. `minIntervalMs` padrão: max(Pᵢ/2, 100 ms). */
-    bool setPid(uint8_t pid, uint32_t periodMs);
+    bool setPid(uint8_t pid, uint32_t periodMs);  // false se cheio ou PID reservado (> 0xFC)
     bool removePid(uint8_t pid);
 };
 
@@ -66,6 +66,7 @@ enum class ConfigError : uint8_t {
     Infeasible,       // U > Umax
     FlushOutOfRange,  // prazo de fechamento fora de [1 s, 30 s]
     Busy,             // Aquisição recusou (ex.: medindo Tmax)
+    InvalidPid,       // PID ≥ 0xFD colide com marcador/GPS (spec fase-1/02 §2)
 };
 
 /** Confere pisos e viabilidade (U ≤ Umax com Tᵢ = Tmax). */
