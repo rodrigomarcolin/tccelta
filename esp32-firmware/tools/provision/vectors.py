@@ -171,7 +171,7 @@ def emit_header(v):
 def emit_dart(v):
     def c(name, hexs): return f"const String {name} = '{hexs}';\n"
     out = ["// GERADO por esp32-firmware/tools/provision/vectors.py — não editar.\n",
-           "// ignore_for_file: constant_identifier_names\n\n"]
+           "// ignore_for_file: lines_longer_than_80_chars\n\n"]
     for k in ("dev_id", "k_auth", "k_rec", "k_sig", "k_sig_public"):
         out.append(c("vec" + "".join(p.capitalize() for p in k.split("_")), v[k]))
     for h in v["handshake"]:

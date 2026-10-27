@@ -1,17 +1,24 @@
 # Connectivity
 
-## Canal de dados da coleta (a implementar)
+Dois serviços GATT no mesmo servidor NimBLE (`ble/BleConnectivity`):
 
-O canal de comandos ELM327 (NUS, `BleConnectivity`) já existe e cobre todos os
-`AT#`. Falta o canal **binário** de dados, por onde vão os blocos para o
-servidor e a sincronização de hora. A coleta já está pronta para ele; o
-contrato é este:
-
-| Sentido | O que fazer | Onde |
+| Serviço | UUID | Uso |
 |---|---|---|
-| App → Dongle | Remontar os quadros (`collector::FrameDecoder`) e pôr cada mensagem em `rtos::DataMessage`: `ACK` (tipo `0x02`) → `ctx.uploadRx`; `TIME_RESP` (`0x04`) → `ctx.sessionRx`. Não verificar nada: as tarefas verificam. | `rtos/CollectorContext.h` |
-| Dongle → App | Implementar `IDataChannel::send()`: envolver em quadro (`collector::frameMessage`) e fragmentar pelo MTU. | `IDataChannel.h` |
-| Conexão | Ligar `APP_CONNECTED` ao conectar; desligar `APP_CONNECTED`, `INTERNET` e `SESSION_OK` ao desconectar. | `ctx.events` |
+| NUS | `6E400001-B5A3-F393-E0A9-E50E24DCCA9E` | Comandos de texto ELM327 e `AT#` (RX `...0002` escrita, TX `...0003` notificação). É o único anunciado. |
+| SYNC | `7A3C0001-9B1E-4F2A-8C5D-2E6F1A0B3C4D` | Protocolo binário de segurança e telemetria: RX `7A3C0002-...` (`WRITE`, app para dongle, um TLV por escrita de até 64 B) e TX `7A3C0003-...` (`NOTIFY`, dongle para app). O app o descobre na conexão. |
 
-O formato das mensagens está em `collector/DataProtocol.h`. Enquanto o canal
-não existe, `SerialDataChannel` imprime as mensagens na serial.
+## Formato do SYNC
+
+- TLV `T (1) | L (2, LE) | V`. Tipos: `0x01` desafio, `0x02` resposta, `0x03` bloco,
+  `0x04` ACK, `0x05` pedido de lote, `0x06` erro, `0x07` aviso de novo bloco.
+  Layouts byte a byte em `sync/SyncProtocol.h` (spec `fase-1/04`).
+- No SYNC_TX cada notificação é `C | pedaço do TLV`; `C` tem o bit 7 ligado no
+  primeiro fragmento e o contador (módulo 128) nos bits 6..0. O pedaço tem
+  `MTU - 4` bytes (`sync/Fragmenter.h`).
+- `BleSyncLink` controla o fluxo por créditos de notificação (janela derivada do MTU)
+  e só enfileira em `syncRx` o que chega: nenhum trabalho no callback do NimBLE.
+  A `SyncTask` consome a fila e roda o `SyncEngine` (handshake, cursor, lotes).
+- A cada conexão `ctx.connections` incrementa (geração); `APP_CONNECTED` liga ao
+  conectar e `APP_CONNECTED`/`INTERNET` desligam ao desconectar.
+
+Eventos de depuração do SYNC e do handshake: `docs/debug-events.md` (§5.7).
