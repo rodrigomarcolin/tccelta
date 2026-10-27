@@ -4,7 +4,6 @@ import 'package:tccelta_mobile/src/core/persistence/shared_preferences_provider.
 import 'package:tccelta_mobile/src/data/datasources/ble_permissions_datasource.dart';
 import 'package:tccelta_mobile/src/data/datasources/dongle_datasource.dart';
 import 'package:tccelta_mobile/src/data/datasources/last_dongle_datasource.dart';
-import 'package:tccelta_mobile/src/data/datasources/secure_dongle_datasource.dart';
 import 'package:tccelta_mobile/src/data/repositories/ble_permissions_repository_impl.dart';
 import 'package:tccelta_mobile/src/data/repositories/dongle_repository_impl.dart';
 import 'package:tccelta_mobile/src/data/repositories/last_dongle_repository_impl.dart';
@@ -15,7 +14,6 @@ import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
 import 'package:tccelta_mobile/src/domain/repositories/last_dongle_repository.dart';
 import 'package:tccelta_mobile/src/infra/ble/ble_plus.dart';
 import 'package:tccelta_mobile/src/services/ble/ble_service.dart';
-import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
 
 /// Port BLE -> adapter concreto (infra). Trocar de lib = trocar SÓ este
 /// provider; nada acima sabe qual biblioteca está embaixo.
@@ -24,14 +22,9 @@ final Provider<BleService> bleServiceProvider = Provider<BleService>(
 );
 
 /// Datasource específico do dongle, sobre o [bleServiceProvider].
-/// Usa [SecureDongleDatasource] para exigir uma PSK e envolver a conexão BLE
-/// com `EncryptedBleConnection`.
 final Provider<DongleDatasource> dongleDatasourceProvider =
     Provider<DongleDatasource>(
-      (ref) => SecureDongleDatasource(
-        ref.read(bleServiceProvider),
-        ref.read(settingsServiceProvider),
-      ),
+      (ref) => DongleDatasource(ref.read(bleServiceProvider)),
     );
 
 /// Repository = *source of truth* da conexão. Mantém a conexão viva, então é um

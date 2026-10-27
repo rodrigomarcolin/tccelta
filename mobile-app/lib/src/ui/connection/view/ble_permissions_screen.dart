@@ -40,9 +40,8 @@ class BlePermissionsScreen extends ConsumerWidget {
     final last = await ref.read(lastDongleRepositoryProvider).load();
     if (!context.mounted) return;
     if (last != null) {
-      // Popula a seleção como se o usuário tivesse escolhido na busca — a
-      // PSK (se houver) já está salva e é lida direto pelo
-      // `SecureDongleDatasource`, então a tela de PSK Setup é pulada também.
+      // Popula a seleção como se o usuário tivesse escolhido na busca, para
+      // que a tela de conexão tenha o dongle disponível.
       ref
           .read(selectedDongleProvider.notifier)
           .select(BleDevice(id: last.id, name: last.name, rssi: 0));
