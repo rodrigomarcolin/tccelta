@@ -55,6 +55,26 @@ abstract interface class BleConnection {
   /// reconexão (a característica antiga fica inválida quando o link cai).
   Future<void> write(List<int> bytes);
 
+  /// Canal RX/TX adicional pedido no `connect` pelo [serviceUuid]; `null` se
+  /// não foi pedido.
+  BleChannel? channel(String serviceUuid);
+
+  /// MTU ATT negociado (23 enquanto desconhecido).
+  int get mtu;
+
   /// Encerra a conexão e libera os recursos (streams).
   Future<void> disconnect();
+}
+
+/// Canal RX/TX adicional de uma [BleConnection]. [incoming] é estável entre
+/// reconexões (a mesma stream continua emitindo depois de `reconnecting`).
+abstract interface class BleChannel {
+  /// Bytes recebidos por notificação.
+  Stream<List<int>> get incoming;
+
+  /// `true` quando o serviço foi encontrado e RX/TX estão prontos.
+  bool get isReady;
+
+  /// Escreve no canal.
+  Future<void> write(List<int> bytes);
 }

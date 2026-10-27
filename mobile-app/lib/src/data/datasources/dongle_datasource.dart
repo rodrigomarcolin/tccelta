@@ -19,6 +19,18 @@ abstract final class DongleConfig {
   static const String tx = '6E400003-B5A3-F393-E0A9-E50E24DCCA9E';
 }
 
+/// Config do serviço SYNC do dongle (TLV de telemetria autenticada).
+abstract final class SyncConfig {
+  /// Service UUID do SYNC.
+  static const String service = '7A3C0001-9B1E-4F2A-8C5D-2E6F1A0B3C4D';
+
+  /// RX (WRITE) — app -> dongle.
+  static const String rx = '7A3C0002-9B1E-4F2A-8C5D-2E6F1A0B3C4D';
+
+  /// TX (NOTIFY) — dongle -> app.
+  static const String tx = '7A3C0003-9B1E-4F2A-8C5D-2E6F1A0B3C4D';
+}
+
 /// Envelopa o [BleService] genérico com o que é específico do dongle (nome +
 /// UUIDs da NUS). Não guarda estado — o repository é quem faz isso.
 class DongleDatasource {
@@ -56,11 +68,19 @@ class DongleDatasource {
   /// Para o scan em andamento.
   Future<void> stopScan() => _ble.stopScan();
 
-  /// Conecta ao dongle [deviceId] com os UUIDs da NUS.
+  /// Conecta ao dongle [deviceId] com os UUIDs da NUS e abre também o canal
+  /// do serviço SYNC (ausente em firmware antigo sem derrubar a conexão).
   Future<BleConnection> connect(String deviceId) => _ble.connect(
     deviceId: deviceId,
     serviceUuid: DongleConfig.service,
     rxUuid: DongleConfig.rx,
     txUuid: DongleConfig.tx,
+    extraChannels: const [
+      BleChannelSpec(
+        serviceUuid: SyncConfig.service,
+        rxUuid: SyncConfig.rx,
+        txUuid: SyncConfig.tx,
+      ),
+    ],
   );
 }

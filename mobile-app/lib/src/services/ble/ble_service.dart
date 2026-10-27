@@ -1,3 +1,4 @@
+import 'package:meta/meta.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
@@ -36,6 +37,31 @@ abstract interface class BleService {
     required String serviceUuid,
     required String rxUuid,
     required String txUuid,
+    List<BleChannelSpec> extraChannels = const [],
     int mtu,
   });
+}
+
+/// Par RX/TX de um serviço GATT adicional, aberto na mesma conexão.
+@immutable
+class BleChannelSpec {
+  /// Cria a especificação do canal.
+  const BleChannelSpec({
+    required this.serviceUuid,
+    required this.rxUuid,
+    required this.txUuid,
+    this.writeWithResponse = true,
+  });
+
+  /// UUID do serviço GATT.
+  final String serviceUuid;
+
+  /// Característica de escrita (app → dispositivo).
+  final String rxUuid;
+
+  /// Característica de notificação (dispositivo → app).
+  final String txUuid;
+
+  /// Escrita com resposta (permite *long write*). @default true
+  final bool writeWithResponse;
 }

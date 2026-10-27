@@ -86,6 +86,7 @@ class FlutterBluePlusBleService implements BleService {
     required String serviceUuid,
     required String rxUuid,
     required String txUuid,
+    List<BleChannelSpec> extraChannels = const [],
     int mtu = 512,
   }) async {
     final device = _seen[deviceId] ?? BluetoothDevice.fromId(deviceId);
@@ -95,6 +96,7 @@ class FlutterBluePlusBleService implements BleService {
       rx: Guid(rxUuid),
       tx: Guid(txUuid),
       mtu: mtu,
+      extraChannels: extraChannels,
     )..start(); // NÃO aguarda "ready"; começa a emitir fases imediatamente.
     return conn;
   }
@@ -122,8 +124,15 @@ class _FbpConnection implements BleConnection {
     required this.service,
     required this.rx,
     required this.tx,
-    required this.mtu,
-  });
+    required int mtu,
+    List<BleChannelSpec> extraChannels = const [],
+  }) : _requestedMtu = mtu,
+       _channels = {
+         // Os controllers nascem aqui: quem assina cedo não perde notificação
+         // de nenhuma conexão.
+         for (final spec in extraChannels)
+           spec.serviceUuid.toUpperCase(): _FbpChannel(spec),
+       };
 
   /// Tempo máximo que cada tentativa de connect (1ª conexão e reconexão)
   /// aguarda antes de desistir. Numa queda não intencional, é a janela de
@@ -135,7 +144,8 @@ class _FbpConnection implements BleConnection {
   final Guid service;
   final Guid rx;
   final Guid tx;
-  final int mtu;
+  final int _requestedMtu;
+  final Map<String, _FbpChannel> _channels;
 
   final StreamController<BleConnectionPhase> _phaseCtrl =
       StreamController<BleConnectionPhase>.broadcast();
@@ -167,6 +177,13 @@ class _FbpConnection implements BleConnection {
   @override
   bool get isReady => _rx != null && _tx != null;
 
+  @override
+  BleChannel? channel(String serviceUuid) =>
+      _channels[serviceUuid.toUpperCase()];
+
+  @override
+  int get mtu => device.mtuNow;
+
   void _emit(BleConnectionPhase p) {
     _current = p;
     if (!_phaseCtrl.isClosed) _phaseCtrl.add(p);
@@ -181,6 +198,9 @@ class _FbpConnection implements BleConnection {
           !_closed) {
         _rx = null;
         _tx = null;
+        for (final c in _channels.values) {
+          c.reset();
+        }
         _reachedReady = false;
         _emit(BleConnectionPhase.reconnecting);
         try {
@@ -211,7 +231,7 @@ class _FbpConnection implements BleConnection {
     if (Platform.isAndroid) {
       _emit(BleConnectionPhase.optimizingLink);
       try {
-        await device.requestMtu(mtu); // iOS negocia sozinho e ignora.
+        await device.requestMtu(_requestedMtu); // iOS negocia sozinho e ignora.
       } on Object {
         // O MTU padrão do connect() já cobre; seguimos mesmo se falhar.
       }
@@ -225,9 +245,17 @@ class _FbpConnection implements BleConnection {
 
     _emit(BleConnectionPhase.enablingNotify);
     await _notifySub?.cancel();
-    await _tx!.setNotifyValue(true);
+    // Assina ANTES de habilitar o notify: o dongle pode notificar dentro do
+    // próprio `onSubscribe`, e `onValueReceived` é broadcast.
     _notifySub = _tx!.onValueReceived.listen(_incomingCtrl.add);
     device.cancelWhenDisconnected(_notifySub!);
+    await _tx!.setNotifyValue(true);
+
+    // Canais extras: serviço ausente deixa o canal indisponível sem falhar a
+    // conexão (firmware antigo segue só com o NUS).
+    for (final c in _channels.values) {
+      await c.setup(device, services);
+    }
 
     _reachedReady = true;
     _emit(BleConnectionPhase.ready);
@@ -245,6 +273,9 @@ class _FbpConnection implements BleConnection {
     _closed = true;
     await _connStateSub?.cancel();
     await _notifySub?.cancel();
+    for (final c in _channels.values) {
+      await c.dispose();
+    }
     try {
       await device.disconnect();
     } finally {
@@ -252,5 +283,71 @@ class _FbpConnection implements BleConnection {
       await _phaseCtrl.close();
       await _incomingCtrl.close();
     }
+  }
+}
+
+/// Canal GATT adicional sobre `flutter_blue_plus`. O controller de [incoming]
+/// sobrevive às reconexões.
+class _FbpChannel implements BleChannel {
+  _FbpChannel(this.spec);
+
+  final BleChannelSpec spec;
+  final StreamController<List<int>> _incomingCtrl =
+      StreamController<List<int>>.broadcast();
+
+  BluetoothCharacteristic? _rx;
+  BluetoothCharacteristic? _tx;
+  StreamSubscription<List<int>>? _sub;
+
+  @override
+  Stream<List<int>> get incoming => _incomingCtrl.stream;
+
+  @override
+  bool get isReady => _rx != null && _tx != null;
+
+  /// Procura o serviço em [services] e habilita o notify (assinando antes).
+  Future<void> setup(
+    BluetoothDevice device,
+    List<BluetoothService> services,
+  ) async {
+    reset();
+    final service = Guid(spec.serviceUuid);
+    final matches = services.where((s) => s.uuid == service);
+    if (matches.isEmpty) return;
+    final chars = matches.first.characteristics;
+    final rxChar = chars.where((c) => c.uuid == Guid(spec.rxUuid));
+    final txChar = chars.where((c) => c.uuid == Guid(spec.txUuid));
+    if (rxChar.isEmpty || txChar.isEmpty) return;
+    final tx = txChar.first;
+    await _sub?.cancel();
+    _sub = tx.onValueReceived.listen(_incomingCtrl.add);
+    device.cancelWhenDisconnected(_sub!);
+    await tx.setNotifyValue(true);
+    _rx = rxChar.first;
+    _tx = tx;
+  }
+
+  /// Marca o canal como indisponível (link caiu).
+  void reset() {
+    _rx = null;
+    _tx = null;
+  }
+
+  @override
+  Future<void> write(List<int> bytes) async {
+    final c = _rx;
+    if (c == null) throw StateError('Canal indisponível (link desconectado)');
+    await c.write(
+      bytes,
+      withoutResponse: !spec.writeWithResponse,
+      allowLongWrite: spec.writeWithResponse,
+    );
+  }
+
+  /// Libera o canal ao encerrar a conexão.
+  Future<void> dispose() async {
+    reset();
+    await _sub?.cancel();
+    await _incomingCtrl.close();
   }
 }
