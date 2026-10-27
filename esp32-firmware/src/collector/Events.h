@@ -22,6 +22,13 @@ constexpr bool kEventsEnabled = true;
 constexpr bool kEventsEnabled = false;
 #endif
 
+// Builds de benchmark (COLLECTOR_EVENTS_NO_HEX) omitem o hexa do FLUSH para aliviar a serial.
+#if defined(COLLECTOR_EVENTS) && !defined(COLLECTOR_EVENTS_NO_HEX)
+constexpr bool kEventsHexEnabled = true;
+#else
+constexpr bool kEventsHexEnabled = false;
+#endif
+
 /** Destino das linhas. Acrescenta "EV <n> <t> " e as envia (serial no ESP32). */
 class IEventSink {
 public:
@@ -47,6 +54,8 @@ public:
     Event& operator=(const Event&) = delete;
 
     Event& num(const char* key, int64_t value);
+    /** Duração em microssegundos (campos `*_us`, spec fase-1/06 §1): igual a `num`, documenta a unidade. */
+    Event& us(const char* key, uint64_t value) { return num(key, static_cast<int64_t>(value)); }
     Event& flag(const char* key, bool value);
     Event& hex8(const char* key, uint8_t value);
     Event& hex(const char* key, const uint8_t* bytes, size_t len);
@@ -59,7 +68,7 @@ public:
     Event& at(uint32_t tMs) { _tMs = tMs; _hasTime = true; return *this; }
 
     static constexpr size_t kSmallCapacity = 256;
-    static constexpr size_t kLargeCapacity = 2400;  // cabe o FLUSH com 1 KB em hexa
+    static constexpr size_t kLargeCapacity = 2600;  // cabe o FLUSH com 1 KB de dados e 64 B de tag em hexa
 
 private:
     char   _small[kSmallCapacity];
@@ -89,6 +98,7 @@ public:
     Event& operator=(const Event&) = delete;
 
     Event& num(const char*, int64_t) { return *this; }
+    Event& us(const char*, uint64_t) { return *this; }
     Event& flag(const char*, bool) { return *this; }
     Event& hex8(const char*, uint8_t) { return *this; }
     Event& hex(const char*, const uint8_t*, size_t) { return *this; }
