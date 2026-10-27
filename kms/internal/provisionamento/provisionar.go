@@ -1,3 +1,10 @@
+// Package provisionamento é a parte Vault do provisionamento de dongles: importa K_auth/K_rec no
+// Transit (BYOK), roda o teste dourado, gera o material NVS e grava o registro.json que
+// `tccelta provisionar registrar` (backend) usa para cadastrar o dongle no banco.
+//
+// Ordem das garantias: o KMS vem primeiro e o banco depois. No pior caso sobra uma chave órfã no
+// Vault (inofensiva, sem uso); nunca um dongle no banco sem chave. Tudo é idempotente: chave que já
+// existe no Transit é pulada e só o registro é reemitido.
 package provisionamento
 
 import (
@@ -17,20 +24,45 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/kms"
+	"tccelta/kms/internal/vault"
 )
 
-// Provisionador cadastra dongles e importa K_auth/K_rec no Vault.
+// SchemaRegistro é o schema do registro.json (docs/registro-dongle.md).
+const SchemaRegistro = "tccelta.dongle.registro.v1"
+
+// Registro é o contrato com o backend: o que o banco precisa saber de um dongle provisionado.
+type Registro struct {
+	Schema       string `json:"schema"`
+	DevID        string `json:"dev_id"`
+	Perfil       string `json:"perfil"`
+	KMSChaveAuth string `json:"kms_chave_auth"`
+	KMSChaveRec  string `json:"kms_chave_rec"`
+	ChavePublica string `json:"chave_publica,omitempty"`
+	Descricao    string `json:"descricao,omitempty"`
+}
+
+// Gravar escreve saida/<dev_id>/registro.json (0644: não tem segredo) e devolve o caminho.
+func (r Registro) Gravar(saida string) (string, error) {
+	dir := filepath.Join(saida, r.DevID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	b, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	p := filepath.Join(dir, "registro.json")
+	return p, os.WriteFile(p, append(b, '\n'), 0o644)
+}
+
+// Provisionador importa K_auth/K_rec no Vault.
 type Provisionador struct {
-	T         kms.Transporte
-	Pool      *pgxpool.Pool
+	T         vault.Transporte
 	MountAuth string
 	MountRec  string
 	Ambiente  string
@@ -80,14 +112,6 @@ func (p *Provisionador) ExportarWrapping(ctx context.Context, saida string) erro
 	return os.WriteFile(saida, append(b, '\n'), 0o600)
 }
 
-func (p *Provisionador) importar(ctx context.Context, mount, nome string, pub *rsa.PublicKey, chave []byte) error {
-	ct, err := Embrulhar(pub, chave)
-	if err != nil {
-		return err
-	}
-	return p.importarCiphertext(ctx, mount, nome, ct)
-}
-
 func (p *Provisionador) importarCiphertext(ctx context.Context, mount, nome, ct string) error {
 	_, err := p.T.Escrever(ctx, fmt.Sprintf("%s/keys/%s/import", mount, nome), map[string]any{
 		"ciphertext": ct, "hash_function": "SHA256", "type": "hmac",
@@ -95,32 +119,38 @@ func (p *Provisionador) importarCiphertext(ctx context.Context, mount, nome, ct 
 	return err
 }
 
-// cadastrar insere o dongle e executa importar dentro da mesma transação do banco.
-func (p *Provisionador) cadastrar(ctx context.Context, dev []byte, perfil string, chavePub []byte, desc string, importar func(hex string) error) error {
-	hexID := hex.EncodeToString(dev)
-	tx, err := p.Pool.BeginTx(ctx, pgx.TxOptions{})
+// existe diz se a chave `nome` já está no mount (o Vault responde 404 se não estiver).
+func (p *Provisionador) existe(ctx context.Context, mount, nome string) (bool, error) {
+	_, err := p.T.Ler(ctx, mount+"/keys/"+nome)
+	if err == nil {
+		return true, nil
+	}
+	var ev *vault.ErroVault
+	if errors.As(err, &ev) && ev.Status == http.StatusNotFound {
+		return false, nil
+	}
+	return false, err
+}
+
+// importarSeFaltar importa o ciphertext só se a chave ainda não existir no mount.
+func (p *Provisionador) importarSeFaltar(ctx context.Context, mount, nome string, ct func() (string, error)) error {
+	ja, err := p.existe(ctx, mount, nome)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	q := consultas.New(tx)
-	var d *string
-	if desc != "" {
-		d = &desc
+	if ja {
+		p.Log.Info("provisionamento.chave_ja_existe", "mount", mount, "chave", nome)
+		return nil
 	}
-	id, err := q.InserirDongle(ctx, consultas.InserirDongleParams{DevID: dev, PerfilSeguranca: perfil,
-		KmsChaveAuth: hexID, KmsChaveRec: hexID, ChavePublica: chavePub, Descricao: d})
+	c, err := ct()
 	if err != nil {
-		return fmt.Errorf("cadastro: %w", err)
-	}
-	if err := q.InserirDongleEstado(ctx, id); err != nil {
 		return err
 	}
-	if err := importar(hexID); err != nil {
-		p.Log.Error("provisionamento.import_falhou_chave_orfa_possivel", "dev_id", hexID, "erro", err)
+	if err := p.importarCiphertext(ctx, mount, nome, c); err != nil {
+		p.Log.Error("provisionamento.import_falhou_chave_orfa_possivel", "mount", mount, "chave", nome, "erro", err)
 		return fmt.Errorf("vault: %w", err)
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 // Dongle de teste/gerado.
@@ -131,96 +161,97 @@ type Dongle struct {
 	KSig        []byte
 }
 
-// ImportarComChaves cadastra um dongle com chaves dadas (CSV de teste e `novo`).
-func (p *Provisionador) ImportarComChaves(ctx context.Context, d Dongle, desc string) error {
+// ImportarComChaves importa K_auth/K_rec do dongle (idempotente) e devolve o registro. As chaves do
+// Transit levam o DevId em hexadecimal como nome.
+func (p *Provisionador) ImportarComChaves(ctx context.Context, d Dongle, desc string) (Registro, error) {
 	pa, _, err := p.chavePublica(ctx, p.MountAuth)
 	if err != nil {
-		return err
+		return Registro{}, err
 	}
 	pr, _, err := p.chavePublica(ctx, p.MountRec)
 	if err != nil {
-		return err
+		return Registro{}, err
 	}
-	return p.cadastrar(ctx, d.DevID, d.Perfil, nil, desc, func(h string) error {
-		if err := p.importar(ctx, p.MountAuth, h, pa, d.KAuth); err != nil {
-			return err
-		}
-		return p.importar(ctx, p.MountRec, h, pr, d.KRec)
-	})
+	hx := hex.EncodeToString(d.DevID)
+	if err := p.importarSeFaltar(ctx, p.MountAuth, hx, func() (string, error) { return Embrulhar(pa, d.KAuth) }); err != nil {
+		return Registro{}, err
+	}
+	if err := p.importarSeFaltar(ctx, p.MountRec, hx, func() (string, error) { return Embrulhar(pr, d.KRec) }); err != nil {
+		return Registro{}, err
+	}
+	return Registro{Schema: SchemaRegistro, DevID: hx, Perfil: d.Perfil, KMSChaveAuth: hx, KMSChaveRec: hx, Descricao: desc}, nil
 }
 
-// Novo gera dongles de teste (recusado em producao).
-func (p *Provisionador) Novo(ctx context.Context, perfil string) (Dongle, error) {
+// Novo gera um dongle de teste, importa as chaves e devolve o dongle e o registro (recusado em producao).
+// A checagem de DevId livre é só no Vault: todo dongle cadastrado tem chave lá.
+func (p *Provisionador) Novo(ctx context.Context, perfil string) (Dongle, Registro, error) {
 	if p.Ambiente == "producao" {
-		return Dongle{}, errors.New("provisionar novo é recusado em AMBIENTE=producao")
+		return Dongle{}, Registro{}, errors.New("provisionar novo é recusado em AMBIENTE=producao")
 	}
 	for tent := 0; tent < 5; tent++ {
 		d := Dongle{DevID: make([]byte, 8), KAuth: make([]byte, 32), KRec: make([]byte, 32), Perfil: perfil}
 		for _, b := range [][]byte{d.DevID, d.KAuth, d.KRec} {
 			if _, err := rand.Read(b); err != nil {
-				return Dongle{}, err
+				return Dongle{}, Registro{}, err
 			}
 		}
-		if _, err := consultas.New(p.Pool).BuscarDonglePorDevId(ctx, d.DevID); err == nil {
+		ja, err := p.existe(ctx, p.MountAuth, hex.EncodeToString(d.DevID))
+		if err != nil {
+			return Dongle{}, Registro{}, err
+		}
+		if ja {
 			continue
 		}
-		hx := hex.EncodeToString(d.DevID)
-		if _, err := p.T.Ler(ctx, p.MountAuth+"/keys/"+hx); err == nil {
-			continue
+		r, err := p.ImportarComChaves(ctx, d, "dongle de teste")
+		if err != nil {
+			return Dongle{}, Registro{}, err
 		}
-		if err := p.ImportarComChaves(ctx, d, "dongle de teste"); err != nil {
-			return Dongle{}, err
-		}
-		return d, nil
+		return d, r, nil
 	}
-	return Dongle{}, errors.New("não foi possível gerar um DevId livre")
+	return Dongle{}, Registro{}, errors.New("não foi possível gerar um DevId livre")
 }
 
 // ImportarCSV importa dev_id_hex,k_auth_hex,k_rec_hex,perfil (só fora de produção). Idempotente.
-func (p *Provisionador) ImportarCSV(ctx context.Context, arq string) ([]Dongle, error) {
+func (p *Provisionador) ImportarCSV(ctx context.Context, arq string) ([]Dongle, []Registro, error) {
 	if p.Ambiente == "producao" {
-		return nil, errors.New("importar chaves de teste é recusado em AMBIENTE=producao")
+		return nil, nil, errors.New("importar chaves de teste é recusado em AMBIENTE=producao")
 	}
 	f, err := os.Open(arq)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer f.Close()
 	rd := csv.NewReader(f)
 	rd.Comment = '#'
 	rd.FieldsPerRecord = 4
-	var out []Dongle
+	var ds []Dongle
+	var rs []Registro
 	for {
 		rec, err := rd.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		dev, e1 := hex.DecodeString(strings.TrimSpace(rec[0]))
 		ka, e2 := hex.DecodeString(strings.TrimSpace(rec[1]))
 		kr, e3 := hex.DecodeString(strings.TrimSpace(rec[2]))
 		if e1 != nil || e2 != nil || e3 != nil || len(dev) != 8 || len(ka) != 32 || len(kr) != 32 {
-			return nil, fmt.Errorf("linha inválida: %v", rec[0])
+			return nil, nil, fmt.Errorf("linha inválida: %v", rec[0])
 		}
 		d := Dongle{DevID: dev, KAuth: ka, KRec: kr, Perfil: strings.TrimSpace(rec[3])}
-		if _, err := consultas.New(p.Pool).BuscarDonglePorDevId(ctx, dev); err == nil {
-			p.Log.Info("provisionamento.ja_existe", "dev_id", rec[0])
-			out = append(out, d)
-			continue
+		r, err := p.ImportarComChaves(ctx, d, "dongle de teste (CSV)")
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", rec[0], err)
 		}
-		if err := p.ImportarComChaves(ctx, d, "dongle de teste (CSV)"); err != nil {
-			// chave já importada no Vault (execução anterior interrompida)? apenas relata
-			return nil, fmt.Errorf("%s: %w", rec[0], err)
-		}
-		out = append(out, d)
+		ds, rs = append(ds, d), append(rs, r)
 	}
-	return out, nil
+	return ds, rs, nil
 }
 
-// RegistroKMS é o envelope kms_record.json gerado pelo provision.py (Fase 1).
-type RegistroKMS struct {
+// EnvelopeKMS é o envelope kms_record.json gerado pelo provision.py (Fase 1).
+type EnvelopeKMS struct {
 	Schema          string   `json:"schema"`
 	DevID           string   `json:"dev_id"`
 	SecurityProfile string   `json:"security_profile"`
@@ -237,76 +268,74 @@ type chaveKMS struct {
 	KeyHex        string `json:"key_hex"` // só alg "none" fora de produção
 }
 
-// ImportarRegistro importa o envelope de um dongle real.
-func (p *Provisionador) ImportarRegistro(ctx context.Context, arq, desc string) error {
+// ImportarRegistro importa o envelope de um dongle real (idempotente) e devolve o registro.
+func (p *Provisionador) ImportarRegistro(ctx context.Context, arq, desc string) (Registro, error) {
 	b, err := os.ReadFile(arq)
 	if err != nil {
-		return err
+		return Registro{}, err
 	}
-	var r RegistroKMS
+	var r EnvelopeKMS
 	if err := json.Unmarshal(b, &r); err != nil {
-		return err
+		return Registro{}, err
 	}
 	if r.Schema != "tccelta.kms.v1" {
-		return fmt.Errorf("schema desconhecido %q", r.Schema)
+		return Registro{}, fmt.Errorf("schema desconhecido %q", r.Schema)
 	}
 	dev, err := hex.DecodeString(r.DevID)
 	if err != nil || len(dev) != 8 {
-		return errors.New("dev_id inválido")
+		return Registro{}, errors.New("dev_id inválido")
 	}
 	switch r.SecurityProfile {
 	case "hmac", "asym", "none":
 	default:
-		return fmt.Errorf("security_profile %q", r.SecurityProfile)
+		return Registro{}, fmt.Errorf("security_profile %q", r.SecurityProfile)
 	}
-	var pubSig []byte
+	pubSig := ""
 	if r.SecurityProfile == "asym" {
-		pubSig, err = hex.DecodeString(r.KSigPublic)
-		if err != nil || len(pubSig) != 65 || pubSig[0] != 4 {
-			return errors.New("k_sig_public inválida")
+		raw, err := hex.DecodeString(r.KSigPublic)
+		if err != nil || len(raw) != 65 || raw[0] != 4 {
+			return Registro{}, errors.New("k_sig_public inválida")
 		}
+		pubSig = r.KSigPublic
 	}
 	pa, kidA, err := p.chavePublica(ctx, p.MountAuth)
 	if err != nil {
-		return err
+		return Registro{}, err
 	}
 	pr, kidR, err := p.chavePublica(ctx, p.MountRec)
 	if err != nil {
-		return err
+		return Registro{}, err
 	}
-	ct := func(c chaveKMS, kid string, pub *rsa.PublicKey) (string, error) {
-		switch c.Alg {
-		case "vault-byok-rsa-oaep-sha256-aes-kwp":
-			if !strings.EqualFold(c.Kid, kid) {
-				return "", fmt.Errorf("kid %s difere do da wrapping key atual %s", c.Kid, kid)
+	ct := func(c chaveKMS, kid string, pub *rsa.PublicKey) func() (string, error) {
+		return func() (string, error) {
+			switch c.Alg {
+			case "vault-byok-rsa-oaep-sha256-aes-kwp":
+				if !strings.EqualFold(c.Kid, kid) {
+					return "", fmt.Errorf("kid %s difere do da wrapping key atual %s", c.Kid, kid)
+				}
+				return c.CiphertextB64, nil
+			case "none":
+				if p.Ambiente == "producao" {
+					return "", errors.New("alg none recusado em producao")
+				}
+				k, err := hex.DecodeString(c.KeyHex)
+				if err != nil || len(k) != 32 {
+					return "", errors.New("key_hex inválida")
+				}
+				return Embrulhar(pub, k)
 			}
-			return c.CiphertextB64, nil
-		case "none":
-			if p.Ambiente == "producao" {
-				return "", errors.New("alg none recusado em producao")
-			}
-			k, err := hex.DecodeString(c.KeyHex)
-			if err != nil || len(k) != 32 {
-				return "", errors.New("key_hex inválida")
-			}
-			return Embrulhar(pub, k)
+			return "", fmt.Errorf("alg %q", c.Alg)
 		}
-		return "", fmt.Errorf("alg %q", c.Alg)
 	}
-	ca, err := ct(r.KAuth, kidA, pa)
-	if err != nil {
-		return err
+	hx := hex.EncodeToString(dev)
+	if err := p.importarSeFaltar(ctx, p.MountAuth, hx, ct(r.KAuth, kidA, pa)); err != nil {
+		return Registro{}, err
 	}
-	cr, err := ct(r.KRec, kidR, pr)
-	if err != nil {
-		return err
+	if err := p.importarSeFaltar(ctx, p.MountRec, hx, ct(r.KRec, kidR, pr)); err != nil {
+		return Registro{}, err
 	}
-	return p.cadastrar(ctx, dev, r.SecurityProfile, pubSig, desc, func(h string) error {
-		if err := p.importarCiphertext(ctx, p.MountAuth, h, ca); err != nil {
-			return err
-		}
-		return p.importarCiphertext(ctx, p.MountRec, h, cr)
-	})
+	return Registro{Schema: SchemaRegistro, DevID: hx, Perfil: r.SecurityProfile, KMSChaveAuth: hx, KMSChaveRec: hx,
+		ChavePublica: pubSig, Descricao: desc}, nil
 }
 
 // Verificar roda o teste dourado (1) e (2) com chaves conhecidas; exige a política de teste (dev).

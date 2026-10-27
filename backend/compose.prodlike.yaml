@@ -1,3 +1,5 @@
+# Perfil prodlike: Vault em modo servidor (raft, TLS 1.3, auditoria), redes internas e mTLS entre a API e o
+# KMS. Gere a PKI antes: `make certs` (usa ../kms/scripts/gerar-certs.sh).
 services:
   banco:
     ports: !reset []
@@ -8,8 +10,8 @@ services:
       VAULT_CACERT: /vault/certs/ca.pem
     secrets: !reset []
     volumes:
-      - ./deploy/vault/config:/vault/config:ro
-      - ./deploy/certs/vault:/vault/certs:ro
+      - ../kms/deploy/vault/config:/vault/config:ro
+      - ../kms/deploy/certs:/vault/certs:ro
       - vault_dados:/vault/data
       - vault_init:/vault/init
       - vault_auditoria:/vault/logs
@@ -22,33 +24,57 @@ services:
     entrypoint: ["/bin/sh", "/vault/scripts/init-unseal.sh"]
     environment: { VAULT_ADDR: "https://vault:8200", VAULT_CACERT: /vault/certs/ca.pem }
     volumes:
-      - ./deploy/vault/scripts:/vault/scripts:ro
-      - ./deploy/certs/vault/ca.pem:/vault/certs/ca.pem:ro
+      - ../kms/deploy/vault/scripts:/vault/scripts:ro
+      - ../kms/deploy/certs/ca.pem:/vault/certs/ca.pem:ro
       - vault_init:/vault/init
     depends_on: { vault: { condition: service_started } }
     restart: "no"
-    networks: [kms]
+    networks: [cofre]
   vault-bootstrap:
     environment: { VAULT_ADDR: "https://vault:8200", VAULT_CACERT: /vault/certs/ca.pem, PERFIL: prodlike }
     secrets: !reset []
     volumes:
-      - ./deploy/vault/scripts:/vault/scripts:ro
-      - ./deploy/vault/politicas:/vault/politicas:ro
-      - ./deploy/certs/vault/ca.pem:/vault/certs/ca.pem:ro
+      - ../kms/deploy/vault/scripts:/vault/scripts:ro
+      - ../kms/deploy/vault/politicas:/vault/politicas:ro
+      - ../kms/deploy/certs/ca.pem:/vault/certs/ca.pem:ro
       - vault_init:/vault/init:ro
-      - vault_approle_api:/approle/api
+      - vault_approle_kms:/approle/kms
       - vault_approle_ferramentas:/approle/ferramentas
       - vault_approle_rotacao:/approle/rotacao
     depends_on: !override
       vault-unseal: { condition: service_completed_successfully }
+  # KMS: TLS com certificado de cliente obrigatorio (AMBIENTE != dev) e Vault por TLS.
+  kms:
+    environment:
+      AMBIENTE: prodlike
+      VAULT_ADDR: https://vault:8200
+      VAULT_CACERT: /run/certs/ca.pem
+      KMS_TLS_CERT: /run/certs/kms.pem
+      KMS_TLS_KEY: /run/certs/kms-key.pem
+      KMS_TLS_CLIENT_CA: /run/certs/ca.pem
+    volumes:
+      - ../kms/deploy/certs:/run/certs:ro
+  jwt-rotacao:
+    environment:
+      AMBIENTE: prodlike
+      VAULT_ADDR: https://vault:8200
+      VAULT_CACERT: /run/certs/ca.pem
+    volumes:
+      - ../kms/deploy/certs/ca.pem:/run/certs/ca.pem:ro
+  # API: fala com o KMS por mTLS (certificado de cliente da API, CA para conferir o servidor).
   api:
     environment:
-      VAULT_ADDR: https://vault:8200
-      VAULT_CACERT: /run/secrets/vault_ca
-    secrets: [pg_senha_api, redis_senha, vault_ca]
+      KMS_URL: https://kms:8300
+      KMS_CACERT: /run/secrets/kms_ca
+      KMS_CLIENT_CERT: /run/secrets/kms_api_cert
+      KMS_CLIENT_KEY: /run/secrets/kms_api_key
+    secrets: [pg_senha_api, redis_senha, kms_ca, kms_api_cert, kms_api_key]
     ports: !reset []
 networks:
   dados: { internal: true }
   kms: { internal: true }
+  cofre: { internal: true }
 secrets:
-  vault_ca: { file: ./deploy/certs/vault/ca.pem }
+  kms_ca: { file: ../kms/deploy/certs/ca.pem }
+  kms_api_cert: { file: ../kms/deploy/certs/api-cliente.pem }
+  kms_api_key: { file: ../kms/deploy/certs/api-cliente-key.pem }

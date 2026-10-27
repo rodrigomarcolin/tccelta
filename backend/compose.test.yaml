@@ -1,4 +1,4 @@
-# Stack minima para e2e / CI: banco + redis + vault dev + migrar + api (sem caddy, sem tunel).
+# Stack minima para e2e / CI: banco + redis + vault dev + kms + migrar + api (sem caddy, sem tunel).
 # Reaproveita compose.yaml; este arquivo e usado sozinho (-f compose.test.yaml) e e autossuficiente.
 name: tccelta-teste
 
@@ -10,6 +10,14 @@ x-backend: &backend
   user: "65532:65532"
   cap_drop: [ALL]
   env_file: [.env]
+
+x-kms: &kms
+  image: tccelta-kms:local
+  build: { context: ../kms, dockerfile: Dockerfile, target: kms }
+  read_only: true
+  tmpfs: [/tmp]
+  user: "65532:65532"
+  cap_drop: [ALL]
 
 services:
   banco:
@@ -35,22 +43,39 @@ services:
     secrets: [vault_dev_root_token]
     entrypoint: ["/bin/sh", "-c", "VAULT_DEV_ROOT_TOKEN_ID=$$(cat /run/secrets/vault_dev_root_token) exec vault server -dev"]
     healthcheck: { test: ["CMD", "vault", "status"], interval: 5s, retries: 20 }
-    networks: [kms]
+    networks: [cofre]
   vault-bootstrap:
     image: hashicorp/vault:${VAULT_VERSAO:-1.18}
     depends_on: { vault: { condition: service_healthy } }
     environment: { VAULT_ADDR: "http://vault:8200", PERFIL: dev }
     secrets: [vault_dev_root_token]
     volumes:
-      - ./deploy/vault/scripts:/vault/scripts:ro
-      - ./deploy/vault/politicas:/vault/politicas:ro
-      - vault_approle_api:/approle/api
+      - ../kms/deploy/vault/scripts:/vault/scripts:ro
+      - ../kms/deploy/vault/politicas:/vault/politicas:ro
+      - vault_approle_kms:/approle/kms
       - vault_approle_ferramentas:/approle/ferramentas
       - vault_approle_rotacao:/approle/rotacao
     user: "0:0"
     entrypoint: ["/bin/sh", "/vault/scripts/bootstrap.sh"]
     restart: "no"
-    networks: [kms]
+    networks: [cofre]
+  kms:
+    <<: *kms
+    command: ["servir"]
+    environment:
+      AMBIENTE: dev
+      VAULT_ADDR: http://vault:8200
+      VAULT_APPROLE_ROLE_ID_ARQUIVO: /run/approle/kms_role_id
+      VAULT_APPROLE_SECRET_ID_ARQUIVO: /run/approle/kms_secret_id
+      KMS_ENDERECO: ":8300"
+      KMS_METRICAS_ENDERECO: ":9300"
+    volumes: [vault_approle_kms:/run/approle:ro]
+    depends_on: { vault-bootstrap: { condition: service_completed_successfully } }
+    healthcheck:
+      test: ["CMD", "/tccelta-kms", "saude", "--url", "http://127.0.0.1:9300/saude/pronta"]
+      interval: 5s
+      retries: 20
+    networks: [kms, cofre]
   redis:
     image: redis:7.4-alpine
     command: ["/bin/sh", "-c", "exec redis-server --save '' --appendonly no --requirepass \"$$(cat /run/secrets/redis_senha)\""]
@@ -78,16 +103,13 @@ services:
       PERMITIR_PERFIL_NONE: "true"
       BANCO_URL: postgres://tccelta_api@banco:5432/tccelta?sslmode=disable
       BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_api
-      VAULT_ADDR: http://vault:8200
-      VAULT_APPROLE_ROLE_ID_ARQUIVO: /run/approle/api_role_id
-      VAULT_APPROLE_SECRET_ID_ARQUIVO: /run/approle/api_secret_id
+      KMS_URL: http://kms:8300
       REDIS_ENDERECO: redis:6379
       REDIS_SENHA_ARQUIVO: /run/secrets/redis_senha
     secrets: [pg_senha_api, redis_senha]
-    volumes: [vault_approle_api:/run/approle:ro]
     depends_on:
       migrar: { condition: service_completed_successfully }
-      vault-bootstrap: { condition: service_completed_successfully }
+      kms: { condition: service_healthy }
       redis: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "/tccelta", "saude", "--url", "http://127.0.0.1:8080/saude/pronta"]
@@ -111,8 +133,6 @@ services:
     entrypoint: ["/tccelta"]
     read_only: false
     environment:
-      VAULT_ADDR: http://vault:8200
-      VAULT_TOKEN_ARQUIVO: /run/approle/provisionador_token
       BANCO_URL: postgres://tccelta_provisionador@banco:5432/tccelta?sslmode=disable
       BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_provisionador
       SIM_BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
@@ -121,12 +141,27 @@ services:
       ADMIN_BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
     secrets: [pg_senha_provisionador, pg_senha_dono]
     volumes:
-      - vault_approle_ferramentas:/run/approle:ro
       - ./testdata:/testdata:ro
       - ./saida:/saida
     networks: [dados, kms]
+  kms-ferramentas:
+    <<: *kms
+    image: tccelta-kms-ferramentas:local
+    build: { context: ../kms, dockerfile: Dockerfile, target: ferramentas }
+    profiles: [ferramentas]
+    entrypoint: ["/tccelta-kms"]
+    read_only: false
+    environment:
+      AMBIENTE: dev
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN_ARQUIVO: /run/approle/provisionador_token
+    volumes:
+      - vault_approle_ferramentas:/run/approle:ro
+      - ./testdata:/testdata:ro
+      - ./saida:/saida
+    networks: [cofre]
 
-networks: { dados: {}, kms: {} }
+networks: { dados: {}, kms: {}, cofre: {} }
 secrets:
   pg_senha_superusuario: { file: ./deploy/segredos/pg_senha_superusuario }
   pg_senha_dono: { file: ./deploy/segredos/pg_senha_dono }
@@ -135,4 +170,4 @@ secrets:
   pg_senha_provisionador: { file: ./deploy/segredos/pg_senha_provisionador }
   vault_dev_root_token: { file: ./deploy/segredos/vault_dev_root_token }
   redis_senha: { file: ./deploy/segredos/redis_senha }
-volumes: { vault_approle_api: {}, vault_approle_ferramentas: {}, vault_approle_rotacao: {} }
+volumes: { vault_approle_kms: {}, vault_approle_ferramentas: {}, vault_approle_rotacao: {} }

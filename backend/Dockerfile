@@ -11,11 +11,11 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
       -ldflags "-s -w -X tccelta/backend/internal/versao.Versao=${VERSAO}" \
       -o /out/tccelta ./cmd/tccelta
 
-# Alvo `ferramentas`: Python + gerador de imagem NVS (usado por `provisionar novo`) + o mesmo binario.
-FROM python:3.12-slim AS ferramentas
-RUN pip install --no-cache-dir esp-idf-nvs-partition-gen cryptography
+# Alvo `ferramentas`: o mesmo binario, para `provisionar registrar`, simulador e reprocessar.
+# (A parte Vault do provisionamento e o gerador de imagem NVS ficam no alvo `ferramentas` do modulo ../kms.)
+FROM gcr.io/distroless/static-debian12:nonroot AS ferramentas
 COPY --from=build /out/tccelta /tccelta
-USER 65532:65532
+USER nonroot:nonroot
 ENTRYPOINT ["/tccelta"]
 
 FROM gcr.io/distroless/static-debian12:nonroot
