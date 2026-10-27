@@ -1,0 +1,54 @@
+name: kms-ci
+
+on:
+  pull_request:
+    paths: ["kms/**", ".github/workflows/kms-ci.yml"]
+  push:
+    branches: [main, master]
+    paths: ["kms/**"]
+
+defaults:
+  run:
+    working-directory: kms
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - name: go vet
+        run: go vet ./...
+      - uses: golangci/golangci-lint-action@v6
+        with: { version: v1.64.8, working-directory: kms }
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - run: go test -race ./...
+
+  isolamento:
+    # kms e backend sao modulos distintos, sem replace/go.work: nenhum importa o outro.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: kms nao importa o backend
+        run: "! grep -rn 'tccelta/backend' kms --include='*.go' --include='go.mod'"
+        working-directory: .
+      - name: backend nao importa o kms
+        run: "! grep -rn 'tccelta/kms' backend --include='*.go' --include='go.mod'"
+        working-directory: .
+
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...

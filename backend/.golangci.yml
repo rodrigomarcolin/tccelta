@@ -1,6 +1,38 @@
 run:
   timeout: 5m
 linters:
-  enable: [errcheck, gosec, bodyclose, sqlclosecheck, contextcheck]
+  enable: [errcheck, gosec, bodyclose, sqlclosecheck, contextcheck, depguard]
+linters-settings:
+  depguard:
+    rules:
+      # Direção: dominio <- repositorio + casodeuso/porta <- casodeuso/* <- httpapi <- cmd.
+      # Os adaptadores (repositorio/postgres, kmsremoto, observabilidade/metricas, token) só são
+      # ligados em cmd/tccelta/api.go.
+      dominio:
+        files: ["**/internal/dominio/**"]
+        deny:
+          - { pkg: github.com/jackc/pgx, desc: "o dominio e puro: sem banco" }
+          - { pkg: tccelta/backend/internal/banco, desc: "o dominio e puro: sem banco" }
+          - { pkg: github.com/prometheus, desc: "o dominio e puro: sem metricas" }
+          - { pkg: net/http, desc: "o dominio e puro: sem transporte" }
+          - { pkg: tccelta/backend/internal/repositorio, desc: "o dominio nao conhece os repositorios" }
+          - { pkg: tccelta/backend/internal/casodeuso, desc: "o dominio nao conhece os casos de uso" }
+      casodeuso:
+        files: ["**/internal/casodeuso/**"]
+        deny:
+          - { pkg: github.com/jackc/pgx, desc: "casos de uso acessam o banco so por internal/repositorio" }
+          - { pkg: tccelta/backend/internal/banco, desc: "casos de uso acessam o banco so por internal/repositorio" }
+          - { pkg: github.com/prometheus, desc: "metricas so pelas portas de casodeuso/porta" }
+          - { pkg: net/http, desc: "casos de uso nao conhecem o transporte" }
+          - { pkg: tccelta/backend/internal/kmsremoto, desc: "o KMS entra pela porta porta.Autenticador" }
+          - { pkg: tccelta/backend/internal/observabilidade/metricas, desc: "metricas so pelas portas de casodeuso/porta" }
+          - { pkg: tccelta/backend/internal/repositorio/postgres, desc: "use as interfaces de internal/repositorio" }
+      httpapi:
+        files: ["**/internal/httpapi/**"]
+        deny:
+          - { pkg: github.com/jackc/pgx, desc: "o HTTP e so transporte" }
+          - { pkg: tccelta/backend/internal/banco, desc: "o HTTP e so transporte" }
+          - { pkg: tccelta/backend/internal/repositorio, desc: "o HTTP chama casos de uso, nunca repositorios" }
+          - { pkg: tccelta/backend/internal/kmsremoto, desc: "o HTTP chama casos de uso, nunca o KMS" }
 issues:
   exclude-dirs: [internal/banco/consultas]

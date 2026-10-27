@@ -23,7 +23,6 @@ import (
 	ding "tccelta/backend/internal/dominio/ingestao"
 	"tccelta/backend/internal/dominio/protocolo"
 	"tccelta/backend/internal/limites"
-	"tccelta/backend/internal/repositorio/memoria"
 	"tccelta/backend/internal/token"
 )
 
@@ -77,13 +76,11 @@ func montar(t *testing.T, f *fakes, ativo bool) (*Deps, *token.Emissor) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bd := memoria.Novo()
 	dev, _ := protocolo.DevIDDeHex("0011223344556677")
-	bd.AdicionarDongle(dongle.Dongle{ID: 1, DevID: dev, Perfil: protocolo.PerfilHMAC, Ativo: ativo})
 	cfg, _ := config.CarregarDe(func(string) string { return "" })
 	d := &Deps{Cfg: cfg, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Met: portateste.Nop{},
 		PedirDesafio: f.desafio, ResponderDesafio: f.resposta, ReceberLote: f.lote, ObterConfirmacao: fakeConfirmacao{},
-		Autenticar: sessao.NovoAutenticar(v, bd.Repositorios().Dongles, false),
+		Autenticar: fakeAutenticar{v: v, dev: dev, ativo: ativo},
 		Limitador:  limites.NovoLocal(), Semaforo: limites.NovaConcorrencia(1, 0)}
 	return d, token.NovoEmissor(k, "iss", "aud", time.Hour)
 }
@@ -107,11 +104,9 @@ func codigo(w *httptest.ResponseRecorder) string {
 
 func TestDevIDInvalidoEDesconhecido(t *testing.T) {
 	// o caso de uso de desafio real, sobre repositórios em memória, responde 404 ao DevId sem cadastro
-	bd := memoria.Novo()
 	f := novosFakes()
+	f.desafio.err = dongle.ErrDesconhecido
 	d, _ := montar(t, f, true)
-	d.PedirDesafio = casohs.NovoEmitirDesafio(bd.Repositorios(), portateste.Nova(), portateste.Nop{}, portateste.RelogioFixo(time.Unix(1, 0)),
-		slog.New(slog.NewTextHandler(io.Discard, nil)), casohs.Parametros{})
 	h := d.Roteador()
 	if w := req(h, "POST", "/v1/dongles/zz/desafio", nil, nil); w.Code != 400 || codigo(w) != "devid_invalido" {
 		t.Fatal(w.Code, w.Body.String())
@@ -254,4 +249,26 @@ func TestSaude(t *testing.T) {
 	if req(h, "GET", "/saude/pronta", nil, nil).Code != 503 {
 		t.Fatal("deveria estar não pronto")
 	}
+}
+
+// fakeAutenticar valida o token de verdade (validador sobre o KMS em memória) e simula o cadastro:
+// só o dongle `dev` existe, ativo ou não.
+type fakeAutenticar struct {
+	v     *token.Validador
+	dev   protocolo.DevID
+	ativo bool
+}
+
+func (f fakeAutenticar) Executar(ctx context.Context, bruto string) (sessao.Autenticada, error) {
+	s, err := f.v.Validar(ctx, bruto)
+	if err != nil {
+		return sessao.Autenticada{}, err
+	}
+	if s.Dev != f.dev {
+		return sessao.Autenticada{}, porta.ErrTokenInvalido
+	}
+	if !f.ativo {
+		return sessao.Autenticada{}, dongle.ErrInativo
+	}
+	return sessao.Autenticada{Sessao: s, Dongle: dongle.Dongle{DevID: f.dev, Ativo: true}}, nil
 }
