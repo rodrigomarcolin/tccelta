@@ -14,3 +14,12 @@ tools/provision/out/
 /sdkconfig.*
 !/sdkconfig.defaults
 !/sdkconfig.*.defaults
+
+# Logs de execução e benchmarks locais (as pastas existem no repo via .gitkeep; o conteúdo não)
+/logs/*
+!/logs/.gitkeep
+/benchmarks/*
+!/benchmarks/.gitkeep
+
+# Gerado pelo gerenciador de componentes do ESP-IDF
+/dependencies.lock
