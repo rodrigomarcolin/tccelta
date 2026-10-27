@@ -10,3 +10,11 @@ monitor_port = COM9
 ; configuração são mantidos). Não deixe ligado: impede testar a recuperação
 ; após reinício.
 ; build_flags = -DCOLLECTOR_WIPE_ON_BOOT
+
+; Pareamento: tempos curtos para bancada (mantenha o MAX_BONDS).
+; [pairing]
+; build_flags =
+;     -DPAIR_BUTTON_HOLD_MS=2000
+;     -DPAIR_WINDOW_MS=20000
+;     -DCONFIG_BT_NIMBLE_MAX_BONDS=1
+;     -DMYNEWT_VAL_BLE_SM_MAX_PROCS=3

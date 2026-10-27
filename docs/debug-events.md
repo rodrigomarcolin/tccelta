@@ -170,7 +170,7 @@ include event formatting.
 
 | Event | Fields | Meaning |
 |---|---|---|
-| `CONN` | `up:bool` `gen:int` | App connected / disconnected over BLE; `gen` = connection generation. |
+| `CONN` | `up:bool` `gen:int` | Authorized session opened / closed (encrypted link with a valid LESC bond, see 5.9); `gen` = connection generation. |
 | `NET` | `up:bool` | The app reported Internet available / unavailable (informational). |
 | `SYNC_SUB` | `on:bool` | Notifications on SYNC_TX enabled / disabled. |
 | `SYNC_MTU` | `mtu:int` | Negotiated MTU changed. |
@@ -193,9 +193,37 @@ include event formatting.
 
 | Event | Fields | Meaning |
 |---|---|---|
-| `STACK` | `task:enum(acquisition,flush,elm327,sync,logger)` `free:int` | Every 60 s, one line per task: minimum free stack ever (bytes). |
+| `STACK` | `task:enum(acquisition,flush,elm327,sync,pairing,logger)` `free:int` | Every 60 s, one line per task: minimum free stack ever (bytes). |
 | `HEAP` | `free:int` `min:int` | Every 60 s: current and minimum free heap (bytes). |
 | `LOG_DROP` | `count:int` | `count` events were lost because the logger queue was full. Also visible as a gap in `n`. |
+
+
+### 5.9 Pairing and link security
+
+Emitted by the LESC Just Works link layer (`PairButton`, `PairingPolicy`,
+`PairingController`, `BleConnectivity`, `BleSecurity`). `conn` is the NimBLE
+connection handle (the same in all events of a connection; it may be reused
+after `LINK_DOWN`). New events are additive: `FORMAT v` does not change.
+
+| Event | Fields | Meaning |
+|---|---|---|
+| `PAIR_BTN` | `action:enum(press,hold,release,blocked)` `held:int` `fired:bool` | Pairing button transition. `press`: debounced press (`held=0`). `hold`: `PAIR_BUTTON_HOLD_MS` reached (`held` = real time, `fired=1`). `release`: `held` = total duration, `fired=1` if the press fired. `blocked`: the firmware booted with the button pressed and ignores it until released. |
+| `PAIR_WINDOW` | `state:enum(open,close)` `reason:enum(boot,button,timeout,bonded,error)` `deadline:ms\|-` `dur:int\|-` | Pairing window. `open` (always `reason=button`): `deadline` = instant it closes. `close`: `dur` = time it stayed open (`-` for `reason=boot`). `bonded`: a phone paired. `error`: it did not open because erasing the bonds failed (`dur=0`). |
+| `BOND_DELETE` | `reason:enum(button,policy,recover)` `count:int` `ok:bool` `attempts:int` `dur:int` | Bonds erased. `policy`: boot hygiene (more than one bond or a legacy bond, `dur` = time spent) or the bond of a refused connection (`count=1`, decided by the policy, `dur=0`). `recover`: the whole `nimble_bond` namespace is erased before a restart. |
+| `BOND_VERIFY` | `conn:int` `ok:bool` `lesc:bool` `persisted:bool` | New bond checked in the store right after pairing. `ok=0` refuses the connection and keeps the window open. |
+| `NVS` | `free:int` `used:int` `total:int` | Entries of the `nvs` partition at boot (shared by bonds and collection). |
+| `CONN_DROP` | `reason:enum(button)` `count:int` | All connections dropped (`0x13`) for a new pairing. Each one still produces its `LINK_DOWN`. |
+| `ADV` | `mode:enum(off,normal,pairing)` `window:bool` `bonded:bool` | Advertising reconfigured; only when something changes. `window`/`bonded` = bits of the manufacturer data (`FF FF 01 flags`). |
+| `LINK_UP` | `conn:int` `addr:hex` `atype:enum(pub,rnd)` `window:bool` | Link accepted, **not yet** authorized. `addr` = over-the-air address (display order, no `:`; a rotating RPA on phones). `window=1` if the window was open. |
+| `LINK_ENC` | `conn:int` `up:bool` `bonded:bool` `fresh:bool` `key:int` `reason:enum(ok,pairing,other)` `rc:int` `dur:int` | Encryption result (`ENC_CHANGE`). `fresh=1`: new key (pairing); `0`: restored LTK. `up=0`: `pairing` = pairing failed (see `PAIR_RESULT`), `other` = anything else. Restoring without an LTK on the dongle emits nothing. `dur` = `t - LINK_UP.t`. |
+| `PAIR_RESULT` | `conn:int` `ok:bool` `reason:enum(ok,window_closed,not_bonded,legacy,not_persisted,busy,peer_reject,local_reject,timeout,other)` `late:bool` `rc:int` `dur:int` | End of a pairing attempt that reached the SM (not emitted for restores nor for requests refused in `BOND_FULL`). `ok=1` only with a LESC bond created in the window and confirmed in the store. `late=1`: admitted in the window, finished after it closed. `dur` = pairing time (includes the OS dialog). |
+| `CONN_REJECT` | `conn:int` `reason:enum(not_bonded,enc_fail,key_size,auth_timeout,busy)` `hci:hex` `dur:int` | The dongle drops the connection. `hci` = reason sent (`05` refusal, `09` busy). |
+| `LINK_DOWN` | `conn:int` `rc:int` `hci:hex\|-` `auth:bool` `dur:int` | Link down. `rc` = raw NimBLE reason; `hci` = `rc - 0x200` for HCI errors (`13` remote, `16` local, `08` timeout). `auth=1` if it was the authorized session. |
+| `WRITE_DROP` | `conn:int` `chr:enum(nus_rx,sync_rx)` `len:int` | Write from an unauthorized connection, discarded. |
+| `BOND_FULL` | `event:enum(full,overflow)` `action:enum(reject,allow)` `obj:int` `conn:int\|-` `window:bool` | `full`: a Pairing Request arrived with the store full (any request when a bond exists, `MAX_BONDS=1`); `reject` outside the window (the existing bond is untouched), `allow` inside it; `obj` is `2` (peer_sec). `overflow`: attempt to write a second bond; always `reject`, `obj` = NimBLE object type (`1` our_sec, `2` peer_sec). |
+
+`CONN` now means an **authorized session** (encrypted link with a valid LESC
+bond) opened/closed; a refused connection never produces `CONN`.
 
 ## 6. Reconstruction recipes
 
@@ -272,6 +300,15 @@ handshake cost at the dongle, the BLE throughput per MTU, the fragmentation
 overhead and the confirmation latency per `seq`, for the `none`, `hmac` and
 `asym` builds (`collector_*_bench_*` envs).
 
+
+### 6.9 Pairing and link security
+
+- **Pairing time:** `PAIR_RESULT ok=1 dur`. Since the button: `PAIR_RESULT.t - PAIR_BTN(action=hold).t`.
+- **Reconnect with bond:** `LINK_ENC fresh=0 up=1 dur`; until the session: `CONN(up=1).t - LINK_UP.t` of the same connection.
+- **Window usage:** `PAIR_WINDOW open`/`close` pairs; `reason=timeout` without `PAIR_RESULT ok=1` in between is a wasted window.
+- **Improper attempts:** `CONN_REJECT` by `reason`; `WRITE_DROP` by `conn`.
+- **Availability (A1.5):** sum of `dur` of `LINK_DOWN auth=0` = time strangers held slots.
+
 ## 7. Block binary format (for `FLUSH hex`)
 
 Little-endian. All offsets in bytes.
@@ -328,6 +365,37 @@ EV 18 1001 DECIDE rule=early pids=04 late=- slack=61
 ...
 EV 230 10825 BLK_CLOSE buf=0 reason=deadline len=612 recs=120 age=10000
 EV 231 10849 FLUSH buf=0 seq=128 boot=3 len=612 ok=1 attempts=1 dur=24 hex=80000000030039030000640...
+```
+
+
+New pairing through the button (Android):
+
+```
+EV 120 30112 PAIR_BTN action=press held=0 fired=0
+EV 121 35113 PAIR_BTN action=hold held=5021 fired=1
+EV 122 35113 ADV mode=off window=0 bonded=1
+EV 123 35114 CONN_DROP reason=button count=1
+EV 124 35131 BOND_DELETE reason=button count=1 ok=1 attempts=1 dur=17
+EV 125 35131 PAIR_WINDOW state=open reason=button deadline=80131 dur=-
+EV 126 35132 ADV mode=pairing window=1 bonded=0
+EV 127 35190 LINK_DOWN conn=1 rc=534 hci=16 auth=1 dur=812345
+EV 128 35191 CONN up=0 gen=2
+EV 130 41220 LINK_UP conn=2 addr=5A1F3C2B9D44 atype=rnd window=1
+EV 131 44877 LINK_ENC conn=2 up=1 bonded=1 fresh=1 key=16 reason=ok rc=0 dur=3657
+EV 132 44877 BOND_VERIFY conn=2 ok=1 lesc=1 persisted=1
+EV 133 44877 PAIR_RESULT conn=2 ok=1 reason=ok late=0 rc=0 dur=3657
+EV 134 44877 PAIR_WINDOW state=close reason=bonded deadline=- dur=9746
+EV 135 44877 ADV mode=off window=0 bonded=1
+EV 136 44878 CONN up=1 gen=3
+```
+
+Stranger outside the window while a bond exists (refused in the store):
+
+```
+EV 280 70100 LINK_UP conn=2 addr=4C9E01D2A7B3 atype=rnd window=0
+EV 281 71620 BOND_FULL event=full action=reject obj=2 conn=2 window=0
+EV 282 75100 CONN_REJECT conn=2 reason=auth_timeout hci=05 dur=5000
+EV 283 75140 LINK_DOWN conn=2 rc=534 hci=16 auth=0 dur=5040
 ```
 
 ## 9. Limits
