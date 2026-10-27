@@ -25,13 +25,14 @@ Do lado do app Flutter, a fase implementa a ponte HTTPS que substitui o *stub* d
 | Entrega | Onde |
 |---|---|
 | Pasta `backend/` (módulo Go `tccelta/backend`, binário único `tccelta`) | raiz do monorepo |
-| Docker Compose dev e prodlike, Caddy TLS, Vault dev e Raft, Makefile | `backend/compose*.yaml`, `backend/deploy/`, `backend/Makefile` |
+| Docker Compose dev e prodlike, Redis (rate limit), Caddy, túnel com certificado público (Cloudflare Tunnel), Vault dev e Raft, serviço `jwt-rotacao`, Makefile | `backend/compose*.yaml`, `backend/deploy/`, `backend/Makefile` |
 | Migrations goose (bronze, contexto, silver, cadastro, rejeitados, alertas, permissões) | `backend/internal/banco/migrations/` |
 | API: `POST /v1/dongles/{id}/desafio`, `POST /v1/dongles/{id}/desafio/resposta`, `POST /v1/dongles/blocos`, `GET /v1/dongles/{id}/confirmacao` | `backend/internal/httpapi`, `handshake`, `ingestao` |
 | Pacote `protocolo` + vetores de teste (Python independente + firmware) | `backend/internal/protocolo/` |
 | Worker de tempo + expiração de desafios | `backend/internal/worker`, `tempo` |
-| KMS: políticas, AppRole, bootstrap, provisionamento de dongles (material NVS + import BYOK) | `backend/deploy/vault/`, `backend/internal/kms`, `provisionamento` |
-| Simulador de dongles, testes de integração, e2e, carga, CI | `backend/internal/simulador`, `testeinfra`, `.github/workflows/backend-ci.yml` |
+| KMS: políticas, AppRole, bootstrap, rotação automática da chave do JWT, provisionamento de dongles (imagem NVS direta + import BYOK) | `backend/deploy/vault/`, `backend/internal/kms`, `provisionamento` |
+| Reprocessamento de `leitura`/`posicao` a partir de `bloco_bruto` | `backend/internal/ingestao/reprocessar.go` (`tccelta worker reprocessar`) |
+| Simulador de dongles, testes de integração, e2e, CI; testes de carga **documentados (execução adiada)** | `backend/internal/simulador`, `testeinfra`, `.github/workflows/backend-ci.yml` |
 | App: ambiente/URL, `dio`, DTOs, datasource → repository (port da Fase 1) → use cases, gatilhos, reenvio | `mobile-app/lib/src/...` (spec 09) |
 
 ## Ordem das specs e dependências
@@ -55,7 +56,7 @@ Ordem sugerida de execução: **01 → 02 + 03 (protocolo) → 07 (checkpoint do
 
 - **Fase 1 (em paralelo)** define o firmware (HMAC, CRC, NVS, SYNC BLE, handshake no dongle) e o app até o *molde* do gatilho de handshake. Esta fase **não** redefine nada do lado BLE: ela implementa a ponte HTTPS atrás do port deixado pela Fase 1 e consome o material de provisionamento.
 - **Fase 2 (LESC)** não toca o servidor.
-- **Perfis de segurança da Fase 1** (`SECURITY_PROFILE=none|hmac|asym`): o servidor implementa `hmac`, aceita `none` só em bancada (`PERMITIR_PERFIL_NONE=true`, nunca em `producao`) e deixa `asym` desenhado em [Aberto] (spec 07), sem afetar o caminho HMAC. **Reconciliado:** o perfil só muda a tag do bloco (0/32/64 B); a tag do handshake é HMAC `K_auth` de 16 B nos três perfis; `asym` = ECDSA P-256 determinística, `r‖s` 64 B.
+- **Perfis de segurança da Fase 1** (`SECURITY_PROFILE=none|hmac|asym`): o servidor implementa `hmac`, aceita `none` só em bancada (`PERMITIR_PERFIL_NONE=true`, nunca em `producao`) e deixa `asym` para **depois do caminho HMAC estável** (decisão do autor; spec 07), sem afetar o caminho HMAC. **Reconciliado:** o perfil só muda a tag do bloco (0/32/64 B); a tag do handshake é HMAC `K_auth` de 16 B nos três perfis; `asym` = ECDSA P-256 determinística, `r‖s` 64 B.
 
 ### Contratos cruzados com a Fase 1 (reconciliados pelo orquestrador; ver `.spec/README.md`)
 
@@ -72,7 +73,9 @@ Ordem sugerida de execução: **01 → 02 + 03 (protocolo) → 07 (checkpoint do
 | `c_S` emitido | `c_S = max(ultimo_c_s + 1, segundos Unix)`: o servidor de bancada do app (Fase 1) usa a mesma regra, e o dongle persiste `last_cs` | 04 |
 | Dongle com contadores zerados (NVS/flash apagadas) | é tratado como **novo DevId** (reprovisionar com o `provision.py` da Fase 1 + `importar-registro`): o servidor recusa `HEAD_seq` menor que o salvo, como manda o doc | 04 |
 | Vetores de teste | fonte única: `esp32-firmware/tools/provision/vectors.py` → `vectors.json` da Fase 1 (DevId `544343454C544101`), copiado para `testdata/vetores_firmware.json`; `vetores.json` (Python desta fase) é a segunda implementação independente | 03 |
-| Material de provisionamento | dongle real: `provision.py` (Fase 1) gera `secnvs.csv`/`secnvs.bin` (partição `secnvs`, namespace `sec`) e o envelope `kms_record.json` (BYOK do Transit), que `tccelta provisionar importar-registro` consome; `tccelta provisionar novo` só para dongles de teste | 07 |
+| Material de provisionamento | dongle real: `provision.py` (Fase 1) gera `secnvs.csv`/`secnvs.bin` (partição `secnvs`, namespace `sec`) e o envelope `kms_record.json` (BYOK do Transit), que `tccelta provisionar importar-registro` consome; `tccelta provisionar novo` só para dongles de teste e **grava a imagem `secnvs.bin` direto** (o CSV existe só na memória e passa por stdin ao gerador da Fase 1; `--hw dev` em claro, plano B1, ou `devsec` cifrada) | 07 |
+| Δt dos registros | `u16` sem sinal (decisão da Fase 1); `t0` pode recuar entre blocos consecutivos | 03, 05 |
+| Identidade do boot | `(dongle_id, geracao_boot, boot_id)`: a volta do `boot_id` (u16) abre nova geração | 02, 04, 05 |
 | Port no app | nomes da Fase 1: `SyncServerGateway` (`requestChallenge`, `submitResponse`, `postBlocks`, `latestConfirmation`; esta fase implementa `HttpsSyncServerGateway` em `infra/sync/`), token em `SyncServerRepository` (`needsHandshake`/`clearToken`), port do dongle `DongleSyncRepository`, orquestração em `HandshakeRunner`/`SyncCoordinator` | 09 |
 | Ações do app por resposta | `X-Lote-Acao: nenhuma \| reler (Erro 0x07 ao dongle) \| aguardar`; tabela de gatilhos de handshake | 05, 09 |
 
@@ -82,14 +85,19 @@ Ordem sugerida de execução: **01 → 02 + 03 (protocolo) → 07 (checkpoint do
 |---|---|
 | Binário único com subcomandos; worker sem acesso ao Vault; redes `borda`/`dados`/`kms` separadas | 01 |
 | `goose` (SQL embutido, um arquivo por migration, lido pelo sqlc) | 02 |
-| `bloco_bruto` como tabela comum com PK `(dongle_id, seq)`, append-only por `GRANT` + trigger; `leitura`/`posicao` como hypertables por `recebido_em` (1 dia, compressão aos 7 dias) | 02 |
+| `bloco_bruto` como tabela comum (não hypertable) com PK `(dongle_id, seq)`, **particionada por hash de `dongle_id` (16 partições) desde já**, append-only por `GRANT` + trigger; `leitura`/`posicao` como hypertables por `recebido_em` (1 dia, compressão aos 7 dias) | 02 |
+| `boot` identificado por `(dongle_id, geracao_boot, boot_id)` desde já; `boot.config` sempre nula; `dongle.t_lat_s` criada mas sem uso; grupos de âncoras persistidos em `grupo_ancora` | 02, 04, 06 |
+| Rate limit global entre réplicas em **Redis** (com *fallback* local); HTTP/3 não habilitado | 01, 03 |
+| Caminho padrão do app: **túnel com certificado público** (Cloudflare Tunnel), CA do Caddy como plano B offline; Vault com unseal manual 3 de 5 em produção; backups só documentados | 01, 09 |
 | `ServeMux` da stdlib; `pgx/v5` + sqlc; `slog`; Prometheus; geography por EWKB em COPY binário | 03 |
 | Handshake em JSON (bytes em base64, porque leva JWT e metadados); blocos e ACK de lote em `octet-stream` puro | 03, 04, 05 |
 | Pré-checagem barata do desafio antes de chamar o KMS; consistência sob o advisory lock; JWT assinado fora e ACK dentro da transação | 04 |
 | Lote interrompido = 200 + ACK; 422 só sem progresso por tag inválida; `X-Lote-Acao` orienta o buffer do app | 05 |
 | Decodificação **síncrona** na transação do lote (como o doc); modo assíncrono desenhado em [Aberto] | 05 |
 | KMS: `verify` com `batch_input` de todo o lote em paralelo com a pré-assinatura do ACK provável (1 ida e volta, 0 chamadas sob o lock em regime), duplicados pulados, ACK reaproveitado | 05, 07 |
-| Saída operacional para fila travada por bloco autêntico: `tccelta admin saltar` (lacuna `OPERADOR`, auditada) | 05 |
+| **Sem saída manual** para fila travada por bloco autêntico (`admin saltar` descartado): a fila do dongle fica travada até corrigir firmware/chave; nenhuma perda é declarada sem prova do dongle | 05 |
+| Reprocessamento: `tccelta worker reprocessar` (ensaio por padrão, `--aplicar` refaz `leitura`/`posicao` do bronze, inclusive em chunks comprimidos) | 05 |
+| Rotação da chave do JWT automática (`jwt-rotacao`, credencial própria; expurgo coordenado com a validade do token) | 07 |
 | Mounts `transit-auth`/`transit-rec`/`transit-jwt`, chaves tipo `hmac` importadas por BYOK; `deny` explícito em tudo que geraria, exportaria ou reconfiguraria `K_rec` | 07 |
 | JWT EdDSA (Ed25519 no Transit), 1 h, validação local, sem revogação | 08 |
 | Grupos de âncoras com janela contada da primeira âncora; vizinhos = boots ancorados mais próximos; limite superior extra pelo `recebido_em` | 06 |
@@ -104,7 +112,7 @@ Ordem sugerida de execução: **01 → 02 + 03 (protocolo) → 07 (checkpoint do
 - [ ] Ingestão: Go-Back-N estrito, BOOT/LOSS pelas regras do doc, uma transação e ≤ 2 chamadas ao KMS por lote, idempotente no reenvio.
 - [ ] Worker: reproduz o exemplo numérico do doc (±200 ms); boots sem âncora ganham janela por vizinhos; alertas de deriva e interseção vazia.
 - [ ] `make e2e` verde (BOOT, LOSS, OVERFLOW, âncora, vizinhos, rejeição, duplicados, reconexão).
-- [ ] Relatório de carga M1–M6 (spec 10) versionado.
+- [ ] Metas de carga M1–M6 (spec 10) documentadas e cenários de carga implementados; **execução e relatório adiados** (decisão do autor).
 - [ ] App: os bytes servidor ⇄ SYNC são preservados; gatilhos e política de reenvio cobertos por testes; `format`/`analyze`/`test` limpos.
 - [ ] Roteiro ponta a ponta abaixo executado com o simulador **e** com um dongle real.
 
@@ -120,20 +128,20 @@ Ordem sugerida de execução: **01 → 02 + 03 (protocolo) → 07 (checkpoint do
    ```sql
    SELECT d.dev_id_hex, e.seq_contiguo, e.head_seq, e.c_conf FROM dongle d JOIN dongle_estado e USING (dongle_id);
    SELECT causa, from_seq, to_seq FROM lacuna ORDER BY dongle_id, from_seq;
-   SELECT dongle_id, boot_id, origem_tempo, round(b*1e6, 1) AS ppm, incerteza_base_ms FROM boot ORDER BY 1, 2;
+   SELECT dongle_id, geracao_boot, boot_id, origem_tempo, round(b*1e6, 1) AS ppm, incerteza_base_ms FROM boot ORDER BY 1, 2, 3;
    SELECT count(*) FROM leitura; SELECT count(*) FROM posicao;
    ```
 5. Prometheus (`--profile observabilidade`): `tccelta_blocos_total{resultado="aceito"}` cresce; `tccelta_kms_chamadas_total / tccelta_lotes_total ≤ 2`.
 
 ### B. App com servidor real e dongle simulado no lado do port (sem BLE)
 
-1. `make up-tls API_HOST=<IP da LAN>` → `make ca-exportar` → instalar `saida/caddy-root.crt` no aparelho.
-2. Rodar o app com `--dart-define-from-file=env/dev.json` apontando para `https://<IP>:8443`, usando o `FakeDongle` da Fase 1 (`test/support/fake_dongle.dart`, implementa `DongleSyncRepository`) com as chaves de teste.
+1. **Caminho padrão:** `make up-tunel` (Cloudflare Tunnel; `TUNEL_HOSTNAME` e o token do túnel em `deploy/segredos/cloudflared_token`) — certificado público, **nada a instalar no celular**. *Plano B offline (LAN):* `make up-tls API_HOST=<IP da LAN>` → `make ca-exportar` → instalar `saida/caddy-root.crt` no aparelho.
+2. Rodar o app com `--dart-define-from-file=env/dev.json` apontando para `https://<TUNEL_HOSTNAME>` (plano B: `env/lan.json`, `https://<IP>:8443`), usando o `FakeDongle` da Fase 1 (`test/support/fake_dongle.dart`, implementa `DongleSyncRepository`) com as chaves de teste.
 3. Esperado: handshake 200, lotes 200 completos e `seq_contiguo` subindo no banco.
 
 ### C. Dongle real ⇒ app ⇒ API ⇒ banco
 
-1. `make kms-wrapping` → na estação, `provision.py --profile dev|devsec --kms-wrapping kms_wrapping.json --flash` (Fase 1, spec 01 §11; no perfil `prod` não há `--flash`: a gravação segue o procedimento da spec 01 §10.3) → `make kms-importar ARQ=out/<hex>/kms_record.json`. (Alternativa só de bancada: `make provisionar N=1` → `saida/<hex>/secnvs.csv` → `provision.py --import` → `shred -u`.)
+1. `make kms-wrapping` → na estação, `provision.py --profile dev|devsec --kms-wrapping kms_wrapping.json --flash` (Fase 1, spec 01 §11; no perfil `prod` não há `--flash`: a gravação segue o procedimento da spec 01 §10.3) → `make kms-importar ARQ=out/<hex>/kms_record.json`. (Alternativa só de bancada: `make provisionar N=1` → `saida/<hex>/secnvs.bin` (imagem pronta, sem CSV em disco) → gravar com `esptool.py write_flash 0x19000` → `shred -u` no `bench_keys.json`.)
 2. Dongle no carro ou na bancada com o simulador de ECU (`simulador/`); app pareado (LESC, Fase 2) e com o SYNC da Fase 1.
 3. Ligar o dongle. Esperado:
    - o aviso 0x07 tem bit 0/1 ⇒ o app faz o handshake;
@@ -150,7 +158,7 @@ Ordem sugerida de execução: **01 → 02 + 03 (protocolo) → 07 (checkpoint do
 
 ```
 backend/
-├── cmd/tccelta/                    # main + subcomandos: api, worker, migrar, provisionar, simulador, saude
+├── cmd/tccelta/                    # main + subcomandos: api, worker (e worker reprocessar), migrar, provisionar, jwt (rotacionar, agendar), simulador, saude
 ├── internal/
 │   ├── config/                     # env vars (+ *_ARQUIVO para segredos)
 │   ├── versao/
@@ -163,14 +171,14 @@ backend/
 │   │   ├── pool.go  tx.go  escuta.go  geo.go  migracoes.go
 │   ├── dongles/                    # cache DevId → dongle
 │   ├── pids/                       # catálogo de PIDs + LISTEN pid_alterado
-│   ├── kms/                        # interfaces + Vault (+ kmsteste/ para testes)
+│   ├── kms/                        # interfaces + Vault (+ rotacao.go do JWT, + kmsteste/ para testes)
 │   ├── token/                      # JWT: emissor e validador
 │   ├── handshake/                  # desafio e resposta
 │   ├── ingestao/                   # lote, plano, aplicação, decodificador
 │   ├── tempo/                      # âncoras, reta, vizinhos, desembrulhar t_ms
 │   ├── worker/                     # laço LISTEN/SKIP LOCKED, expiração
 │   ├── httpapi/                    # rotas, handlers, middlewares, problem+json
-│   ├── limites/                    # rate limit, semáforo
+│   ├── limites/                    # rate limit (local + Redis), semáforo
 │   ├── metricas/
 │   ├── provisionamento/            # DevId/chaves, BYOK (RSA-OAEP + AES-KWP), material NVS
 │   ├── simulador/                  # dongle virtual + app virtual + cenários
@@ -192,21 +200,38 @@ backend/
 ├── Makefile  sqlc.yaml  go.mod  go.sum
 ```
 
-## Pontos em aberto consolidados
+## Pontos em aberto e decisões do autor (consolidados)
 
-| [Aberto] | Recomendação | Spec |
+Todos os pontos que estavam em aberto foram decididos pelo autor (painel de decisões); a coluna "Decisão" é o que vale. Só ficam em aberto a decodificação assíncrona (só se a carga, quando medida, exigir) e o `flutter_secure_storage` do token.
+
+| Ponto | Decisão | Spec |
 |---|---|---|
-| Auto-unseal e HA do Vault; backups | documentar; unseal manual 3 de 5 no TCC | 01, 07 |
-| Particionar `bloco_bruto`; hash encadeado | só acima de ~100 GB; hash encadeado fora do mínimo | 02 |
-| `boot.config` não vem no protocolo | Fase 1 incluir registro de configuração no 1º bloco do boot | 02 |
-| Camada gold | fase posterior; gancho `pendente_gold` pronto | 02, 06 |
-| Modo diagnóstico (`flags_c` bit 0) | formato suportado, emissão desligada (`flags_c = 0`) | 04 |
-| Decodificação assíncrona | só se o teste de carga exigir; desenho pronto | 05 |
-| Perfil `asym` | ECDSA P-256 determinística (`r‖s` 64 B, fixado pela Fase 1) com verificação local; em aberto só o momento de implementar | 07 |
-| Gerar NVS cifrada direto na ferramenta | junto com a Fase 1 | 07 |
-| Rate limit distribuído | só com mais de 2 réplicas e abuso real | 03 |
-| Identidade de usuário do app | fora do escopo (OIDC separado do token do dongle) | 08 |
-| URL base em Configurações; token em `flutter_secure_storage` | só se surgir necessidade | 09 |
+| Auto-unseal e HA do Vault | **Unseal manual 3 de 5 em produção; auto-unseal e HA só documentados** | 01, 07 |
+| Backup do banco e do Vault | **Só documentar** pgBackRest e `vault operator raft snapshot` | 01 |
+| Túnel com certificado público | **Cloudflare Tunnel (ou similar) desde já**; CA do Caddy como plano B | 01, 09 |
+| Particionar `bloco_bruto` | **Por hash de `dongle_id` (16 partições) já** | 02 |
+| Encadeamento por hash dos blocos (AD5) | **Fora do escopo mínimo, só documentado** | 02 |
+| `boot.config` não vem no protocolo | **Sempre nula** (a Fase 1 não inclui registro de configuração) | 02 |
+| Volta do `boot_id` (u16) | **`geracao_boot` na PK já** | 02, 04, 05, 06 |
+| Camada gold | **Fase posterior**; só o gancho `pendente_gold` | 02, 06 |
+| Modo diagnóstico (`flags_c` bit 0) | **Adiado**: formato suportado, emissão desligada (`flags_c = 0`) | 04 |
+| `T_lat` por dongle | **Coluna `dongle.t_lat_s` já**, mas o servidor não a usa (handshake segue com `T_LAT_SUGERIDO` global) | 02, 04 |
+| `t_lat_s` sugerido ao app | **Teto `min(local, servidor)`** (aplicado pelo app, Fase 1) | 09 |
+| Fila travada por bloco autêntico | **Sem saída manual** (`admin saltar` descartado) | 05 |
+| Reprocessamento de `leitura` | **`tccelta worker reprocessar` implementado nesta fase** | 05 |
+| Limite de âncoras por boot | **Sem limite**; limitar só se a fila crescer | 06 |
+| Persistir os grupos de âncoras | **Persistir** (`grupo_ancora`) | 02, 06 |
+| Calibrar `DERIVA_MAX_PPM` | **Manter 40 ppm sem medir**; procedimento de medição documentado | 06, 10 |
+| Perfil `asym` no servidor | **Depois do caminho HMAC estável** (ECDSA P-256, verificação local) | 07 |
+| NVS cifrada na ferramenta `novo` | **Sim, junto com a Fase 1** (imagem direta, CSV só em memória) | 07 |
+| Rotação da chave do JWT | **Automatizada** (`jwt-rotacao`) | 07, 08 |
+| Rate limit distribuído | **Redis**, com *fallback* local | 01, 03 |
+| HTTP/3 no Caddy | **Não habilitar** | 01, 03 |
+| Identidade de usuário do app | **Fora do escopo do TCC** | 08 |
+| URL base em Configurações | **Só se trocar o IP virar atrito** | 09 |
+| Simulador próprio × k6/vegeta | **Simulador próprio em Go**; testes de carga só documentados | 10 |
+| Decodificação assíncrona | em aberto: só se o teste de carga (adiado) exigir; desenho pronto | 05 |
+| Token em `flutter_secure_storage` | em aberto: só se o buffer for persistido | 09 |
 
 ## Revisão crítica (advisor) e o que mudou
 
@@ -228,7 +253,7 @@ Achados incorporados:
 | 1 | Crítico | BOOT após OVERFLOW (o firmware descarta flash por segmento) seria `marcador_invalido` para sempre, travando a fila | BOOT aceito com `to = seq − 1` e `from ≤ exp`; lacuna só na parte não coberta; casos de teste 16–17 e cenário e2e | 05, 10 |
 | 2 | Alto | Montar o diretório `/docker-entrypoint-initdb.d` escondia os scripts de init da `timescaledb-ha` | Monta só `900-papeis.sh`; `shared_preload_libraries` explícito; checkpoint de inspeção da imagem | 01 |
 | 3 | Alto | Deadlock possível worker × API: o `UPDATE` de vizinhos trava várias linhas de `boot` | TX2 do worker toma o mesmo `pg_advisory_xact_lock` do dongle; `EmTransacao` repete 1× em `40P01`/`40001` e depois 503 | 03, 04, 05, 06 |
-| 4 | Alto | Sem saída para fila travada por bloco autêntico (malformado, chave errada, BOOT corrompido) | `tccelta admin saltar` (lacuna `OPERADOR` com justificativa); LOSS estendido (`from ≤ seq ≤ to`) + pedido à Fase 1 para BOOT corrompido | 02, 05, 09 |
+| 4 | Alto | Sem saída para fila travada por bloco autêntico (malformado, chave errada, BOOT corrompido) | Proposta original: `tccelta admin saltar` (lacuna `OPERADOR`) — **descartada pelo autor** (sem saída manual; a fila do dongle fica travada até corrigir firmware/chave). Mantido: LOSS estendido (`from ≤ seq ≤ to`) + pedido à Fase 1 para BOOT corrompido | 02, 05, 09 |
 | 5 | Médio | A premissa "deny vence qualquer allow futuro" está errada (no Vault, vence o caminho mais específico) | Nota corrigida; a garantia vem de política única + testes negativos no CI; `denied_parameters`/`allowed_parameters` no import do provisionador | 07 |
 | 6 | Médio | O token do provisionador ficava no mesmo volume montado na API | Volumes `vault_approle_api` e `vault_approle_ferramentas` separados; teste de isolamento | 01, 07 |
 | 7 | Médio | `maior_seq_visto` ficava morto (sempre igual a `seq_contiguo`) | O lote inteiro (acima do snapshot) é verificado num só `batch_input`; `maior_seq_visto`/`head_seq` refletem blocos autênticos acima do furo; some o motivo `concorrencia`; todas as tags inválidas vão para rejeitados | 05 |
@@ -250,6 +275,6 @@ Desvios conscientes em relação ao doc, todos justificados nas specs:
 1. handshake em JSON + base64;
 2. consistência checada sob o lock;
 3. regras estendidas de BOOT/LOSS;
-4. lacuna `OPERADOR`;
-5. limite superior de tempo por `recebido_em`;
-6. `b = 0` quando o ajuste não é significativo.
+4. limite superior de tempo por `recebido_em`;
+5. `b = 0` quando o ajuste não é significativo;
+6. grupos de âncoras persistidos (`grupo_ancora`) e `geracao_boot` na identidade do boot (escolhas do autor).

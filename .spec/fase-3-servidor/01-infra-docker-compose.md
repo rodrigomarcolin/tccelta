@@ -4,7 +4,7 @@
 
 ## Objetivo
 
-Subir, só com Docker, todo o lado servidor do TCCELTA numa máquina: banco (PostgreSQL + TimescaleDB + PostGIS), KMS (HashiCorp Vault), API Go, worker (o mesmo binário em modo worker), job de migrations, proxy TLS (Caddy) e ferramentas (provisionamento e simulador). Há dois perfis de execução:
+Subir, só com Docker, todo o lado servidor do TCCELTA numa máquina: banco (PostgreSQL + TimescaleDB + PostGIS), Redis (estado do rate limit), KMS (HashiCorp Vault), API Go, worker (o mesmo binário em modo worker), job de migrations, proxy (Caddy), túnel com certificado público (Cloudflare Tunnel) e ferramentas (provisionamento e simulador). Há dois perfis de execução:
 
 - **dev**: Vault em modo `-dev` (memória, sem selo), portas publicadas só em `127.0.0.1`, redes não internas, para iterar rápido.
 - **prodlike**: Vault com storage persistente (Raft), TLS, `init`/`unseal` e AppRole, redes internas sem portas publicadas, contêineres somente leitura. Serve para testar o que muda quando o servidor for para o VPS e, depois, quando o Vault sair para outro host atrás de uma VPN.
@@ -27,8 +27,11 @@ Fora: o conteúdo das migrations (spec 02), o código da API (spec 03) e as pol�
 | `migrar` | `tccelta-backend:local` (build) | `migrar` | `dados` | sempre (job) | `goose up` com migrations embutidas |
 | `api` | `tccelta-backend:local` | `api` | `borda`, `dados`, `kms` | sempre | HTTP da API (2 réplicas) |
 | `worker` | `tccelta-backend:local` | `worker` | `dados` | sempre | worker assíncrono (spec 06) |
-| `caddy` | `caddy:2.8-alpine` | padrão | `borda` | `tls` | HTTPS para o app (TLS interno ou ACME) |
-| `ferramentas` | `tccelta-backend:local` | `sleep infinity` | `dados`, `kms`, `borda` | `ferramentas` | `provisionar`, `simulador`, `psql` |
+| `redis` | `redis:7.4-alpine` | `redis-server` com a senha lida do segredo (ver snippet) | `dados` | sempre | estado compartilhado do rate limit (spec 03); sem persistência |
+| `caddy` | `caddy:2.8-alpine` | padrão | `borda` | `tls`, `tunel` | balanceia as réplicas da API; TLS próprio (CA local do Caddy) no `tls`, HTTP interno atrás do túnel no `tunel` |
+| `cloudflared` | `cloudflare/cloudflared:${CLOUDFLARED_VERSAO}` | `tunnel --no-autoupdate run` | `borda` | `tunel` | túnel de saída até a Cloudflare: certificado público, nada a instalar no celular |
+| `jwt-rotacao` | `tccelta-backend:local` | `jwt agendar` | `kms` | sempre | rotaciona e expurga a chave do JWT (spec 07, *Rotação da chave do JWT*); credencial própria, sem acesso ao banco |
+| `ferramentas` | `tccelta-ferramentas:local` (alvo `ferramentas` do `Dockerfile`: Python + gerador de NVS da Fase 1 + binário) | `sleep infinity` | `dados`, `kms`, `borda` | `ferramentas` | `provisionar` (inclusive a imagem NVS), `simulador`, `worker reprocessar`, `psql` |
 | `prometheus` | `prom/prometheus:v2.55.1` | padrão | `borda`, `dados` | `observabilidade` | coleta `/metricas` |
 | `grafana` | `grafana/grafana:11.3.0` | padrão | `borda` | `observabilidade` | painéis |
 
@@ -40,9 +43,9 @@ Fora: o conteúdo das migrations (spec 02), o código da API (spec 03) e as pol�
 
 ```yaml
 networks:
-  borda:                     # caddy ↔ api (e prometheus/grafana)
+  borda:                     # caddy ↔ api (e cloudflared, prometheus/grafana)
     ipam: { config: [{ subnet: 172.30.10.0/24 }] }   # fixa: PROXIES_CONFIAVEIS=172.30.10.0/24
-  dados:   { internal: false }  # api, worker, migrar, ferramentas ↔ banco
+  dados:   { internal: false }  # api, worker, migrar, ferramentas ↔ banco; api ↔ redis
   kms:     { internal: false }  # api, vault-bootstrap, ferramentas ↔ vault
 ```
 
@@ -61,8 +64,10 @@ No perfil prodlike, `compose.prodlike.yaml` sobrescreve `dados` e `kms` com `int
 | `vault_init` | `vault:/vault/init` (0700) | saída do `operator init` (só no prodlike, **só em laboratório**) |
 | `vault_approle_api` | `vault-bootstrap:/approle/api` (rw), `api:/run/approle` (ro) | só `role_id` e `secret_id` da API (dono 65532, 0400) |
 | `vault_approle_ferramentas` | `vault-bootstrap:/approle/ferramentas` (rw), `ferramentas:/run/approle` (ro) | só o token do provisionador (dono 65532, 0400) |
+| `vault_approle_rotacao` | `vault-bootstrap:/approle/rotacao` (rw), `jwt-rotacao:/run/approle` (ro) | só `role_id` e `secret_id` do AppRole `tccelta-rotacao-jwt` (dono 65532, 0400); terceiro volume de credenciais, nunca montado na API |
 | `vault_auditoria` | `vault:/vault/logs` | log de auditoria do Vault |
 | `caddy_dados` | `caddy:/data` | certificados e CA local do Caddy |
+| (nenhum) | `redis` | **[Decisão]** sem volume: `--save "" --appendonly no`. O estado do rate limit é efêmero; perdê-lo só zera as janelas. |
 | `prometheus_dados`, `grafana_dados` | — | observabilidade |
 
 ### Segredos (Compose `secrets`, arquivos em `backend/deploy/segredos/`, fora do git)
@@ -73,6 +78,8 @@ No perfil prodlike, `compose.prodlike.yaml` sobrescreve `dados` e `kms` com `int
 | `pg_senha_dono`, `pg_senha_api`, `pg_senha_worker`, `pg_senha_provisionador` | init do banco, `migrar`, `api`, `worker`, `ferramentas` | `make segredos` |
 | `vault_dev_root_token` | `vault` (dev), `vault-bootstrap` (dev) | `make segredos` |
 | `vault_ca` | `api`, `ferramentas` (prodlike) | `scripts/gerar-certs.sh` |
+| `redis_senha` | `redis` (`--requirepass`), `api` (`REDIS_SENHA_ARQUIVO`) | `make segredos` |
+| `cloudflared_token` | `cloudflared` (`--token-file`) | **à mão**, copiado do painel Zero Trust da Cloudflare ao criar o túnel; `make segredos` só cria o arquivo vazio com `chmod 600` |
 
 O `make segredos` roda `scripts/gerar-segredos.sh`, que usa `openssl rand -hex 24` dentro de um contêiner `alpine`. Assim não depende de ferramentas do host Windows. O `.gitignore` de `backend/` ignora `deploy/segredos/*` e `deploy/certs/*`, exceto um `.gitkeep`.
 
@@ -152,6 +159,7 @@ services:
       - ./deploy/vault/politicas:/vault/politicas:ro
       - vault_approle_api:/approle/api
       - vault_approle_ferramentas:/approle/ferramentas
+      - vault_approle_rotacao:/approle/rotacao
     user: "0:0"                     # root: o script faz chown para o uid 65532 da distroless
     entrypoint: ["/bin/sh", "/vault/scripts/bootstrap.sh"]
     restart: "no"
@@ -178,11 +186,14 @@ services:
       VAULT_ADDR: http://vault:8200
       VAULT_APPROLE_ROLE_ID_ARQUIVO: /run/approle/api_role_id
       VAULT_APPROLE_SECRET_ID_ARQUIVO: /run/approle/api_secret_id
-    secrets: [pg_senha_api]
+      REDIS_ENDERECO: redis:6379
+      REDIS_SENHA_ARQUIVO: /run/secrets/redis_senha
+    secrets: [pg_senha_api, redis_senha]
     volumes: [vault_approle_api:/run/approle:ro]
     depends_on:
       migrar: { condition: service_completed_successfully }
       vault-bootstrap: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "/tccelta", "saude", "--url", "http://127.0.0.1:8080/saude/pronta"]
       interval: 10s
@@ -209,9 +220,25 @@ services:
     stop_grace_period: 30s
     networks: [dados]
 
+  redis:
+    image: redis:7.4-alpine
+    # sem persistência; limite de memória com descarte LRU; senha do segredo
+    command: ["/bin/sh", "-c",
+      "exec redis-server --save '' --appendonly no --maxmemory 64mb --maxmemory-policy allkeys-lru --requirepass \"$$(cat /run/secrets/redis_senha)\""]
+    secrets: [redis_senha]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_senha) redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [dados]            # nunca publicar a porta 6379
+
   caddy:
     image: caddy:2.8-alpine
-    profiles: [tls]
+    profiles: [tls, tunel]
     environment:
       API_HOST: ${API_HOST:-localhost}
       API_PORTA_TLS: ${API_PORTA_TLS:-8443}
@@ -219,12 +246,47 @@ services:
     volumes:
       - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_dados:/data
+    # 8443 (TLS próprio) só no perfil `tls`; no `tunel` o Caddy atende em HTTP na porta 8081, sem publicar nada
     ports: ["${API_PORTA_TLS:-8443}:8443"]
     depends_on: { api: { condition: service_healthy } }
     networks: [borda]
 
+  cloudflared:
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSAO}      # fixar uma tag estável em .env
+    profiles: [tunel]
+    # túnel gerenciado remotamente: o nome público (TUNEL_HOSTNAME) e a origem http://caddy:8081
+    # são configurados no painel da Cloudflare ao criar o túnel; aqui só entra o token.
+    command: ["tunnel", "--no-autoupdate", "run", "--token-file", "/run/secrets/cloudflared_token"]   # [verificar] a flag na versão fixada
+    secrets: [cloudflared_token]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    depends_on: { caddy: { condition: service_started } }
+    networks: [borda]            # só saída; nenhuma porta publicada
+
+  jwt-rotacao:
+    <<: *backend
+    command: ["jwt", "agendar"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_APPROLE_ROLE_ID_ARQUIVO: /run/approle/rotacao_role_id
+      VAULT_APPROLE_SECRET_ID_ARQUIVO: /run/approle/rotacao_secret_id
+      JWT_ROTACAO_PERIODO: ${JWT_ROTACAO_PERIODO:-720h}          # rotaciona a cada 30 dias
+      JWT_ROTACAO_VERIFICACAO: ${JWT_ROTACAO_VERIFICACAO:-1h}    # intervalo do laço
+    volumes: [vault_approle_rotacao:/run/approle:ro]
+    depends_on: { vault-bootstrap: { condition: service_completed_successfully } }
+    healthcheck:
+      test: ["CMD", "/tccelta", "saude", "--url", "http://127.0.0.1:8092/saude/viva"]
+      interval: 30s
+      timeout: 3s
+      retries: 4
+    networks: [kms]              # sem banco, sem borda
+
   ferramentas:
     <<: *backend
+    image: tccelta-ferramentas:local
+    build: { context: ., dockerfile: Dockerfile, target: ferramentas }
     profiles: [ferramentas]
     entrypoint: ["/tccelta"]
     command: ["ajuda"]
@@ -237,6 +299,9 @@ services:
       # simulador (verificações só com SELECT); em dev/teste usa o papel dono
       SIM_BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
       SIM_BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
+      # `worker reprocessar` (spec 05) refaz leitura/posicao: precisa de DELETE/INSERT, só o dono tem
+      ADMIN_BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
+      ADMIN_BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
     secrets: [pg_senha_provisionador, pg_senha_dono]
     volumes:
       - vault_approle_ferramentas:/run/approle:ro
@@ -252,8 +317,10 @@ secrets:
   pg_senha_worker:       { file: ./deploy/segredos/pg_senha_worker }
   pg_senha_provisionador: { file: ./deploy/segredos/pg_senha_provisionador }
   vault_dev_root_token:  { file: ./deploy/segredos/vault_dev_root_token }
+  redis_senha:           { file: ./deploy/segredos/redis_senha }
+  cloudflared_token:     { file: ./deploy/segredos/cloudflared_token }
 
-volumes: { banco_dados: {}, vault_dados: {}, vault_init: {}, vault_approle_api: {}, vault_approle_ferramentas: {}, vault_auditoria: {}, caddy_dados: {}, prometheus_dados: {}, grafana_dados: {} }
+volumes: { banco_dados: {}, vault_dados: {}, vault_init: {}, vault_approle_api: {}, vault_approle_ferramentas: {}, vault_approle_rotacao: {}, vault_auditoria: {}, caddy_dados: {}, prometheus_dados: {}, grafana_dados: {} }
 ```
 
 Notas:
@@ -307,12 +374,13 @@ services:
       - vault_init:/vault/init:ro       # lê o root token inicial (laboratório)
       - vault_approle_api:/approle/api
       - vault_approle_ferramentas:/approle/ferramentas
+      - vault_approle_rotacao:/approle/rotacao
     depends_on: { vault-unseal: { condition: service_completed_successfully } }
   api:
     environment:
       VAULT_ADDR: https://vault:8200
       VAULT_CACERT: /run/secrets/vault_ca
-    secrets: [pg_senha_api, vault_ca]
+    secrets: [pg_senha_api, redis_senha, vault_ca]
     ports: !reset []
 networks:
   dados: { internal: true }
@@ -344,7 +412,7 @@ listener "tcp" {
 # Auditoria habilitada pelo bootstrap: vault audit enable file file_path=/vault/logs/auditoria.log
 ```
 
-`deploy/vault/scripts/init-unseal.sh`: primeiro espera o Vault aceitar conexões (laço de até 60 s em `vault status`, aceitando os códigos de saída 0 e 2; o código 1 = indisponível continua esperando), porque `service_started` dispara antes de o listener subir. Depois, se `vault status` devolver 2 (selado) e `/vault/init/init.json` não existir, roda `vault operator init -key-shares=1 -key-threshold=1 -format=json > /vault/init/init.json` (chmod 600). Em seguida, extrai a chave com `sed`/`grep`, sem precisar de `jq`, e roda `vault operator unseal <chave>`. **[Decisão] 1 share / threshold 1 é só para o laboratório.** O script imprime um aviso grande e recusa rodar se `AMBIENTE=producao`. Em produção, ver [Aberto] *auto-unseal*.
+`deploy/vault/scripts/init-unseal.sh`: primeiro espera o Vault aceitar conexões (laço de até 60 s em `vault status`, aceitando os códigos de saída 0 e 2; o código 1 = indisponível continua esperando), porque `service_started` dispara antes de o listener subir. Depois, se `vault status` devolver 2 (selado) e `/vault/init/init.json` não existir, roda `vault operator init -key-shares=1 -key-threshold=1 -format=json > /vault/init/init.json` (chmod 600). Em seguida, extrai a chave com `sed`/`grep`, sem precisar de `jq`, e roda `vault operator unseal <chave>`. **[Decisão] 1 share / threshold 1 é só para o laboratório.** O script imprime um aviso grande e recusa rodar se `AMBIENTE=producao`. Em produção vale a decisão *Unseal manual* (§ Decisões do autor, abaixo).
 
 `scripts/gerar-certs.sh`: roda `openssl` num contêiner `alpine:3.20`. Gera uma CA privada `deploy/certs/vault/ca.pem` e o certificado do servidor `vault.pem` com SAN `DNS:vault,DNS:localhost,IP:127.0.0.1` (e `DNS:${KMS_HOST}` para o cenário de VPN), com validade de 1 ano e chave ECDSA P-256.
 
@@ -386,6 +454,15 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
       -ldflags "-s -w -X tccelta/backend/internal/versao.Versao=${VERSAO}" \
       -o /out/tccelta ./cmd/tccelta
 
+# Alvo `ferramentas` (perfil `ferramentas`, `docker build --target ferramentas`): Python + o gerador de
+# imagem NVS da Fase 1 (`provisionar novo` o chama por stdin, spec 07) + o mesmo binário. Fica ANTES do
+# estágio final para o alvo padrão continuar sendo a imagem distroless da API/worker.
+FROM python:3.12-slim AS ferramentas
+RUN pip install --no-cache-dir esp-idf-nvs-partition-gen   # fixar a versão em requirements
+COPY --from=build /out/tccelta /tccelta
+USER 65532:65532
+ENTRYPOINT ["/tccelta"]
+
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/tccelta /tccelta
 USER nonroot:nonroot
@@ -416,9 +493,26 @@ As migrations vão embutidas no binário (`embed.FS`, spec 02), então a imagem 
 	}
 	log { output stdout format json }
 }
+
+# Atrás do túnel (perfil `tunel`): HTTP puro na rede `borda`, sem porta publicada; só o
+# cloudflared alcança. O TLS público termina na Cloudflare. O IP real do celular vem no
+# cabeçalho Cf-Connecting-Ip, que só é confiável aqui porque nada além do cloudflared
+# chega a esta porta.
+:8081 {
+	encode zstd gzip
+	request_body { max_size 64KB }
+	reverse_proxy {
+		dynamic a { name api port 8080 refresh 5s }
+		lb_policy round_robin
+		health_uri /saude/pronta
+		health_interval 10s
+		header_up X-Real-IP {header.Cf-Connecting-Ip}
+	}
+	log { output stdout format json }
+}
 ```
 
-- `CADDY_TLS=internal` emite certificado pela CA local do Caddy (funciona para IP de LAN, por exemplo `API_HOST=192.168.0.10`). `make ca-exportar` copia `/data/caddy/pki/authorities/local/root.crt` para `saida/caddy-root.crt`, para instalar no celular (spec 09).
+- **[Decisão] O caminho padrão do app é o túnel** (`make up-tunel`, perfil `tunel`): certificado público da Cloudflare, nada a instalar no celular. A porta 8443 com `CADDY_TLS=internal` (perfil `tls`) fica como **plano B offline**, sem internet: emite certificado pela CA local do Caddy (funciona para IP de LAN, por exemplo `API_HOST=192.168.0.10`), e `make ca-exportar` copia `/data/caddy/pki/authorities/local/root.crt` para `saida/caddy-root.crt`, para instalar no celular (spec 09).
 - Com domínio público, `CADDY_TLS=email@dominio` usa ACME. Nesse caso, publique também a porta 80/443 e use `API_PORTA_TLS=443`.
 - `dynamic a` resolve `api` pelo DNS do Docker e distribui entre as réplicas.
 - `request_body max_size 64KB` corta corpos absurdos antes da API (o lote máximo tem 32 × 1059 B ≈ 33,9 KB).
@@ -443,6 +537,7 @@ certs:           ; sh scripts/gerar-certs.sh
 build:           ; $(COMPOSE) build
 up:              env segredos ; $(COMPOSE) up -d --build --wait
 up-tls:          env segredos ; $(COMPOSE) --profile tls up -d --build --wait
+up-tunel:        env segredos ; $(COMPOSE) --profile tunel up -d --build --wait
 up-prodlike:     env segredos certs ; $(COMPOSE_PL) --profile tls up -d --build --wait
 down:            ; $(COMPOSE) down
 limpar:          ; $(COMPOSE) down -v      # apaga volumes (banco e vault)
@@ -453,8 +548,12 @@ migracao-nova:   ; docker run --rm -v "$(CURDIR)/internal/banco/migrations":/m -
 sqlc:            ; docker run --rm -v "$(CURDIR)":/src -w /src $(SQLC_IMG) generate
 sqlc-verificar:  ; docker run --rm -v "$(CURDIR)":/src -w /src $(SQLC_IMG) diff
 vault-bootstrap: ; $(COMPOSE) run --rm vault-bootstrap
+# produção: unseal manual, 3 de 5 shares (cada operador digita a sua; repetir 3 vezes)
+vault-unseal-manual: ; $(COMPOSE_PL) exec -it vault vault operator unseal
 seed-dev:        ; $(COMPOSE) --profile ferramentas $(FERR) provisionar importar --arquivo /testdata/dongles-teste.csv
-provisionar:     ; $(COMPOSE) --profile ferramentas $(FERR) provisionar novo --saida /saida --quantidade $(or $(N),1)
+provisionar:     ; $(COMPOSE) --profile ferramentas $(FERR) provisionar novo --saida /saida --quantidade $(or $(N),1) --hw $(or $(HW),dev)
+# refaz leitura/posicao a partir de bloco_bruto (spec 05); sem APLICAR=1 é só ensaio
+reprocessar:     ; $(COMPOSE) --profile ferramentas $(FERR) worker reprocessar --dongle $(DONGLE) --desde-seq $(or $(DESDE),1) $(if $(APLICAR),--aplicar,)
 ca-exportar:     ; $(COMPOSE) cp caddy:/data/caddy/pki/authorities/local/root.crt saida/caddy-root.crt
 psql:            ; $(COMPOSE) exec banco psql -U postgres -d tccelta
 teste:           ; $(DOCKER_GO) go test -race ./...
@@ -472,7 +571,8 @@ e2e:             env segredos
 	$(COMPOSE_T) --profile ferramentas $(FERR) provisionar importar --arquivo /testdata/dongles-teste.csv
 	$(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario e2e --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB) \
 	 && $(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario protocolo-negativo --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB) \
-	 && $(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario tempo --acelerar 120 --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB); \
+	 && $(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario tempo --acelerar 120 --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB) \
+	 && $(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario geracao --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB); \
 	 st=$$?; $(COMPOSE_T) down -v; exit $$st
 carga:           ; $(COMPOSE) --profile ferramentas $(FERR) simulador --cenario carga --provisionar $(or $(N),1000) --api http://api:8080 $(SIM_DB) --relatorio /saida/relatorio.json
 ```
@@ -489,6 +589,9 @@ API_REPLICAS=2
 API_HOST=localhost              # IP da LAN para testar no celular
 API_PORTA_TLS=8443
 CADDY_TLS=internal
+JWT_ROTACAO_PERIODO=720h       # rotação da chave do JWT (serviço jwt-rotacao); expurgo = JWT_VALIDADE + folga após a rotação
+CLOUDFLARED_VERSAO=            # fixar a tag estável do cloudflared (perfil tunel)
+TUNEL_HOSTNAME=                # ex.: api.seudominio.com.br — o app usa https://$TUNEL_HOSTNAME
 LOG_NIVEL=info
 LOG_FORMATO=json
 # demais variáveis da API/worker: ver spec 03 (tabela de configuração)
@@ -516,7 +619,7 @@ Hoje, a API fala com o Vault por `http://vault:8200` (dev) ou `https://vault:820
 | `backend/.dockerignore` | `saida/`, `deploy/segredos/`, `deploy/certs/`, `**/*_test.go` não (testes precisam) |
 | `backend/compose.yaml` | base/dev |
 | `backend/compose.prodlike.yaml` | sobreposição |
-| `backend/compose.test.yaml` | stack mínima para e2e em CI: banco + vault dev + migrar + api (sem caddy) |
+| `backend/compose.test.yaml` | stack mínima para e2e em CI: banco + redis + vault dev + migrar + api (sem caddy, sem túnel) |
 | `backend/.env.example` | variáveis não secretas |
 | `backend/Makefile` | alvos acima |
 | `backend/scripts/gerar-segredos.sh` | gera os arquivos de `deploy/segredos/` se não existirem (idempotente) |
@@ -526,7 +629,8 @@ Hoje, a API fala com o Vault por `http://vault:8200` (dev) ou `https://vault:820
 | `backend/deploy/vault/scripts/bootstrap.sh` | spec 07 |
 | `backend/deploy/vault/scripts/init-unseal.sh` | init/unseal de laboratório |
 | `backend/deploy/vault/politicas/*.hcl` | spec 07 |
-| `backend/deploy/caddy/Caddyfile` | proxy TLS |
+| `backend/deploy/caddy/Caddyfile` | proxy: TLS próprio na 8443 (plano B) e HTTP interno na 8081 (túnel) |
+| `backend/deploy/redis/` | (vazio; a configuração vai na linha de comando do serviço) |
 | `backend/deploy/observabilidade/prometheus.yml` | *scrape* de `api:9090` e `worker:9091` |
 | `backend/deploy/kms/compose.kms.yaml` | Vault isolado para o cenário de VPN (só documentado e testado manualmente) |
 | `backend/.gitignore` | `saida/`, `deploy/segredos/*`, `deploy/certs/*`, `.env` |
@@ -535,6 +639,8 @@ Hoje, a API fala com o Vault por `http://vault:8200` (dev) ou `https://vault:820
 
 - `make up` termina com `--wait` sem erro: todos os healthchecks ficam verdes e os jobs `migrar` e `vault-bootstrap` saem com código 0.
 - `docker compose exec banco psql -U postgres -d tccelta -c "\dx"` lista `timescaledb` e `postgis`.
+- `docker compose exec redis sh -c 'REDISCLI_AUTH=$(cat /run/secrets/redis_senha) redis-cli ping'` responde `PONG`; da máquina host, `redis-cli -h 127.0.0.1 ping` não conecta (porta não publicada).
+- Perfil `tunel`: `curl https://$TUNEL_HOSTNAME/saude/pronta` responde 200 com certificado público válido (sem `--cacert`); `docker compose --profile tunel ps` mostra `cloudflared` ativo e nenhuma porta publicada por ele.
 - `docker compose run --rm ferramentas saude --url http://api:8080/saude/pronta` devolve 0.
 - No prodlike: `docker compose -f compose.yaml -f compose.prodlike.yaml exec api sh` falha (a distroless não tem shell). `docker network inspect tccelta_dados` mostra `"Internal": true`. `curl http://127.0.0.1:5432` no host falha, porque a porta não é publicada.
 - Reinício a frio no prodlike: `docker compose restart vault` deixa o Vault selado. O `vault-unseal` (`make vault-unseal`) o desela, e a API volta a ficar pronta sozinha (relogin AppRole, spec 07).
@@ -545,7 +651,7 @@ Hoje, a API fala com o Vault por `http://vault:8200` (dev) ou `https://vault:820
 2. `compose.yaml` com `banco` + `00-papeis.sh`. **Checkpoint:** `make up` e `\dx` mostra as extensões; `\du` mostra os papéis.
 3. Adicionar `vault` dev + `vault-bootstrap` (por enquanto só habilita os engines). **Checkpoint:** `vault secrets list` mostra `transit-auth/`, `transit-rec/` e `transit-jwt/`.
 4. Adicionar `migrar`, `api` e `worker` com `depends_on` condicionais. **Checkpoint:** `make up` sobe tudo na ordem certa; derrubar o banco deixa a API "não pronta" (healthcheck vermelho) sem ela cair.
-5. Perfil `tls` com Caddy. **Checkpoint:** `curl --cacert saida/caddy-root.crt https://localhost:8443/saude/pronta` dá 200.
+5. Perfil `tunel` com Caddy + `cloudflared` (caminho padrão do app) e, como plano B offline, o perfil `tls`. **Checkpoint:** `curl https://$TUNEL_HOSTNAME/saude/pronta` dá 200; `curl --cacert saida/caddy-root.crt https://localhost:8443/saude/pronta` dá 200 no `tls`.
 6. Perfil prodlike (certs, Raft, init/unseal, redes internas). **Checkpoint:** os testes do prodlike acima passam.
 7. Observabilidade (opcional). **Checkpoint:** o Prometheus mostra os alvos `api` e `worker` como *up*.
 
@@ -554,6 +660,9 @@ Hoje, a API fala com o Vault por `http://vault:8200` (dev) ou `https://vault:820
 - [ ] `make up` sobe a stack dev do zero numa máquina só com Docker (Windows + Docker Desktop e Linux).
 - [ ] `make up-prodlike` sobe com Vault persistente e TLS; os dados do Vault e do banco sobrevivem a `docker compose down` (sem `-v`).
 - [ ] O worker não alcança o Vault (`docker compose exec worker /tccelta saude --url http://vault:8200/v1/sys/health` falha por DNS/rede).
+- [ ] O Redis só é alcançável da rede `dados` e com senha; a API segue de pé (limite local) quando ele cai.
+- [ ] O `jwt-rotacao` só enxerga a rede `kms` (sem banco) e sua credencial não está montada na API; o token da API segue sem poder rotacionar (spec 07, testes de política).
+- [ ] Com `make up-tunel`, o app fala com `https://$TUNEL_HOSTNAME` sem instalar certificado no celular.
 - [ ] Nenhum segredo em `compose*.yaml`, `.env.example` ou no git.
 - [ ] O documento descreve e valida (manualmente) o cenário de Vault externo com `VAULT_ADDR`/`VAULT_CACERT`.
 
@@ -566,9 +675,15 @@ Hoje, a API fala com o Vault por `http://vault:8200` (dev) ou `https://vault:820
 | Volume `vault_init` guarda a chave de unseal junto com os dados | só no laboratório, com aviso no script e recusa em `AMBIENTE=producao` |
 | `!reset` exige Compose ≥ 2.24 | `make` verifica `docker compose version` e falha com mensagem clara |
 | Relógio do host sem NTP afeta S1/S2 (âncoras) | checklist do README: `w32tm /query /status` (Windows) ou `timedatectl` no VPS; o contêiner usa o relógio do kernel |
+| O túnel passa o tráfego por um terceiro: a Cloudflare termina o TLS e **vê em claro** telemetria e GPS (os blocos continuam autenticados por HMAC, mas não são secretos) | Aceito no TCC e registrado como limitação; o plano B `tls` (CA local) mantém o tráfego só entre app e servidor; para produção, TLS de ponta a ponta (domínio próprio + ACME no Caddy) |
+| Depende de conta Cloudflare, de um domínio e da internet no momento do teste | Plano B `tls` na LAN; o túnel é de saída (nenhuma porta aberta no roteador) |
+| `Cf-Connecting-Ip` forjável se a 8081 for alcançável por outro caminho | A 8081 não é publicada nem roteada além da rede `borda`; só o `cloudflared` está nela com o Caddy |
+| Redis fora do ar | A API cai para o limitador local por réplica (spec 03), com métrica e log; nunca bloqueia o tráfego por causa disso |
 
-## [Aberto]
+## Decisões do autor (antes em aberto)
 
-- **[Aberto] Auto-unseal em produção.** Recomendação: *transit auto-unseal* com um segundo Vault mínimo, ou o KMS do provedor do VPS, se houver. Para o TCC, unseal manual com 3 de 5 shares guardados por pessoas diferentes.
-- **[Aberto] Backup.** pgBackRest para o banco (o doc cita) e `vault operator raft snapshot` agendado. Recomendação: só documentar no TCC, sem automatizar.
-- **[Aberto] Túnel com certificado público** (Cloudflare Tunnel ou similar) em vez de instalar a CA do Caddy no celular. Recomendação: usar só se a instalação da CA for um problema nos aparelhos de teste.
+- **[Decisão] Unseal manual 3 de 5; auto-unseal só documentado.** Em produção o Vault é inicializado com `vault operator init -key-shares=5 -key-threshold=3` e as 5 shares vão para pessoas diferentes; após cada reinício do Vault, três operadores rodam `make vault-unseal-manual` (uma share cada). O 1/1 do `init-unseal.sh` fica só no laboratório. *Transit auto-unseal* com um segundo Vault mínimo, ou o KMS do provedor do VPS, ficam **apenas descritos** no texto do TCC (sem infraestrutura extra); a consequência aceita é que reiniciar o Vault exige intervenção humana. Vault em HA (réplicas Raft) também só documentado.
+- **[Decisão] Backup só documentado, não automatizado.** No texto do TCC: pgBackRest para o banco (o doc cita; `pgbackrest backup --type=full` + arquivamento de WAL) e `vault operator raft snapshot save` para o Vault (sem o snapshot, perder o volume do Vault é perder `K_auth`/`K_rec` de todos os dongles). Nenhum serviço, cron ou teste de restauração entra no Compose desta fase.
+- **[Decisão] Túnel com certificado público desde já** (Cloudflare Tunnel; "ou similar" = qualquer túnel de saída com TLS público). Perfil `tunel`, `make up-tunel`; o app usa `https://$TUNEL_HOSTNAME` e não instala CA no celular. A CA do Caddy (`tls`) fica como plano B offline. Limitação registrada: o provedor do túnel termina o TLS (ver Riscos).
+- **[Decisão] Redis para o rate limit** (spec 03): serviço `redis` na rede `dados`, sem persistência, com senha; a API degrada para o limitador local se ele falhar.
+- **[Decisão] HTTP/3 não habilitado** no Caddy (`protocols h1 h2`; o `dio` do app usa HTTP 1.1/2; sem porta UDP).

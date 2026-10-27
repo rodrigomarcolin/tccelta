@@ -279,6 +279,7 @@ do firmware anterior à fase (sem cifra) para o cenário C0×C1 da
 - **[Decisão] D15** — `LINK_UP` registra o endereço no ar do celular (RPA)
   para correlacionar tentativas; não identifica a pessoa (RPA muda a cada
   ~15 min).
-- **[Aberto] A7** — Guardar os artefatos de bancada no repositório
-  (`docs/bancada/…`) ou só no TCC? *Recomendação:* logs de texto no
-  repositório (pequenos, úteis para o visualizador); `.pcapng` fora do git.
+- **[Decisão] A7** — Artefatos de bancada: **logs de texto no repositório**
+  (`docs/bancada/fase-2-lesc/`; pequenos, úteis para o visualizador) e
+  `.pcapng` **fora do git** (guardados à parte e citados no TCC; acrescentar
+  `*.pcapng` ao `.gitignore`).

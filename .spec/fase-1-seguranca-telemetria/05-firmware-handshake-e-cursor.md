@@ -384,13 +384,15 @@ tarefas (spec 03); as instâncias de HMAC/ECDSA são exclusivas da tarefa
 ### 11. Modo diagnóstico pelo desafio
 
 `flags_c` bit 0 + `diag_min` são lidos, validados pela tag e registrados
-(`HS_CHALLENGE flags=01 diag_min=30`). **[Aberto]** Aplicar de fato
-(entrar em diagnóstico por `diag_min` minutos e voltar ao coletor) muda a
-regra atual de que `AT#DIAG 1` é sempre aceito (decisão de demonstração da
-Investigação §2.1). **Recomendação:** na Fase 1, `diagGate = nullptr`; uma
+(`HS_CHALLENGE flags=01 diag_min=30`). **[Decisão] Adiar: formato pronto,
+sem efeito.** Aplicar de fato (entrar em diagnóstico por `diag_min` minutos e
+voltar ao coletor) mudaria a regra atual de que `AT#DIAG 1` é sempre aceito
+(decisão de demonstração da Investigação §2.1). Na Fase 1 o gancho
+`IDiagGate` fica vazio (`diagGate = nullptr`): `AT#DIAG 1` continua sempre
+aceito e o servidor emite sempre `flags_c = 0` (Fase 3, spec 04). Uma
 implementação `CollectorDiagGate` (chama `ICollectorControl::setDiagMode` e
-agenda a volta) entra quando o autor decidir exigir o token do servidor
-para o diagnóstico.
+agenda a volta) fica para depois do TCC, quando se decidir exigir o token do
+servidor para o diagnóstico.
 
 ### 12. Comandos de bancada (só builds com `COLLECTOR_EVENTS`)
 
@@ -545,9 +547,9 @@ Em placa: cenários do §13 com `sync_bench.py` contra `collector_mock_debug`
 | Risco / ponto | Impacto | Recomendação |
 |---|---|---|
 | Marcador com faixa que começa abaixo de `ACK_seq + 1` (BOOT cujo `from_seq` já foi coberto por um OVERFLOW declarado em outro handshake) — **resolvido com a Fase 3** | Servidor poderia rejeitar e travar | O TAIL efetivo (§4) evita o caso comum; a Fase 3 (spec 05) aceita BOOT com `from ≤ ACK + 1` e `to = seq − 1`, registrando só a parte `> ACK`, aceita BOOT de faixa vazia sem lacuna, LOSS com `from = ACK + 1` e `from ≤ seq ≤ to`, ignora `seq ≤ ACK` no lote e sempre aceita `seq = ACK + 1`. |
-| **[Aberto]** Faixa vazia no BOOT (`to = from − 1`) | Servidor | Ver spec 03; registrar como "sem lacuna". |
+| Faixa vazia no BOOT (`to = from − 1`) — **resolvido com a Fase 3** | Servidor | A spec 05 da Fase 3 aceita como "sem lacuna" (ver spec 03). |
 | App que não envia ACK de propósito (A3.2) | Flash enche; dongle descarta e declara via `TAIL_seq` | Comportamento esperado pelo documento. |
 | `save last_cs` lento (NVS ~ms) | Aumenta o RTT do handshake (âncora menos precisa) | Medido em `HS_RESPONSE nvs_us`; aceitável (âncora tolera ±2 s). |
 | Leitura da flash concorrente com a gravação (mutex do store) | Envio de bloco espera um `append` em curso | Medido em `read_us`; esperado < 50 ms. |
 | ECDSA no LOSS (perfil `asym`) na `SyncTask` | Pilha e latência maiores | Pilha de 12 KB; LOSS é raro. |
-| **[Aberto]** Diagnóstico via desafio | Regra de produto | §11. |
+| **[Decisão]** Diagnóstico via desafio adiado | Regra de produto | Formato pronto, gancho `IDiagGate` vazio, sem efeito (§11). |

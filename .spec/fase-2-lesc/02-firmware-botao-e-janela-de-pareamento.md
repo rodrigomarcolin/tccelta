@@ -113,7 +113,7 @@ cria bond"). Pareamento já iniciado antes do fechamento termina com bond e
 é aceito (`PAIR_RESULT late=1`).
 
 **[Decisão] D9 — Sem janela automática no boot.** O documento manda abrir
-pareamento só pelo botão; um dongle novo exige o gesto também ([Aberto] A5).
+pareamento só pelo botão; um dongle novo exige o gesto também ([Decisão] A5).
 
 #### 4.3.2 Conexões
 
@@ -574,10 +574,9 @@ Nada de FreeRTOS/NimBLE no `native`.
 - **[Decisão] D10** — `PairingTask` no núcleo 0, prioridade 2 (§4.5).
 - **[Decisão] D11** — Configuração por seção `[pairing]` do `.ini` (§5.1).
 - **[Decisão] D12** — Botão pressionado no boot bloqueia o detector até soltar (§4.1).
-- **[Aberto] A5** — Abrir a janela automaticamente no primeiro boot (dongle
-  sem nenhum bond)? *Recomendação:* não; o documento exige o botão e o
-  gesto é simples. Se o autor quiser facilitar a demonstração, um flag
-  `PAIR_WINDOW_ON_FIRST_BOOT=0` pode ser acrescentado depois.
-- **[Aberto] A6** — LED: usar GPIO2 por padrão? *Recomendação:* deixar `-1`
+- **[Decisão] A5** — **Não abrir a janela automaticamente** no primeiro boot
+  (dongle sem nenhum bond); o documento exige o botão e o gesto é simples.
+  Sem flag `PAIR_WINDOW_ON_FIRST_BOOT`.
+- **[Decisão] A6** — LED: GPIO2 não é o padrão; deixar `-1`
   no repositório e ligar `-DPAIR_LED_PIN=2` no `platformio_local.ini` de quem
   tiver placa DOIT.

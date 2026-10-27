@@ -8,7 +8,7 @@ Emitir, no handshake aceito, um JWT que autoriza o app a enviar blocos daquele d
 
 ## Escopo
 
-Dentro: formato do token, emissão via Vault (Ed25519), validação local, middleware, mapeamento de erros, rotação de chave, testes. Fora: contas de usuário no app ([Aberto]).
+Dentro: formato do token, emissão via Vault (Ed25519), validação local, middleware, mapeamento de erros, rotação de chave (automática, serviço `jwt-rotacao`, spec 07 e spec 01), testes. Fora: contas de usuário no app (**[Decisão]** fora do escopo do TCC; ver *Decisões do autor*).
 
 ## Design
 
@@ -146,7 +146,7 @@ Na rota de blocos não há `{id}`: o DevId é **sempre** o `sub`, como pede o do
    - assinatura com 1 bit trocado;
    - token sem `exp`.
 3. Expiração: `exp = agora − 31 s` ⇒ `token_expirado`; `exp = agora − 29 s` ⇒ válido (folga).
-4. Rotação: as chaves passam a ter `v1` e `v2`; um token `kid=jwt-v2` é válido sem reiniciar (recarga por `kid` desconhecido).
+4. Rotação: as chaves passam a ter `v1` e `v2`; um token `kid=jwt-v2` é válido sem reiniciar (recarga por `kid` desconhecido). Com a rotação automática (spec 07, *Rotação da chave do JWT*): depois que o serviço `jwt-rotacao` eleva `min_decryption_version` para 2, a recarga das chaves públicas deixa de listar a `v1` e um token `kid=jwt-v1` passa a 401 `token_invalido`; a API **nunca** chama `rotate`/`config` (política `deny`).
 5. Middleware:
    - sem header ⇒ 401 + `WWW-Authenticate`;
    - dongle inativo ⇒ 403;
@@ -173,7 +173,11 @@ Na rota de blocos não há `{id}`: o DevId é **sempre** o `sub`, como pede o do
 | Vault fora no boot ⇒ API sem chave pública | `/saude/pronta` = 503 até carregar; o Compose reinicia |
 | Token vazado | dano limitado (só cota); validade de 1 h; desativar o dongle |
 
-## [Aberto]
+## Decisões do autor (antes em aberto)
 
-- **[Aberto] Identidade do usuário do app** (conta, frota) separada do token do dongle. O doc menciona "identificar o usuário", mas o TCC não tem contas. Recomendação: fora de escopo. Se vier, usar OIDC no app e um segundo token, nunca misturado ao `sub = DevId`.
+- **[Decisão] Identidade do usuário do app (conta, frota): fora do escopo do TCC.** O doc menciona "identificar o usuário", mas o TCC não tem contas: o token identifica só o dongle (`sub = DevId`) e o app não ganha tela de conta. Se vier no futuro, usar OIDC no app e um segundo token, nunca misturado ao `sub = DevId`.
+- **[Decisão] Rotação da chave do JWT automatizada** (spec 07): job separado da API, com credencial própria; a validação desta spec só precisa recarregar as públicas (já prevista).
+
+## Em aberto
+
 - **[Aberto] Lista de negação por `jti`** (tabela `token_revogado(jti, exp)`). Recomendação: só se surgir um requisito de revogação imediata.

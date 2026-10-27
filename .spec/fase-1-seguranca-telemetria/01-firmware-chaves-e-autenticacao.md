@@ -21,11 +21,13 @@ implementações diferentes: MAC com PSK e assinatura digital").
 - `IMessageAuth` (já existe) com `NoAuth`, `HmacBlockAuth`, `EcdsaBlockAuth`;
   nova `IHandshakeAuth` com `HmacHandshakeAuth` e `NoHandshakeAuth`.
 - `KeyStore`: leitura das chaves de uma partição NVS dedicada (`secnvs`),
-  sempre por NVS encryption (um só caminho de código); chaves fixas de
-  bancada por *build flag*.
+  por NVS encryption quando o `sdkconfig` a liga (`devsec`/`prod`) e em claro
+  no `dev` (plano B1, §9.5); a escolha é um `#if CONFIG_NVS_ENCRYPTION`, o
+  único ponto do código que varia entre perfis; chaves fixas de bancada por
+  *build flag*.
 - **Passo 0 da fase:** migração de todos os envs do firmware para Arduino
-  como componente do ESP-IDF (`framework = arduino, espidf`), com *timebox*
-  e plano B (§9).
+  como componente do ESP-IDF (`framework = arduino, espidf`), seguindo
+  direto o plano B1 (§9.5).
 - **Mesmo firmware em todos os perfis de hardware** — `dev`, `devsec`
   (ensaio de produção) e `prod` —, com uma só tabela de partições; a
   diferença entre eles é só o arquivo de *defaults* do `sdkconfig` e o
@@ -60,7 +62,7 @@ Fatos do núcleo Arduino que determinam o desenho (conferidos com `nm` e no
 |---|---|---|
 | Secure Boot V2 | `# CONFIG_SECURE_BOOT is not set`; *bootloader* pré-compilado (`tools/sdk/esp32/bin/bootloader_*.elf`) sem verificação de assinatura | Impossível sem compilar o *bootloader* pelo ESP-IDF. |
 | *Flash encryption* | `# CONFIG_SECURE_FLASH_ENC_ENABLED is not set` | O *bootloader* não cifra no primeiro boot; só daria para cifrar manualmente no host, sem modo *release*. |
-| NVS encryption | `libnvs_flash.a` **não exporta** `nvs_flash_secure_init`, `nvs_flash_secure_init_partition`, `nvs_flash_generate_keys`, `nvs_flash_read_security_cfg` e **não contém** `nvs_encrypted_partition.cpp.obj` (`ar t`); no `sdkconfig` a seção NVS só lista `CONFIG_NVS_ASSERT_ERROR_CHECK` — `CONFIG_NVS_ENCRYPTION` nem aparece, sinal de dependência não satisfeita: no IDF 4.4 ela **depende de `SECURE_FLASH_ENC_ENABLED`** | Impossível no Arduino puro; no Arduino + IDF, só via `sdkconfig` com *flash encryption* ligada — o perfil `dev` precisa do ajuste do §9.3. |
+| NVS encryption | `libnvs_flash.a` **não exporta** `nvs_flash_secure_init`, `nvs_flash_secure_init_partition`, `nvs_flash_generate_keys`, `nvs_flash_read_security_cfg` e **não contém** `nvs_encrypted_partition.cpp.obj` (`ar t`); no `sdkconfig` a seção NVS só lista `CONFIG_NVS_ASSERT_ERROR_CHECK` — `CONFIG_NVS_ENCRYPTION` nem aparece, sinal de dependência não satisfeita: no IDF 4.4 ela **depende de `SECURE_FLASH_ENC_ENABLED`** | Impossível no Arduino puro; no Arduino + IDF, só via `sdkconfig` com *flash encryption* ligada — **[Decisão]** o perfil `dev` não ganha NVS encryption (plano B1, §9.3 e §9.5): o caminho cifrado só existe em `devsec`/`prod`. |
 | HMAC-SHA256 | `mbedtls_md_hmac_*` presentes; `CONFIG_MBEDTLS_HARDWARE_SHA=y` | Suportado, com SHA em hardware. |
 | ECDSA P-256 | `mbedtls_ecdsa_sign_det_ext`, `CONFIG_MBEDTLS_ECP_DP_SECP256R1_ENABLED=y`, `CONFIG_MBEDTLS_HARDWARE_MPI=y` | Suportado. |
 | Ed25519 | Não existe no mbedTLS 2.28 | Perfil `asym` usa **ECDSA P-256**. |
@@ -146,11 +148,12 @@ Layout na partição `secnvs` (NVS), namespace `sec`:
 **[Decisão] Partição própria para as chaves** (`secnvs`), separada da `nvs`
 que guarda config, `boot_id`, reserva de `seq` e `c_S`: (a) reprovisionar uma
 placa de desenvolvimento não apaga a reserva de `seq` nem o último `c_S`
-(apagar esses dois faz o servidor rejeitar o dongle) — desde que o
-reprovisionamento reaproveite a chave XTS da `nvs_key` já presente na placa
-(§11); (b) a imagem de fábrica contém só chaves; (c) em **todos** os perfis
-as duas partições são cifradas com a mesma chave XTS da partição `nvs_key`
-(no `dev` essa chave fica legível na flash, §8).
+(apagar esses dois faz o servidor rejeitar o dongle) — no `dev` isso vale
+sem condição (as duas partições estão em claro); em `devsec`/`prod`,
+desde que o reprovisionamento reaproveite a chave XTS da `nvs_key` já
+presente na placa (§11); (b) a imagem de fábrica contém só chaves; (c) em
+`devsec`/`prod` as duas partições são cifradas com a mesma chave XTS da
+partição `nvs_key`; no `dev` ambas ficam **em claro** (plano B1, §8).
 
 Chaves fixas de bancada (`-DSECURITY_DEV_FIXED_KEYS`, **nunca em produção**),
 usadas quando `secnvs` não está provisionada. São as mesmas do servidor de
@@ -363,14 +366,19 @@ public:
 };
 ```
 
-Algoritmo de `load` (**um só caminho**, igual em `dev`, `devsec` e `prod`):
-1. `part = esp_partition_find_first(DATA, NVS_KEYS, "nvs_key")` →
+Algoritmo de `load` (**[Decisão] plano B1:** o único ponto que varia entre
+perfis é o `#if CONFIG_NVS_ENCRYPTION` dos passos 1–2; o resto é igual em
+`dev`, `devsec` e `prod`):
+1. `#if CONFIG_NVS_ENCRYPTION` (`devsec`/`prod`):
+   `part = esp_partition_find_first(DATA, NVS_KEYS, "nvs_key")` →
    `nvs_flash_read_security_cfg(part, &cfg)`. Quando o `KeyStore` roda, o
    `initArduino` já chamou `nvs_flash_init()`, que gera as chaves se a
    `nvs_key` estiver em branco; por isso `ESP_ERR_NVS_KEYS_NOT_INITIALIZED`
    aqui é erro, e `ESP_ERR_NVS_CORRUPT_KEY_PART` → `[keys] nvs_key corrompida`
    e `Missing`.
-2. `nvs_flash_secure_init_partition("secnvs", &cfg)`; `crypto::secureZero(&cfg)`.
+2. `#if CONFIG_NVS_ENCRYPTION`: `nvs_flash_secure_init_partition("secnvs", &cfg)`;
+   `crypto::secureZero(&cfg)`. `#else` (`dev`): `nvs_flash_init_partition("secnvs")`,
+   a `secnvs` aberta **em claro**.
 3. `nvs_open_from_partition("secnvs", "sec", NVS_READONLY, &h)`; ler `prov_ver`
    e os blobs com `nvs_get_blob`, conferindo o tamanho exato de cada um.
 4. Exigências por perfil: `hmac` → `dev_id`, `k_auth`, `k_rec`; `asym` →
@@ -379,9 +387,10 @@ Algoritmo de `load` (**um só caminho**, igual em `dev`, `devsec` e `prod`):
 5. Se faltar algo e `SECURITY_DEV_FIXED_KEYS` estiver definido → copiar as
    chaves fixas (§2), `source = DevFixed`. Senão `source = Missing`, `false`.
    `secnvs` em branco (placa nunca provisionada) inicializa normalmente e cai
-   aqui: o atalho das chaves fixas continua valendo com NVS encryption.
+   aqui: o atalho das chaves fixas vale com e sem NVS encryption.
 6. `nvs_close`; `crypto::secureZero` em todo buffer temporário.
-7. Linha de boot `[sec] fe=<off|dev|release> sb=<0|1> jtag_off=<0|1> dl_off=<0|1> crypt_cnt=<n> nvs_enc=1`
+7. Linha de boot `[sec] fe=<off|dev|release> sb=<0|1> jtag_off=<0|1> dl_off=<0|1> crypt_cnt=<n> nvs_enc=<0|1>`
+   (`nvs_enc` = `CONFIG_NVS_ENCRYPTION`: 0 no `dev`, 1 em `devsec`/`prod`)
    com `esp_get_flash_encryption_mode()`, `esp_secure_boot_enabled()`,
    `esp_efuse_read_field_bit(ESP_EFUSE_JTAG_DISABLE / ESP_EFUSE_UART_DOWNLOAD_DIS)`
    e `esp_efuse_read_field_blob(ESP_EFUSE_FLASH_CRYPT_CNT, …, 7)`, **em todos
@@ -395,15 +404,18 @@ antes do `KeyStore`, ela fica registrada como partição em claro e as chaves
 viram lixo; regra de revisão: nenhum `Preferences::begin(…, "secnvs")`.
 
 **[Decisão] `Preferences`/`NvsStore` na `nvs` padrão ficam cifrados sem
-mudança de código.** Conferido no núcleo: `initArduino` chama
-`nvs_flash_init()` antes do `setup`, e com `CONFIG_NVS_ENCRYPTION` essa
-função inicializa a `nvs` por `nvs_flash_secure_init_partition` com as chaves
-da `nvs_key` (gerando-as se ausentes); `Preferences::begin(name)` sem rótulo
-só faz `nvs_open` nessa partição. Logo o namespace `collector` (spec 03) e os
-*bonds* do NimBLE (`nimble_bond`, Fase 2) ficam cifrados nos três perfis.
-Consequência operacional: a `nvs_key` precisa estar gravada **antes** do
-primeiro boot do firmware novo, ou o próprio dongle gera uma chave diferente
-da usada pelo `provision.py` para cifrar a `secnvs` (§11 trata os dois casos).
+mudança de código em `devsec`/`prod`; no `dev` ficam em claro.** Conferido
+no núcleo: `initArduino` chama `nvs_flash_init()` antes do `setup`, e com
+`CONFIG_NVS_ENCRYPTION` essa função inicializa a `nvs` por
+`nvs_flash_secure_init_partition` com as chaves da `nvs_key` (gerando-as se
+ausentes); `Preferences::begin(name)` sem rótulo só faz `nvs_open` nessa
+partição. Logo o namespace `collector` (spec 03) e os *bonds* do NimBLE
+(`nimble_bond`, Fase 2) ficam cifrados em `devsec`/`prod`; no `dev`, sem o
+ajuste do `nvs_flash` (§9.3), o `nvs_flash_init()` é o de sempre e tudo fica
+em claro. Consequência operacional em `devsec`/`prod`: a `nvs_key` precisa
+estar gravada **antes** do primeiro boot do firmware novo, ou o próprio
+dongle gera uma chave diferente da usada pelo `provision.py` para cifrar a
+`secnvs` (§11 trata os dois casos).
 
 **[Decisão] Guardas derivadas do `sdkconfig`, não de *build flag*** (em
 `KeyStore.cpp`, que só compila no ESP32):
@@ -432,8 +444,9 @@ de RAM conteria as chaves e a partição `coredump` não é cifrada.
 ### 8. Perfis de hardware e camadas de proteção
 
 **[Decisão] Mesmo firmware em todos os perfis.** Código-fonte, framework
-(`arduino, espidf`), tabela de partições (§9.4), `CMakeLists.txt` e o caminho
-do `KeyStore` (§7) são idênticos. Passar de um perfil para outro é só:
+(`arduino, espidf`), tabela de partições (§9.4) e `CMakeLists.txt` são
+idênticos, e o `KeyStore` (§7) só varia no `#if CONFIG_NVS_ENCRYPTION`
+(plano B1, §9.5). Passar de um perfil para outro é só:
 (a) acrescentar um arquivo de *defaults* ao `sdkconfig` do *build*;
 (b) executar o procedimento de gravação/queima de eFuse do perfil (§10).
 Os perfis de hardware são ortogonais ao `SECURITY_PROFILE` (`none`/`hmac`/`asym`, §1).
@@ -446,7 +459,7 @@ Os perfis de hardware são ortogonais ao `SECURITY_PROFILE` (`none`/`hmac`/`asym
 
 | Camada (§4.1 do documento) | `dev` | `devsec` | `prod` |
 |---|---|---|---|
-| NVS encryption (`secnvs` e `nvs`, XTS-AES) | **Sim, mas sem proteção real:** a `nvs_key` fica legível em claro na flash; serve para validar o caminho de código | Sim; `nvs_key` cifrada pela FE, mas a chave FE existe no host (protege só de quem não tem o arquivo) | Sim; `nvs_key` cifrada pela FE com chave gerada no chip |
+| NVS encryption (`secnvs` e `nvs`, XTS-AES) | **Não** (plano B1, §9.5): `secnvs` e `nvs` em claro; o caminho cifrado só é validado no `devsec` | Sim; `nvs_key` cifrada pela FE, mas a chave FE existe no host (protege só de quem não tem o arquivo) | Sim; `nvs_key` cifrada pela FE com chave gerada no chip |
 | *Flash encryption* (cifra *bootloader*, tabela, app, `nvs_key`) | Não | Sim, modo **desenvolvimento**; chave gerada no host e queimada em BLOCK1 | Sim, modo **release**; chave gerada no chip no 1º boot (BLOCK1 protegido contra leitura/escrita) |
 | Secure Boot V2 (exige ESP32 **rev. v3.0+**) | Não | Sim, com chave de assinatura própria do ensaio | Sim, chave de produção |
 | eFuse: JTAG | Livre | Livre (`CONFIG_SECURE_BOOT_ALLOW_JTAG`) | Desabilitado (`JTAG_DISABLE`) |
@@ -527,7 +540,7 @@ do projeto e que o último arquivo da lista vence em chaves repetidas —
 
 #### 9.2 Arquivos do *build* híbrido
 
-- `CMakeLists.txt` (raiz) — ver §9.3.
+- `CMakeLists.txt` (raiz) — o mínimo do §9.3 (sem o ajuste do `nvs_flash`, plano B1).
 - `src/CMakeLists.txt`: `FILE(GLOB_RECURSE app_sources ${CMAKE_SOURCE_DIR}/src/*.*)` +
   `idf_component_register(SRCS ${app_sources})` (o mesmo que o *builder* gera
   sozinho quando falta; versionar para não depender disso).
@@ -606,47 +619,44 @@ mantém o *download* livre).
 do IDF recusa boot em chip mais antigo, e o `dev` precisa rodar em qualquer
 placa.
 
-#### 9.3 NVS encryption no perfil `dev` (ajuste do componente `nvs_flash`)
+#### 9.3 NVS encryption no perfil `dev` (descartado: plano B1)
 
 No IDF 4.4, `CONFIG_NVS_ENCRYPTION` **depende de `SECURE_FLASH_ENC_ENABLED`**
 (evidência local no estado atual); sem *flash encryption* não dá para ligá-la
 pelo `sdkconfig`, e o componente `nvs_flash` é compilado sem
 `nvs_encrypted_partition.cpp` e sem as funções `nvs_flash_secure_init*`,
-`nvs_flash_generate_keys`, `nvs_flash_read_security_cfg`. Para o caminho
-único do `KeyStore` (§7) existir também no `dev`:
+`nvs_flash_generate_keys`, `nvs_flash_read_security_cfg`.
+
+**[Decisão]** O ajuste do componente `nvs_flash` no `CMakeLists.txt` raiz
+(recompilar `nvs_encrypted_partition.cpp` com `CONFIG_NVS_ENCRYPTION=1` fora
+do `sdkconfig`) **não é feito**: a fase segue direto o plano B1 (§9.5). O
+`CMakeLists.txt` raiz fica com o mínimo do `project.cmake` do IDF:
 
 ```cmake
 # CMakeLists.txt (raiz) — igual nos três perfis
 cmake_minimum_required(VERSION 3.16.0)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(tccelta_dongle)
-
-# NVS encryption em todos os perfis (spec 01 §9.3). Com FE ligada o sdkconfig
-# já traz CONFIG_NVS_ENCRYPTION=y e este bloco não faz nada.
-if(NOT CONFIG_NVS_ENCRYPTION)
-  idf_component_get_property(nvs_lib nvs_flash COMPONENT_LIB)
-  idf_component_get_property(nvs_dir nvs_flash COMPONENT_DIR)
-  target_compile_definitions(${nvs_lib} PRIVATE CONFIG_NVS_ENCRYPTION=1)
-  target_sources(${nvs_lib} PRIVATE "${nvs_dir}/src/nvs_encrypted_partition.cpp")
-  target_link_libraries(${nvs_lib} PRIVATE idf::mbedtls)
-endif()
 ```
 
-- O XTS do mbedTLS já está ligado incondicionalmente
-  (`mbedtls/esp_config.h`: `#define MBEDTLS_CIPHER_MODE_XTS`).
-- Sem FE, a flag `encrypted` da `nvs_key` não tem efeito (a partição é lida e
-  gravada em claro) — **[verificar]** no *checkpoint* abaixo.
-- **[verificar]** que o *builder* do PlatformIO compila as fontes e
-  definições acrescentadas depois de `project()` (ele lê o *code model* do
-  CMake, que já as inclui). Proteção natural: se o ajuste falhar, o
-  `KeyStore` não liga (`undefined reference to nvs_flash_secure_init_partition`).
+Consequências:
+- `dev` **não** tem NVS encryption: `secnvs` e `nvs` ficam em claro, e o
+  `KeyStore` abre a `secnvs` com `nvs_flash_init_partition` (`#if` do §7). A
+  `nvs_key` existe na tabela (mesma tabela nos três perfis), mas não é usada
+  no `dev`.
+- O caminho cifrado (`nvs_flash_secure_init_partition`, `nvs_key`) só é
+  exercitado e validado no `devsec` (§10.2); em `prod` é o mesmo código.
+- O `dev` deixa de ser "mesmo caminho de código" do `prod` apenas nesse `#if`;
+  tudo mais (tabela, `CMakeLists.txt`, `KeyStore` fora do `#if`) é idêntico.
+- A NVS não cifrada do `dev` significa que quem lê a flash da placa de bancada
+  lê `K_auth`/`K_rec`/`k_sig` e os *bonds* — aceitável porque o `dev` usa
+  chaves de bancada descartáveis (a Fase 2 registra o risco, spec 01 §6).
 
 *Checkpoint* do §9.3 (placa `dev`, depois de `erase_flash`): (1) o *build*
-liga; (2) primeiro boot imprime `[sec] fe=off … nvs_enc=1` e `KEYS
-source=dev_fixed`; (3) `esptool.py read_flash 0x17000 0x1000 nvs_key.bin`
-mostra 64 B de chave + CRC em claro (não `FF…`); (4) `read_flash` da `nvs`
-não mostra em claro as chaves `seq_rsv`/`collector` nos valores (só os
-cabeçalhos de página); (5) reboot preserva `seq_rsv`.
+liga; (2) primeiro boot imprime `[sec] fe=off … nvs_enc=0` e `KEYS
+source=dev_fixed`; (3) `esptool.py read_flash 0x19000 0x3000 secnvs.bin` de
+uma placa provisionada mostra as chaves em claro (confirma o `dev` em claro,
+não é falha); (4) reboot preserva `seq_rsv`.
 
 #### 9.4 Tabela de partições única (`partitions_collector.csv`)
 
@@ -696,13 +706,12 @@ de bancada recomeçam do zero (servidor de bancada: "Esquecer estado do
 dongle", spec 09), e as migrações de `last_seq` (spec 03) e de `/log` v1
 (spec 02) só rodam em casos defensivos.
 
-#### 9.5 Passo 0: migração do *build* (com *timebox*)
+#### 9.5 Passo 0: migração do *build* (plano B1 direto)
 
 Ordem: (1) `[base]` com `framework = arduino, espidf` e `platform_packages`;
-`CMakeLists.txt`, `src/CMakeLists.txt`, `sdkconfig.defaults` (sem o bloco do
-§9.3 ainda) e a tabela nova; (2) `pio run -e collector_mock_debug` e
-`collector_twai_debug`; (3) gravar com `erase_flash` + `pio run -t upload`;
-(4) acrescentar o bloco do §9.3.
+`CMakeLists.txt`, `src/CMakeLists.txt`, `sdkconfig.defaults` e a tabela nova;
+(2) `pio run -e collector_mock_debug` e `collector_twai_debug`; (3) gravar com
+`erase_flash` + `pio run -t upload`.
 
 *Checkpoint* do passo 0 (antes de **qualquer** código de segurança): o
 firmware atual, sem mudança de código, compila em todos os envs e roda numa
@@ -712,39 +721,39 @@ sobrevivem a reboot), NVS (`boot_id` incrementa entre boots) — e o pool de
 *mbufs* do NimBLE continua o configurado por `-D` (spec 04 §7). Conferir
 também no `.map`/`nm` do `firmware.elf` que só há um host NimBLE linkado (o
 do NimBLE-Arduino; nenhum `ble_hs_*` vindo de `components/bt/host/nimble`) e
-anotar o tamanho do app híbrido (entra na decisão de OTA, §9.6).
+anotar o tamanho do app híbrido (útil para o registro do §9.6).
 
-**[Aberto] Risco da migração** (maior risco da fase: compatibilidade do
-`framework-espidf 3.40407` com o Arduino 2.0.17 na plataforma 7.x; NimBLE-Arduino
-com o BT do IDF; tempo de compilação — cada env compila o IDF inteiro).
-**Recomendação:** *timebox* de ~2 dias de trabalho para o *checkpoint*
-acima. Planos B, nesta ordem:
-- **B1** — o híbrido funciona, mas o ajuste do §9.3 não: o `KeyStore` passa a
-  escolher pelo `CONFIG_NVS_ENCRYPTION` do `sdkconfig` (`#if`, único ponto do
-  código que varia; `dev` abre a `secnvs` em claro com
-  `nvs_flash_init_partition`); a diferença entre perfis continua sendo só
-  `sdkconfig` + procedimento, e o caminho cifrado é validado no `devsec`.
-- **B2** — o híbrido não fecha: todos os envs voltam ao Arduino puro
-  (`framework = arduino`, tabela atual), `KeyStore` em claro; as camadas de
-  hardware são demonstradas numa placa descartável com um projeto IDF
-  mínimo (`idf.py`) que só gera *bootloader*/`sdkconfig` assinados; a
-  limitação é registrada no TCC.
+**[Decisão] Risco da migração: ir direto ao plano B1.** O passo 0 é o maior
+risco da fase (compatibilidade do `framework-espidf 3.40407` com o Arduino
+2.0.17 na plataforma 7.x; NimBLE-Arduino com o BT do IDF; tempo de
+compilação — cada env compila o IDF inteiro), e o ajuste do `nvs_flash` do
+§9.3 é a parte mais frágil dele, por isso **não** se gasta *timebox* tentando
+o ajuste:
+- **B1 (adotado)** — híbrido sem o ajuste do §9.3: o `KeyStore` escolhe pelo
+  `CONFIG_NVS_ENCRYPTION` do `sdkconfig` (`#if`, único ponto do código que
+  varia; `dev` abre a `secnvs` em claro com `nvs_flash_init_partition`); a
+  diferença entre perfis continua sendo só `sdkconfig` + procedimento, e o
+  caminho cifrado é validado no `devsec`.
+- **B2 (recuo, só se o híbrido não fechar)** — todos os envs voltam ao
+  Arduino puro (`framework = arduino`, tabela atual), `KeyStore` em claro; as
+  camadas de hardware são demonstradas numa placa descartável com um projeto
+  IDF mínimo (`idf.py`) que só gera *bootloader*/`sdkconfig` assinados; a
+  limitação é registrada no TCC. Aplica-se se o *checkpoint* acima não fechar
+  em ~2 dias de trabalho.
 
 #### 9.6 OTA
 
-**[Aberto]** A tabela não tem OTA: com 2 MB de LittleFS, a escolha foi um só
-app de 1,8 MB. Em `prod`, com o *download* da ROM desabilitado
-(`UART_DOWNLOAD_DIS`) e a FE em *release*, **firmware novo só entra por OTA
-assinado**; sem OTA, a placa `prod` nunca mais é atualizada (nem
-reprovisionada). A tabela também não pode mudar depois do `prod`.
-**Recomendação para o TCC:** manter as placas de bancada em `dev`/`devsec` e
-tratar `prod` como demonstração (uma placa dedicada, com o firmware final).
-Alternativa a decidir **antes** de queimar qualquer placa `prod`: o app atual
-tem ~630 KB, então dois *slots* de `0xE0000` (896 KB) — `otadata 0x1C000/0x2000`,
-`ota_0 0x20000/0xE0000`, `ota_1 0x100000/0xE0000` — caberiam sem tirar nada do
-LittleFS (`0x1E0000–0x1F0000` livre), se o app híbrido assinado ficar abaixo
-de ~800 KB; o OTA em si (transporte pelo app via BLE, rollback, anti-rollback
-com `SECURE_VERSION`) fica fora da Fase 1.
+**[Decisão] Sem OTA; `prod` só como demonstração.** A tabela não tem OTA:
+com 2 MB de LittleFS, a escolha foi um só app de 1,8 MB. Em `prod`, com o
+*download* da ROM desabilitado (`UART_DOWNLOAD_DIS`) e a FE em *release*,
+firmware novo só entraria por OTA assinado; sem OTA, a placa `prod` nunca mais
+é atualizada (nem reprovisionada), e a tabela não pode mudar depois do `prod`.
+Portanto as placas de bancada ficam em `dev`/`devsec`, e `prod` é uma placa
+dedicada à demonstração, com o firmware final. Dois *slots* de `0xE0000`
+(896 KB) — `otadata 0x1C000/0x2000`, `ota_0 0x20000/0xE0000`,
+`ota_1 0x100000/0xE0000` — caberiam sem tirar nada do LittleFS, mas não são
+adotados; o OTA em si (transporte pelo app via BLE, rollback, anti-rollback
+com `SECURE_VERSION`) fica fora do TCC.
 
 ### 10. Procedimentos por perfil
 
@@ -843,17 +852,17 @@ escrita (nota de `esp_flash_write_protect_crypt_cnt` em `esp_flash_encrypt.h`).
 provision.py --profile {dev,devsec,prod} [--security {hmac,asym,none}] [--port COMx]
              [--kms-wrapping kms_wrapping.json] [--dev-id HEX16] [--out DIR] [--flash]
              [--nvs-key {auto,new,board}] [--fe-key keys/devsec/fe_key_devsec.bin]
-             [--import secnvs.csv]     # bancada: usa chaves geradas por `tccelta provisionar novo` (Fase 3)
+             [--import secnvs.csv]     # bancada: CSV de outra origem; `tccelta provisionar novo` (Fase 3) já grava `secnvs.bin` pronto, sem CSV em disco
 ```
 
 | Passo | Detalhe |
 |---|---|
 | Entropia | `secrets.token_bytes(n)` (CSPRNG do SO: `BCryptGenRandom`/`getrandom`). `DevId` aleatório de 8 B, rejeitando tudo-zero e tudo-FF; `--dev-id` só para reprovisionar a mesma placa. `k_sig`: `ec.generate_private_key(SECP256R1())`, exportado como escalar de 32 B. |
 | CSV | `secnvs.csv` no formato do gerador: `key,type,encoding,value` / `sec,namespace,,` / `prov_ver,data,u8,1` / `dev_id,data,hex2bin,<16 hex>` / `k_auth,data,hex2bin,<64 hex>` / `k_rec,…` / `k_sig,…` (só `asym`) / `prof,data,u8,<0-2>`. |
-| Chave XTS (`nvs_key`) | **[Decisão]** Igual nos três perfis (a NVS é sempre cifrada). `--nvs-key new`: `python -m esp_idf_nvs_partition_gen generate-key --keyfile nvs_keys.bin --outdir out/<DevId>` → `out/<DevId>/keys/nvs_keys.bin` (placa em branco; obrigatório em `prod`). `--nvs-key board`: lê a `nvs_key` da placa (`esptool.py read_flash 0x17000 0x1000`), decifra no `devsec` com `espsecure.py decrypt_flash_data --keyfile <--fe-key> --address 0x17000`, confere o CRC do formato `nvs_keys` e a reaproveita — mantém legíveis a `nvs` (reserva de `seq`, `last_cs`, *bonds*) de uma placa que já rodou o firmware. `auto` (padrão): `board` se `--flash` e a placa tiver chave válida (`dev`/`devsec`), senão `new`. |
+| Chave XTS (`nvs_key`) | **[Decisão]** Só `devsec`/`prod` (plano B1, §9.5): no `dev` a NVS é em claro e não há `nvs_key` (`--nvs-key` é ignorado, com aviso). `--nvs-key new`: `python -m esp_idf_nvs_partition_gen generate-key --keyfile nvs_keys.bin --outdir out/<DevId>` → `out/<DevId>/keys/nvs_keys.bin` (placa em branco; obrigatório em `prod`). `--nvs-key board`: lê a `nvs_key` da placa (`esptool.py read_flash 0x17000 0x1000`), decifra no `devsec` com `espsecure.py decrypt_flash_data --keyfile <--fe-key> --address 0x17000`, confere o CRC do formato `nvs_keys` e a reaproveita — mantém legíveis a `nvs` (reserva de `seq`, `last_cs`, *bonds*) de uma placa que já rodou o firmware. `auto` (padrão): `board` se `--flash` e a placa tiver chave válida (`dev`/`devsec`), senão `new`. |
 | Nome do módulo | **[verificar]** ao montar o ambiente que o pacote PyPI `esp-idf-nvs-partition-gen` expõe o módulo `esp_idf_nvs_partition_gen` (`python -m esp_idf_nvs_partition_gen --help`); se não, usar o nome real em todas as chamadas abaixo. |
-| Imagem `secnvs` | Sempre cifrada: `python -m esp_idf_nvs_partition_gen encrypt secnvs.csv secnvs.bin 0x3000 --inputkey out/<DevId>/keys/nvs_keys.bin`. A imagem em claro (`generate`) deixa de existir. |
-| Gravação (`--flash`, `dev`/`devsec`) | `esptool.py --port COMx write_flash 0x19000 secnvs.bin` (a `secnvs` não é `encrypted`: grava-se igual com ou sem FE) e, só com `--nvs-key new`, `0x17000 nvs_keys.bin` — no `dev` em claro; no `devsec` já com FE ativa, com `write_flash --encrypt` (cifra pela ROM). Com `--nvs-key new` numa placa que já rodou o firmware, a `nvs` existente fica ilegível e é recriada (perde reserva de `seq`, `last_cs`, *bonds*): o script exige `--yes` e avisa. Offsets lidos de `partitions_collector.csv`, não fixos no script. `prod` não tem `--flash`: a gravação é o passo 5 do §10.3. |
+| Imagem `secnvs` | `devsec`/`prod`: cifrada, `python -m esp_idf_nvs_partition_gen encrypt secnvs.csv secnvs.bin 0x3000 --inputkey out/<DevId>/keys/nvs_keys.bin`. `dev` (plano B1): em claro, `python -m esp_idf_nvs_partition_gen generate secnvs.csv secnvs.bin 0x3000`. |
+| Gravação (`--flash`, `dev`/`devsec`) | `esptool.py --port COMx write_flash 0x19000 secnvs.bin` (a `secnvs` não é `encrypted`: grava-se igual com ou sem FE) e, só em `devsec` com `--nvs-key new`, `0x17000 nvs_keys.bin` (com FE ativa, `write_flash --encrypt`, cifra pela ROM); o `dev` não grava `nvs_key`. Em `devsec`, com `--nvs-key new` numa placa que já rodou o firmware, a `nvs` existente fica ilegível e é recriada (perde reserva de `seq`, `last_cs`, *bonds*): o script exige `--yes` e avisa. Offsets lidos de `partitions_collector.csv`, não fixos no script. `prod` não tem `--flash`: a gravação é o passo 5 do §10.3. |
 | Registro KMS | `kms_record.json` (ver abaixo). Com `--kms-wrapping kms_wrapping.json` (exportado por `tccelta provisionar exportar-wrapping`, Fase 3 spec 07: as *wrapping keys* RSA-4096 dos mounts `transit-auth` e `transit-rec`), `k_auth` e `k_rec` vão no formato BYOK do Vault Transit (`alg: "vault-byok-rsa-oaep-sha256-aes-kwp"`: chave AES-256 efêmera cifrada com RSA-OAEP-SHA256 pela wrapping key do mount, seguida do material embrulhado com AES-KWP, RFC 5649), cada uma com o `kid` do seu mount; sem ela (só `--profile dev`/`devsec`) vão em claro com `"alg":"none"` e o script imprime aviso. A opção `--kms-pubkey` não existe mais. O esquema do `kms_record.json` **não muda** com os perfis de hardware. |
 | Saída de bancada | `--profile dev`/`devsec` também grava `out/<DevId>/bench_keys.json` (`dev_id`, `k_auth`, `k_rec` em hex) para o servidor de bancada do app (spec 09). |
 
@@ -924,11 +933,11 @@ Mais os vetores padrão: SHA-256(`""`) = `e3b0c442…b855`; SHA-256(`"abc"`) =
 | Criar | `src/security/mbed/MbedHmacSha256.{h,cpp}` | Adaptador mbedTLS (§3). |
 | Criar | `src/security/mbed/EcdsaBlockAuth.{h,cpp}` | Perfil `asym`; compila em todos os envs ESP32, instanciado só com `SECURITY_PROFILE=2`. |
 | Alterar | `src/collector/IMessageAuth.h` | Só o comentário do contrato (§4); `NoAuth` fica. |
-| Criar | `src/storage/KeyStore.{h,cpp}` | §7 (caminho único por NVS encryption, linha `[sec]`, guardas do `sdkconfig`). |
+| Criar | `src/storage/KeyStore.{h,cpp}` | §7 (`#if CONFIG_NVS_ENCRYPTION` como único ponto que varia, linha `[sec]`, guardas do `sdkconfig`). |
 | Alterar | `src/app/CollectorApp.cpp` | Passo 0.5 do boot: `KeyStore::load` → evento `KEYS`; criar as instâncias da §6 conforme `security::kProfile`. |
 | Alterar | `platformio.ini` | **Passo 0:** `[base]` com `framework = arduino, espidf` e `platform_packages` (§9.1). Depois: `env:native` ganha `+<crypto/> +<security/> -<security/mbed/>`; `[debug]` ganha `-DSECURITY_DEV_FIXED_KEYS`; seções `[sec_none]`, `[sec_asym]` e envs de benchmark (spec 06); `env:collector_mock_devsec` e `env:collector_twai_prod` (só `extends` + `board_build.cmake_extra_args`). |
 | Alterar | `partitions_collector.csv` | **Passo 0:** tabela única do §9.4 (vale nos três perfis). |
-| Criar | `CMakeLists.txt`, `src/CMakeLists.txt`, `sdkconfig.defaults` | **Passo 0** (§9.2); o bloco do `nvs_flash` (§9.3) entra no fim do passo 0. |
+| Criar | `CMakeLists.txt`, `src/CMakeLists.txt`, `sdkconfig.defaults` | **Passo 0** (§9.2); sem o ajuste do `nvs_flash` (§9.3 descartado, plano B1). |
 | Criar | `sdkconfig.devsec.defaults`, `sdkconfig.prod.defaults` | §9.2 (únicos arquivos que distinguem os perfis). |
 | Alterar | `.gitignore` (firmware) | `secure_boot_signing_key.pem`, `keys/`, `tools/provision/out/`, `/sdkconfig.*` com `!/sdkconfig.defaults` e `!/sdkconfig.*.defaults`. |
 | Criar | `tools/provision/provision.py`, `requirements.txt`, `README.md` | §11. |
@@ -949,13 +958,14 @@ Nativos (`pio test -e native -f test_crypto`):
 - `NoHandshakeAuth`: tag de 16 zeros, `verify` sempre `true`; `NoAuth::tagSize() == 0`.
 
 Em placa (`collector_mock_debug`, perfil `dev`):
-- Boot com `secnvs` vazia e chaves fixas: `[sec] fe=off sb=0 … nvs_enc=1`,
+- Boot com `secnvs` vazia e chaves fixas: `[sec] fe=off sb=0 … nvs_enc=0`,
   `KEYS source=dev_fixed fe=off sb=0`.
-- `provision.py --profile dev --flash` (com `--nvs-key auto` → `board`) e
+- `provision.py --profile dev --flash` (`secnvs.bin` em claro, sem `nvs_key`) e
   reboot: `KEYS source=partition dev_id=<o gerado>`; `seq_rsv` e `boot_id`
   continuam de onde estavam (a `nvs` não foi perdida).
-- `esptool.py read_flash` da `secnvs`: nenhum `K_auth`/`K_rec` em claro (o
-  hexa a procurar está no `bench_keys.json`).
+- `esptool.py read_flash` da `secnvs` no `dev`: as chaves **aparecem** em
+  claro (confirma o plano B1; o hexa a procurar está no `bench_keys.json`).
+  O mesmo `read_flash` no `devsec` (§10.2) não deve mostrá-las.
 - Perfil `asym` (`collector_mock_debug_asym`): `FLUSH tag_len=64`; a
   assinatura de um bloco verifica com a chave pública impressa pelo
   `provision.py` (script `tools/provision/verify_block.py <hex do FLUSH>`).
@@ -965,17 +975,17 @@ Em placa (`collector_mock_debug`, perfil `dev`):
 ## Passos de implementação
 
 0. **Build único** (§9.5): todos os envs em `framework = arduino, espidf`,
-   tabela única, `CMakeLists.txt`/`sdkconfig.defaults`, depois o bloco do
-   `nvs_flash` (§9.3). *Checkpoint:* o do §9.5 (firmware atual roda sobre
-   Arduino + ESP-IDF: coleta, NUS BLE, LittleFS, NVS) e, ao fim, o do §9.3.
-   *Timebox* e planos B1/B2 no §9.5.
+   tabela única, `CMakeLists.txt`/`sdkconfig.defaults`,
+   sem o ajuste do `nvs_flash` (plano B1 direto, §9.3/§9.5). *Checkpoint:* o do
+   §9.5 (firmware atual roda sobre Arduino + ESP-IDF: coleta, NUS BLE,
+   LittleFS, NVS). Recuo B2 só se o híbrido não fechar (§9.5).
 1. **Primitivas** (`crypto/`) + `test_crypto`. *Checkpoint:* `pio test -e native -f test_crypto` verde.
 2. **Perfis e interfaces** (`security/` puro: `SecurityProfile.h`,
    `DeviceKeys.h`, `BlockAuth`, `HandshakeAuth`) + testes com os vetores do
    §12. *Checkpoint:* vetores passam no native.
 3. **Adaptadores mbedTLS** e `KeyStore`; ligar em `CollectorApp` (sem usar
    ainda nas specs 02/05). *Checkpoint:* `pio run -e collector_mock_debug`
-   compila; boot imprime `[sec] fe=off … nvs_enc=1` e `KEYS source=dev_fixed`;
+   compila; boot imprime `[sec] fe=off … nvs_enc=0` e `KEYS source=dev_fixed`;
    um teste de placa temporário compara `MbedHmacSha256` com
    `PortableHmacSha256` no vetor RFC 4231.
 4. **Provisionamento dev** (a tabela já veio no passo 0). *Checkpoint:*
@@ -1015,15 +1025,15 @@ Em placa (`collector_mock_debug`, perfil `dev`):
 
 | Risco / ponto | Impacto | Recomendação |
 |---|---|---|
-| **[Aberto]** *Build* híbrido Arduino + IDF na plataforma 7.x (agora pré-requisito de toda a fase) | Bloqueia tudo o que vem depois do passo 0 | *Timebox* de ~2 dias; planos B1/B2 (§9.5). |
-| **[verificar]** Ajuste do `nvs_flash` para NVS encryption sem FE (§9.3) | Sem ele, `dev` não exercita o caminho cifrado | *Checkpoint* do §9.3; senão plano B1 (`#if CONFIG_NVS_ENCRYPTION`, validação do caminho cifrado no `devsec`). |
+| **[Decisão]** *Build* híbrido Arduino + IDF na plataforma 7.x (pré-requisito de toda a fase) | Bloqueia tudo o que vem depois do passo 0 | Plano B1 direto (§9.5); recuo B2 só se o híbrido não fechar. |
+| NVS encryption só existe em `devsec`/`prod` (plano B1, §9.3) | `dev` não exercita o caminho cifrado; chaves e *bonds* do `dev` em claro na flash | Chaves de bancada descartáveis no `dev`; caminho cifrado validado no `devsec`. |
 | **[verificar]** Nomes das opções de `sdkconfig.*.defaults` no IDF 4.4.7 | Opção errada é ignorada em silêncio e a placa é queimada com outra configuração | Conferir cada linha no `sdkconfig.<env>` gerado **antes** de gravar `devsec`/`prod` (§9.2). |
 | `sdkconfig.<env>` velho vence o `*.defaults` editado | Placa queimada com a configuração anterior | Apagar `sdkconfig.<env>` após editar qualquer `*.defaults` (§9.1). |
 | `erase_flash` obrigatório ao entrar no passo 0 | Perde reserva de `seq`, `last_cs`, *bonds* das placas de bancada | Uma vez por placa; zerar o estado do dongle no servidor de bancada (spec 09). |
-| `nvs_key` gerada pelo próprio dongle antes do provisionamento | `secnvs` cifrada com outra chave → `KEYS source=missing` | `--nvs-key auto/board` no `dev`/`devsec`; em `prod`, gravar tudo antes do 1º boot (§10.3, passo 5). |
+| `nvs_key` gerada pelo próprio dongle antes do provisionamento | `secnvs` cifrada com outra chave → `KEYS source=missing` (só `devsec`/`prod`; o `dev` é em claro) | `--nvs-key auto/board` no `devsec`; em `prod`, gravar tudo antes do 1º boot (§10.3, passo 5). |
 | ESP32 com revisão < v3.0 | Sem Secure Boot V2 nem `UART_DOWNLOAD_DIS` | Checar no §10.1; comprar módulos `ESP32-D0WD-V3`/`WROOM-32E`. Para placa antiga: só FE + NVS enc, registrado como limitação. |
 | `factory` de 1,8125 MB e o binário híbrido | *Build* falha | Medir no passo 0 (`-t size`); app atual ~630 KB, folga grande. |
-| **[Aberto]** Sem OTA (§9.6) | Placa `prod` não é atualizável | Bancada em `dev`/`devsec`; `prod` só demonstração; decidir o *layout* com OTA antes de queimar `prod`. |
+| **[Decisão]** Sem OTA (§9.6) | Placa `prod` não é atualizável | Bancada em `dev`/`devsec`; `prod` só demonstração. |
 | Chave de Secure Boot do ESP32 não é revogável | Placa `devsec` presa à chave de ensaio | Chave de ensaio separada da de produção; placa descartável. |
 | Chaves em RAM | Extração por *glitching*/ataque físico avançado | Fora do modelo do documento (aceito em §4.1). *Core dump* desligado em `devsec`/`prod`. |
 | `esp_sha` compartilhado entre tarefas | Variância no `sign_us` | Registrar no benchmark; não é falha. |

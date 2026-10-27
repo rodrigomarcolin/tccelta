@@ -49,7 +49,7 @@ Dentro: handler, serviço `ingestao`, decodificador guiado pela tabela `pid`, qu
 | `tag_invalida` | `reler` | os bytes do buffer podem estar corrompidos. O app descarta o buffer acima de `ACK_seq` e envia o Erro 0x07 ao dongle (cursor volta para `ACK_seq + 1`), como a seta "Erro 0x07" do `ingestao-lote-servidor.puml` |
 | `salto` | `reler` | falta no buffer o bloco `ACK_seq + 1`; reenviar o mesmo buffer não resolve |
 | `marcador_invalido` | `reler` | BOOT/LOSS fora da regra indica buffer dessincronizado. Se repetir 3× com o mesmo ACK, o app faz handshake (spec 09) |
-| `pid_desconhecido`, `registro_malformado` | `aguardar` | o bloco é autêntico; reler dá os mesmos bytes. O app mantém o buffer e reenvia com backoff. O operador cadastra o PID (`INSERT INTO pid`, recarregado sem deploy) ou, para bloco malformado, usa `tccelta admin saltar` (abaixo) |
+| `pid_desconhecido`, `registro_malformado` | `aguardar` | o bloco é autêntico; reler dá os mesmos bytes. O app mantém o buffer e reenvia com backoff. O operador cadastra o PID (`INSERT INTO pid`, recarregado sem deploy); para bloco malformado não há saída manual (ver *Fila travada*, abaixo): corrige-se o firmware do dongle |
 
 #### `GET /v1/dongles/{id}/confirmacao`
 
@@ -118,8 +118,9 @@ func (s *Servico) UltimaConfirmacao(ctx context.Context, d dongles.Dongle) ([]by
 
 4. TRANSAÇÃO (lock_timeout 3 s, statement_timeout 10 s; EmTransacao repete 1× em 40P01/40001)
    TravarDongle(dongle_id)                                ← pg_advisory_xact_lock(1, dongle_id)
-   e := LerEstado(dongle_id)                              ← autoritativo
-   faixas := LerTMsUltimoBoots(dongle_id, boot_ids do lote)  ← para desembrulhar t_ms (u32)
+   e := LerEstado(dongle_id)                              ← autoritativo (inclui geracao_boot e ultimo_boot_id)
+   G, U := e.geracao_boot, e.ultimo_boot_id               ← estado da geração do boot_id (avança no laço)
+   faixas := LerTMsUltimoBoots(dongle_id, boot_ids do lote, G)  ← para desembrulhar t_ms (u32); gerações G e G+1
    exp := e.seq_contiguo + 1; aceitos := []; motivo := ""
    maiorVisto := max(seq dos blocos com validos[b] == true)      ← inclusive os que não serão aceitos
    para cada bloco b com validos[b] == false: RegistrarRejeitado(tag_invalida)   (≤ 32, dedup por hash)
@@ -131,6 +132,7 @@ func (s *Servico) UltimaConfirmacao(ctx context.Context, d dongles.Dongle) ([]by
         aceita se to == b.seq − 1  &&  from ≤ exp  &&  b.seq ≥ exp
         senão RegistrarRejeitado(marcador_invalido); PARA
         lacuna BOOT [exp, to] se exp ≤ to (a parte de [from, to] ainda não coberta); exp = b.seq + 1
+        b.ger, G, U, avancou = atribuirGeracao(G, U, b.BootID)       ← o BOOT abre a geração nova, se for o caso
      se c.Marcador == LOSS:          ← regra do doc, estendida para BOOT corrompido (ver Decisão)
         aceita se from == exp  &&  from ≤ b.seq ≤ to
         senão RegistrarRejeitado(marcador_invalido); PARA
@@ -138,7 +140,8 @@ func (s *Servico) UltimaConfirmacao(ctx context.Context, d dongles.Dongle) ([]by
      se dados:
         b.seq ≠ exp                  → motivo = salto; PARA
         algum PID ∉ catálogo         → RegistrarRejeitado(pid_desconhecido); InserirAlerta; PARA
-        linhas := decodificar(b, c)  ← leitura/posicao
+        b.ger, G, U, avancou = atribuirGeracao(G, U, b.BootID)
+        linhas := decodificar(b, c)  ← leitura/posicao (com b.ger)
         exp = b.seq + 1
      aceitos += b
    novoAck := exp − 1
@@ -148,14 +151,16 @@ func (s *Servico) UltimaConfirmacao(ctx context.Context, d dongles.Dongle) ([]by
      CopiarLeituras(linhas)         (COPY binário)
      CopiarPosicoes(linhas)         (COPY binário, geography EWKB)
      InserirLacuna(...) para cada marcador
-     AtualizarBootsIngestao(agregado por boot_id, ordenado por boot_id)
+     InserirAlerta(geracao_boot_avancou, {de: G0, para: G, boot_id, ultimo_boot_id}) se G > e.geracao_boot (uma por lote)
+     AtualizarBootsIngestao(agregado por (geracao_boot, boot_id), ordenado por essa chave)
      NotificarBootPendente('<dongle_id>')
    ackMsg := Ack{novoAck, e.c_conf, 0}
    ackTLV := e.ultimo_ack, se decodifica exatamente para ackMsg
           senão Montar(tagPre), se ackMsg == ACK pré-assinado no passo 3b
           senão Montar(HMACAuth(...)[:16])            ← só em divergência (tag inválida, corrida)
-   se mudou algo (novoAck, maiorVisto ou ackTLV):
-     AtualizarEstadoIngestao(seq_contiguo=novoAck, maior_visto=maiorVisto, ultimo_ack=ackTLV)
+   se mudou algo (novoAck, maiorVisto, ackTLV ou geração):
+     AtualizarEstadoIngestao(seq_contiguo=novoAck, maior_visto=maiorVisto, ultimo_ack=ackTLV,
+                             geracao_boot=G, ultimo_boot_id=U)
    COMMIT
 
 5. RESPOSTA
@@ -183,7 +188,7 @@ func (s *Servico) UltimaConfirmacao(ctx context.Context, d dongles.Dongle) ([]by
 3. **`seq = seq_contiguo + 1` é sempre aceito** quando a tag confere e a forma é válida, seja bloco de dados, BOOT ou LOSS.
 4. **TAIL efetivo (Fase 1, spec 05 §4) × OVERFLOW:** o dongle relata `TAIL_seq = from_seq` do BOOT mais antigo ainda na flash (com CRC válido), não o `seq` do BOOT. Assim, um furo de boot `[from, seq − 1]` já apagado abaixo do BOOT nunca é classificado como OVERFLOW pelo passo 7f do handshake (spec 04): a regra `TAIL_seq > seq_contiguo + 1` só dispara quando houve descarte real. Quando o descarte apaga o próprio segmento do BOOT, a Fase 1 relata o `seq` do bloco mais antigo restante, e o OVERFLOW cobre `[seq_contiguo + 1, TAIL − 1]`; o BOOT seguinte (se houver) cai na regra estendida `from ≤ exp`.
 
-### Saída operacional para fila travada (`tccelta admin saltar`)
+### Fila travada por bloco autêntico (sem saída manual)
 
 Alguns casos fazem o dongle reenviar para sempre um bloco **autêntico** que nenhuma regra aceita:
 
@@ -191,27 +196,24 @@ Alguns casos fazem o dongle reenviar para sempre um bloco **autêntico** que nen
 - `L ≠ tamanho + 32` (400) com bytes relidos idênticos;
 - `tag_invalida` com CRC válido (chave ou DevId errados na NVS).
 
-Para esses casos:
+**[Decisão] Não há saída manual.** O comando `tccelta admin saltar` (e a causa `OPERADOR` em `lacuna`) foram **descartados** por decisão do autor: avançar `seq_contiguo` sem prova do dongle seria declarar perda sem que o dongle a tenha declarado (LOSS/BOOT/OVERFLOW são as únicas formas, e todas partem do dongle). Consequência aceita: **a fila daquele dongle fica travada** até corrigir a causa no dongle — firmware com o bug de registro, ou chave/DevId certos na NVS (`provision.py` + `importar-registro`; contadores zerados ⇒ novo DevId). Nenhum outro dongle é afetado e nenhum dado é perdido: o bloco continua na flash do dongle.
 
-```
-tccelta admin saltar --dev-id <hex> --ate-seq N --justificativa "texto"   (papel tccelta_dono)
-```
-
-O comando, numa transação com `pg_advisory_xact_lock(1, dongle_id)`:
-
-1. exige `N > seq_contiguo` e `N ≤ head_seq` (ou `--forcar`);
-2. insere `lacuna` com causa `OPERADOR` `[seq_contiguo + 1, N]` e a justificativa;
-3. avança `seq_contiguo = N` (`maior_seq_visto` e `head_seq` com `GREATEST`);
-4. registra um `alerta`.
-
-O `ultimo_ack` fica desatualizado (o comando não tem acesso ao KMS). O próximo lote o reassina, porque o ACK esperado diverge, e o dongle recebe um ACK ≥ N assim que o app reenvia (os blocos ≤ N viram duplicados).
-
-**[Aberto]** Esse comando é a única forma de declarar perda sem prova do dongle. Por isso exige justificativa, fica auditado em `lacuna` e não é exposto pela API.
+Como o problema aparece (para o operador agir no dongle, não no servidor): alertas `tag_invalida`/`marcador_invalido`/`pid_desconhecido`, `bloco_rejeitado.ocorrencias` crescendo para o mesmo `hash_conteudo`, `seq_contiguo` parado enquanto `maior_seq_visto`/`head_seq` sobem, e a métrica `tccelta_blocos_total{resultado}`.
 
 Regras e invariantes:
 
 - **Go-Back-N estrito.** Nada acima de `seq_contiguo` é guardado fora de ordem: um bloco só entra em `bloco_bruto` se for o próximo da cadeia. Depois do commit, todos os `seq` em `bloco_bruto` são ≤ `seq_contiguo`, por isso o `ON CONFLICT DO NOTHING` nunca dispara em operação normal. Ele fica como defesa em profundidade (o `RETURNING` confere).
 - **Marcadores BOOT/LOSS:** as regras são as do `.tex` §4.3 e §5. O LOSS é gravado em `bloco_bruto` no próprio `seq` (= `from_seq`), com `boot_id = 0` e `t0_ms = 0`, como vierem. O BOOT é gravado no seu `seq` com o `boot_id` novo. A lacuna referencia `seq_bloco`.
+- **Geração do `boot_id` (`atribuirGeracao`, função pura em `aplicacao.go`).** Os blocos aceitos chegam em ordem de `seq`, então dentro de uma geração os `boot_id` são crescentes; um `boot_id` **menor** que `ultimo_boot_id` é a volta do u16 (ou uma NVS apagada) e abre a geração seguinte:
+  ```go
+  // boot_id 0 (LOSS) não participa: devolve a geração corrente e deixa o estado intacto.
+  func atribuirGeracao(g, u, bootID uint16) (ger, novoU uint16, avancou bool) {
+      if bootID == 0      { return g, u, false }
+      if bootID < u       { return g + 1, bootID, true }   // volta do u16
+      return g, bootID, false
+  }
+  ```
+  Só blocos **aceitos** (dados e BOOT; nunca duplicados, rejeitados ou LOSS) passam por ela, na ordem do corpo; por isso o estado `(G, U)` só avança com blocos que entram em `bloco_bruto`. A geração vai para `bloco_bruto`, `leitura`, `posicao` e `boot`, e `(G, U)` final é gravado em `dongle_estado` na mesma transação. É a mesma regra que o handshake infere, sem gravar (spec 04, passo 7g). Limite: menos de 65.536 boots entre dois blocos que chegam ao servidor.
 - **Bloco de dados com PID desconhecido é rejeitado inteiro** (doc), e o lote para nele. Como o bloco é autêntico, o dongle o reenviará até o PID ser cadastrado. Isso trava a fila daquele dongle de propósito, porque o doc prefere isso a perder dados. Alerta `pid_desconhecido` para o operador.
 - **`maior_seq_visto`** = maior `seq` com tag **válida** observado neste lote, inclusive acima de um furo e sem gravar o bloco, comparado com o valor salvo. **`head_seq`** sobe junto (`GREATEST`), sem alterar `head_relatado_em`, como no doc. Assim, `(seq_contiguo, maior_seq_visto]` é a faixa "faltando no meio" (A3.6/A3.7).
 - **`epoca`** de cada bloco = claim `cs` do JWT.
@@ -223,10 +225,10 @@ Regras e invariantes:
 
 ```go
 type LinhaLeitura struct {
-    BootID int32; TMs int64; PID int16; ValorBruto int32; Valor *float32; SeqBloco int64
+    Geracao, BootID int32; TMs int64; PID int16; ValorBruto int32; Valor *float32; SeqBloco int64
 }
 type LinhaPosicao struct {
-    BootID int32; TMs int64; Geom geo.PontoZ; SeqBloco int64
+    Geracao, BootID int32; TMs int64; Geom geo.PontoZ; SeqBloco int64
 }
 // Decodificar aplica o catálogo: bruto = A (n_bytes=1) ou 256·A + B (n_bytes=2);
 // valor = bruto·fator + deslocamento; fora de [valor_min, valor_max] ⇒ Valor = nil.
@@ -251,25 +253,27 @@ A alternativa assíncrona fica desenhada em [Aberto]. Ela só deve ser ativada s
 SELECT seq_contiguo, c_conf, ultimo_ack FROM dongle_estado WHERE dongle_id = @dongle_id;
 
 -- name: LerTMsUltimoBoots :many
-SELECT boot_id, t_ms_ultimo FROM boot
-WHERE dongle_id = @dongle_id AND boot_id = ANY(@boot_ids::int[]);
+-- Devolve as linhas candidatas nas gerações @geracao e @geracao + 1; o chamador escolhe a certa (atribuirGeracao).
+SELECT geracao_boot, boot_id, t_ms_ultimo FROM boot
+WHERE dongle_id = @dongle_id AND boot_id = ANY(@boot_ids::int[])
+  AND geracao_boot IN (@geracao::int, @geracao::int + 1);
 
 -- name: InserirBlocosBrutos :many
-INSERT INTO bloco_bruto (dongle_id, seq, boot_id, t0_ms, marcador, epoca, payload, assinatura, recebido_em)
-SELECT @dongle_id, u.seq, u.boot_id, u.t0_ms, NULLIF(u.marcador, ''), @epoca, u.payload, u.assinatura, @recebido_em
-FROM unnest(@seqs::bigint[], @boot_ids::int[], @t0s::bigint[], @marcadores::text[],
+INSERT INTO bloco_bruto (dongle_id, seq, boot_id, geracao_boot, t0_ms, marcador, epoca, payload, assinatura, recebido_em)
+SELECT @dongle_id, u.seq, u.boot_id, u.geracao_boot, u.t0_ms, NULLIF(u.marcador, ''), @epoca, u.payload, u.assinatura, @recebido_em
+FROM unnest(@seqs::bigint[], @boot_ids::int[], @geracoes::int[], @t0s::bigint[], @marcadores::text[],
             @payloads::bytea[], @assinaturas::bytea[])
-     AS u(seq, boot_id, t0_ms, marcador, payload, assinatura)
+     AS u(seq, boot_id, geracao_boot, t0_ms, marcador, payload, assinatura)
 ON CONFLICT (dongle_id, seq) DO NOTHING
 RETURNING seq;
 
 -- name: CopiarLeituras :copyfrom
-INSERT INTO leitura (dongle_id, boot_id, t_ms, pid, valor_bruto, valor, seq_bloco, recebido_em)
-VALUES (@dongle_id, @boot_id, @t_ms, @pid, @valor_bruto, @valor, @seq_bloco, @recebido_em);
+INSERT INTO leitura (dongle_id, geracao_boot, boot_id, t_ms, pid, valor_bruto, valor, seq_bloco, recebido_em)
+VALUES (@dongle_id, @geracao_boot, @boot_id, @t_ms, @pid, @valor_bruto, @valor, @seq_bloco, @recebido_em);
 
 -- name: CopiarPosicoes :copyfrom
-INSERT INTO posicao (dongle_id, boot_id, t_ms, geom, origem, seq_bloco, recebido_em)
-VALUES (@dongle_id, @boot_id, @t_ms, @geom, @origem, @seq_bloco, @recebido_em);
+INSERT INTO posicao (dongle_id, geracao_boot, boot_id, t_ms, geom, origem, seq_bloco, recebido_em)
+VALUES (@dongle_id, @geracao_boot, @boot_id, @t_ms, @geom, @origem, @seq_bloco, @recebido_em);
 
 -- name: RegistrarRejeitado :exec
 INSERT INTO bloco_rejeitado (dongle_id, seq, boot_id, t0_ms, payload, assinatura, motivo, detalhe,
@@ -280,15 +284,15 @@ ON CONFLICT (dongle_id, hash_conteudo) DO UPDATE
    SET ocorrencias = bloco_rejeitado.ocorrencias + 1, recebido_em = EXCLUDED.recebido_em;
 
 -- name: AtualizarBootsIngestao :exec
--- Uma linha por boot_id (agregado em Go, ordenado por boot_id para ordem de locks estável).
-INSERT INTO boot (dongle_id, boot_id, seq_primeiro, seq_ultimo, t_ms_primeiro, t_ms_ultimo,
+-- Uma linha por (geracao_boot, boot_id) (agregado em Go, ordenado por essa chave para ordem de locks estável).
+INSERT INTO boot (dongle_id, geracao_boot, boot_id, seq_primeiro, seq_ultimo, t_ms_primeiro, t_ms_ultimo,
                   deslocamento_max_ms, pendente_tempo, pendente_gold, pendente_desde)
-SELECT @dongle_id, u.boot_id, u.seq_ini, u.seq_fim, u.t_ini, u.t_fim, u.desl_max, true, true, @agora
-FROM unnest(@boot_ids::int[], @seq_inis::bigint[], @seq_fims::bigint[], @t_inis::bigint[],
+SELECT @dongle_id, u.geracao_boot, u.boot_id, u.seq_ini, u.seq_fim, u.t_ini, u.t_fim, u.desl_max, true, true, @agora
+FROM unnest(@geracoes::int[], @boot_ids::int[], @seq_inis::bigint[], @seq_fims::bigint[], @t_inis::bigint[],
             @t_fims::bigint[], @desl_maxs::float8[])
-     AS u(boot_id, seq_ini, seq_fim, t_ini, t_fim, desl_max)
-ORDER BY u.boot_id
-ON CONFLICT (dongle_id, boot_id) DO UPDATE SET
+     AS u(geracao_boot, boot_id, seq_ini, seq_fim, t_ini, t_fim, desl_max)
+ORDER BY u.geracao_boot, u.boot_id
+ON CONFLICT (dongle_id, geracao_boot, boot_id) DO UPDATE SET
   seq_primeiro        = LEAST(boot.seq_primeiro, EXCLUDED.seq_primeiro),
   seq_ultimo          = GREATEST(boot.seq_ultimo, EXCLUDED.seq_ultimo),
   t_ms_primeiro       = LEAST(boot.t_ms_primeiro, EXCLUDED.t_ms_primeiro),
@@ -305,7 +309,9 @@ UPDATE dongle_estado SET
   maior_seq_visto = GREATEST(maior_seq_visto, @maior_visto, @seq_contiguo),
   head_seq        = GREATEST(head_seq, @maior_visto, @seq_contiguo),
   ultimo_ack      = @ultimo_ack,
-  ultimo_ack_em   = @agora
+  ultimo_ack_em   = @agora,
+  geracao_boot    = @geracao_boot,
+  ultimo_boot_id  = @ultimo_boot_id
 WHERE dongle_id = @dongle_id;
 ```
 
@@ -355,8 +361,8 @@ O handler lê o corpo inteiro (`io.ReadAll` sob `MaxBytesReader`), obtém `token
 |---|---|
 | `internal/banco/queries/blocos.sql` | queries acima |
 | `internal/ingestao/servico.go` | `ProcessarLote`, `UltimaConfirmacao` |
-| `internal/ingestao/aplicacao.go` | `aplicar(blocos, validos, estado, catalogo) (aceitos, linhas, lacunas, motivo, novoAck, maiorVisto)` (puro, testável sem banco). O passo 3b chama a mesma função com `validos = todos true` e `estado = snapshot` para obter o ACK provável: uma regra, uma implementação |
-| `internal/ingestao/admin.go` + `cmd/tccelta/admin.go` | `tccelta admin saltar` |
+| `internal/ingestao/aplicacao.go` | `aplicar(blocos, validos, estado, catalogo) (aceitos, linhas, lacunas, motivo, novoAck, maiorVisto, geracao)` (puro, testável sem banco), com `atribuirGeracao`. O passo 3b chama a mesma função com `validos = todos true` e `estado = snapshot` para obter o ACK provável: uma regra, uma implementação |
+| `internal/ingestao/reprocessar.go` + `cmd/tccelta/worker.go` (subcomando `reprocessar`) | `tccelta worker reprocessar` (seção *Reprocessamento*) |
 | `internal/ingestao/decodificador.go` | `Decodificar` |
 | `internal/tempo/desembrulhar.go` | `Desembrulhar(t32 uint32, ref int64) int64` |
 | `internal/pids/catalogo.go` | (spec 03) |
@@ -390,7 +396,11 @@ O handler lê o corpo inteiro (`io.ReadAll` sob `MaxBytesReader`), obtém `token
 | 19 | 30 | LOSS(seq=31, from=32, to=40) | ok | 30, marcador_invalido (`from ≠ exp`) |
 | 20 | 30 | BOOT(seq=31, from=31, to=30) (faixa vazia, todo boot grava BOOT) | ok | 31, completo, nenhuma lacuna |
 | 21 | 30 | LOSS(seq=31, from=31, to=63), LOSS(seq=64, from=64, to=64), 65 (BOOT 64 corrompido, Fase 1 teste 9b) | ok | 65, completo; lacunas LOSS [31,63] e [64,64] |
-| 20 | 10 | 11, 13, 14(tag ruim) | — | 11, salto; `maior_seq_visto = 13`; 14 em `bloco_rejeitado` |
+| 22 | 10 | 11, 13, 14(tag ruim) | — | 11, salto; `maior_seq_visto = 13`; 14 em `bloco_rejeitado` |
+| 23 | 10; `(G=0, U=65535)` | BOOT(seq=11, boot_id=1, from=11, to=10), 12(boot 1) | ok | 12, completo; geração do BOOT e do 12 = 1; estado final `(G=1, U=1)`; alerta `geracao_boot_avancou` |
+| 24 | 10; `(G=0, U=7)` | 11(boot 7), LOSS(seq=12, from=12, to=14), 15(boot 7), duplicado 5(boot 3) | ok | 15; todos na geração 0 (LOSS e o duplicado não mexem em `(G,U)`) |
+
+`atribuirGeracao` (puro): `(0,7,9)` → `(0,9,falso)`; `(0,7,7)` → `(0,7,falso)`; `(0,7,3)` → `(1,3,verdadeiro)`; `(0,65535,1)` → `(1,1,verdadeiro)`; `(2,5,0)` → `(2,5,falso)`.
 
 Forma (400): TLV com `L` maior que o restante; tipo 0x02 no lote; `L ≠ tamanho + 32`; `tamanho = 16`; `tamanho = 1025`; corpo vazio. 33 TLVs ⇒ 429 `lote_grande`.
 
@@ -400,7 +410,7 @@ Decodificador:
 - PID 0x0D com A=0xFF ⇒ 255 dentro da faixa;
 - valor fora da faixa ⇒ `Valor=nil`;
 - GPS lat −235505200 ⇒ −23,55052°;
-- Δt negativo;
+- Δt = 65 535 (máximo do `u16`; o campo não tem sinal, e t0 pode recuar entre blocos consecutivos porque o dongle abre outro bloco para um GPS anterior ao t0 do aberto);
 - desembrulhar `t0` perto de 2³².
 
 **Integração (Postgres + `kmsteste`):**
@@ -416,12 +426,15 @@ Decodificador:
 9. `GET /confirmacao` devolve exatamente o último ACK; com token de outro DevId ⇒ 403; dongle sem handshake ⇒ 404.
 10. Permissão: a transação roda como `tccelta_api` e nenhuma query tenta `UPDATE bloco_bruto`.
 11. Em regime (lote todo válido, sem corrida), o dublê do KMS registra exatamente 1 `verify` + 1 `hmac` **antes** da abertura da transação e 0 dentro dela.
-12. `tccelta admin saltar` sobre uma fila travada por `registro_malformado` ⇒ lacuna `OPERADOR`; o próximo lote do app vira duplicado e recebe ACK ≥ N reassinado.
+12. Fila travada sem saída manual: bloco autêntico com `registro_malformado` ⇒ 200 interrompido com `aguardar`; `seq_contiguo` parado; reenviar o mesmo lote só incrementa `bloco_rejeitado.ocorrencias`; nenhuma rota, subcomando ou papel do banco avança a fila (o teste confere que `admin saltar` não existe e que `lacuna` não aceita causa `OPERADOR`).
 13. Cenário "OVERFLOW até o BOOT" (caso 16) de ponta a ponta: handshake com TAIL=64, seguido do lote com o BOOT 64 ⇒ completo.
+14. Volta do `boot_id` (casos 23–24): `leitura` das duas gerações coexistem sem colisão de PK em `boot`; `boot` ganha a geração 1; `bloco_bruto.geracao_boot` e `leitura.geracao_boot` conferem; alerta `geracao_boot_avancou` registrado uma vez.
+15. Particionamento: lotes de 100 dongles diferentes caem em partições diferentes de `bloco_bruto` (`SELECT tableoid::regclass, count(*) …`), sem alterar o comportamento.
+16. Reprocessamento (seção *Reprocessamento*): corrigir `fator` do PID 0x05 ⇒ `worker reprocessar --aplicar` ⇒ `valor` novo, contagem de linhas igual, `valor_bruto` intacto; repetir (idempotente); com o chunk comprimido (`compress_chunk`) também funciona; dry-run não escreve; concorrente com a ingestão do mesmo dongle ⇒ serializado pelo advisory lock; `tccelta_api` e `tccelta_worker` não conseguem `DELETE` em `leitura`.
 
 ## Passos ordenados com checkpoints
 
-1. `aplicacao.go` + `decodificador.go` com testes puros. **Checkpoint:** tabela de 20 casos verde.
+1. `aplicacao.go` (com `atribuirGeracao`) + `decodificador.go` com testes puros. **Checkpoint:** tabela de 24 casos verde.
 2. Queries + `make sqlc`; teste do `COPY` de `posicao` (EWKB). **Checkpoint:** `SELECT ST_AsText(geom) FROM posicao` mostra o ponto esperado.
 3. `ProcessarLote` com `kmsteste`. **Checkpoint:** integração 1–3.
 4. Handler + middlewares (semáforo, JWT, limites). **Checkpoint:** o simulador (spec 10) envia 1.000 blocos de 1 dongle via HTTP, e o ACK final = 1.000.
@@ -442,7 +455,7 @@ Decodificador:
 | PID desconhecido trava a fila do dongle | comportamento desejado pelo doc; alerta + métrica `tccelta_blocos_total{resultado="pid_desconhecido"}` |
 | `COPY` de muitas linhas segurando o lock | medido no teste de carga; [Aberto] modo assíncrono |
 | Marcadores "espiados" antes da verificação | só alimentam o ACK *provável* (pré-assinatura); nenhuma decisão de escrita usa conteúdo não autenticado, e um ACK provável errado só custa uma reassinatura |
-| Fila travada por bloco autêntico que nenhuma regra aceita | alerta + `tccelta admin saltar` (lacuna `OPERADOR`, auditada) |
+| Fila travada por bloco autêntico que nenhuma regra aceita | **sem saída manual (decisão do autor):** a fila do dongle fica travada até corrigir firmware/chave no dongle; alertas e `bloco_rejeitado.ocorrencias` sinalizam; nenhuma perda é declarada sem prova do dongle |
 | App mal-comportado reenvia lixo em loop | rate limit por DevId + `bloco_rejeitado` deduplicado por hash |
 
 ## [Aberto]
@@ -453,4 +466,31 @@ Decodificador:
   - o worker pega dongles com `seq_decodificado < seq_contiguo` (`FOR UPDATE SKIP LOCKED` em `dongle_estado`… ou numa tabela `fila_decodificacao(dongle_id PK)` para não disputar a linha com a API), decodifica `(seq_decodificado, seq_contiguo]` a partir de `bloco_bruto` com o mesmo `ingestao.Decodificar`, faz o `COPY` e avança a marca na mesma transação.
 
   Recomendação: manter o modo síncrono no TCC.
-- **[Aberto] Reprocessamento** (`tccelta worker reprocessar --dongle <hex> --desde-seq N`) para aplicar correções de fator/deslocamento, refazendo `leitura` a partir de `bloco_bruto`. Recomendação: fase futura; `valor_bruto` já permite um `UPDATE` direto enquanto os chunks não estiverem comprimidos.
+
+## Reprocessamento (`tccelta worker reprocessar`)
+
+**[Decisão] Implementado nesta fase** (decisão do autor, em vez de deixar para uma fase futura com `UPDATE` sobre `valor_bruto`). Se o `fator`/`deslocamento`/faixa de um PID for corrigido no catálogo, ou o decodificador tiver um bug, `leitura` e `posicao` ficam com o valor antigo. O comando refaz as duas tabelas **a partir de `bloco_bruto`** (a fonte da verdade, imutável), inclusive para dados antigos já em chunks comprimidos.
+
+```
+tccelta worker reprocessar --dongle <hex> [--desde-seq N] [--ate-seq M] [--lote 200] [--aplicar]
+```
+
+- **Onde roda:** no contêiner `ferramentas` (`make reprocessar`), com o papel `tccelta_dono` (`ADMIN_BANCO_URL`). **Nunca** no worker contínuo nem pela API: eles não têm `DELETE` em `leitura`/`posicao`. Não precisa do Vault: as tags já foram verificadas quando o bloco entrou, e o comando não reverifica nem reassina nada.
+- **Sem `--aplicar` é um ensaio** (padrão): decodifica com o catálogo atual, compara com o que está em `leitura`/`posicao` e imprime o resumo (blocos, linhas, quantas mudariam de `valor`); não escreve.
+- **Com `--aplicar`**, em janelas de `--lote` blocos de dados (`marcador IS NULL`) em ordem de `seq`, **uma transação por janela**:
+  1. `TravarDongle(dongle_id)` (o mesmo `pg_advisory_xact_lock(1, dongle_id)` da ingestão e do handshake; `lock_timeout` 3 s, repete a janela até 5 vezes);
+  2. lê os blocos (`seq, geracao_boot, boot_id, t0_ms, payload, recebido_em`) — o `t0_ms` gravado já está desembrulhado;
+  3. decodifica com o **mesmo** `ingestao.Decodificar` e o catálogo `pid` recarregado no início;
+  4. `DELETE FROM leitura/posicao WHERE dongle_id = … AND seq_bloco BETWEEN a AND b AND recebido_em IN (…)` — o `recebido_em` de cada bloco entra na cláusula para o TimescaleDB excluir chunks. DML em chunk **comprimido** é suportado a partir do TimescaleDB 2.11 (descomprime só os segmentos afetados); **[verificar]** na imagem fixada (`pg17`);
+  5. `COPY` das linhas novas com o `recebido_em` **original** do bloco (as linhas continuam no mesmo chunk);
+  6. `COMMIT`.
+- **PID desconhecido** (removido do catálogo): a janela faz rollback, o comando para e imprime o `seq`; nada fica pela metade.
+- **Idempotente:** rodar duas vezes dá o mesmo estado. `boot` (faixa de tempo e reta) não muda; o comando só marca `boot.pendente_gold = true` dos boots tocados (gancho da camada gold futura).
+- **Auditoria:** ao fim grava `alerta(tipo = 'reprocessamento', detalhe = {desde_seq, ate_seq, blocos, linhas_removidas, linhas_inseridas, aplicado, operador})` e log `ingestao.reprocessado`; métrica `tccelta_reprocessamento_linhas_total`.
+- **Custo:** proporcional ao número de blocos; em chunks comprimidos cada janela descomprime e recomprime os segmentos tocados (lento, mas correto). Recomenda-se limitar por `--desde-seq`.
+
+## Decisões do autor (antes em aberto)
+
+- **[Decisão] Sem saída manual para fila travada** (`admin saltar` descartado; ver *Fila travada por bloco autêntico*).
+- **[Decisão] Reprocessamento implementado nesta fase** (ver acima).
+- **[Decisão] Decodificação síncrona mantida** (a assíncrona fica só desenhada, abaixo, como o autor não pediu mudança).

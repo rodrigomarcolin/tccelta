@@ -42,7 +42,8 @@ Fora (outras specs/fases):
 - App → spec 04.
 - Conteúdo do protocolo SYNC (TLV, handshake, blocos) → Fase 1. Esta spec só
   muda **quem** pode falar com o SYNC.
-- Endereço privado do próprio dongle (RPA, ameaça T9) → [Aberto] A3.
+- Endereço privado do próprio dongle (RPA, ameaça T9) → [Decisão] A3: fica
+  público, T9 vira limitação registrada.
 
 ## 3. Estado atual do código (verificado)
 
@@ -368,19 +369,21 @@ Roda na tarefa *host*, antes do `onAuthenticationComplete` da mesma conexão
   (chave na partição `nvs_key`, protegida pela flash encryption quando esta
   está ligada). O store do NimBLE abre a partição **padrão** (`nvs_open`, sem
   `_from_partition`), que o `initArduino` inicializa por `nvs_flash_init()`
-  — com NVS encryption, já cifrada. O que a Fase 1 (spec 01 §7–§9) fixou:
-  **mesmo firmware e NVS encryption ligada nos três perfis de hardware**, logo
-  os bonds ficam cifrados sem código nesta fase; o que muda é a proteção da
-  chave XTS:
+  — com NVS encryption, já cifrada. O que a Fase 1 (spec 01 §7–§9, plano B1)
+  fixou: **mesmo firmware; NVS encryption ligada em `devsec`/`prod` e
+  desligada no `dev`**, logo em `devsec`/`prod` os bonds ficam cifrados sem
+  código nesta fase; o que muda é a proteção da chave XTS:
   - **`prod`** (FE *release*, chave FE gerada no chip): `nvs_key` cifrada e
     ilegível pela serial (*download* da ROM desabilitado); bonds protegidos;
   - **`devsec`** (FE de desenvolvimento, chave FE gerada no host): bonds
     protegidos contra quem não tem o arquivo da chave FE de ensaio;
-  - **`dev`**: a `nvs_key` fica **em claro** na flash, então a cifra não
-    protege nada — quem lê a flash (A3) lê a `nvs_key`, decifra a `nvs` e
-    obtém a LTK/IRK do par corrente: decifra capturas desse par e pode se
-    passar pelo celular até o próximo botão. Não afeta outros dongles. Risco
-    residual só de bancada; ver [Aberto] A2.
+  - **`dev`**: sem NVS encryption (plano B1 da Fase 1), a `nvs` fica **em
+    claro** na flash — quem lê a flash lê direto a LTK/IRK do par corrente:
+    decifra capturas desse par e pode se passar pelo celular até o próximo
+    botão. Não afeta outros dongles. **[Decisão] A2:** aceitar e documentar no
+    texto do TCC o risco residual do perfil `dev` (só de bancada, chaves
+    descartáveis); os ensaios de segurança com sniffer que importam para a
+    avaliação rodam em `devsec`.
 
 ## 7. Plano arquivo por arquivo
 
@@ -528,18 +531,19 @@ nativos verdes).
 - **[Decisão] D22** — Bond confirmado no store antes de valer; falha ao
   apagar bonds leva à recuperação por apagamento do namespace + reinício
   (§5.6).
-- **[Aberto] A1** — Manter o bit "há bond" no anúncio? *Recomendação:*
-  manter; é ele que permite ao app suspeitar de "dongle perdeu o pareamento"
-  sem tentar conectar.
-- **[Aberto] A2** — Bonds em claro na NVS se a Fase 1 cifrar só uma partição
-  separada (§6). *Recomendação:* aceitar e registrar no texto do TCC como
-  risco residual de A3 restrito ao par corrente.
-- **[Aberto] A3** — Endereço do dongle: público (atual) ou RPA (privacidade,
-  T9)? *Recomendação:* manter público; a reconexão não depende disso (§3.1)
-  e o Android identifica o dongle pelo MAC, que o app persiste.
-- **[Aberto] A4** — *Fork* da NimBLE-Arduino para tratar `REPEAT_PAIRING`?
-  *Recomendação:* não é mais necessário (D3 recusa antes); só registrar no
-  texto.
+- **[Decisão] A1** — Manter o bit "há bond" no anúncio: é ele que permite ao
+  app suspeitar de "dongle perdeu o pareamento" sem tentar conectar (o
+  scanner passivo fica sabendo se o dongle já está pareado; aceito).
+- **[Decisão] A2** — Os bonds ficam na `nvs`. Em `devsec`/`prod` ela é
+  cifrada (a `nvs_key` protegida por *flash encryption*, §6); no `dev`, sem
+  NVS encryption (plano B1 da Fase 1), fica em claro. Aceitar e documentar no
+  texto do TCC o risco residual do perfil `dev`.
+- **[Decisão] A3** — Endereço do dongle: **público** (atual); T9
+  (rastreabilidade) fica como limitação. A reconexão não depende disso
+  (§3.1) e o Android identifica o dongle pelo MAC, que o app persiste.
+- **[Decisão] A4** — **Não fazer *fork*** da NimBLE-Arduino para tratar
+  `REPEAT_PAIRING` (D3 recusa antes, no `BLE_STORE_EVENT_FULL`); registrar no
+  texto e conferir o comportamento do `FULL` na 2.5.0.
 
 ## 11. Critérios de aceite
 

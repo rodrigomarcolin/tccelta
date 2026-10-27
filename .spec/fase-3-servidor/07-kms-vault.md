@@ -171,6 +171,7 @@ vault read transit-jwt/keys/jwt >/dev/null 2>&1 || \
 
 vault policy write tccelta-api           /vault/politicas/tccelta-api.hcl
 vault policy write tccelta-provisionador /vault/politicas/tccelta-provisionador.hcl
+vault policy write tccelta-rotacao-jwt   /vault/politicas/tccelta-rotacao-jwt.hcl
 [ "$PERFIL" = dev ] && vault policy write tccelta-teste-dourado /vault/politicas/tccelta-teste-dourado.hcl
 
 vault auth list | grep -q '^approle/' || vault auth enable approle
@@ -180,6 +181,13 @@ vault read -field=role_id auth/approle/role/tccelta-api/role-id > /approle/api/a
 [ -s /approle/api/api_secret_id ] || \
   vault write -f -field=secret_id auth/approle/role/tccelta-api/secret-id > /approle/api/api_secret_id
 
+# AppRole do serviço de rotação do JWT: terceiro volume de credenciais, só no contêiner `jwt-rotacao`.
+vault write auth/approle/role/tccelta-rotacao-jwt token_policies=tccelta-rotacao-jwt token_no_default_policy=true \
+  token_type=service token_ttl=1h token_max_ttl=24h secret_id_ttl=0 secret_id_num_uses=0
+vault read -field=role_id auth/approle/role/tccelta-rotacao-jwt/role-id > /approle/rotacao/rotacao_role_id
+[ -s /approle/rotacao/rotacao_secret_id ] || \
+  vault write -f -field=secret_id auth/approle/role/tccelta-rotacao-jwt/secret-id > /approle/rotacao/rotacao_secret_id
+
 # Token do provisionador (curta duração; renovado a cada execução do bootstrap).
 # Vai para um volume SEPARADO, montado só no contêiner "ferramentas" (nunca na API).
 POL=tccelta-provisionador; [ "$PERFIL" = dev ] && POL="$POL,tccelta-teste-dourado"
@@ -188,7 +196,7 @@ vault token create -policy="$POL" -no-default-policy -ttl=24h -field=token > /ap
 [ "$PERFIL" != dev ] && { vault audit list | grep -q '^file/' || vault audit enable file file_path=/vault/logs/auditoria.log; }
 
 # O job roda como root (user: "0:0" no compose) para poder entregar os arquivos ao uid da distroless.
-chown 65532:65532 /approle/api/* /approle/ferramentas/*; chmod 0400 /approle/api/* /approle/ferramentas/*
+chown 65532:65532 /approle/api/* /approle/ferramentas/* /approle/rotacao/*; chmod 0400 /approle/api/* /approle/ferramentas/* /approle/rotacao/*
 echo "bootstrap do Vault concluído (perfil=$PERFIL)"
 ```
 
@@ -224,7 +232,8 @@ func aesKWP(kek, chave []byte) ([]byte, error)
 ```
 tccelta provisionar exportar-wrapping --saida kms_wrapping.json            # chaves de embrulho dos mounts (para o provision.py da Fase 1)
 tccelta provisionar importar-registro --arquivo kms_record.json [--descricao "..."]   # dongle REAL, provisionado pela Fase 1
-tccelta provisionar novo     --quantidade N --saida /saida [--perfil hmac|asym] [--descricao "..."]   # só dongles de TESTE/simulador (AMBIENTE != producao)
+tccelta provisionar novo     --quantidade N --saida /saida [--perfil hmac|asym] [--hw dev|devsec] [--descricao "..."]   # só dongles de TESTE/simulador (AMBIENTE != producao); grava a imagem NVS direto, sem CSV em disco
+tccelta jwt rotacionar       [--agora]                                    # rotação e expurgo da chave do JWT (também roda em laço no serviço `jwt-rotacao`)
 tccelta provisionar importar --arquivo /testdata/dongles-teste.csv      # só AMBIENTE != producao
 tccelta provisionar verificar --dev-id <hex>                              # teste dourado (dev)
 ```
@@ -274,14 +283,19 @@ Fluxo de `novo`, por dongle:
 4. importar(transit-auth, hex, k_auth); importar(transit-rec, hex, k_rec)
      falha → ROLLBACK; registrar a chave órfã (DevId nunca usado; inofensiva)
 5. COMMIT
-6. escrever material do firmware (0600) e zerar k_auth/k_rec
+6. montar o CSV da `secnvs` SÓ NA MEMÓRIA e passá-lo por stdin ao gerador da Fase 1 (ver abaixo);
+   escrever a imagem e o restante do material do firmware (0600); zerar k_auth/k_rec e o CSV
 ```
 
 Saídas:
 
 **(a) Material do firmware (só para dongles de teste; contrato cruzado com a Fase 1)** em `saida/<dev_id_hex>/`:
 
-- `secnvs.csv`, **no formato fixado pela Fase 1** (spec 01 §11: partição `secnvs`, namespace `sec`), para que o mesmo `provision.py --profile dev --dev-id <hex> --import secnvs.csv` da Fase 1 gere e grave a imagem na placa de bancada:
+- **[Decisão] A partição NVS é gerada direto pela ferramenta `novo`, sem `secnvs.csv` em disco** (escolha do autor: "fazer junto com a Fase 1", reaproveitando o fluxo de imagem do `provision.py`). A ferramenta monta o CSV **na memória**, no formato fixado pela Fase 1 (spec 01 §11: partição `secnvs`, namespace `sec`), e o entrega por *stdin* ao mesmo gerador da Fase 1, `python -m esp_idf_nvs_partition_gen generate - secnvs.bin 0x3000` (`/dev/stdin`; **[verificar]** que o gerador aceita o CSV por stdin; se não, usar um *named pipe*/`tmpfs` em RAM). Por isso a imagem `ferramentas` não é a distroless do binário: o alvo `ferramentas` do `Dockerfile` (spec 01) é uma `python:3.12-slim` com `esp-idf-nvs-partition-gen` e o binário `tccelta`. Saídas por dongle em `saida/<hex>/`:
+  - `secnvs.bin`: imagem pronta, para gravar com `esptool.py write_flash 0x19000 secnvs.bin`. Com `--hw dev` (padrão, **plano B1 da Fase 1**: o `dev` não tem NVS encryption) a imagem é **em claro** (`generate`); com `--hw devsec`, a ferramenta gera a chave XTS (`generate-key`, gravada em `nvs_keys.bin`, 0600) e produz a imagem **cifrada** (`encrypt … --inputkey`), como o `provision.py --profile devsec`, e a gravação de `nvs_keys.bin` em `0x17000` segue a spec 01 §10.2;
+  - o `provision.py --import` da Fase 1 deixa de ser necessário para dongles de teste (continua aceitando um CSV de outra origem).
+
+  Formato do CSV em memória (idêntico ao da Fase 1):
 
   ```csv
   key,type,encoding,value
@@ -293,9 +307,9 @@ Saídas:
   prof,data,u8,1
   ```
   (`prof`: 0 = none, 1 = hmac, 2 = asym; com `asym`, linha extra `k_sig,data,hex2bin,<64 hex>`.)
-- `bench_keys.json` (`dev_id`, `k_auth`, `k_rec` em hex), o mesmo arquivo que o `provision.py --profile dev` produz para o servidor de bancada do app (Fase 1, spec 09).
+- `bench_keys.json` (`dev_id`, `k_auth`, `k_rec` em hex), o mesmo arquivo que o `provision.py --profile dev` produz para o servidor de bancada do app (Fase 1, spec 09). É o único arquivo com chaves em claro que sobra em disco (dongles descartáveis).
 - `dongle.json` **sem segredos**: `{"dev_id":"…","perfil":"hmac","criado_em":"…","kms":{"auth":"transit-auth/…","rec":"transit-rec/…"}}`.
-- O README da Fase 3 instrui: gerar a partição NVS com a ferramenta da Fase 1, gravar e **apagar** `secnvs.csv`/`bench_keys.json` (`shred -u`). `saida/` está no `.gitignore`. Dongles reais **não** passam por aqui (ver `importar-registro`).
+- O README da Fase 3 instrui: gravar `secnvs.bin` na placa e **apagar** `bench_keys.json`/`nvs_keys.bin` (`shred -u`) depois de usá-los. `saida/` está no `.gitignore`. Dongles reais **não** passam por aqui (ver `importar-registro`).
 
 **(b) Importação no Vault:** feita pela própria ferramenta (passo 4).
 
@@ -365,23 +379,23 @@ Chamadas HTTP (via `client.Logical().WriteWithContext`):
 | Perfil | 0x02 (resposta) | 0x03 (bloco) | 0x01/0x04 (servidor → dongle) |
 |---|---|---|---|
 | `hmac` (padrão) | HMAC K_auth, 16 B (Vault `hmac` + prefixo) | HMAC K_rec, 32 B (Vault `verify`) | HMAC K_auth, 16 B |
-| `asym` ([Aberto]) | HMAC K_auth, 16 B (igual) | ECDSA P-256 determinística do dongle, `r‖s` 64 B | HMAC K_auth, 16 B |
+| `asym` ([Decisão]: depois do HMAC estável) | HMAC K_auth, 16 B (igual) | ECDSA P-256 determinística do dongle, `r‖s` 64 B | HMAC K_auth, 16 B |
 | `none` (bancada) | HMAC K_auth, 16 B (igual) | sem tag (0 B) | HMAC K_auth, 16 B |
 
 **Reconciliado com a Fase 1 (spec 01 §1):** o perfil só muda a tag do **bloco**; o handshake usa `K_auth` com tag de 16 B nos três perfis. Logo `K_auth` é importada no Vault para todo dongle, inclusive `none` e `asym`.
 
-- **[Aberto] `asym`:**
+- **[Decisão] `asym`: implementar depois que o caminho HMAC estiver estável** (escolha do autor; não compete com a estabilização do HMAC nem verifica no Transit):
   - Algoritmo fixado pela Fase 1: **ECDSA P-256 determinística (RFC 6979), SHA-256, assinatura `r‖s` de 64 B** (o mbedTLS 2.28 do Arduino 2.0.17 não tem Ed25519). O par `k_sig` é gerado pelo `provision.py` da Fase 1 na fabricação: a privada vai para a `secnvs`, a pública (65 B, ponto não comprimido `04‖X‖Y`) vem no `kms_record.json` (`k_sig_public`) e é gravada em `dongle.chave_publica`.
   - A verificação é **local** na API com `crypto/ecdsa` (a chave pública não é segredo), sobre `SHA-256("MALCONG" || 0x03 || DevId || dados)`. Opcionalmente, a chave pública pode ser importada no Transit (`transit-rec-asym/keys/<hex>/import`, tipo `ecdsa-p256`, só `public_key`) para manter a verificação no KMS e medir esse custo também.
   - A tag de 64 B muda só `L` do bloco (`protocolo.PerfilAsym`).
-  - Recomendação: implementar depois do caminho HMAC estar estável. O desenho acima não muda o caminho HMAC.
+  - Ordem: primeiro `hmac` completo (specs 03–06 e carga da spec 10); só então o verificador `asym` (local, `crypto/ecdsa`), o registro de verificadores por perfil já previsto acima e o benchmark `hmac × asym` ponta a ponta. A verificação no Transit (`transit-rec-asym`) e o desenho "só `hmac`/`none` no servidor" **não** são adotados. O desenho acima não muda o caminho HMAC.
 - **`none`:** aceito somente com `PERMITIR_PERFIL_NONE=true` **e** `AMBIENTE != producao` (`config.Carregar` falha caso contrário), e somente para dongles cadastrados com `perfil_seguranca='none'`. O verificador de blocos devolve `true` sem chamar o Vault; o handshake continua passando pelo Vault com `K_auth`. Os blocos ficam marcados (`bloco_bruto.assinatura` vazia), então nunca se confundem com dados autenticados nas análises.
 
 ## Plano arquivo por arquivo
 
 | Arquivo | Conteúdo |
 |---|---|
-| `deploy/vault/politicas/tccelta-api.hcl`, `tccelta-provisionador.hcl`, `tccelta-teste-dourado.hcl` | políticas |
+| `deploy/vault/politicas/tccelta-api.hcl`, `tccelta-provisionador.hcl`, `tccelta-teste-dourado.hcl`, `tccelta-rotacao-jwt.hcl` | políticas |
 | `deploy/vault/scripts/bootstrap.sh`, `init-unseal.sh` | scripts |
 | `internal/kms/kms.go` | interfaces, erros |
 | `internal/kms/vault.go` | implementação Vault + login/renovação AppRole |
@@ -390,7 +404,10 @@ Chamadas HTTP (via `client.Logical().WriteWithContext`):
 | `internal/kms/kmsteste/memoria.go` | dublê |
 | `internal/provisionamento/embrulho.go` (+`_test` com vetores RFC 5649) | BYOK |
 | `internal/provisionamento/provisionar.go` | `Novo`, `Importar`, `Verificar` |
-| `internal/provisionamento/material.go` | `secnvs.csv`, `bench_keys.json`, `dongle.json` (dongles de teste) |
+| `internal/provisionamento/material.go` | CSV da `secnvs` só em memória → `secnvs.bin` via gerador (stdin), `bench_keys.json`, `dongle.json` (dongles de teste) |
+| `internal/provisionamento/nvsgen.go` | chamada ao `esp_idf_nvs_partition_gen` por `os/exec` (stdin), `--hw dev|devsec` |
+| `internal/kms/rotacao.go` (+`_test`) | rotação e expurgo da chave do JWT (`jwt rotacionar`), ver *Rotação da chave do JWT* |
+| `cmd/tccelta/jwt.go` | subcomando `jwt rotacionar` / `jwt agendar` |
 | `internal/provisionamento/registro.go` | leitura/validação de `kms_record.json` e `importar-registro`; `exportar-wrapping` |
 | `cmd/tccelta/provisionar.go` | subcomando |
 | `testdata/dongles-teste.csv` | 3 dongles de teste (chaves públicas de teste) |
@@ -429,7 +446,7 @@ Chamadas HTTP (via `client.Logical().WriteWithContext`):
 2. `embrulho.go` + `provisionar importar` + `verificar`. **Checkpoint 2 (crítico):** teste dourado (1)–(3) passa. Se falhar, reavaliar a versão do Vault ou o tipo de chave antes de seguir.
 3. `kms/vault.go` (login, renovação, `HMACAuth`, `VerificarBlocos`, `Assinar`, `ChavesPublicas`, disjuntor). **Checkpoint 3:** testes 2, 5 e 6.
 4. Testes de política negativos. **Checkpoint 4:** teste 3 verde.
-5. `provisionar novo` + material. **Checkpoint 5:** `make provisionar N=1` gera `saida/<hex>/secnvs.csv`, e o dongle aparece no banco e no Vault (`vault read transit-auth/keys/<hex>` com `exportable=false`).
+5. `provisionar novo` + material. **Checkpoint 5:** `make provisionar N=1` gera `saida/<hex>/secnvs.bin` (sem `secnvs.csv` em disco: `find saida -name '*.csv'` vazio), e o dongle aparece no banco e no Vault (`vault read transit-auth/keys/<hex>` com `exportable=false`).
 6. `exportar-wrapping` + `importar-registro`. **Checkpoint 6:** um `kms_record.json` gerado pelo `provision.py` da Fase 1 (ou pelo teste, que embrulha com a mesma rotina) é importado e passa no teste dourado.
 6. Perfil prodlike (TLS, Raft, unseal). **Checkpoint 6:** depois de `restart` + unseal, a API volta a ficar pronta sozinha.
 
@@ -437,7 +454,8 @@ Chamadas HTTP (via `client.Logical().WriteWithContext`):
 
 - [ ] O HMAC do Vault com a chave importada é idêntico ao HMAC local (teste dourado).
 - [ ] O token da API não consegue gerar HMAC, exportar, fazer backup nem reconfigurar `K_rec` (testes negativos).
-- [ ] Os segredos de K_auth/K_rec nunca aparecem em logs, no banco nem no git. Só existem na NVS do dongle, no Vault e, transitoriamente, em `saida/<hex>/secnvs.csv` (dongles de teste) ou na memória da estação de fabricação (Fase 1).
+- [ ] Os segredos de K_auth/K_rec nunca aparecem em logs, no banco nem no git. Só existem na NVS do dongle, no Vault e, para dongles de teste, em `saida/<hex>/bench_keys.json`/`secnvs.bin` (descartáveis; o CSV da `secnvs` nunca toca o disco) ou na memória da estação de fabricação (Fase 1).
+- [ ] A chave do JWT é rotacionada e expurgada sem intervenção: o job `jwt-rotacao` gera `v2`, os tokens `v1` continuam válidos até expirar, e depois a `v1` deixa de ser aceita.
 - [ ] Um lote de até 32 blocos usa 1 chamada de verificação.
 - [ ] O KMS indisponível vira 503 + `Retry-After` em todos os endpoints, sem 500.
 
@@ -449,11 +467,32 @@ Chamadas HTTP (via `client.Logical().WriteWithContext`):
 | `root_token` e chave de unseal no mesmo volume (laboratório) | passos manuais de revogação; recusa em `AMBIENTE=producao` |
 | Comprometimento da API ⇒ abuso de `transit-auth/hmac` (forjar Desafio/ACK) | inerente ao desenho do doc (`K_auth` pode ser gerada pela API); auditoria do Vault registra cada chamada; `K_rec` continua protegida, então blocos não podem ser forjados |
 | Chave órfã no Vault após falha parcial do provisionamento | DevId nunca entregue; inofensiva; registrada no log |
-| `secnvs.csv` com chaves em claro no disco (só dongles de teste) | permissões 0600, `saida/` fora do git, instrução de `shred` no README; dongles reais usam o `provision.py` da Fase 1 na estação + `importar-registro` |
+| `bench_keys.json`/`secnvs.bin` com chaves em claro no disco (só dongles de teste, perfil `dev`) | permissões 0600, `saida/` fora do git, instrução de `shred` no README; o CSV nunca é gravado; dongles reais usam o `provision.py` da Fase 1 na estação + `importar-registro` |
+| A imagem `ferramentas` (Python + gerador NVS) é maior e tem shell | só no perfil `ferramentas`, rede interna, sem porta; o binário distroless da API/worker não muda |
 
-## [Aberto]
+## Rotação da chave do JWT (automática)
 
-- **[Aberto] Gerar a partição NVS cifrada diretamente na ferramenta `novo`** (chamando o `nvs_partition_gen.py` num contêiner), para que o CSV de dongles de teste nunca toque o disco. Para dongles reais o problema não existe: a Fase 1 gera a imagem na estação e só o `kms_record.json` (cifrado) chega aqui.
-- **[Aberto] Perfil `asym`** (desenho acima). Algoritmo já fixado pela Fase 1: ECDSA P-256 determinística, `r‖s` 64 B; verificação local na API com `crypto/ecdsa`. Em aberto só o **quando** implementar.
-- **[Aberto] Rotação da chave do JWT.** O desenho já suporta (`kid` = versão; a API recarrega as chaves públicas a cada 10 min e ao ver um `kid` desconhecido). Recomendação: documentar o procedimento (`vault write -f transit-jwt/keys/jwt/rotate` + `min_encryption_version`), sem automatizar.
-- **[Aberto] Auto-unseal e HA do Vault** (spec 01).
+**[Decisão] Rotação automatizada** (escolha do autor, em vez de só documentar o procedimento). O desenho de `kid` = versão (spec 08) já suporta duas versões convivendo. Um serviço dedicado, **fora da API e do worker**, faz o ciclo de vida da chave `transit-jwt/keys/jwt`:
+
+- **Serviço `jwt-rotacao`** (spec 01): o mesmo binário, `tccelta jwt agendar`, em laço a cada `JWT_ROTACAO_VERIFICACAO` (padrão `1h`); credencial própria (AppRole `tccelta-rotacao-jwt`, volume `vault_approle_rotacao`), só na rede `kms`. A API continua com `deny` em `transit-jwt/keys/jwt/*`: **o token da API não rotaciona nem expurga nada**.
+- **Política `tccelta-rotacao-jwt.hcl`** (única do serviço, `token_no_default_policy=true`):
+  ```hcl
+  path "transit-jwt/keys/jwt"        { capabilities = ["read"] }     # versões e creation_time
+  path "transit-jwt/keys/jwt/rotate" { capabilities = ["update"] }
+  path "transit-jwt/keys/jwt/config" { capabilities = ["update"] }   # min_decryption_version
+  # sem sign/*, export/*, backup/*: este serviço não assina nem lê material
+  ```
+- **Estado só no Vault** (sem tabela nova): cada verificação lê `transit-jwt/keys/jwt` (`latest_version`, `keys.<v>.creation_time`).
+  1. **Rotacionar** se `agora − creation_time(latest) ≥ JWT_ROTACAO_PERIODO` (padrão `720h`, 30 dias): `POST transit-jwt/keys/jwt/rotate`. A API passa a assinar com a versão nova a partir da próxima chamada (`kid = jwt-v<nova>`) e recarrega as públicas ao ver o `kid` desconhecido (ou a cada 10 min).
+  2. **Expurgar** a versão `k` quando `agora ≥ creation_time(k+1) + JWT_VALIDADE + JWT_FOLGA + 10 min` (nenhum token assinado com `k` pode mais estar válido nem em cache de verificação): `POST transit-jwt/keys/jwt/config {"min_decryption_version": k+1}`. Depois disso a API deixa de listar a chave pública `k` e tokens `kid = jwt-v<k>` passam a 401 `token_invalido`.
+  3. Idempotente e seguro a reexecuções; `tccelta jwt rotacionar --agora` força o passo 1 (manutenção).
+- **Concorrência:** duas instâncias do serviço rodando juntas apenas tentam as mesmas operações (o Vault rejeita/ignora a segunda `rotate` dentro do mesmo período pela checagem de `creation_time` antes de chamar); em produção roda uma só.
+- **Alternativa não adotada:** `auto_rotate_period` do próprio Transit cobriria só a rotação, não o expurgo coordenado com `JWT_VALIDADE`. **[verificar]** se `min_decryption_version` omite as versões antigas de `GET transit-jwt/keys/jwt` para chaves Ed25519 na versão do Vault fixada; se não omitir, usar `min_available_version` (trim) além dele.
+- **Testes** (Vault real em `-dev`, relógio injetado): chave criada na `v1`; com o relógio avançando 30 dias, `v2` existe; token assinado antes continua válido (`kid=jwt-v1`) durante `JWT_VALIDADE`; depois do prazo de expurgo `min_decryption_version = 2` e o token `v1` falha; token novo `jwt-v2` válido; o AppRole da API recebe 403 em `.../rotate` e `.../config`; o AppRole de rotação recebe 403 em `transit-jwt/sign/jwt` e `transit-rec/*`.
+
+## Decisões do autor (antes em aberto)
+
+- **[Decisão] Gerar a partição NVS direto na ferramenta `novo`** (ver *Ferramenta de provisionamento*): o CSV de dongles de teste nunca toca o disco. Para dongles reais o problema não existe: a Fase 1 gera a imagem na estação e só o `kms_record.json` (cifrado) chega aqui.
+- **[Decisão] Perfil `asym`: depois do caminho HMAC estável** (verificação local com `crypto/ecdsa`; ver *Perfis `none` e `asym`*).
+- **[Decisão] Rotação da chave do JWT automatizada** (ver acima).
+- **[Decisão] Auto-unseal e HA do Vault:** unseal manual 3 de 5 em produção; auto-unseal e HA só documentados (spec 01).

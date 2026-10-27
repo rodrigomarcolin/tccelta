@@ -478,4 +478,4 @@ Em placa (com nRF Connect no celular, antes do app existir):
 | iOS com MTU 185 e janela de conexão longa | Vazão menor | Aceitável (bloco a cada 6–10 s). Medir no benchmark (spec 06). |
 | Escrita longa (`allowLongWrite`) não suportada em algum Android | Desafio de 50 B com MTU 23 falha | O app sempre pede MTU 512 antes; se o MTU < 53, registrar e tentar de novo após renegociar. |
 | `MAX_CONNECTIONS = 3` até a Fase 2 | Outro celular derruba a sessão SYNC | Documentado; a Fase 2 limita a um bond. |
-| **[Aberto]** Data Length Extension / PHY 2M | Pode dobrar a vazão | Fora do escopo funcional; incluir como variável do benchmark se sobrar tempo (`NimBLEDevice::setDefaultPhy`). |
+| **[Decisão]** Data Length Extension / PHY 2M: **não usar no TCC** | Poderia dobrar a vazão, mas adiciona variável que depende do celular | Benchmark só com o PHY 1M padrão (nenhum `NimBLEDevice::setDefaultPhy`); o ganho potencial fica registrado como trabalho futuro. |

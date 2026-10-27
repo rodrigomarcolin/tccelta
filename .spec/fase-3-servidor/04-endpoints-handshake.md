@@ -107,7 +107,7 @@ Segue o `handshake-servidor-desafio.puml`:
 1. Middlewares: `limitarIP` → `limitarDevId(LIMITE_DESAFIO_MIN)` → 429.
 2. `dongles.Buscar(DevId)`: desconhecido → 404; `ativo=false` → 403; perfil `none` sem `PERMITIR_PERFIL_NONE` → 403.
 3. `N_S`: 16 bytes de `crypto/rand`.
-4. `flags_c = 0`, sem `diag_min` (ver [Aberto] diagnóstico).
+4. `flags_c = 0`, sem `diag_min` (**[Decisão]** emissão do modo diagnóstico adiada; ver *Decisões do autor* no fim).
 5. **S1** = `truncarMicro(agora())`, **antes** do `INSERT`.
 6. Executar `EmitirDesafio` (query abaixo), fora de transação explícita: é um único comando atômico. 0 linhas → `ErrDesafiosPendentes`.
 7. Montar o payload do 0x01 (`c_S`, `N_S`, `ACK_seq = seq_contiguo`, `c_conf`, `flags_c`) e calcular `tag = HMACAuth(DevId, EntradaTag(0x01, DevId, payload))[:16]`. Falha do KMS → 503. O desafio fica no banco e vence sozinho.
@@ -148,11 +148,13 @@ Segue o `handshake-servidor-resposta.puml`, com dois ajustes justificados abaixo
      f. rtt := S2 − s1
         comAncora := 0 ≤ rtt ≤ ANCORA_RTT_MAX
         rtt < 0 → InserirAlerta(relogio_servidor_regrediu)
-     g. ref := LerTMsUltimoBoots(dongle_id, [r.BootID])        ← sob o lock (query da spec 05)
+     g. ger := geracaoDoHandshake(e, r.BootID)                   ← função pura (regras.go), sem tocar o estado
+        ref := LerTMsUltimoBoots(dongle_id, [r.BootID])          ← sob o lock (query da spec 05); usa a geração `ger`
         tMs := tempo.Desembrulhar(r.TMs, ref)                   ← mesma referência por boot da ingestão
-        GarantirBootPendente(dongle_id, r.BootID, agora)
-        se comAncora: InserirAncora(dongle_id, boot_id, tMs, nonce, s1, S2)
-        (desafio.t_ms e ancora_tempo.t_ms guardam o valor DESEMBRULHADO, igual a leitura.t_ms)
+        GarantirBootPendente(dongle_id, ger, r.BootID, agora)
+        se comAncora: InserirAncora(dongle_id, ger, boot_id, tMs, nonce, s1, S2)
+        (desafio.t_ms e ancora_tempo.t_ms guardam o valor DESEMBRULHADO, igual a leitura.t_ms;
+         desafio.geracao_boot guarda `ger`)
      h. ackMsg := Ack{AckSeq: ack, CConf: r.CS, Flags: comAncora ? 0 : FlagAckAncoraFalhou}
         tagAck := HMACAuth(DevId, EntradaTag(0x04, DevId, ackMsg.Payload()))[:16]   → falha: ROLLBACK; 503
         ackTLV := ackMsg.Montar(tagAck)
@@ -160,7 +162,7 @@ Segue o `handshake-servidor-resposta.puml`, com dois ajustes justificados abaixo
                                  head_relatado_em=S2, c_conf=r.CS, ultimo_ack=ackTLV)
      j. FinalizarDesafio(resultado = comAncora ? 'aceito' : 'aceito_sem_ancora',
                          ack_seq=ack, perda_ini, perda_fim, token_jti=jti)
-     k. NotificarBootPendente('<dongle_id>:<boot_id>')        ← entregue no COMMIT
+     k. NotificarBootPendente('<dongle_id>:<geracao_boot>:<boot_id>')   ← entregue no COMMIT
    COMMIT
 8. 200 {"ack": b64(ackTLV), "token": jwt, "token_expira_em": exp, "t_lat_s": ...}
 ```
@@ -175,6 +177,7 @@ Notas:
 - **[Decisão] JWT assinado antes da transação (passo 6).** O JWT não depende do resultado da transação: o `jti` é aleatório, e `cs` e `exp` já são conhecidos. Assinar fora encurta o tempo com o lock do dongle e com uma conexão do pool presa. Se a transação falhar ou der 409/422, o JWT é descartado sem ter sido entregue. O ACK, por outro lado, precisa ser assinado **dentro** da transação, porque `ACK_seq` só é conhecido ali e o ACK assinado é gravado em `ultimo_ack` atomicamente com o estado.
 - **Âncora quando `rtt > 2 s`:** o handshake segue sem âncora (`aceito_sem_ancora`), o boot é marcado pendente (para estimativa por vizinhos) e o ACK leva `flags_a` bit 0. Exatamente como no doc.
 - **`HEAD_seq` nunca diminui:** verificado em 7d e reforçado pela trigger `dongle_estado_monotono` (spec 02).
+- **[Decisão] Geração do `boot_id` no handshake (passo 7g).** O `boot` é identificado por `(dongle_id, geracao_boot, boot_id)` (spec 02). A resposta traz só o `boot_id` corrente, e o bloco BOOT dele pode ainda não ter chegado, então a geração é *inferida sem gravar o estado*: `geracaoDoHandshake(e, bootID)` devolve `e.geracao_boot` se `bootID ≥ e.ultimo_boot_id` (ou `bootID = 0`), e `e.geracao_boot + 1` se `bootID < e.ultimo_boot_id` (o u16 deu a volta). Um segundo handshake do mesmo boot dá o mesmo resultado, e quando o primeiro bloco do boot é aceito a ingestão (spec 05, `atribuirGeracao`) chega à mesma geração e só então grava `dongle_estado.geracao_boot`. Alerta `geracao_boot_avancou` é gerado pela ingestão, não aqui.
 - **[Decisão, reconciliação com a Fase 1] `c_S = max(ultimo_c_s + 1, segundos Unix agora)`.** O dongle persiste o maior `c_S` aceito (`last_cs`) e recusa desafios com `c_S` menor ou igual (Erro 0x02). O servidor de bancada embutido no app (Fase 1, spec 09 §7) emite `c_S` a partir da época Unix (~1,7·10⁹), então uma placa que passou pela bancada recusaria para sempre um servidor real que começasse em 1. Ancorar `c_S` na época (cabe em `uint32` até 2106) mantém o contador estritamente crescente, cobre placas reaproveitadas e não muda nada no dongle, que só compara. O `max` preserva a monotonicidade se o relógio da API recuar (NTP). A trigger `dongle_estado_monotono` continua valendo.
 
 ### Queries (`internal/banco/queries/desafio.sql`, `estado.sql`, `contexto.sql`)
@@ -224,7 +227,8 @@ RETURNING s1;
 -- name: FinalizarDesafio :exec
 UPDATE desafio
    SET resultado = @resultado, ack_seq = @ack_seq, perda_ini = @perda_ini,
-       perda_fim = @perda_fim, token_jti = @token_jti, t_ms = COALESCE(@t_ms_desembrulhado, t_ms)
+       perda_fim = @perda_fim, token_jti = @token_jti, t_ms = COALESCE(@t_ms_desembrulhado, t_ms),
+       geracao_boot = COALESCE(@geracao_boot, geracao_boot)
  WHERE dongle_id = @dongle_id AND c_s = @c_s;
 
 -- name: ExpirarDesafios :execrows
@@ -239,7 +243,7 @@ UPDATE desafio SET resultado = 'expirado'
 SELECT pg_advisory_xact_lock(1, @dongle_id::int);
 
 -- name: LerEstado :one
-SELECT seq_contiguo, maior_seq_visto, head_seq, tail_seq, ultimo_c_s, c_conf
+SELECT seq_contiguo, maior_seq_visto, head_seq, tail_seq, ultimo_c_s, c_conf, geracao_boot, ultimo_boot_id
 FROM dongle_estado WHERE dongle_id = @dongle_id;
 
 -- name: AtualizarEstadoHandshake :exec
@@ -266,19 +270,20 @@ VALUES (@dongle_id, @from_seq, @to_seq, @causa, @registrado_em, @c_s, @seq_bloco
 ON CONFLICT (dongle_id, from_seq) DO NOTHING;
 
 -- name: GarantirBootPendente :exec
-INSERT INTO boot (dongle_id, boot_id, pendente_tempo, pendente_desde)
-VALUES (@dongle_id, @boot_id, true, @agora)
-ON CONFLICT (dongle_id, boot_id) DO UPDATE
+INSERT INTO boot (dongle_id, geracao_boot, boot_id, pendente_tempo, pendente_desde)
+VALUES (@dongle_id, @geracao_boot, @boot_id, true, @agora)
+ON CONFLICT (dongle_id, geracao_boot, boot_id) DO UPDATE
    SET pendente_tempo = true, pendente_desde = EXCLUDED.pendente_desde
  WHERE NOT boot.pendente_tempo;     -- não regrava se já pendente (evita churn)
 
 -- name: InserirAncora :exec
-INSERT INTO ancora_tempo (dongle_id, boot_id, t_ms, nonce, s1, s2)
-VALUES (@dongle_id, @boot_id, @t_ms, @nonce, @s1, @s2)
+INSERT INTO ancora_tempo (dongle_id, geracao_boot, boot_id, t_ms, nonce, s1, s2)
+VALUES (@dongle_id, @geracao_boot, @boot_id, @t_ms, @nonce, @s1, @s2)
 ON CONFLICT DO NOTHING;
 
 -- name: InserirAlerta :exec
-INSERT INTO alerta (dongle_id, boot_id, tipo, detalhe) VALUES (@dongle_id, @boot_id, @tipo, @detalhe);
+INSERT INTO alerta (dongle_id, geracao_boot, boot_id, tipo, detalhe)
+VALUES (@dongle_id, @geracao_boot, @boot_id, @tipo, @detalhe);
 
 -- name: NotificarBootPendente :exec
 SELECT pg_notify('boot_pendente', @carga::text);
@@ -322,7 +327,7 @@ O decodificador JSON usa `DisallowUnknownFields` e no máximo 2 KiB. O base64 us
 
 - `handshake.desafio_emitido{dongle, c_s, ack_seq}`
 - `handshake.tag_invalida{dongle, c_s}` (nível `warn`)
-- `handshake.aceito{dongle, c_s, boot_id, rtt_ms, com_ancora, ack_seq, overflow_ini, overflow_fim}`
+- `handshake.aceito{dongle, c_s, geracao_boot, boot_id, rtt_ms, com_ancora, ack_seq, overflow_ini, overflow_fim}`
 - `handshake.inconsistente{dongle, c_s, head, tail, head_salvo}`
 - Métricas: `tccelta_handshakes_total{resultado}` e `tccelta_ancora_rtt_segundos`.
 
@@ -332,7 +337,7 @@ O decodificador JSON usa `DisallowUnknownFields` e no máximo 2 KiB. O base64 us
 |---|---|
 | `internal/banco/queries/desafio.sql`, `estado.sql`, `contexto.sql` | queries acima |
 | `internal/handshake/servico.go` | `Servico`, `EmitirDesafio`, `ProcessarResposta` |
-| `internal/handshake/regras.go` | funções puras: `aplicarTail(e Estado, r Resposta) (ack uint32, perda *Faixa, err error)`, `avaliarAncora(s1, s2, max) (bool, alerta)` |
+| `internal/handshake/regras.go` | funções puras: `aplicarTail(e Estado, r Resposta) (ack uint32, perda *Faixa, err error)`, `avaliarAncora(s1, s2, max) (bool, alerta)`, `geracaoDoHandshake(e Estado, bootID uint16) uint16` |
 | `internal/handshake/relogio.go` | `truncarMicro`, `tetoMicro` |
 | `internal/handshake/regras_test.go` | tabela de casos da regra do TAIL e da âncora |
 | `internal/handshake/servico_integracao_test.go` (`integracao`) | banco real + `kmsteste` |
@@ -356,6 +361,8 @@ O decodificador JSON usa `DisallowUnknownFields` e no máximo 2 KiB. O base64 us
 
 Âncora: rtt = 0 → âncora; 2,000000 s → âncora; 2,000001 s → sem âncora + flag; −5 ms → sem âncora + alerta.
 
+Geração (`geracaoDoHandshake`): `(G=0, U=7, boot=7)` → 0; `(0, 7, 9)` → 0; `(0, 7, 3)` → 1 (volta do u16); `(2, 65535, 1)` → 3; `(0, 0, 1)` (dongle novo) → 0; `bootID = 0` → G.
+
 **Integração (Postgres real via testcontainers + `kmsteste` com chaves conhecidas):**
 
 1. Fluxo feliz: desafio → montar a resposta com K_auth de teste → 200. Verificar:
@@ -376,6 +383,7 @@ O decodificador JSON usa `DisallowUnknownFields` e no máximo 2 KiB. O base64 us
 10. Pendentes: 4º desafio sem responder → 429 `desafios_pendentes` com `Retry-After`.
 11. KMS fora (dublê devolvendo erro) no ACK → 503 e nada gravado (desafio continua pendente).
 12. Resposta concorrente com um lote (spec 05) do mesmo dongle: as transações ficam serializadas (o teste verifica a ordem pelos timestamps de log e o estado final consistente).
+13. Volta do `boot_id`: `dongle_estado` com `ultimo_boot_id = 65535`, `geracao_boot = 0`; handshake com `boot_id = 1` ⇒ `boot (geracao 1, boot 1)` criado, `desafio.geracao_boot = 1`, âncora na geração 1 e `dongle_estado.geracao_boot` ainda 0 (só a ingestão avança); repetir o handshake ⇒ a mesma linha.
 
 ## Passos ordenados com checkpoints
 
@@ -403,7 +411,7 @@ O decodificador JSON usa `DisallowUnknownFields` e no máximo 2 KiB. O base64 us
 | DoS de desafios para um DevId (pendentes cheios) bloqueia o app legítimo por até 60 s | rate limit por IP; o DevId só circula no BLE (LESC) e no app; risco aceito e registrado |
 | JWT assinado e não entregue (corrida 409) | inofensivo: `jti` não gravado, token nunca sai da API |
 
-## [Aberto]
+## Decisões do autor (antes em aberto)
 
-- **[Aberto] Emissão do modo diagnóstico (`flags_c` bit 0 + `diag_min`).** O formato é suportado ponta a ponta (`protocolo.Desafio.DiagMin`, colunas `desafio.flags_c`/`diag_min`, `dongle.diag_solicitado_min`). Recomendação para esta fase: emitir sempre `flags_c = 0`. Em fase futura, quando `dongle.diag_solicitado_min` não for nulo, o próximo desafio leva bit 0 + `diag_min`, e o valor é zerado quando um handshake com esse `c_S` for aceito. O período fica registrado e vira "intervalo legítimo" nas análises (o `token-diagnostico` do `server-specification.md` fica para depois).
-- **[Aberto] `T_lat` por dongle.** Hoje é global (`T_LAT_SUGERIDO`). Recomendação: coluna `dongle.t_lat_s` quando houver política comercial.
+- **[Decisão] Emissão do modo diagnóstico (`flags_c` bit 0 + `diag_min`): adiada, formato pronto e sem efeito.** O formato é suportado ponta a ponta (`protocolo.Desafio.DiagMin`, colunas `desafio.flags_c`/`diag_min`, `dongle.diag_solicitado_min`), mas o servidor emite **sempre** `flags_c = 0`, e o firmware (Fase 1, spec 05 §11) mantém o gancho `IDiagGate` vazio, com `AT#DIAG 1` sempre aceito. Fica descrito para depois: quando `dongle.diag_solicitado_min` não for nulo, o próximo desafio levaria bit 0 + `diag_min`, e o valor seria zerado quando um handshake com esse `c_S` fosse aceito; o período viraria "intervalo legítimo" nas análises (o `token-diagnostico` do `server-specification.md` também fica para depois).
+- **[Decisão] `T_lat` por dongle: coluna `dongle.t_lat_s` criada já (spec 02), mas o servidor não a usa.** O handshake continua devolvendo o `T_LAT_SUGERIDO` global (`t_lat_s` omitido se `0`) e não consulta a coluna; ela fica reservada, preenchida só à mão. O app já trata o valor sugerido como teto, `min(local, servidor)` (Fase 1, spec 07 §7).

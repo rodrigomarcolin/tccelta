@@ -27,7 +27,7 @@ pareamentos e conexões. Isso fecha A1.1/A1.2/A1.4 e reduz A1.3 (MITM) e A1.5
    iOS: alerta do sistema), telas para "segure o botão", janela expirada,
    pareamento recusado, bond perdido (Android remove e pareia de novo; iOS
    orienta "Esquecer este dispositivo"), reconexão automática com bond; a
-   camada PSK antiga sai do caminho de conexão.
+   camada PSK antiga já saiu na Fase 1 (esta fase só confere o caminho de conexão).
 
 ## Specs (ordem de leitura)
 
@@ -36,7 +36,7 @@ pareamentos e conexões. Isso fecha A1.1/A1.2/A1.4 e reduz A1.3 (MITM) e A1.5
 | 01 | `01-firmware-lesc-nimble.md` | Configuração LESC no NimBLE, gate de bond, flags de características e CCCD, autorização por conexão, advertising, bonds na NVS. |
 | 02 | `02-firmware-botao-e-janela-de-pareamento.md` | Detector do botão, máquina de estados da janela e das conexões (`PairingPolicy`), tarefa, timers, prioridades, build flags. |
 | 03 | `03-firmware-eventos-e-testes.md` | Catálogo de eventos para `docs/debug-events.md`, testes nativos, roteiro de bancada B1–B16 e métricas. |
-| 04 | `04-app-pareamento-just-works.md` | Port/adapter BLE, use cases, `ConnectingViewModel`, `PairingScreen`, remoção da camada PSK, testes com `FakeBleService`. |
+| 04 | `04-app-pareamento-just-works.md` | Port/adapter BLE, use cases, `ConnectingViewModel`, `PairingScreen`, conferência de que a camada PSK (removida na Fase 1) saiu do caminho de conexão, testes com `FakeBleService`. |
 
 ### Ordem de execução
 
@@ -63,18 +63,19 @@ pareamentos e conexões. Isso fecha A1.1/A1.2/A1.4 e reduz A1.3 (MITM) e A1.5
   comporta com os dados de fabricante; spec 01 §5.5) nem usar o namespace
   NVS `nimble_bond` (spec 01 §6).
 - Tela de configurações: a rota `/settings` e os parâmetros T_lat/B_max/T_GPS
-  são da Fase 1; a Fase 2 remove apenas o conteúdo de PSK (spec 04 §5.7).
-- Camada PSK do app: a Fase 1 (spec 07 §1) só a desliga por padrão atrás de
-  `--dart-define=LEGACY_PSK_TRANSPORT` e **não apaga arquivo nenhum**; esse
-  é o estado intermediário. A remoção (ou isolamento) é desta fase (spec 04
-  §5.7, A8), que também retira a flag.
-- NVS encryption da Fase 1 (spec 01 §7–§9): mesmo firmware (Arduino como
-  componente do ESP-IDF) e NVS encryption ligada nos três perfis de hardware
-  (`dev`, `devsec`, `prod`), cobrindo a `nvs` padrão além da `secnvs` — logo
-  os bonds do NimBLE ficam cifrados sem código nesta fase. Proteção real só
-  em `devsec`/`prod`, onde a chave XTS (`nvs_key`) é protegida pela *flash
-  encryption*; no `dev` a `nvs_key` fica legível na flash e os bonds são, na
-  prática, recuperáveis (risco residual aceito, spec 01 §6, A2).
+  são da Fase 1; o conteúdo de PSK já saiu na Fase 1 (spec 04 §5.7 só confere).
+- Camada PSK do app: **já foi removida** (opção A da A8) antes desta fase —
+  a Fase 1 (spec 07 §1) a apagou, na branch `chore/remove-security`, com o
+  histórico na tag `versao-custom-secure-ble`; não há flag
+  `LEGACY_PSK_TRANSPORT`. Esta fase só confere que nada de PSK ficou no
+  caminho de conexão (spec 04 §5.7).
+- NVS encryption da Fase 1 (spec 01 §7–§9, plano B1): mesmo firmware (Arduino
+  como componente do ESP-IDF); NVS encryption ligada só em `devsec`/`prod`,
+  cobrindo a `nvs` padrão além da `secnvs` — logo os bonds do NimBLE ficam
+  cifrados sem código nesta fase. Proteção real em `devsec`/`prod`, onde a
+  chave XTS (`nvs_key`) é protegida pela *flash encryption*; no `dev` a NVS
+  fica **em claro** (sem NVS encryption) e os bonds são legíveis na flash
+  (risco residual aceito, spec 01 §6, A2).
 
 ## Critérios de aceite da fase
 
@@ -100,10 +101,10 @@ pareamentos e conexões. Isso fecha A1.1/A1.2/A1.4 e reduz A1.3 (MITM) e A1.5
 Material: ESP32 DevKit (botão BOOT/GPIO0), firmware `collector_*_debug` com a
 serial gravada em arquivo, Android ≥ 10 e iPhone com o app, nRF Connect e
 LightBlue; opcional nRF52840 Dongle + nRF Sniffer no Wireshark e `crackle`.
-Antes da primeira gravação: `pio run -t erase` (com a NVS encryption da Fase 1
-isso também apaga `nvs_key` e `secnvs`: a placa volta às chaves fixas de
-bancada ou precisa de `provision.py --profile dev --flash`, Fase 1 spec 01
-§11; em `devsec` não usar `erase`) e esquecer o dongle nos
+Antes da primeira gravação: `pio run -t erase` (isso também apaga `nvs_key` e
+`secnvs`: a placa volta às chaves fixas de bancada ou precisa de
+`provision.py --profile dev --flash`, Fase 1 spec 01 §11; em `devsec` não
+usar `erase`) e esquecer o dongle nos
 celulares. Cenários completos, eventos esperados e métricas (tempo de
 pareamento, de restauração e até a sessão, N = 10 por SO) na spec 03 §4:
 
@@ -134,15 +135,15 @@ central sem LESC (opcional).
 | D12 | 02 | Botão pressionado no boot bloqueia o detector até soltar. |
 | D13–D15 | 03 | `FORMAT v` inalterado; `CONN` = sessão autorizada; `LINK_UP` registra o RPA. |
 | D16–D20 | 04 | Anúncio só como dica; pareamento no `ConnectingViewModel`; plano automático; `createBond` explícito no Android; sem novas tentativas após erro de segurança. |
-| A1 | 01 | Manter o bit "há bond" no anúncio? Rec.: manter. |
-| A2 | 01 | Bonds na `nvs` cifrada nos três perfis da Fase 1, mas no perfil `dev` a chave XTS (`nvs_key`) fica legível na flash (sem proteção real); `devsec`/`prod` protegem a chave com *flash encryption*. Rec.: aceitar e documentar o risco residual do perfil `dev`. |
-| A3 | 01 | Endereço do dongle público × RPA. Rec.: público nesta fase. |
-| A4 | 01 | *Fork* da NimBLE para recusar `REPEAT_PAIRING`. Rec.: desnecessário (D3 recusa antes). |
-| A5 | 02 | Janela automática no primeiro boot. Rec.: não. |
-| A6 | 02 | LED no GPIO2 por padrão. Rec.: `-1` no repositório. |
-| A7 | 03 | Artefatos de bancada no repositório. Rec.: só logs de texto. |
-| A8 | 04 | Camada PSK: remover (com tag) ou isolar como legado. Rec.: remover. |
-| A9 | 04 | Card "Segurança do enlace" no "Mais". Rec.: não. |
+| A1 | 01 | **Decidido:** manter o bit "há bond" no anúncio. |
+| A2 | 01 | **Decidido:** aceitar e documentar o risco do perfil `dev`. Com o plano B1 da Fase 1 o `dev` tem NVS **em claro** (não só a `nvs_key` legível): quem lê a flash da placa de bancada lê os bonds. `devsec`/`prod` protegem a chave XTS com *flash encryption*. |
+| A3 | 01 | **Decidido:** manter endereço público (rastreabilidade T9 fica como limitação registrada). |
+| A4 | 01 | **Decidido:** não fazer *fork* da NimBLE para `REPEAT_PAIRING`; registrar no texto (D3 recusa antes). |
+| A5 | 02 | **Decidido:** não abrir a janela automaticamente no primeiro boot; todo pareamento passa pelo botão. |
+| A6 | 02 | **Decidido:** `PAIR_LED_PIN=-1` no repositório; GPIO2 no `platformio_local.ini` de quem tem DOIT. |
+| A7 | 03 | **Decidido:** logs de texto no repositório (`docs/bancada/fase-2-lesc/`); `.pcapng` fora do git. |
+| A8 | 04 | **Decidido: A (remover, com tag)** — e **já feito**: a camada PSK saiu na Fase 1 (branch `chore/remove-security`); histórico na tag `versao-custom-secure-ble`. |
+| A9 | 04 | **Decidido:** não criar o card "Segurança do enlace" nesta fase. |
 
 ## Revisão crítica (advisor)
 

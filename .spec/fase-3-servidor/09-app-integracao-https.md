@@ -18,7 +18,7 @@ A arquitetura obrigatória do app é `datasource → repository → view_model`,
 
 ## Escopo
 
-Dentro: configuração de ambiente (base URL), cliente `dio`, DTOs, datasource, repository que implementa o port deixado pela Fase 1, use cases de handshake e envio, política de reenvio, falhas, configuração de rede Android/iOS para o certificado de desenvolvimento, testes com `dio` dublado.
+Dentro: configuração de ambiente (base URL), cliente `dio`, DTOs, datasource, repository que implementa o port deixado pela Fase 1, use cases de handshake e envio, política de reenvio, falhas, configuração de rede Android/iOS (caminho padrão pelo **túnel com certificado público**; CA do Caddy só como plano B na LAN), testes com `dio` dublado.
 
 Fora (Fase 1): serviço BLE SYNC, TLV/fragmentação, buffer e cursor, erros App ⇄ dongle, tela de parâmetros `T_lat`/`B_max`/`T_GPS`. Esta spec **consome** essas peças pelos ports da Fase 1 e não as redefine.
 
@@ -88,10 +88,10 @@ class AppEnvironment {
 final appEnvironmentProvider = Provider<AppEnvironment>((ref) => AppEnvironment.fromDefines());
 ```
 
-- Arquivos `mobile-app/env/dev.json` (`{"FLAVOR":"dev","API_BASE_URL":"https://192.168.0.10:8443"}`) e `env/prodlike.json`. `env/*.local.json` fica no `.gitignore`.
+- Arquivos `mobile-app/env/dev.json` (**caminho padrão, túnel:** `{"FLAVOR":"dev","API_BASE_URL":"https://api.seudominio.com.br"}`, o `TUNEL_HOSTNAME` da spec 01, porta 443), `env/lan.json` (plano B na LAN, CA do Caddy: `{"FLAVOR":"dev","API_BASE_URL":"https://192.168.0.10:8443"}`) e `env/prodlike.json`. `env/*.local.json` fica no `.gitignore`.
 - Execução: `fvm flutter run --dart-define-from-file=env/dev.json`.
 - A URL base é validada no boot: esquema `https`, ou `http` só se `permiteHttpSemTls`. Senão, `AppException`.
-- [Aberto] sobrescrever a URL na tela de Configurações (só em build debug).
+- **[Decisão] Sobrescrever a URL na tela de Configurações: não agora.** Trocar o IP (plano B) é rebuild com outro `env/*.json`; com o túnel o hostname é fixo e a questão some. Só se trocar a URL virar atrito no teste de campo se implementa o campo "URL da API" (só em build debug, persistido no `SettingsService`/`SyncSettings`).
 
 ### Cliente HTTP (`lib/src/core/network/`)
 
@@ -383,7 +383,7 @@ class LoteAdaptativo { int get k; void reduzir(); void sucesso(); }
      ServidorIndisponível (5xx/503/rede) → esperar max(Retry-After, politica.proximaEspera()); lote.reduzir(); lote fica no buffer
      RequisicaoInvalida (400)   → bug: log de erro; buffer.descartarAcimaDe(ACK conhecido); dongle.enviarErro(0x07);
                                   400 repetido 3× com os mesmos bytes relidos ⇒ estado bloqueado ("bloco malformado no dongle";
-                                  o operador resolve com `tccelta admin saltar`, spec 05)
+                                  sem saída manual no servidor — corrige-se o firmware/chave do dongle, spec 05)
 ```
 
 Nada é apagado do buffer sem um ACK, e o dongle só apaga a flash com o ACK assinado. Uma falha nunca perde dados, só atrasa.
@@ -420,9 +420,11 @@ final Provider<SyncServerGateway> syncServerGatewayProvider = Provider((ref) {
 // os gatilhos novos (tabela acima) entram no SyncCoordinator.
 ```
 
-### Rede no Android/iOS (certificado do Caddy em desenvolvimento)
+### Rede no Android/iOS (túnel com certificado público; CA do Caddy como plano B)
 
-- `android/app/src/debug/res/xml/network_security_config.xml`:
+**[Decisão] Caminho padrão: túnel com certificado público** (Cloudflare Tunnel ou similar, spec 01, `make up-tunel`). O app fala com `https://$TUNEL_HOSTNAME`, o certificado é de uma CA pública já confiada pelo Android e pelo iOS, e **não se instala nenhuma CA no aparelho**; também funciona fora da LAN (4G). A configuração de rede abaixo só é necessária no **plano B (LAN, sem internet)**:
+
+- `android/app/src/debug/res/xml/network_security_config.xml` (plano B):
 
   ```xml
   <network-security-config>
@@ -439,15 +441,16 @@ final Provider<SyncServerGateway> syncServerGatewayProvider = Provider((ref) {
   ```
 
   Ele é referenciado só no `android/app/src/debug/AndroidManifest.xml` (`android:networkSecurityConfig="@xml/network_security_config"`). O release confia só nas CAs do sistema e não permite HTTP.
-- Instalar a CA: `make ca-exportar` (spec 01) → copiar `saida/caddy-root.crt` para o aparelho → Configurações → Segurança → Instalar certificado CA.
-- iOS: instalar o `.crt` como perfil e habilitar em Ajustes → Geral → Sobre → Ajustes de Confiança de Certificados.
-- `API_HOST` do Caddy = IP do PC na LAN; `env/dev.json` aponta `https://<IP>:8443`.
+- Plano B, instalar a CA: `make ca-exportar` (spec 01) → copiar `saida/caddy-root.crt` para o aparelho → Configurações → Segurança → Instalar certificado CA.
+- Plano B, iOS: instalar o `.crt` como perfil e habilitar em Ajustes → Geral → Sobre → Ajustes de Confiança de Certificados.
+- Plano B: `API_HOST` do Caddy = IP do PC na LAN; `env/lan.json` aponta `https://<IP>:8443`.
+- Limitação registrada: com o túnel, o provedor termina o TLS e vê telemetria e GPS em claro (spec 01, Riscos); o plano B mantém o tráfego só entre app e servidor.
 
 ## Plano arquivo por arquivo
 
 | Arquivo | Ação |
 |---|---|
-| `mobile-app/env/dev.json`, `env/prodlike.json`; `.gitignore` (`env/*.local.json`) | criar |
+| `mobile-app/env/dev.json` (túnel), `env/lan.json` (plano B), `env/prodlike.json`; `.gitignore` (`env/*.local.json`) | criar |
 | `lib/src/core/config/app_environment.dart` | criar |
 | `lib/src/core/network/dio_client.dart`, `dio_provider.dart`, `log_interceptor.dart` | criar |
 | `lib/src/core/utils/bytes_base64.dart` | criar |
@@ -509,7 +512,7 @@ Antes de dar a tarefa por pronta: `fvm dart format .` → `fvm flutter analyze` 
 2. DTOs + datasource + `FakeHttpAdapter`. **Checkpoint:** teste 2.
 3. Repository implementando o port da Fase 1. **Checkpoint:** teste 3; troca do provider do stub pela implementação real.
 4. Use cases + gatilhos no view_model da Fase 1. **Checkpoint:** testes 4 e 5.
-5. Configuração de rede Android + CA do Caddy. **Checkpoint:** num aparelho real na LAN, `GET /saude/pronta` via `dio` (botão de debug temporário ou teste manual) responde 200 em HTTPS.
+5. Túnel (`make up-tunel`) e, só para o plano B, configuração de rede Android + CA do Caddy. **Checkpoint:** num aparelho real, pelo túnel e **sem instalar certificado**, `GET /saude/pronta` via `dio` (botão de debug temporário ou teste manual) responde 200 em HTTPS; no plano B (LAN + CA do Caddy) também responde 200.
 6. Ponta a ponta com o simulador de dongle *no lugar do BLE* (port do dongle dublado, servidor real) e depois com o dongle real. **Checkpoint:** roteiro do README.
 
 ## Critérios de aceite
@@ -527,11 +530,13 @@ Antes de dar a tarefa por pronta: `fvm dart format .` → `fvm flutter analyze` 
 |---|---|
 | Nomes e assinaturas dos ports da Fase 1 diferentes do suposto | o contrato está registrado no README; a adaptação é mecânica e a semântica está fixada aqui |
 | RTT do celular > 2 s ⇒ âncoras sempre falhando | prioridade do desafio no BLE; reenvio imediato; métrica no app e no servidor (`tccelta_ancora_rtt_segundos`); sem âncora o handshake ainda vale |
-| CA do Caddy não aceita em algum aparelho | túnel com certificado público ([Aberto] da spec 01) |
+| CA do Caddy não aceita em algum aparelho | já resolvido: o caminho padrão é o túnel com certificado público (spec 01); a CA do Caddy é só o plano B |
+| Túnel indisponível (conta/domínio/internet) ou provedor vendo o tráfego | plano B na LAN com `env/lan.json`; limitação registrada na spec 01 |
 | Relógio do celular errado | expiração calculada pelo cronômetro monotônico + `token_validade_s` |
 
-## [Aberto]
+## Decisões do autor (antes em aberto)
 
-- **[Aberto] Sobrescrever a URL base em Configurações** (só em build debug, persistida no `SettingsService`, no padrão de `psk_hex`). Recomendação: fazer se trocar o IP da LAN virar atrito no teste de campo.
-- **[Aberto] `flutter_secure_storage`** para o token, caso o buffer passe a ser persistido em disco.
-- **[Aberto] Usar `t_lat_s` sugerido pelo servidor.** Recomendação: o app só registra o valor nesta fase; a configuração local de `T_lat` (Fase 1) continua valendo, como o doc define para o TCC.
+- **[Decisão] URL base em Configurações: só se trocar o IP virar atrito** (nada agora; ver *Ambientes*).
+- **[Decisão] Túnel com certificado público desde já** (ver *Rede no Android/iOS*).
+- **[Decisão] `t_lat_s` sugerido pelo servidor vale como teto: `min(local, servidor)`** (Fase 1, spec 07 §7 e spec 08). O gateway HTTPS só preenche `HandshakeEnvelope.suggestedLatency` (`t_lat_s` ausente/0 ⇒ `null`); quem aplica o teto é o `SyncCoordinator` da Fase 1, sem mudança nesta spec. *(Isso substitui a recomendação anterior, de só registrar o valor.)*
+- **[Aberto] `flutter_secure_storage`** para o token, caso o buffer passe a ser persistido em disco (mantido em aberto: o token é só em memória, sem necessidade hoje).

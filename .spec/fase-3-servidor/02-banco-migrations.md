@@ -10,7 +10,7 @@ Criar, com migrations versionadas, todas as tabelas descritas na seção 6 do `.
 
 Dentro: DDL completo (bronze, contexto, silver), seed dos 7 PIDs, índices, hypertables, compressão, FKs, *triggers* de invariantes, `NOTIFY`, `GRANT`s por papel, escolha e uso da ferramenta de migration e convenções de nomes.
 
-Fora: camada gold (`viagem`, `amostra_alinhada`, `viagem_metricas`), que fica como trabalho futuro e aparece em [Aberto]. As queries de cada fluxo estão nas specs 04, 05 e 06; aqui ficam só as de cadastro (`dongle`, `pid`).
+Fora: camada gold (`viagem`, `amostra_alinhada`, `viagem_metricas`), que **fica para fase posterior** (decisão do autor: só o gancho `boot.pendente_gold`, ver *Decisões do autor* no fim). As queries de cada fluxo estão nas specs 04, 05 e 06; aqui ficam só as de cadastro (`dongle`, `pid`).
 
 ## Design
 
@@ -63,10 +63,11 @@ O `tccelta migrar` usa `pgx/v5/stdlib` para abrir `*sql.DB` (o goose exige `data
 ```
 dongle (cadastro) ─1:1─ dongle_estado (bronze, estado operacional)
    │
-   ├─1:N─ bloco_bruto (bronze, PK dongle_id+seq, append-only)
+   ├─1:N─ bloco_bruto (bronze, PK dongle_id+seq, append-only, particionada por hash de dongle_id)
    ├─1:N─ bloco_rejeitado (bronze, auditoria)
    ├─1:N─ desafio (contexto, PK dongle_id+c_s) ─1:0..1─ ancora_tempo (contexto)
-   ├─1:N─ boot (contexto, PK dongle_id+boot_id) ─1:N─ ancora_tempo
+   ├─1:N─ boot (contexto, PK dongle_id+geracao_boot+boot_id) ─1:N─ ancora_tempo
+   │                                                         └─1:N─ grupo_ancora (derivado pelo worker)
    ├─1:N─ lacuna (contexto; OVERFLOW→desafio, BOOT/LOSS→bloco_bruto)
    ├─1:N─ alerta (operacional)
    └─1:N─ leitura / posicao (silver, hypertables; sem FK para dongle, ver Decisão)
@@ -103,9 +104,10 @@ CREATE TABLE dongle (
                          CHECK (perfil_seguranca IN ('hmac', 'asym', 'none')),
   kms_chave_auth       text    NOT NULL,  -- nome da chave no mount transit-auth (= dev_id_hex)
   kms_chave_rec        text    NOT NULL,  -- nome da chave no mount transit-rec  (= dev_id_hex)
-  chave_publica        bytea   NULL CHECK (chave_publica IS NULL OR octet_length(chave_publica) = 32),
+  chave_publica        bytea   NULL CHECK (chave_publica IS NULL OR (octet_length(chave_publica) = 65 AND get_byte(chave_publica, 0) = 4)),  -- P-256 não comprimida 04‖X‖Y
   ativo                boolean NOT NULL DEFAULT true,
   diag_solicitado_min  integer NULL CHECK (diag_solicitado_min BETWEEN 1 AND 65535),
+  t_lat_s              integer NULL CHECK (t_lat_s BETWEEN 10 AND 300),   -- T_lat sugerido por dongle (reservado, ver abaixo)
   descricao            text    NULL,
   criado_em            timestamptz NOT NULL DEFAULT now(),
   CHECK (perfil_seguranca <> 'asym' OR chave_publica IS NOT NULL)
@@ -115,7 +117,9 @@ CREATE TABLE dongle (
 DROP TABLE dongle;
 ```
 
-`chave_publica` e o perfil `asym` existem para o benchmark do perfil assimétrico (spec 07, [Aberto]). `diag_solicitado_min` é o gancho do modo diagnóstico (`flags_c` bit 0, spec 04, [Aberto]).
+`chave_publica` e o perfil `asym` existem para o benchmark do perfil assimétrico (spec 07; o servidor só os implementa depois do caminho HMAC estável). `diag_solicitado_min` é o gancho do modo diagnóstico (`flags_c` bit 0, spec 04; emissão adiada, o desafio sai sempre com `flags_c = 0`).
+
+**[Decisão] Coluna `dongle.t_lat_s` criada já nesta fase, mas ainda sem uso pelo servidor.** O autor pediu o `T_lat` por dongle no esquema; o handshake **não** lê a coluna: a resposta continua levando o `T_LAT_SUGERIDO` global (spec 04) e nenhuma consulta do caminho quente a seleciona (por isso ela fica fora de `BuscarDonglePorDevId`). Preencher e aplicar uma política por dongle fica para quando houver motivo (cadastro e `UPDATE` manuais bastam; o app já aplica o valor como teto, Fase 1 spec 07 §7).
 
 #### `00003_bronze.sql`
 
@@ -131,6 +135,8 @@ CREATE TABLE dongle_estado (
   head_relatado_em  timestamptz NULL,            -- S2 do handshake que relatou head e tail
   ultimo_c_s        bigint  NOT NULL DEFAULT 0 CHECK (ultimo_c_s BETWEEN 0 AND 4294967295),
   c_conf            bigint  NOT NULL DEFAULT 0,  -- c_S do último handshake aceito
+  geracao_boot      integer NOT NULL DEFAULT 0 CHECK (geracao_boot BETWEEN 0 AND 65535),   -- geração do boot_id (u16 dá a volta), ver abaixo
+  ultimo_boot_id    integer NOT NULL DEFAULT 0 CHECK (ultimo_boot_id BETWEEN 0 AND 65535), -- último boot_id ≠ 0 aceito na geração atual
   ultimo_ack        bytea   NULL,                -- TLV 0x04 completo e assinado (GET /confirmacao)
   ultimo_ack_em     timestamptz NULL,
   atualizado_em     timestamptz NOT NULL DEFAULT now(),
@@ -150,6 +156,12 @@ BEGIN
     RAISE EXCEPTION 'dongle_estado: regressão proibida (dongle_id=%)', OLD.dongle_id
       USING ERRCODE = 'check_violation';
   END IF;
+  -- a geração só sobe; dentro da mesma geração o boot_id só sobe (a volta do u16 é uma geração nova)
+  IF NEW.geracao_boot < OLD.geracao_boot
+     OR (NEW.geracao_boot = OLD.geracao_boot AND NEW.ultimo_boot_id < OLD.ultimo_boot_id) THEN
+    RAISE EXCEPTION 'dongle_estado: geração/boot_id regrediu (dongle_id=%)', OLD.dongle_id
+      USING ERRCODE = 'check_violation';
+  END IF;
   NEW.atualizado_em := now();
   RETURN NEW;
 END $$;
@@ -158,10 +170,12 @@ CREATE TRIGGER dongle_estado_monotono BEFORE UPDATE ON dongle_estado
   FOR EACH ROW EXECUTE FUNCTION dongle_estado_monotono();
 
 -- Blocos aceitos, exatamente como vieram. Append-only para a aplicação.
+-- Particionada por hash de dongle_id (16 partições) desde já; a PK inclui a chave de partição.
 CREATE TABLE bloco_bruto (
   dongle_id    integer NOT NULL REFERENCES dongle (dongle_id),
   seq          bigint  NOT NULL CHECK (seq BETWEEN 1 AND 4294967295),
   boot_id      integer NOT NULL CHECK (boot_id BETWEEN 0 AND 65535),
+  geracao_boot integer NOT NULL DEFAULT 0 CHECK (geracao_boot BETWEEN 0 AND 65535),   -- derivada na ingestão (spec 05); LOSS (boot_id 0) leva a geração corrente
   t0_ms        bigint  NOT NULL,
   marcador     text    NULL CHECK (marcador IN ('BOOT', 'LOSS')),
   epoca        bigint  NULL,      -- c_S do handshake cujo JWT trouxe o bloco (claim "cs")
@@ -169,7 +183,15 @@ CREATE TABLE bloco_bruto (
   assinatura   bytea   NOT NULL CHECK (octet_length(assinatura) IN (0, 32, 64)),   -- tag K_rec (32) | ECDSA P-256 r‖s (64) | none (0)
   recebido_em  timestamptz NOT NULL,
   PRIMARY KEY (dongle_id, seq)    -- idempotência: replay vira no-op
-);
+) PARTITION BY HASH (dongle_id);
+
+-- +goose StatementBegin
+DO $$ BEGIN
+  FOR i IN 0..15 LOOP
+    EXECUTE format('CREATE TABLE bloco_bruto_p%s PARTITION OF bloco_bruto FOR VALUES WITH (MODULUS 16, REMAINDER %s)', i, i);
+  END LOOP;
+END $$;
+-- +goose StatementEnd
 
 -- +goose StatementBegin
 CREATE FUNCTION bloco_bruto_imutavel() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -209,7 +231,17 @@ DROP TABLE dongle_estado;
 DROP FUNCTION dongle_estado_monotono();
 ```
 
-**[Decisão] `bloco_bruto` é tabela comum, não hypertable.** A PK `(dongle_id, seq)` é a garantia de unicidade do doc. Um hypertable exige a coluna de partição em todo índice único, o que quebraria essa garantia. Volume: com 1.000 dongles, cerca de 15 GB/dia. Isso é aceitável no TCC; ver [Aberto] particionamento.
+**[Decisão] `bloco_bruto` é tabela comum, não hypertable, e já nasce particionada por hash de `dongle_id` (16 partições).** A PK `(dongle_id, seq)` é a garantia de unicidade do doc. Um hypertable exige a coluna de partição em todo índice único (`recebido_em`), o que quebraria essa garantia; o particionamento declarativo por `dongle_id` mantém a PK porque a chave de partição faz parte dela. Volume: com 1.000 dongles, cerca de 15 GB/dia, distribuídos igualmente nas 16 partições (cada uma com seu índice da PK, menor e mais rápida de manter). A escolha do autor foi particionar já, em vez de esperar ~100 GB: o custo é só o `DO $$` de criação das partições, e a aplicação continua enxergando uma única tabela (`bloco_bruto`; consultas e `GRANT`s sempre no pai).
+
+- **Nada muda nas queries.** `INSERT … ON CONFLICT (dongle_id, seq)`, as FKs de `lacuna` para `(dongle_id, seq)` e o trigger de imutabilidade (trigger de linha no pai, propagado às partições no PostgreSQL ≥ 13) funcionam sobre a tabela particionada. Toda consulta por dongle (ingestão, reprocessamento) tem `dongle_id` na cláusula e poda a partição.
+- **Mais partições depois:** `MODULUS 16` não muda em silêncio; quando 16 não bastarem, criar uma tabela nova com mais partições e migrar (`INSERT … SELECT` por intervalos de `dongle_id`) — fora do escopo.
+- **Alternativa descartada por ora:** payload em object storage (MinIO) com hash no banco; mais um serviço e verificação de integridade externa.
+
+**[Decisão] `geracao_boot`: a volta do `boot_id` (u16) tem solução desde já.** `boot_id` dá a volta a cada 65.536 boots e a PK `(dongle_id, boot_id)` colidiria. Por isso o `boot` passa a ser identificado por `(dongle_id, geracao_boot, boot_id)`:
+- `dongle_estado.geracao_boot` e `ultimo_boot_id` guardam a geração corrente e o último `boot_id ≠ 0` aceito nela;
+- como o servidor aceita os blocos **em ordem de `seq`** (Go-Back-N), os `boot_id` chegam crescentes dentro de uma geração; um bloco com `boot_id` **menor** que `ultimo_boot_id` só pode ser uma volta do u16 (ou uma NVS apagada) e abre a geração seguinte: `geracao_boot += 1`. A regra pura `atribuirGeracao` está na spec 05; o handshake usa a mesma ideia sem alterar o estado (spec 04, passo 7g);
+- blocos LOSS (`boot_id = 0`) não participam e levam a geração corrente;
+- limite documentado: a regra assume menos de 65.536 boots entre dois blocos que chegam ao servidor (dentro desse intervalo a ordem de `seq` desfaz qualquer ambiguidade).
 
 **[Decisão] `epoca` foi reaproveitada:** o doc a define como "época em que o bloco foi assinado" (resquício do desenho com chave de sessão, que não existe mais). Aqui ela guarda o `c_S` do handshake cujo JWT autorizou o lote. Isso rastreia qual sessão do app entregou cada bloco (auditoria A3.x) sem coluna nova.
 
@@ -221,8 +253,9 @@ DROP FUNCTION dongle_estado_monotono();
 -- colunas de tempo são derivadas e recalculadas pelo worker (spec 06).
 CREATE TABLE boot (
   dongle_id             integer NOT NULL REFERENCES dongle (dongle_id),
+  geracao_boot          integer NOT NULL CHECK (geracao_boot BETWEEN 0 AND 65535),
   boot_id               integer NOT NULL CHECK (boot_id BETWEEN 0 AND 65535),
-  config                jsonb   NULL,              -- protocolo, Tmax, PIDs e períodos ([Aberto] origem)
+  config                jsonb   NULL,              -- protocolo, Tmax, PIDs e períodos: SEMPRE nula (o protocolo não envia a configuração; decisão do autor)
   -- faixa observada
   seq_primeiro          bigint  NULL,
   seq_ultimo            bigint  NULL,
@@ -240,7 +273,7 @@ CREATE TABLE boot (
   pendente_gold         boolean NOT NULL DEFAULT false,
   pendente_desde        timestamptz NOT NULL DEFAULT now(),
   criado_em             timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (dongle_id, boot_id)
+  PRIMARY KEY (dongle_id, geracao_boot, boot_id)
 );
 CREATE INDEX boot_fila_tempo ON boot (pendente_desde) WHERE pendente_tempo;
 CREATE INDEX boot_ordem_seq  ON boot (dongle_id, seq_primeiro);
@@ -258,6 +291,7 @@ CREATE TABLE desafio (
   diag_min                integer NULL,
   -- preenchidos com a Resposta 0x02
   respondido_em           timestamptz NULL,          -- S2; NULL enquanto pendente
+  geracao_boot            integer NULL,              -- geração atribuída ao boot_id da resposta (spec 04, passo 7g)
   boot_id                 integer NULL,
   t_ms                    bigint  NULL,
   head_seq                bigint  NULL,
@@ -278,33 +312,51 @@ CREATE INDEX desafio_a_expirar ON desafio (expira_em) WHERE respondido_em IS NUL
 -- Uma linha por handshake com S2 − S1 ≤ 2 s: a medida crua.
 -- O deslocamento do boot está em [s1 − t_ms, s2 − t_ms].
 CREATE TABLE ancora_tempo (
-  dongle_id  integer NOT NULL,
-  boot_id    integer NOT NULL,
-  t_ms       bigint  NOT NULL,
-  nonce      bytea   NOT NULL UNIQUE REFERENCES desafio (nonce),
-  s1         timestamptz NOT NULL,
-  s2         timestamptz NOT NULL,
-  PRIMARY KEY (dongle_id, boot_id, t_ms),
-  FOREIGN KEY (dongle_id, boot_id) REFERENCES boot (dongle_id, boot_id),
+  dongle_id    integer NOT NULL,
+  geracao_boot integer NOT NULL,
+  boot_id      integer NOT NULL,
+  t_ms         bigint  NOT NULL,
+  nonce        bytea   NOT NULL UNIQUE REFERENCES desafio (nonce),
+  s1           timestamptz NOT NULL,
+  s2           timestamptz NOT NULL,
+  PRIMARY KEY (dongle_id, geracao_boot, boot_id, t_ms),
+  FOREIGN KEY (dongle_id, geracao_boot, boot_id) REFERENCES boot (dongle_id, geracao_boot, boot_id),
   CHECK (s2 >= s1)
 );
 
--- Lacunas declaradas: OVERFLOW (handshake), BOOT/LOSS (blocos marcadores) ou
--- OPERADOR (salto administrativo de uma fila travada por bloco autêntico; spec 05).
+-- Grupos de âncoras calculados pelo worker (spec 06): uma linha por grupo, regravada
+-- junto com a reta do boot. Permite a incerteza por leitura sem refazer os grupos.
+CREATE TABLE grupo_ancora (
+  dongle_id     integer NOT NULL,
+  geracao_boot  integer NOT NULL,
+  boot_id       integer NOT NULL,
+  ordem         integer NOT NULL CHECK (ordem >= 1),   -- posição do grupo por t_ms crescente
+  t_primeiro_ms bigint  NOT NULL,                       -- t_ms da primeira âncora do grupo
+  t_ultimo_ms   bigint  NOT NULL,
+  t_centro_ms   double precision NOT NULL,              -- média dos t_ms (TCentro)
+  lo_ms         double precision NOT NULL,              -- limites do deslocamento o = hora_real − t_ms
+  hi_ms         double precision NOT NULL,
+  n_ancoras     integer NOT NULL CHECK (n_ancoras >= 1),
+  calculado_em  timestamptz NOT NULL,
+  PRIMARY KEY (dongle_id, geracao_boot, boot_id, ordem),
+  FOREIGN KEY (dongle_id, geracao_boot, boot_id) REFERENCES boot (dongle_id, geracao_boot, boot_id) ON DELETE CASCADE,
+  CHECK (hi_ms >= lo_ms)
+);
+
+-- Lacunas declaradas: OVERFLOW (handshake) ou BOOT/LOSS (blocos marcadores).
+-- Não há causa administrativa: não existe salto manual de fila travada (decisão do autor, spec 05).
 CREATE TABLE lacuna (
   id             bigint  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   dongle_id      integer NOT NULL REFERENCES dongle (dongle_id),
   from_seq       bigint  NOT NULL,
   to_seq         bigint  NOT NULL,
-  causa          text    NOT NULL CHECK (causa IN ('BOOT', 'LOSS', 'OVERFLOW', 'OPERADOR')),
+  causa          text    NOT NULL CHECK (causa IN ('BOOT', 'LOSS', 'OVERFLOW')),
   registrado_em  timestamptz NOT NULL,
   c_s            bigint  NULL,   -- handshake que declarou (OVERFLOW)
   seq_bloco      bigint  NULL,   -- bloco marcador que declarou (BOOT/LOSS)
-  justificativa  text    NULL,   -- obrigatória para OPERADOR
   CHECK (to_seq >= from_seq),
   CHECK ((causa = 'OVERFLOW') = (c_s IS NOT NULL)),
   CHECK ((causa IN ('BOOT', 'LOSS')) = (seq_bloco IS NOT NULL)),
-  CHECK ((causa = 'OPERADOR') = (justificativa IS NOT NULL)),
   FOREIGN KEY (dongle_id, c_s)       REFERENCES desafio (dongle_id, c_s),
   FOREIGN KEY (dongle_id, seq_bloco) REFERENCES bloco_bruto (dongle_id, seq),
   UNIQUE (dongle_id, from_seq)    -- duas lacunas não começam no mesmo seq
@@ -313,11 +365,13 @@ CREATE TABLE lacuna (
 -- Alertas operacionais (deriva, interseção vazia, PID desconhecido, etc.).
 CREATE TABLE alerta (
   id         bigint  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  dongle_id  integer NOT NULL REFERENCES dongle (dongle_id),
-  boot_id    integer NULL,
-  tipo       text    NOT NULL CHECK (tipo IN
+  dongle_id    integer NOT NULL REFERENCES dongle (dongle_id),
+  geracao_boot integer NULL,
+  boot_id      integer NULL,
+  tipo         text    NOT NULL CHECK (tipo IN
                ('deriva_excessiva', 'intersecao_vazia', 'relogio_servidor_regrediu', 'pid_desconhecido',
-                'tag_invalida', 'marcador_invalido', 'boot_id_reutilizado', 'invariante_violada')),
+                'tag_invalida', 'marcador_invalido', 'geracao_boot_avancou', 'invariante_violada',
+                'reprocessamento')),
   detalhe    jsonb   NOT NULL DEFAULT '{}',
   criado_em  timestamptz NOT NULL DEFAULT now()
 );
@@ -326,6 +380,7 @@ CREATE INDEX alerta_recentes ON alerta (dongle_id, criado_em DESC);
 -- +goose Down
 DROP TABLE alerta;
 DROP TABLE lacuna;
+DROP TABLE grupo_ancora;
 DROP TABLE ancora_tempo;
 DROP TABLE desafio;
 DROP TABLE boot;
@@ -334,6 +389,8 @@ DROP TABLE boot;
 Notas de projeto:
 
 - **[Decisão] Tabela `lacuna` própria.** O `server-specification.md` dizia que as lacunas "saem de uma consulta", mas o `.tex` (versão mais recente) e o `modelo-dados-contexto.puml` criam `lacuna` com causa. Prevalece o `.tex`. `UNIQUE (dongle_id, from_seq)` torna a gravação idempotente.
+- **[Decisão] Persistir os grupos de âncoras (`grupo_ancora`).** O doc pede para não persistir os grupos; o autor escolheu persistir, para calcular a incerteza de cada leitura (meia largura do grupo mais próximo + deriva × distância) sem refazer o agrupamento. É um desvio consciente: a tabela é *derivada* (o `ancora_tempo` continua sendo a fonte da verdade), pertence ao worker e é regravada por inteiro, na mesma transação que atualiza a reta do boot (spec 06), então nunca fica incoerente com `boot.a_ms`/`b`.
+- **[Decisão] `boot.config` fica sempre nula.** O protocolo não transmite a configuração do boot e a Fase 1 **não** inclui registro de configuração no primeiro bloco; nenhuma análise depende da coluna, que fica reservada.
 - **`desafio.ack_seq_emitido`/`c_conf_emitido`** guardam o que o Desafio 0x01 levou. Isso permite auditar e reconstruir os bytes do desafio sem chamar o KMS.
 - **`boot.pendente_tempo DEFAULT true`:** todo boot novo nasce pendente, porque precisa ao menos da estimativa por vizinhos.
 - **`boot.deslocamento_max_ms`:** cada bloco foi gerado antes de ser recebido, então `o + t_fim(bloco) ≤ recebido_em(bloco)`. A ingestão mantém o mínimo de `recebido_em_ms − t_fim_ms`. Esse é um limite superior gratuito para boots sem âncora (spec 06).
@@ -388,6 +445,7 @@ DROP TABLE pid;
 -- +goose Up
 CREATE TABLE leitura (
   dongle_id    integer  NOT NULL,
+  geracao_boot integer  NOT NULL,
   boot_id      integer  NOT NULL,
   t_ms         bigint   NOT NULL,          -- t0_ms do bloco + Δt
   pid          smallint NOT NULL REFERENCES pid (pid),
@@ -397,17 +455,18 @@ CREATE TABLE leitura (
   recebido_em  timestamptz NOT NULL
 );
 SELECT create_hypertable('leitura', 'recebido_em', chunk_time_interval => INTERVAL '1 day');
-CREATE INDEX leitura_viagem ON leitura (dongle_id, boot_id, pid, t_ms);
+CREATE INDEX leitura_viagem ON leitura (dongle_id, geracao_boot, boot_id, pid, t_ms);
 ALTER TABLE leitura SET (
   timescaledb.compress,
   timescaledb.compress_segmentby = 'dongle_id, pid',
-  timescaledb.compress_orderby   = 'boot_id, t_ms'
+  timescaledb.compress_orderby   = 'geracao_boot, boot_id, t_ms'
 );
 SELECT add_compression_policy('leitura',
   COALESCE(NULLIF(current_setting('tccelta.compressao_apos', true), ''), '7 days')::interval);
 
 CREATE TABLE posicao (
   dongle_id    integer NOT NULL,
+  geracao_boot integer NOT NULL,
   boot_id      integer NOT NULL,
   t_ms         bigint  NOT NULL,
   geom         geography(PointZ, 4326) NOT NULL,  -- lon/lat graus, alt metros
@@ -416,11 +475,11 @@ CREATE TABLE posicao (
   recebido_em  timestamptz NOT NULL
 );
 SELECT create_hypertable('posicao', 'recebido_em', chunk_time_interval => INTERVAL '1 day');
-CREATE INDEX posicao_viagem ON posicao (dongle_id, boot_id, t_ms);
+CREATE INDEX posicao_viagem ON posicao (dongle_id, geracao_boot, boot_id, t_ms);
 ALTER TABLE posicao SET (
   timescaledb.compress,
   timescaledb.compress_segmentby = 'dongle_id',
-  timescaledb.compress_orderby   = 'boot_id, t_ms'
+  timescaledb.compress_orderby   = 'geracao_boot, boot_id, t_ms'
 );
 SELECT add_compression_policy('posicao',
   COALESCE(NULLIF(current_setting('tccelta.compressao_apos', true), ''), '7 days')::interval);
@@ -473,14 +532,17 @@ GRANT SELECT, UPDATE         ON dongle_estado                                  T
 GRANT SELECT, INSERT         ON bloco_bruto, ancora_tempo, leitura, posicao    TO tccelta_api;
 GRANT SELECT, INSERT, UPDATE ON bloco_rejeitado, desafio, boot                 TO tccelta_api;
 GRANT SELECT, INSERT         ON lacuna, alerta                                 TO tccelta_api;
+GRANT SELECT                 ON grupo_ancora                                   TO tccelta_api;
 
 -- Worker: lê o contexto e grava só a reta de tempo, a fila e os alertas.
 GRANT SELECT                 ON dongle, dongle_estado, bloco_bruto, ancora_tempo, lacuna, pid TO tccelta_worker;
 GRANT SELECT, UPDATE         ON boot                                           TO tccelta_worker;
 GRANT SELECT, UPDATE (resultado) ON desafio                                    TO tccelta_worker;
 GRANT SELECT, INSERT         ON alerta                                         TO tccelta_worker;
+GRANT SELECT, INSERT, DELETE ON grupo_ancora                                   TO tccelta_worker;   -- regravados a cada recálculo (spec 06)
 
--- O salto administrativo (tccelta admin saltar, spec 05) roda como tccelta_dono, dono das tabelas.
+-- O reprocessamento (tccelta worker reprocessar, spec 05) roda como tccelta_dono, dono das tabelas,
+-- a partir do contêiner `ferramentas`; o worker contínuo continua sem escrever em leitura/posicao.
 
 -- Provisionamento: cria dongles e seu estado inicial.
 GRANT SELECT, INSERT         ON dongle, dongle_estado                          TO tccelta_provisionador;
@@ -533,7 +595,7 @@ SELECT pid, nome, unidade, n_bytes, fator, deslocamento, valor_min, valor_max FR
 
 | Arquivo | Conteúdo |
 |---|---|
-| `backend/internal/banco/migrations/00001_extensoes.sql` … `00008_permissoes.sql` | DDL acima |
+| `backend/internal/banco/migrations/00001_extensoes.sql` … `00008_permissoes.sql` | DDL acima (inclui `bloco_bruto` particionada, `geracao_boot`, `grupo_ancora`, `dongle.t_lat_s`) |
 | `backend/internal/banco/migracoes.go` | `embed` + `Migrar(ctx, db)` + `Status` |
 | `backend/internal/banco/queries/dongle.sql`, `pid.sql` | queries de cadastro |
 | `backend/internal/banco/migracoes_test.go` (`//go:build integracao`) | up → down-to 0 → up num Timescale do testcontainers |
@@ -552,6 +614,9 @@ SELECT pid, nome, unidade, n_bytes, fator, deslocamento, valor_min, valor_max FR
 4. **Hypertables:** `SELECT hypertable_name FROM timescaledb_information.hypertables` devolve `leitura` e `posicao`. `timescaledb_information.jobs` lista as duas políticas de compressão.
 5. **NOTIFY de PID:** uma sessão faz `LISTEN pid_alterado` e outra faz `INSERT INTO pid …`. A notificação chega.
 6. **Seed:** `SELECT count(*) FROM pid` = 7.
+7. **Partições:** `SELECT count(*) FROM pg_inherits WHERE inhparent = 'bloco_bruto'::regclass` = 16; um `INSERT` replicado com o mesmo `(dongle_id, seq)` vira conflito (PK global), e `EXPLAIN SELECT … WHERE dongle_id = 7` toca uma única partição; `UPDATE bloco_bruto` falha em qualquer partição.
+8. **Geração:** `UPDATE dongle_estado SET ultimo_boot_id = ultimo_boot_id - 1` (mesma geração) falha com `check_violation`; subir a geração e reduzir `ultimo_boot_id` na mesma `UPDATE` é aceito; dois `boot` com o mesmo `boot_id` em gerações diferentes coexistem.
+9. **Grupos:** apagar um `boot` apaga seus `grupo_ancora` (`ON DELETE CASCADE`); o papel `tccelta_api` não consegue `INSERT` em `grupo_ancora`.
 
 ## Passos ordenados com checkpoints
 
@@ -566,21 +631,22 @@ SELECT pid, nome, unidade, n_bytes, fator, deslocamento, valor_min, valor_max FR
 - [ ] `pid` tem os 7 PIDs (0x04, 0x05, 0x0C, 0x0D, 0x10, 0x2F, 0x49).
 - [ ] `leitura` e `posicao` são hypertables com compressão e índice `(dongle_id, boot_id, [pid,] t_ms)`.
 - [ ] Ida e volta (`up`/`down`) funciona.
-- [ ] A API não consegue alterar nem apagar `bloco_bruto`.
+- [ ] A API não consegue alterar nem apagar `bloco_bruto` (tabela particionada por hash, 16 partições).
+- [ ] `boot` é identificado por `(dongle_id, geracao_boot, boot_id)`; a volta do `boot_id` não colide.
 
 ## Riscos
 
 | Risco | Mitigação |
 |---|---|
-| `boot_id` é u16 e dá a volta após 65.536 boots; a PK `(dongle_id, boot_id)` colidiria | improvável no TCC; a ingestão detecta boot "reaparecendo" com `seq_primeiro` muito à frente de `seq_ultimo` do registro existente e gera o alerta `boot_id_reutilizado`; ver [Aberto] |
+| `boot_id` é u16 e dá a volta após 65.536 boots | resolvido pela `geracao_boot` na PK (decisão do autor); a ingestão a incrementa quando o `boot_id` recua em ordem de `seq` e gera o alerta `geracao_boot_avancou`; limite: menos de 65.536 boots entre dois blocos que chegam ao servidor |
 | `t_ms` é u32 e dá a volta após 49,7 dias de boot contínuo | guardado como `bigint`; a ingestão aplica *unwrap* por boot (spec 05) quando `t0_ms` cai mais de 2³¹ em relação ao último bloco do mesmo boot |
-| `bloco_bruto` cresce rápido | [Aberto] particionamento/arquivamento |
+| `bloco_bruto` cresce rápido | particionada por hash de `dongle_id` desde já (16 partições); arquivamento/object storage fica como evolução futura |
 | sqlc não entender sintaxe Timescale/PostGIS | Checkpoint 3 com plano B (`DO $$`) |
 
-## [Aberto]
+## Decisões do autor (antes em aberto)
 
-- **[Aberto] Particionar `bloco_bruto`.** Recomendação: quando passar de ~100 GB, particionar por `dongle_id` com hash (`PARTITION BY HASH (dongle_id)`, 16 partições); a PK continua válida. Outra opção é mover o `payload` para object storage (MinIO) e guardar o hash.
-- **[Aberto] Encadeamento por hash dos blocos aceitos** (proteção contra o adversário AD5 no banco). Recomendação: coluna `hash_cadeia = sha256(hash_anterior || payload || assinatura)` por dongle e publicação periódica do último hash fora do banco. Fica fora do escopo mínimo.
-- **[Aberto] `boot.config`.** O protocolo atual não envia a configuração do boot. Recomendação: a Fase 1 pode incluí-la num registro de configuração no primeiro bloco de cada boot. Até lá, a coluna fica nula.
-- **[Aberto] Camada gold** (`viagem`, `amostra_alinhada`, `viagem_metricas`). Recomendação: fase posterior. A coluna `boot.pendente_gold` já existe como gancho.
-- **[Aberto] Volta do `boot_id`.** Recomendação: se virar problema real, acrescentar uma `geracao_boot` derivada de `seq` à PK.
+- **[Decisão] `bloco_bruto` particionada por hash de `dongle_id` já** (16 partições; ver a decisão acima). Payload em object storage (MinIO) não é adotado.
+- **[Decisão] Encadeamento por hash dos blocos aceitos: fora do escopo mínimo, só documentado.** Proteção contra o adversário AD5 (acesso ao banco): uma coluna `hash_cadeia = sha256(hash_anterior ‖ payload ‖ assinatura)` por dongle, com publicação periódica do último hash fora do banco, tornaria apagar ou reordenar blocos detectável. Nada disso é implementado: AD5 no banco fica como **limitação declarada** no texto do TCC (a API já não tem `UPDATE`/`DELETE` em `bloco_bruto`, mas o dono do banco tem).
+- **[Decisão] `boot.config` sempre nula** (o protocolo não envia a configuração; a Fase 1 não acrescenta registro de configuração).
+- **[Decisão] Camada gold: fase posterior;** só o gancho `boot.pendente_gold` (sem consumidor no worker).
+- **[Decisão] `geracao_boot` na PK já** (ver acima).

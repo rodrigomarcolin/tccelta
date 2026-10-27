@@ -8,7 +8,8 @@ Rodar o mesmo binário em modo `worker` para:
 
 1. recalcular a reta de tempo de cada boot (`a_ms`, `b`, `incerteza_base_ms`, `origem_tempo`), conforme `handshake-servidor-worker.puml` e a seção "Tempo absoluto" do `server-specification.md`. Isso inclui grupos de âncoras a menos de 10 min, interseção de intervalos, reta por mínimos quadrados ponderados, alerta de deriva acima de 40 ppm e boot sem âncora estimado pelos vizinhos;
 2. expirar desafios não respondidos;
-3. servir de gancho para a camada gold (fora do escopo).
+3. persistir os grupos de âncoras de cada boot (`grupo_ancora`), para o cálculo barato da incerteza por leitura;
+4. servir de gancho para a camada gold (fica para fase posterior: só o `boot.pendente_gold`).
 
 O processamento usa goroutines, `LISTEN/NOTIFY` e `FOR UPDATE SKIP LOCKED`.
 
@@ -40,7 +41,7 @@ tccelta worker
 | `ANCORA_SPAN_MIN` | `1h` | intervalo mínimo entre centros de grupos para estimar `b ≠ 0` |
 | `MEIA_LARGURA_MIN_MS` | `0.5` | piso da meia largura (evita peso infinito) |
 
-`banco.Escutar` usa uma **conexão dedicada** (não do pool) com `LISTEN boot_pendente` e `WaitForNotification`. Se a conexão cair, ela reconecta com backoff de 1 s a 30 s e emite um sinal sintético ao reconectar, porque notificações podem ter sido perdidas. Os sinais são coalescidos num canal com buffer 1: vários `NOTIFY` viram uma única drenagem. O payload (`dongle_id:boot_id`) só vai para o log; a fonte da verdade é a coluna `boot.pendente_tempo`.
+`banco.Escutar` usa uma **conexão dedicada** (não do pool) com `LISTEN boot_pendente` e `WaitForNotification`. Se a conexão cair, ela reconecta com backoff de 1 s a 30 s e emite um sinal sintético ao reconectar, porque notificações podem ter sido perdidas. Os sinais são coalescidos num canal com buffer 1: vários `NOTIFY` viram uma única drenagem. O payload (`dongle_id:geracao_boot:boot_id`) só vai para o log; a fonte da verdade é a coluna `boot.pendente_tempo`.
 
 ### Uma unidade de trabalho = um boot = uma transação
 
@@ -55,6 +56,7 @@ TX1 (statement_timeout 10 s):
        est  := tempo.EstimarPorVizinhos(ant, prox, faixa(b), b.deslocamento_max_ms, cfg)
   senão: est := sem estimativa (boot só conhecido pelo handshake, sem dados ainda)
   AtualizarTempoBoot(b, est)  → pendente_tempo = false
+  SubstituirGruposAncora(b, est.Grupos)   ← apaga os grupos antigos e grava os atuais (nenhum, se origem ≠ 'ancoras')
   para cada alerta em est.Alertas: InserirAlertaSeNovo(...)
 COMMIT
 TX2 (só se est.Origem == 'ancoras' e a reta mudou; lock_timeout 3 s):
@@ -85,6 +87,7 @@ type Ancora struct{ TMs int64; S1Ms, S2Ms float64 }
 type Grupo struct {
     Lo, Hi   float64 // limites do deslocamento o = hora_real − t_ms
     TCentro  float64 // média dos t_ms das âncoras do grupo
+    TPrimeiro, TUltimo int64 // t_ms da primeira e da última âncora do grupo
     N        int
 }
 func (g Grupo) Centro() float64     { return (g.Lo + g.Hi) / 2 }
@@ -97,7 +100,7 @@ type Estimativa struct {
     B                float64
     IncertezaBaseMs  int
     Origem           string   // "ancoras" | "vizinhos" | "" (sem estimativa)
-    Grupos           []Grupo  // só para log/teste (não persistido, como no doc)
+    Grupos           []Grupo  // persistidos em `grupo_ancora` pelo worker (decisão do autor; o doc pedia para não persistir)
     Alertas          []Alerta
 }
 
@@ -120,8 +123,8 @@ type ReferenciaVizinho struct {
 type FaixaBoot struct{ TMsPrimeiro, TMsUltimo int64 }
 func EstimarPorVizinhos(ant, prox *ReferenciaVizinho, f FaixaBoot, deslocMaxMs *float64, c Config) Estimativa
 
-// Incerteza de uma leitura (para a camada gold, futura): meia largura do grupo
-// mais próximo + DerivaMax·|t − t_centro|.
+// Incerteza de uma leitura: meia largura do grupo mais próximo + DerivaMax·|t − t_centro|.
+// Os grupos vêm de `grupo_ancora` (ListarGruposDoBoot), sem refazer o agrupamento.
 func Incerteza(t int64, grupos []Grupo, c Config) float64
 ```
 
@@ -199,7 +202,7 @@ O `seq` ordena os boots (`boot.seq_primeiro`). Para o boot B com faixa `[t_ini, 
 
 ```sql
 -- name: PegarBootPendente :one
-SELECT dongle_id, boot_id, seq_primeiro, t_ms_primeiro, t_ms_ultimo, deslocamento_max_ms,
+SELECT dongle_id, geracao_boot, boot_id, seq_primeiro, t_ms_primeiro, t_ms_ultimo, deslocamento_max_ms,
        a_ms, b, origem_tempo
 FROM boot
 WHERE pendente_tempo
@@ -209,18 +212,18 @@ FOR UPDATE SKIP LOCKED;
 
 -- name: ListarAncorasDoBoot :many
 SELECT t_ms, s1, s2 FROM ancora_tempo
-WHERE dongle_id = @dongle_id AND boot_id = @boot_id
+WHERE dongle_id = @dongle_id AND geracao_boot = @geracao_boot AND boot_id = @boot_id
 ORDER BY t_ms;
 
 -- name: BootAncoradoAnterior :one
-SELECT boot_id, a_ms, b, incerteza_base_ms, t_ms_primeiro, t_ms_ultimo
+SELECT geracao_boot, boot_id, a_ms, b, incerteza_base_ms, t_ms_primeiro, t_ms_ultimo
 FROM boot
 WHERE dongle_id = @dongle_id AND origem_tempo = 'ancoras' AND seq_primeiro < @seq_primeiro
 ORDER BY seq_primeiro DESC
 LIMIT 1;
 
 -- name: BootAncoradoSeguinte :one
-SELECT boot_id, a_ms, b, incerteza_base_ms, t_ms_primeiro, t_ms_ultimo
+SELECT geracao_boot, boot_id, a_ms, b, incerteza_base_ms, t_ms_primeiro, t_ms_ultimo
 FROM boot
 WHERE dongle_id = @dongle_id AND origem_tempo = 'ancoras' AND seq_primeiro > @seq_primeiro
 ORDER BY seq_primeiro ASC
@@ -230,7 +233,23 @@ LIMIT 1;
 UPDATE boot SET
   a_ms = @a_ms, b = @b, incerteza_base_ms = @incerteza_base_ms, origem_tempo = @origem_tempo,
   tempo_atualizado_em = @agora, pendente_tempo = false
-WHERE dongle_id = @dongle_id AND boot_id = @boot_id;
+WHERE dongle_id = @dongle_id AND geracao_boot = @geracao_boot AND boot_id = @boot_id;
+
+-- name: ApagarGruposAncora :exec
+DELETE FROM grupo_ancora
+WHERE dongle_id = @dongle_id AND geracao_boot = @geracao_boot AND boot_id = @boot_id;
+
+-- name: CopiarGruposAncora :copyfrom
+INSERT INTO grupo_ancora (dongle_id, geracao_boot, boot_id, ordem, t_primeiro_ms, t_ultimo_ms,
+                          t_centro_ms, lo_ms, hi_ms, n_ancoras, calculado_em)
+VALUES (@dongle_id, @geracao_boot, @boot_id, @ordem, @t_primeiro_ms, @t_ultimo_ms,
+        @t_centro_ms, @lo_ms, @hi_ms, @n_ancoras, @calculado_em);
+
+-- name: ListarGruposDoBoot :many
+SELECT ordem, t_primeiro_ms, t_ultimo_ms, t_centro_ms, lo_ms, hi_ms, n_ancoras
+FROM grupo_ancora
+WHERE dongle_id = @dongle_id AND geracao_boot = @geracao_boot AND boot_id = @boot_id
+ORDER BY ordem;
 
 -- name: MarcarVizinhosSemAncora :execrows
 -- Todos os boots sem âncora entre o boot ancorado anterior e o seguinte (por seq).
@@ -248,11 +267,11 @@ WHERE dongle_id = @dongle_id
 
 -- name: InserirAlertaSeNovo :exec
 -- Evita repetir o mesmo alerta a cada recálculo (janela de 24 h por boot e tipo).
-INSERT INTO alerta (dongle_id, boot_id, tipo, detalhe)
-SELECT @dongle_id, @boot_id, @tipo, @detalhe
+INSERT INTO alerta (dongle_id, geracao_boot, boot_id, tipo, detalhe)
+SELECT @dongle_id, @geracao_boot, @boot_id, @tipo, @detalhe
 WHERE NOT EXISTS (SELECT 1 FROM alerta
-                  WHERE dongle_id = @dongle_id AND boot_id = @boot_id AND tipo = @tipo
-                    AND criado_em > @agora - INTERVAL '24 hours');
+                  WHERE dongle_id = @dongle_id AND geracao_boot = @geracao_boot AND boot_id = @boot_id
+                    AND tipo = @tipo AND criado_em > @agora - INTERVAL '24 hours');
 
 -- name: ContarBootsPendentes :one
 SELECT count(*) FROM boot WHERE pendente_tempo;
@@ -267,8 +286,20 @@ SELECT count(*) FROM boot WHERE pendente_tempo;
 SELECT l.*, to_timestamp((bo.a_ms + (1 + bo.b) * l.t_ms) / 1000.0) AS ts,
        bo.origem_tempo, bo.incerteza_base_ms
 FROM leitura l
-JOIN boot bo USING (dongle_id, boot_id)
+JOIN boot bo USING (dongle_id, geracao_boot, boot_id)
 WHERE bo.a_ms IS NOT NULL;
+
+-- Incerteza de cada leitura (ms) a partir dos grupos persistidos: meia largura do grupo mais próximo
+-- mais a deriva máxima (DERIVA_MAX_PPM) vezes a distância ao centro dele. Só boots com origem 'ancoras'.
+SELECT l.t_ms, l.valor, g.u AS incerteza_ms
+FROM leitura l
+JOIN LATERAL (
+  SELECT (ga.hi_ms - ga.lo_ms) / 2 + 40e-6 * abs(l.t_ms - ga.t_centro_ms) AS u
+  FROM grupo_ancora ga
+  WHERE ga.dongle_id = l.dongle_id AND ga.geracao_boot = l.geracao_boot AND ga.boot_id = l.boot_id
+  ORDER BY abs(l.t_ms - ga.t_centro_ms)
+  LIMIT 1
+) g ON true;
 ```
 
 ### Métricas e logs
@@ -279,7 +310,8 @@ WHERE bo.a_ms IS NOT NULL;
 - `tccelta_worker_alertas_total{tipo}`
 - `tccelta_worker_desafios_expirados_total`
 - `tccelta_worker_escuta_reconexoes_total`
-- Log `worker.boot_recalculado{dongle_id, boot_id, origem, a_ms, b_ppm, incerteza_ms, grupos, ancoras}`.
+- `tccelta_worker_grupos_gravados_total`
+- Log `worker.boot_recalculado{dongle_id, geracao_boot, boot_id, origem, a_ms, b_ppm, incerteza_ms, grupos, ancoras}`.
 
 ## Plano arquivo por arquivo
 
@@ -288,6 +320,7 @@ WHERE bo.a_ms IS NOT NULL;
 | `internal/tempo/ancoras.go` | `AgruparAncoras`, `AjustarReta`, `EstimarPorAncoras`, `Incerteza` |
 | `internal/tempo/vizinhos.go` | `EstimarPorVizinhos` |
 | `internal/tempo/desembrulhar.go` | (spec 05) |
+| `internal/tempo/grupos.go` | (parte de `ancoras.go`) conversão `Grupo` ⇄ linha de `grupo_ancora` e `Incerteza` sobre os grupos persistidos |
 | `internal/tempo/*_test.go` | casos abaixo + propriedades |
 | `internal/banco/queries/worker.sql` | queries acima |
 | `internal/banco/escuta.go` | `Escutar` |
@@ -321,6 +354,8 @@ WHERE bo.a_ms IS NOT NULL;
 4. API marcando pendente durante o processamento (teste que segura o `FOR UPDATE`) ⇒ o boot é reprocessado depois.
 4b. Lote com bloco BOOT (upsert de 2 boots) concorrente com a TX2 do worker no mesmo dongle, 200 repetições ⇒ nenhum `40P01` chega ao cliente.
 5. Expiração: desafio com `expira_em` no passado ⇒ `resultado = 'expirado'`; desafio com `tag_invalida` não é sobrescrito.
+6. Grupos persistidos: boot com 3 âncoras em 2 grupos ⇒ 2 linhas em `grupo_ancora` iguais a `Estimativa.Grupos` (`Lo`, `Hi`, `TCentro`, `N`); recalcular com uma âncora nova **substitui** (não acumula) as linhas; boot que passa de `ancoras` a `vizinhos` fica sem grupos; a consulta de incerteza por leitura devolve `meia_largura + 40 ppm·distância` do grupo mais próximo; o papel `tccelta_api` não consegue `INSERT` em `grupo_ancora`.
+7. Volta do `boot_id`: boots `(geracao 0, boot 5)` e `(geracao 1, boot 5)` do mesmo dongle são processados e ancorados independentemente (âncoras, grupos e vizinhos por `seq_primeiro`).
 
 ## Passos ordenados com checkpoints
 
@@ -343,10 +378,17 @@ WHERE bo.a_ms IS NOT NULL;
 | Salto de NTP do servidor gera âncoras incoerentes | detectado como `intersecao_vazia`/`relogio_servidor_regrediu`; grupos separados |
 | `t_ms` u32 com volta dentro do boot | `tempo.Desembrulhar` na ingestão e no handshake, com a mesma referência por boot; `ancora_tempo.t_ms` e `leitura.t_ms` ficam na mesma escala (spec 04, passo 7g) |
 | Fila crescendo (worker parado) | gauge `tccelta_worker_fila_tempo` + `/saude/viva` |
-| Boot com milhares de âncoras (dongle que reconecta muito) | O(n log n) por recálculo; aceitável. Se preciso, limitar às 500 âncoras mais recentes ([Aberto]) |
+| Boot com milhares de âncoras (dongle que reconecta muito) | O(n log n) por recálculo; aceitável. **Sem limite** (decisão do autor): usa todas as âncoras (melhor reta); monitorar `tccelta_worker_duracao_segundos` e `tccelta_worker_fila_tempo`, e só limitar às 500 mais recentes se a fila crescer |
 
-## [Aberto]
+## Decisões do autor (antes em aberto)
 
-- **[Aberto] Camada gold** (`viagem`, `amostra_alinhada`, `viagem_metricas`). O worker já tem o gancho `boot.pendente_gold`, mas nenhum consumidor nesta fase. Recomendação: fase posterior, no mesmo padrão (`FOR UPDATE SKIP LOCKED` por boot).
-- **[Aberto] Persistir os grupos** para calcular a incerteza por leitura sem refazer os grupos. O doc pede explicitamente não persistir; manter assim.
-- **[Aberto] Calibrar `DERIVA_MAX_PPM`** com medição do cristal da placa (o doc sugere). Recomendação: o teste de bancada da spec 10 (dongle real, handshakes a cada 10 min por 24 h) produz o `b` medido.
+- **[Decisão] Camada gold: fase posterior.** O worker só mantém o gancho `boot.pendente_gold` (marcado pela ingestão), sem consumidor nesta fase. Quando vier, usa o mesmo padrão (`FOR UPDATE SKIP LOCKED` por boot) e lê `grupo_ancora` para a incerteza.
+- **[Decisão] Sem limite de âncoras por boot** (ver Riscos).
+- **[Decisão] Persistir os grupos de âncoras** em `grupo_ancora` (spec 02): desvio consciente do doc, que pedia para não persistir. Regravados por inteiro na TX1, junto com a reta do boot.
+- **[Decisão] `DERIVA_MAX_PPM = 40` do doc, mantido sem medir.** Não se faz a bancada de 24 h agora; o valor fica **sem validação** na placa usada (limitação registrada). Como seria medir (documentado, não executado):
+  1. **Montagem:** 1–3 dongles reais (`collector_twai_prod`/`debug` conforme o perfil) ligados em USB estável, com o simulador de ECU (ECUSim) alimentando o OBD, num ambiente de temperatura estável; app com o servidor real (Fase 3) e `T_lat` curto.
+  2. **Coleta:** forçar um handshake a cada ~10 min por 24 h (`FakeDongle`/script que reconecta, ou `AT#`/reset de sessão do dongle), deixando o RTT da âncora ≤ 2 s; o worker acumula `ancora_tempo` e `grupo_ancora`.
+  3. **Extração do `b` medido:** `SELECT dongle_id, geracao_boot, boot_id, b*1e6 AS ppm, incerteza_base_ms FROM boot WHERE origem_tempo = 'ancoras'` — só vale com span ≥ `ANCORA_SPAN_MIN` (1 h), então um boot contínuo de 24 h dá um `b` por dongle; repetir com variação de temperatura (dongle ao sol/ar-condicionado) para ver a faixa.
+  4. **RTT real da âncora:** `SELECT percentile_cont(ARRAY[0.5,0.95,0.99]) WITHIN GROUP (ORDER BY extract(epoch FROM s2 - s1)) FROM ancora_tempo` mostra quanto da janela de 2 s o enlace celular consome.
+  5. **Decisão:** `DERIVA_MAX_PPM` = máximo de `|b|` medido entre dongles/temperaturas + margem (ex. 25 %); se o máximo medido for muito menor que 40 ppm, reduzir melhora a incerteza dos vizinhos; se maior, o alerta `deriva_excessiva` já dispararia.
+  6. **Registro:** relatório curto em `backend/docs/relatorios/` com `b` por dongle, RTT p50/p95/p99 e o valor escolhido. Não faz parte dos testes de carga (spec 10), que usam o simulador Go.

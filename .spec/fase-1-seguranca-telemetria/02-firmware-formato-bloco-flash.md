@@ -29,7 +29,7 @@ transporte BLE (spec 04).
 | Peça | Onde | O que faz hoje |
 |---|---|---|
 | Layout | `src/collector/BlockFormat.h` | Cabeçalho `seq u32 @0 \| boot_id u16 @4 \| t_ms inicial u32 @6 \| tamanho u16 @10`; PID 5 B (`tipo=PID \| Δt i16 \| valor 2 B`); GPS 15 B (`0xFF \| Δt i16 \| lat i32 \| lon i32 \| alt i32`); `kBlockSize = 1024`; `struct Block { uint8_t bytes[1024]; size_t length; }`; `stampHeader(seq, bootId)`. |
-| Montagem | `src/collector/BlockBuilder.{h,cpp}` | Abre no 1º registro; Δt **com sinal** (GPS pode ser anterior ao `t_ms` inicial); fecha preenchendo `t_ms` inicial e `tamanho`. |
+| Montagem | `src/collector/BlockBuilder.{h,cpp}` | Abre no 1º registro; hoje o Δt é `i16` **com sinal** (GPS pode ser anterior ao `t_ms` inicial); fecha preenchendo `t_ms` inicial e `tamanho`. Esta fase muda para `u16` sem sinal (**[Decisão]** abaixo): `deltaFor` recusa `tMs < _tStartMs` e `tMs − _tStartMs > 65 535`. |
 | Gravação | `src/collector/BlockWriter.{h,cpp}` | `stampHeader` → `store.append` (2 tentativas) → `persistence.saveLastSeq(seq)` → `SeqCounter::commit()`. Falha dupla: bloco descartado, `seq` não consumido. |
 | Interface | `src/collector/IBlockStore.h` | `append`, `read(seq, Block&) → bool`, `deleteUpTo`, `empty`, `oldestSeq`, `newestSeq`, `lostBlocks`; `ISeqPersistence::saveLastSeq`. |
 | Log | `src/storage/LittleFsBlockStore.{h,cpp}` | Diretório `/log`, arquivos `/log/<firstSeq %010lu>.seg` com até 64 blocos **só com os dados** (sem tag/CRC/cabeçalho de arquivo); índice em RAM de até 256 segmentos; `ensureSpace` descarta o segmento mais antigo (`SEG_DROP`); `deleteUpTo` só remove segmentos inteiros e mantém sempre o mais novo; mutex interno. |
@@ -41,7 +41,7 @@ Conferência com o documento:
 | Figura | Documento | Código atual | Ação |
 |---|---|---|---|
 | Fig. 10 | `seq(4) \| boot_id(2) \| t_ms inicial(4) \| tamanho(2)` + registros até 1012 B | Idêntico (offsets 0/4/6/10; `tamanho` inclui o cabeçalho) | Nenhuma. |
-| Fig. 11 PID | `tipo \| Δt(2) \| valor` = 5 B | Idêntico; Δt é `i16` | **[Decisão]** Δt continua com sinal (o documento só diz "2 bytes"); o servidor (Fase 3) já o lê como `i16`. |
+| Fig. 11 PID | `tipo \| Δt(2) \| valor` = 5 B | Idêntico no tamanho; Δt é `i16` no código | **[Decisão]** Δt **sem sinal (`u16`), como no documento** ("deslocamento a partir do `t_ms` inicial"): o código troca `int16_t` por `uint16_t` em `BlockBuilder::deltaFor` e `BlockFormat.h`, o servidor (Fase 3) passa a lê-lo como `u16`. Os bytes de Δt ≥ 0 são idênticos, então os vetores de teste não mudam. Custo: um GPS cujo `tMs` é anterior ao `t_ms` inicial do bloco aberto **deixa de ser representável nele**; ver o tratamento abaixo. |
 | Fig. 11 marcador | `0xFE`/`0xFD \| Δt(2) \| from_seq(4) \| to_seq(4)` = 11 B | Não existe | Criar (§2–3). PIDs `0xFD`/`0xFE` passam a ser reservados. |
 | Fig. 8 | `dados(1024) \| tag(32) \| CRC32(4)` = 1060 B fixos | Só `dados(tamanho)` | **[Decisão do orquestrador]** tag e CRC sobre os `tamanho` bytes; registro na flash com `tamanho + T + 4` bytes (§5). |
 | Fig. 9 | `0x03 \| L(2) \| dados \| tag(32)` | Não existe | Montado no envio (spec 04/05); `L = tamanho + T`. |
@@ -62,15 +62,30 @@ Conferência com o documento:
 
 | Registro | Tipo (byte 0) | Layout | Tamanho |
 |---|---|---|---|
-| Leitura de PID | `0x00`–`0xFC` (= código do PID) | `tipo u8 \| Δt i16 LE \| A u8 \| B u8` (B = 0 em PID de 1 byte) | 5 |
-| Marcador LOSS | `0xFD` | `0xFD \| Δt i16 LE \| from_seq u32 LE \| to_seq u32 LE` | 11 |
-| Marcador BOOT | `0xFE` | `0xFE \| Δt i16 LE \| from_seq u32 LE \| to_seq u32 LE` | 11 |
-| Posição GPS | `0xFF` | `0xFF \| Δt i16 LE \| lat i32 LE (°×10⁷) \| lon i32 LE (°×10⁷) \| alt i32 LE (mm)` | 15 |
+| Leitura de PID | `0x00`–`0xFC` (= código do PID) | `tipo u8 \| Δt u16 LE \| A u8 \| B u8` (B = 0 em PID de 1 byte) | 5 |
+| Marcador LOSS | `0xFD` | `0xFD \| Δt u16 LE \| from_seq u32 LE \| to_seq u32 LE` | 11 |
+| Marcador BOOT | `0xFE` | `0xFE \| Δt u16 LE \| from_seq u32 LE \| to_seq u32 LE` | 11 |
+| Posição GPS | `0xFF` | `0xFF \| Δt u16 LE \| lat i32 LE (°×10⁷) \| lon i32 LE (°×10⁷) \| alt i32 LE (mm)` | 15 |
 
 **[Decisão]** `validate(CollectorConfig)` passa a rejeitar PID ≥ `0xFD`
 (`ConfigError::InvalidPid`, resposta `?` ao `AT#PID`), para nenhum registro de
 leitura colidir com marcador/GPS. Nenhum PID do Serviço 01 usado no projeto
 chega perto disso.
+
+**[Decisão] Δt sem sinal (`u16`) e GPS anterior ao bloco aberto.** O
+deslocamento é `tMs − t_ms inicial`, em `0…65 535` ms (o bloco fecha em até
+`CONFIG.flush`, bem abaixo disso). `BlockBuilder::deltaFor` recusa `tMs`
+anterior ao `t_ms` inicial (o GPS é marcado ao chegar o comando e pode ter
+`tMs` menor que o do 1º registro do bloco) e deslocamentos acima de 65 535;
+`addPid`/`addGps` devolvem `false` e o `Collector::append` existente
+**fecha o bloco** (`BLK_CLOSE reason=full`) e abre outro cujo `t_ms` inicial é o
+`tMs` do registro recusado — nenhum campo novo, nenhum registro reordenado.
+Consequência para a Fase 3: o `t_ms` inicial **não é crescente** entre blocos
+consecutivos (o bloco novo pode começar antes do fim do anterior), então o
+servidor trata o intervalo de cada bloco como `[t0, t0 + Δt_max]` e agrega
+`t_ms_primeiro`/`t_ms_ultimo` do boot por `min`/`max`, não pelo primeiro e
+pelo último bloco. Teste nativo: GPS com `tMs = t0 − 50` fecha o bloco e abre
+outro com `t0 − 50`; `Δt = 65 536` também.
 
 ### 3. Blocos marcadores
 
@@ -84,7 +99,7 @@ Bloco 0x03 comum cuja área de dados tem **um único** registro de 11 B
 | 6 | `t_ms` u32 | `millis()` ao montar | `0` |
 | 10 | `tamanho` u16 | `23` | `23` |
 | 12 | tipo u8 | `0xFE` | `0xFD` |
-| 13 | Δt i16 | `0` | `0` |
+| 13 | Δt u16 | `0` | `0` |
 | 15 | `from_seq` u32 | último `seq` na flash + 1 (spec 03) | 1º `seq` da faixa perdida |
 | 19 | `to_seq` u32 | `R − 1` | último `seq` da faixa perdida |
 | — | Na flash? | **Sim**, gravado como bloco comum | **Não**; montado e assinado a cada envio (spec 05) |
@@ -436,4 +451,4 @@ Em placa (`collector_mock_debug`):
 | Corrompimento do campo `tamanho` | Varredura de boot perde o resto do segmento | Os `seq` faltantes viram LOSS no envio (spec 05) — perda declarada, não silenciosa. |
 | Troca de perfil numa placa com log | Segmentos com `tag_len` diferente convivem; o servidor de bancada só verifica um perfil | Documentado: trocar de perfil = `COLLECTOR_WIPE_ON_BOOT` uma vez + reset do servidor de bancada. |
 | `kLargeCapacity` 2600 B estático por tarefa que emite FLUSH | +200 B de RAM | Aceitável; só com `COLLECTOR_EVENTS`. |
-| **[Aberto]** Δt com sinal vs. documento ("deslocamento a partir do `t_ms` inicial") | Interpretação do servidor | Manter `i16` (já é o contrato da Fase 3); ajustar o texto do documento. |
+| **[Decisão]** Δt sem sinal (`u16`), como no documento | GPS anterior ao `t_ms` inicial não cabe no bloco aberto; Fase 3 lê `u16` | `Collector::append` fecha o bloco (`BLK_CLOSE reason=full`) e abre outro com o `tMs` do GPS como `t_ms` inicial (§2); a Fase 3 não pode supor `t_ms` inicial crescente entre blocos. |

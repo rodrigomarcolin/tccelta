@@ -343,8 +343,11 @@ automático (tabela §5.5); o usuário só vê instruções quando precisa agir
 
 ### 5.7 Camada PSK legada e coordenação com a Fase 1
 
-Obrigatório nesta fase (independe do [Aberto] A8): **sair do caminho de
-conexão**.
+**[Decisão] A8 = opção A (remover, com tag), já executada na Fase 1**
+(spec 07 §1 da Fase 1; branch `chore/remove-security`). Esta fase **não
+remove nada**: só confere que o app que recebe já está sem PSK no caminho de
+conexão. Os itens abaixo ficam como lista de conferência (se algum ainda
+existir na base em que esta fase for aplicada, fazer como descrito):
 
 1. `connection_providers.dart`: `dongleDatasourceProvider` volta a
    `DongleDatasource(ref.read(bleServiceProvider))`; remover import de
@@ -365,19 +368,17 @@ conexão**.
      classe e apagar só `getPsk/setPsk/clearPsk/getSecurityMode/setSecurityMode`
      e as chaves `psk_hex`/`security_mode`; senão, o arquivo sai inteiro.
 
-Estado herdado da Fase 1 (spec 07 §1): o transporte PSK já está fora do
-caminho de conexão por padrão, atrás de
-`const bool.fromEnvironment('LEGACY_PSK_TRANSPORT')` em
-`connection_providers.dart` e `scan_screen.dart`; nenhum arquivo foi apagado.
-Em qualquer opção abaixo, esta fase **remove a flag e os dois ramos
-condicionais** junto com o código legado.
+Estado herdado da Fase 1 (spec 07 §1): a camada PSK foi **apagada** (não
+existe a flag `LEGACY_PSK_TRANSPORT`). O histórico da implementação está na
+tag `versao-custom-secure-ble` (a tag `legado/psk-app-crypto` prevista
+originalmente **não é necessária**).
 
-Destino do código ([Aberto] A8):
+Destino do código (A8 — decidido: **A, já feito**):
 
 | Opção | O que fazer |
 |---|---|
-| **A — remover (recomendada)** | Criar a tag `legado/psk-app-crypto` no commit anterior; apagar `core/crypto/**`, `infra/ble/{encrypted_ble_connection,ble_security_handshake}.dart`, `infra/ble/README.md` (reescrever para o fluxo LESC), `data/datasources/secure_dongle_datasource.dart`, `domain/ble/security_mode.dart`, `ui/settings/view/{psk_settings_screen,qr_scan_screen,camera_permissions_screen}.dart`, `ui/settings/view_model/{qr_scan_view_model,camera_permissions_view_model}.dart`, providers de PSK/modo/câmera em `ui/settings/settings_providers.dart`, a pilha de permissão de câmera (`data/datasources/camera_permissions_datasource.dart`, `data/repositories/camera_permissions_repository_impl.dart`, `domain/repositories/camera_permissions_repository.dart`), os testes correspondentes (`test/core/crypto/*`, `test/infra/ble/{ble_security_handshake_test,encrypted_ble_connection_test}.dart`, `test/ui/settings/{psk_settings_screen_test,camera_permissions_screen_test}.dart`, `test/src/ui/settings/view_model/*`, `test/src/data/repositories/camera_permissions_repository_impl_test.dart`); dependências `mobile_scanner` e `pointycastle` (se nenhuma outra fase as usar: `grep -rn "pointycastle\|mobile_scanner" lib`); `CAMERA` e `uses-feature` de câmera no `AndroidManifest.xml`; `NSCameraUsageDescription` no `Info.plist`. |
-| B — isolar como legado | Mover para `lib/src/legacy/app_layer_crypto/` (e testes para `test/legacy/`), sem provider, rota ou import a partir de `lib/src/` ativo; manter dependências. |
+| **A — remover (adotada; feita na Fase 1)** | Tag de histórico: `versao-custom-secure-ble` (em vez de criar `legado/psk-app-crypto`); apagar `core/crypto/**`, `infra/ble/{encrypted_ble_connection,ble_security_handshake}.dart`, `infra/ble/README.md` (reescrever para o fluxo LESC), `data/datasources/secure_dongle_datasource.dart`, `domain/ble/security_mode.dart`, `ui/settings/view/{psk_settings_screen,qr_scan_screen,camera_permissions_screen}.dart`, `ui/settings/view_model/{qr_scan_view_model,camera_permissions_view_model}.dart`, providers de PSK/modo/câmera em `ui/settings/settings_providers.dart`, a pilha de permissão de câmera (`data/datasources/camera_permissions_datasource.dart`, `data/repositories/camera_permissions_repository_impl.dart`, `domain/repositories/camera_permissions_repository.dart`), os testes correspondentes (`test/core/crypto/*`, `test/infra/ble/{ble_security_handshake_test,encrypted_ble_connection_test}.dart`, `test/ui/settings/{psk_settings_screen_test,camera_permissions_screen_test}.dart`, `test/src/ui/settings/view_model/*`, `test/src/data/repositories/camera_permissions_repository_impl_test.dart`); dependências `mobile_scanner` e `pointycastle` (se nenhuma outra fase as usar: `grep -rn "pointycastle\|mobile_scanner" lib`); `CAMERA` e `uses-feature` de câmera no `AndroidManifest.xml`; `NSCameraUsageDescription` no `Info.plist`. |
+| B — isolar como legado (descartada) | Mover para `lib/src/legacy/app_layer_crypto/` (e testes para `test/legacy/`), sem provider, rota ou import a partir de `lib/src/` ativo; manter dependências. |
 
 Comentários a corrigir em qualquer opção: `ui/telemetry/view_model/panel_view_model.dart`
 (cita `SecurityModeNotifier`), `forget_dongle_use_case.dart` (cita PSK),
@@ -408,11 +409,11 @@ Comentários a corrigir em qualquer opção: `ui/telemetry/view_model/panel_view
 | `lib/src/ui/connection/view/{connecting,connection_lost,scan,ble_permissions}_screen.dart` | §5.6 |
 | `lib/src/ui/connection/widgets/connection_guard.dart` | rotas |
 | `lib/src/ui/connection/actions/forget_dongle_action.dart` | diálogo iOS |
-| `lib/src/ui/more/view/more_screen.dart` | §5.7 |
+| `lib/src/ui/more/view/more_screen.dart` | §5.7 (sem o card "Criptografia"; **sem** card "Segurança do enlace", A9) |
 | `lib/src/router/app_routes.dart`, `app_router.dart` | `pairing`; remover rotas PSK |
 | `lib/main.dart` (ou o *bootstrap* atual) | limpeza de `psk_hex`/`security_mode` |
-| Camada PSK | §5.7 conforme A8 |
-| `pubspec.yaml`, `AndroidManifest.xml`, `Info.plist` | §5.7 (opção A) |
+| Camada PSK | §5.7: já removida na Fase 1 (A8 = A); só conferir |
+| `pubspec.yaml`, `AndroidManifest.xml`, `Info.plist` | §5.7 (opção A): conferir que `mobile_scanner`, `pointycastle`, `CAMERA` e `NSCameraUsageDescription` já saíram |
 | `mobile-app/CLAUDE.md` | Contrato: "o dongle exige pareamento LESC (bond) antes de qualquer escrita/notify"; nome anunciado `TCCeltaDongle`; remover menções à feature PSK e ao par `CameraPermissions*`; citar `securing` e `PairingScreen` na fatia `connection`. |
 | `test/support/fake_ble_service.dart` | §7 |
 
@@ -455,8 +456,9 @@ found!"), `fvm flutter test`.
    B5, B8, B10, B15 (Android).
 6. **iOS**: B9, B11 e o fluxo "Já pareei este iPhone". *Checkpoint:*
    tabela §5.3 confirmada; ajustes só no classificador.
-7. **Destino da camada legada** (A8) + manifest/plist/pubspec.
-   *Checkpoint:* `fvm flutter pub get`, build Android e iOS.
+7. **Conferir que a camada legada saiu** (A8 = A, feita na Fase 1) e
+   manifest/plist/pubspec. *Checkpoint:* `grep -rn "pointycastle\|mobile_scanner\|psk" lib pubspec.yaml`
+   vazio; `fvm flutter pub get`, build Android e iOS.
 8. **Documentação** (`mobile-app/CLAUDE.md`, `infra/ble/README.md`).
 
 ## 9. Critérios de aceite
@@ -499,12 +501,10 @@ found!"), `fvm flutter test`.
 - **[Decisão] D20** — Reconexão não insiste após erro de segurança (evita
   martelar o dongle e acumular `CONN_REJECT`); só `busy` tem novas
   tentativas.
-- **[Aberto] A8** — Destino da camada PSK: A (remover com tag) ou B (isolar
-  como legado). *Recomendação:* **A**. O firmware já não tem a contraparte,
-  então o código não serve para medir nada; a comparação para o TCC continua
-  em `docs/seguranca-ble-modelagem-ameacas.md` e a tag preserva a
-  implementação para consulta. Escolher B só se o autor quiser citar
-  arquivos do app no texto.
-- **[Aberto] A9** — Mostrar no "Mais" um card "Segurança do enlace" (LESC,
-  pareado/não pareado)? *Recomendação:* não nesta fase (o status de conexão
-  já aparece nas telas de conexão).
+- **[Decisão] A8** — Destino da camada PSK: **A (remover com tag)**, **já
+  feito na Fase 1**. O firmware não tem a contraparte, então o código não
+  serve para medir nada; a comparação para o TCC continua em
+  `docs/seguranca-ble-modelagem-ameacas.md` e a tag `versao-custom-secure-ble`
+  preserva a implementação para consulta.
+- **[Decisão] A9** — **Não criar** o card "Segurança do enlace" no "Mais"
+  nesta fase (o status de conexão já aparece nas telas de conexão).

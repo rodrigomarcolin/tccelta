@@ -33,8 +33,10 @@ require (
     github.com/prometheus/client_golang v1.20.x // métricas
     golang.org/x/time                  v0.8.x   // rate.Limiter
     golang.org/x/sync                  v0.10.x  // errgroup, semaphore
-    github.com/hashicorp/golang-lru/v2 v2.0.x   // cache DevId→dongle e limitadores (expirable LRU)
+    github.com/hashicorp/golang-lru/v2 v2.0.x   // cache DevId→dongle e limitadores locais (expirable LRU)
+    github.com/redis/go-redis/v9       v9.7.x   // estado compartilhado do rate limit (decisão do autor)
     github.com/testcontainers/testcontainers-go v0.34.x // só testes de integração
+    github.com/alicebob/miniredis/v2   v2.34.x  // só testes unitários do limitador
 )
 ```
 
@@ -111,7 +113,9 @@ Todas as variáveis têm um padrão seguro. Segredos aceitam a forma `<NOME>_ARQ
 | `INGESTAO_MAX_SIMULTANEAS` | `32` | semáforo por réplica (≤ `BANCO_POOL_MAX` − folga) |
 | `INGESTAO_ESPERA_VAGA` | `100ms` | espera máxima por vaga antes do 503 |
 | `RETRY_AFTER_SOBRECARGA` | `5` (s) | header do 503 (+ jitter de 0–3 s) |
-| `LIMITE_DESAFIO_MIN`, `LIMITE_RESPOSTA_MIN`, `LIMITE_BLOCOS_MIN`, `LIMITE_IP_MIN` | `6`, `12`, `120`, `120` | rate limit por DevId (e por IP nas rotas sem token) |
+| `LIMITE_DESAFIO_MIN`, `LIMITE_RESPOSTA_MIN`, `LIMITE_BLOCOS_MIN`, `LIMITE_IP_MIN` | `6`, `12`, `120`, `120` | rate limit por DevId (e por IP nas rotas sem token), **global entre réplicas** via Redis |
+| `REDIS_ENDERECO`, `REDIS_SENHA_ARQUIVO` | — | Redis do rate limit (spec 01). Vazio ⇒ só o limitador local por réplica (testes, execução sem Redis) |
+| `REDIS_TIMEOUT` | `50ms` | por chamada; estourou ⇒ conta como falha e cai para o limitador local |
 | `PROXIES_CONFIAVEIS` | `""` (o compose define `172.30.10.0/24`, sub-rede fixa da `borda`) | CIDRs cujo `X-Real-IP` é aceito |
 | `PERMITIR_PERFIL_NONE` | `false` | perfil sem autenticação só em bancada |
 | `LOG_NIVEL`, `LOG_FORMATO` | `info`, `json` | slog |
@@ -206,16 +210,16 @@ Registros (concatenados de 12 até `tamanho`):
 | Registro | Offset rel. | Campo | Tipo | Tam. | Total |
 |---|---|---|---|---|---|
 | PID (tipo ∉ {0xFD,0xFE,0xFF}) | 0 | tipo = código do PID | u8 | 1 | **5** |
-| | 1 | Δt (ms desde `t0_ms`, com sinal) | i16 LE | 2 | |
+| | 1 | Δt (ms desde `t0_ms`, **sem sinal**) | u16 LE | 2 | |
 | | 3 | A | u8 | 1 | |
 | | 4 | B (0 se o PID tem 1 byte) | u8 | 1 | |
 | GPS | 0 | 0xFF | u8 | 1 | **15** |
-| | 1 | Δt | i16 LE | 2 | |
+| | 1 | Δt | u16 LE | 2 | |
 | | 3 | lat (graus × 10⁷) | i32 LE | 4 | |
 | | 7 | lon (graus × 10⁷) | i32 LE | 4 | |
 | | 11 | alt (mm) | i32 LE | 4 | |
 | BOOT / LOSS | 0 | 0xFE (BOOT) / 0xFD (LOSS) | u8 | 1 | **11** |
-| | 1 | Δt | i16 LE | 2 | |
+| | 1 | Δt | u16 LE | 2 | |
 | | 3 | `from_seq` | u32 LE | 4 | |
 | | 7 | `to_seq` | u32 LE | 4 | |
 
@@ -257,7 +261,7 @@ type Perfil struct {
 const TamTagAuth = 16   // 0x01 (45/47 B), 0x02 (50 B), 0x04 (25 B): fixos
 var (
     PerfilHMAC = Perfil{"hmac", 32}
-    PerfilAsym = Perfil{"asym", 64} // [Aberto] spec 07
+    PerfilAsym = Perfil{"asym", 64} // depois do caminho HMAC estável (spec 07)
     PerfilNone = Perfil{"none", 0}  // só com PERMITIR_PERFIL_NONE=true
 )
 ```
@@ -333,25 +337,25 @@ func DecodificarBloco(v []byte, p Perfil) (Bloco, error) // valida L == Tamanho 
 
 type TipoRegistro uint8
 const (RegLoss TipoRegistro = 0xFD; RegBoot TipoRegistro = 0xFE; RegGPS TipoRegistro = 0xFF)
-type RegistroPID struct{ PID uint8; Dt int16; A, B uint8 }
-type RegistroGPS struct{ Dt int16; LatE7, LonE7, AltMm int32 }
-type RegistroMarcador struct{ Tipo TipoRegistro; Dt int16; FromSeq, ToSeq uint32 }
+type RegistroPID struct{ PID uint8; Dt uint16; A, B uint8 }
+type RegistroGPS struct{ Dt uint16; LatE7, LonE7, AltMm int32 }
+type RegistroMarcador struct{ Tipo TipoRegistro; Dt uint16; FromSeq, ToSeq uint32 }
 
 // Conteudo classifica o bloco depois de percorrer os registros.
 type Conteudo struct {
     Marcador *RegistroMarcador // não nil ⇒ bloco BOOT/LOSS (único registro)
     PIDs     []RegistroPID
     GPS      []RegistroGPS
-    DtMax    int16             // para t_fim do bloco
-    DtMin    int16
+    DtMax    uint16            // para t_fim do bloco
+    DtMin    uint16
 }
 func LerRegistros(dados []byte) (Conteudo, error) // ErrRegistroMalformado, ErrMarcadorComOutros
 
 // Builders usados pelo simulador e pelos testes
 type MontadorBloco struct{ /* ... */ }
 func NovoMontadorBloco(seq uint32, bootID uint16, t0Ms uint32) *MontadorBloco
-func (m *MontadorBloco) PID(pid uint8, dt int16, a, b uint8) bool
-func (m *MontadorBloco) GPS(dt int16, lat, lon, alt int32) bool
+func (m *MontadorBloco) PID(pid uint8, dt uint16, a, b uint8) bool
+func (m *MontadorBloco) GPS(dt uint16, lat, lon, alt int32) bool
 func (m *MontadorBloco) Dados() []byte                     // fecha: escreve tamanho
 func MontarMarcador(seq uint32, bootID uint16, t0 uint32, tipo TipoRegistro, from, to uint32) []byte
 func MontarBlocoTLV(dados, tag []byte) []byte
@@ -487,7 +491,7 @@ Arquivos de queries (detalhados nas specs indicadas): `dongle.sql`, `pid.sql` (0
 
 | Status | `codigo` | Onde | Ação do app (Tabela 5) |
 |---|---|---|---|
-| 400 | `corpo_malformado`, `base64_invalido`, `tlv_invalido`, `lote_malformado`, `devid_invalido` | todos | bug do app: registrar; no lote, descartar o buffer acima do ACK e reler (erro 0x07). Se o 400 persistir com os mesmos bytes relidos, o bloco do dongle é malformado: alerta + `tccelta admin saltar` (spec 05) |
+| 400 | `corpo_malformado`, `base64_invalido`, `tlv_invalido`, `lote_malformado`, `devid_invalido` | todos | bug do app: registrar; no lote, descartar o buffer acima do ACK e reler (erro 0x07). Se o 400 persistir com os mesmos bytes relidos, o bloco do dongle é malformado: alerta; sem saída manual no servidor, corrige-se o firmware/chave do dongle (spec 05) |
 | 401 | `token_ausente`, `token_invalido`, `token_expirado` | blocos, confirmação | novo handshake e reenvio |
 | 403 | `token_outro_dongle` | confirmação | descartar o token e fazer handshake |
 | 403 | `dongle_inativo` | todos | parar e avisar o usuário (não repetir) |
@@ -517,7 +521,17 @@ recuperar(panic→500) → idRequisicao(X-Request-Id) → logAcesso(slog) → me
 - `anotarS2` é o **primeiro** código específico da rota e roda antes de ler o corpo: `s2 := time.Now()` guardado no `context`. Os middlewares genéricos antes dele são O(µs) e não fazem I/O.
 - `limitarCorpo`: `http.MaxBytesReader` com `LOTE_MAX_BLOCOS × 1059 + 64` B no lote e `2 KiB` nos JSON.
 - `limitarConcorrencia`: `semaphore.Weighted(INGESTAO_MAX_SIMULTANEAS)` com `TryAcquire` + espera até `INGESTAO_ESPERA_VAGA`. Se não houver vaga, devolve `503` com `Retry-After = RETRY_AFTER_SOBRECARGA + jitter`.
-- `limitarDevId`/`limitarIP` (`internal/limites`): `rate.Limiter` por chave num `expirable.LRU` (100 mil chaves, TTL 10 min). **Por réplica**: com N réplicas, o limite efetivo é até N× maior (aceitável; ver [Aberto]).
+- `limitarDevId`/`limitarIP` (`internal/limites`): **[Decisão] limitador distribuído em Redis** (escolha do autor, no lugar do limite só por réplica). Duas camadas, na ordem:
+  1. **local, por réplica:** `rate.Limiter` por chave num `expirable.LRU` (100 mil chaves, TTL 10 min), sem rede — corta rajadas óbvias sem custar uma ida ao Redis;
+  2. **global, no Redis:** contador de janela fixa de 1 minuto por escopo e chave, atômico por script Lua:
+     ```lua
+     -- KEYS[1] = "tccelta:rl:<escopo>:<chave>:<minuto_unix>", ARGV[1] = ttl da janela em ms (70 000)
+     local n = redis.call('INCR', KEYS[1])
+     if n == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
+     return n
+     ```
+     `n > LIMITE_*_MIN` ⇒ 429 `limite_taxa` com `Retry-After` = segundos até o fim do minuto. O limite passa a ser **global** entre as réplicas (não mais até N× maior).
+  Interface: `limites.Limitador.Permitir(ctx, escopo, chave string, limiteMin int) (ok bool, retryAfter time.Duration)`; implementações `LimitadorLocal`, `LimitadorRedis` e `LimitadorComFallback` (as duas camadas). **Falha do Redis nunca vira 503:** com erro ou `REDIS_TIMEOUT` estourado, a requisição vale só pelo limite local, o evento incrementa `tccelta_limite_redis_falhas_total` e, após 5 falhas seguidas, um *circuit breaker* pula o Redis por 10 s. O Redis só guarda contadores efêmeros (sem persistência; perdê-lo zera as janelas).
 - IP do cliente: `X-Real-IP` só se `RemoteAddr` ∈ `PROXIES_CONFIAVEIS`; senão, `RemoteAddr`.
 
 #### Servidor HTTP e desligamento gracioso
@@ -563,6 +577,7 @@ O `stop_grace_period` do compose é de 30 s.
 | `tccelta_lacunas_total` | counter | `causa` |
 | `tccelta_kms_chamadas_total` / `tccelta_kms_duracao_segundos` | counter / histogram | `operacao` = `hmac_auth`/`verify_rec`/`sign_jwt`, `resultado`, `fase` = `pre` (fora da transação) / `tx` (dentro) |
 | `tccelta_rejeicoes_total` | counter | `motivo` = `sobrecarga`/`limite_taxa`/`kms`/`banco_ocupado` |
+| `tccelta_limite_redis_falhas_total` | counter | erros/timeouts do Redis no rate limit (a API cai para o limite local) |
 | `tccelta_pool_*` | gauge | coletor sobre `pgxpool.Stat()` |
 | `tccelta_worker_*` | ver spec 06 | |
 
@@ -582,7 +597,7 @@ O `stop_grace_period` do compose é de 30 s.
 | `internal/httpapi/problema.go` | `escreverProblema(w, status, codigo, detalhe, retryAfter)` |
 | `internal/httpapi/middlewares.go` | middlewares acima |
 | `internal/httpapi/handshake.go`, `blocos.go`, `confirmacao.go`, `saude.go` | handlers finos (specs 04, 05, 08) |
-| `internal/limites/taxa.go`, `concorrencia.go` | limitadores |
+| `internal/limites/taxa.go`, `redis.go`, `concorrencia.go` | limitadores (local, Redis e com *fallback*) |
 | `internal/metricas/metricas.go` | registradores |
 | `scripts/gerar_vetores.py` | implementação de referência em Python |
 | `sqlc.yaml`, `.golangci.yml` | configuração (`errcheck`, `gosec`, `bodyclose`, `sqlclosecheck`, `contextcheck`) |
@@ -596,12 +611,12 @@ O `stop_grace_period` do compose é de 30 s.
   - `flags_c` com bits reservados → `ErrFlagsReservadas`;
   - marcador junto com PID → erro;
   - sobra de bytes → erro;
-  - Δt negativo;
+  - Δt = 0 e Δt = 65 535 (limites do `u16`, sem sinal);
   - `tamanho` 1024 (limite);
   - fuzz `FuzzLerLote` e `FuzzLerRegistros` (sem panics, sem leitura fora dos limites).
 - `config`: falta de obrigatórias, `*_ARQUIVO`, `producao` + `PERMITIR_PERFIL_NONE` = erro.
 - `httpapi` (com `httptest` e dublês de serviço): mapeamento de cada erro de serviço para status/código/`Retry-After`; `anotarS2` antes da leitura do corpo (o teste usa um corpo que bloqueia e confere que S2 < fim da leitura); 503 quando o semáforo está cheio.
-- `limites`: *burst* e reabastecimento com relógio injetado.
+- `limites`: *burst* e reabastecimento com relógio injetado; limitador Redis com `miniredis`: o contador sobe a cada chamada, a janela nova zera, **duas instâncias do limitador compartilham a contagem** (réplica A e B somam no mesmo limite) e o `Retry-After` é o resto do minuto; Redis derrubado (`miniredis.Close()`) ⇒ `LimitadorComFallback` segue só com o limite local, conta a falha e abre o *circuit breaker* após 5 falhas.
 - `banco/geo`: EWKB de um ponto conhecido comparado com `ST_AsEWKB` (integração).
 
 ## Passos ordenados com checkpoints
@@ -625,10 +640,10 @@ O `stop_grace_period` do compose é de 30 s.
 |---|---|
 | Divergência de interpretação do formato com a Fase 1 (ex.: `L` big-endian, `tamanho` sem o cabeçalho) | vetores cruzados obrigatórios; tabela de contratos no README |
 | EWKB via COPY não aceito | plano B (coluna gerada) |
-| Rate limit por réplica | aceitável; [Aberto] |
+| Rate limit distribuído depende do Redis | cai para o limite local por réplica se ele falhar (nunca 503); contadores efêmeros, sem persistência |
 | `ServeMux` sem algum recurso | troca local por chi; os handlers não mudam |
 
-## [Aberto]
+## Decisões do autor (antes em aberto)
 
-- **[Aberto] Rate limit distribuído.** Recomendação: só se houver mais de 2 réplicas e abuso real. Nesse caso, um limitador em Postgres (tabela `limite_janela` com `INSERT … ON CONFLICT … RETURNING`) evita trazer Redis para a stack.
-- **[Aberto] HTTP/3 no Caddy.** Recomendação: não (o app usa `dio`/HTTP 1.1–2).
+- **[Decisão] Rate limit distribuído em Redis** (descartados: limite só por réplica e a tabela `limite_janela` no Postgres). Serviço `redis` na stack (spec 01), com senha e sem persistência; a API cai para o limite local se ele falhar.
+- **[Decisão] HTTP/3 não habilitado no Caddy** (`protocols h1 h2`): o app usa `dio`/HTTP 1.1–2, exigiria porta UDP e não traria ganho.

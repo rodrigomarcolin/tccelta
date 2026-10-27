@@ -32,11 +32,11 @@ em segundo plano com o app fechado.
 | Handle | `lib/src/domain/ble/ble_connection.dart` | `BleConnection { phase, currentPhase, incoming, isReady, write, disconnect }`; `BleConnectionPhase` com `reconnecting`. |
 | Adapter | `lib/src/infra/ble/ble_plus.dart` | `_FbpConnection`: `connect(license: nonprofit, mtu: null)` → `requestMtu(512)` no Android → `discoverServices` → acha o NUS → `setNotifyValue(true)` → `onValueReceived` num `StreamController.broadcast` que **sobrevive** às reconexões; `write` usa `withoutResponse: true`. |
 | Datasource | `lib/src/data/datasources/dongle_datasource.dart` | `DongleConfig` (UUIDs NUS); `connect(deviceId)`. |
-| Provider | `lib/src/ui/connection/connection_providers.dart` | `dongleDatasourceProvider` = **`SecureDongleDatasource`** (exige PSK e embrulha a conexão em `EncryptedBleConnection`); `ScanScreen.select` empilha `/psk-setup` antes de conectar. O firmware atual **não** tem PSK. |
+| Provider | `lib/src/ui/connection/connection_providers.dart` | Na `main` ainda: `dongleDatasourceProvider` = **`SecureDongleDatasource`** (exige PSK e embrulha a conexão em `EncryptedBleConnection`); `ScanScreen.select` empilha `/psk-setup` antes de conectar. O firmware atual **não** tem PSK. **A camada PSK já foi apagada na branch `chore/remove-security`** (histórico na tag `versao-custom-secure-ble`); esta fase parte dessa base — ver a decisão do §1. |
 | Repository | `lib/src/data/repositories/dongle_repository_impl.dart` | Guarda a conexão, republica `connectionPhase`. |
 | Precedente de repository sobre repository | `lib/src/data/repositories/obd2_repository_impl.dart` | `Obd2RepositoryImpl(DongleRepository)` cria `Elm327Client` + datasources sobre a conexão viva. |
-| Dublês | `test/support/fake_ble_service.dart`, `scripted_ble_connection.dart`, `test/infra/ble/encrypted_ble_connection_test.dart` | Três implementações de `BleConnection` em teste. |
-| Pacotes | `pubspec.yaml` | `flutter_blue_plus ^2.3.10`, `flutter_riverpod ^3.3.2`, `pointycastle`, `shared_preferences`, `dio`, `mocktail`; `fake_async` só transitivo. |
+| Dublês | `test/support/fake_ble_service.dart`, `scripted_ble_connection.dart` (e, na `main`, `test/infra/ble/encrypted_ble_connection_test.dart`, que sai com a camada PSK) | Duas implementações de `BleConnection` em teste depois da remoção da PSK. |
+| Pacotes | `pubspec.yaml` | `flutter_blue_plus ^2.3.10`, `flutter_riverpod ^3.3.2`, `shared_preferences`, `dio`, `mocktail`; `fake_async` só transitivo. `pointycastle` (e `mobile_scanner`) saem com a camada PSK; o HMAC do servidor de bancada (spec 09) usa o pacote `crypto`. |
 
 ## Design
 
@@ -128,13 +128,24 @@ abstract final class SyncConfig {
 // connect(deviceId) passa extraChannels: const [BleChannelSpec(serviceUuid: SyncConfig.service, rxUuid: SyncConfig.rx, txUuid: SyncConfig.tx)]
 ```
 
-**[Decisão] Transporte PSK legado desligado na Fase 1.** Sem contraparte no
-firmware, o `SecureDongleDatasource` impede o próprio NUS de funcionar com
-o dongle atual. `dongleDatasourceProvider` passa a usar `DongleDatasource`
-quando `const bool.fromEnvironment('LEGACY_PSK_TRANSPORT')` for falso (padrão),
-e `ScanScreen.select` vai direto para `/connecting` nesse caso. Nenhum código
-PSK é apagado; a Fase 2 (LESC) decide o destino. **[Aberto]** confirmar com o
-autor que desligar por padrão é aceitável até a Fase 2.
+**[Decisão] Camada PSK legada apagada já na Fase 1** (antecipa o que era a
+A8 da Fase 2; **não** existe a flag `LEGACY_PSK_TRANSPORT`). Sem contraparte
+no firmware, o `SecureDongleDatasource` impedia o próprio NUS de funcionar
+com o dongle atual, e o código não serve para medir nada. Fase 1 e Fase 2
+partem do app sem PSK (a remoção já está feita na branch
+`chore/remove-security`; o histórico fica na tag `versao-custom-secure-ble`):
+- `dongleDatasourceProvider` = `DongleDatasource(bleService)`; `ScanScreen.select`
+  vai direto para `/connecting`;
+- apagados `core/crypto/**`, `infra/ble/{encrypted_ble_connection,ble_security_handshake}.dart`,
+  `data/datasources/secure_dongle_datasource.dart`, `domain/ble/security_mode.dart`,
+  as telas/view models de PSK e de câmera/QR, a pilha de permissão de
+  câmera, os testes correspondentes, `mobile_scanner` e `pointycastle` do
+  `pubspec.yaml`, `CAMERA` do `AndroidManifest.xml` e
+  `NSCameraUsageDescription` do `Info.plist`;
+- rotas `pskSetup`, `cameraPermissions`, `pskScanQr` e o card "Criptografia"
+  da `MoreScreen` removidos; `psk_hex`/`security_mode` limpos das
+  preferências na inicialização (`prefs.remove`).
+A Fase 2 não precisa mais remover nada disso (spec 04 da Fase 2, §5.7).
 
 ### 2. Regras puras (`lib/src/domain/sync/`)
 
@@ -305,6 +316,14 @@ class SendPolicy {
 buffer (≈ aviso + leitura BLE, < 1 s), não do aviso: o app não associa avisos
 a `seq` específicos.
 
+**[Decisão] `T_lat` efetivo = `min(local, servidor)`.** O `tLat` entregue ao
+`SendPolicy` é `min(settings.latency, outcome.suggestedLatency)` quando o
+último `HandshakeOutcome` trouxe `t_lat_s` (Fase 3); sem o campo — `stub`,
+servidor de bancada, `T_LAT_SUGERIDO=0` — vale o `T_lat` local. O servidor só
+**encurta** a latência (teto), nunca a alonga acima do que o usuário
+configurou; o valor sugerido vale até o próximo handshake e não é persistido.
+O `SyncStatus` expõe `effectiveLatency` e a origem (`local`/`servidor`).
+
 ### 7. `SyncCoordinator` (`lib/src/application/sync/sync_coordinator.dart`)
 
 Use case de orquestração (combina `DongleSyncRepository`,
@@ -438,7 +457,7 @@ Só em `kDebugMode`.
 | `syncStatusViewModelProvider` | `NotifierProvider<SyncStatusViewModel, SyncStatus>` | Escuta `coordinator.status`. |
 
 UI: `lib/src/ui/sync/widgets/sync_status_card.dart` (composição de `CardButton`
-+ `StatusBadge`) na `MoreScreen`, abaixo de "Criptografia": título
++ `StatusBadge`) na `MoreScreen`: título
 "Sincronização", subtítulo com a fase e `buffer n/B_max · ACK x · HEAD y`;
 toque abre a tela de configurações da spec 08 (que mostra também o detalhe).
 
@@ -456,9 +475,9 @@ e `SystemMonotonicClock` (um `Stopwatch` iniciado no construtor). Testes usam
 | Alterar | `lib/src/services/ble/ble_service.dart` | `BleChannelSpec`; `extraChannels` no `connect`. |
 | Alterar | `lib/src/domain/ble/ble_connection.dart` | `BleChannel`; `channel()`; `mtu`. |
 | Alterar | `lib/src/infra/ble/ble_plus.dart` | §1. |
-| Alterar | `lib/src/infra/ble/encrypted_ble_connection.dart` | Repassa `channel`/`mtu`. |
+| Apagar | `lib/src/infra/ble/encrypted_ble_connection.dart` e o resto da camada PSK | §1 (decisão: PSK apagada na Fase 1). |
 | Alterar | `lib/src/data/datasources/dongle_datasource.dart` | `SyncConfig`; `extraChannels` no `connect`. |
-| Alterar | `lib/src/ui/connection/connection_providers.dart`, `lib/src/ui/connection/view/scan_screen.dart` | Transporte PSK legado atrás de `LEGACY_PSK_TRANSPORT` (§1). |
+| Alterar | `lib/src/ui/connection/connection_providers.dart`, `lib/src/ui/connection/view/scan_screen.dart` | Sem PSK: `DongleDatasource` direto e `ScanScreen.select` → `/connecting` (§1). |
 | Criar | `lib/src/domain/sync/{sync_protocol,sync_frame,dev_id,new_block_notice,sync_block,handshake_messages,fragment_assembler,sync_buffer,send_policy,retry_backoff,sync_status}.dart` | §2–6. |
 | Criar | `lib/src/core/time/monotonic_clock.dart` | §9. |
 | Criar | `lib/src/core/errors/sync_failure.dart` | `SyncLinkFailure extends Failure`. |
@@ -491,7 +510,7 @@ e `SystemMonotonicClock` (um `Stopwatch` iniciado no construtor). Testes usam
 ## Passos de implementação
 
 1. Port/adapter com canais + dublês atualizados. *Checkpoint:* `fvm flutter analyze` limpo e suíte atual verde.
-2. Desligar o PSK legado por padrão. *Checkpoint:* app conecta ao firmware atual e o painel lê PIDs (bancada).
+2. Apagar a camada PSK legada (§1; na prática, partir da branch `chore/remove-security`). *Checkpoint:* app conecta ao firmware atual e o painel lê PIDs (bancada).
 3. `domain/sync` puro + testes. *Checkpoint:* testes de domínio verdes.
 4. `SyncBleDatasource` + `DongleSyncRepository`. *Checkpoint:* testes de data verdes; em bancada, o log `SYNC … NOTICE` aparece ao conectar.
 5. `SyncCoordinator` (com o `HandshakeRunner` e o servidor de bancada da
@@ -515,7 +534,7 @@ e `SystemMonotonicClock` (um `Stopwatch` iniciado no construtor). Testes usam
 
 | Risco / ponto | Impacto | Recomendação |
 |---|---|---|
-| **[Aberto]** Desligar o transporte PSK por padrão | Telas de PSK ficam sem efeito até a Fase 2 | Manter atrás de `--dart-define=LEGACY_PSK_TRANSPORT=true`; a Fase 2 remove ou reaproveita. |
+| **[Decisão]** Camada PSK apagada na Fase 1 | Perde-se a opção de reaproveitar o código | Histórico na tag `versao-custom-secure-ble`; a comparação para o TCC fica em `docs/seguranca-ble-modelagem-ameacas.md`. |
 | Android entrega notificações de duas características fora de ordem entre si | Nenhum (ordem só importa dentro do SYNC_TX) | — |
 | App em segundo plano | iOS/Android podem suspender o BLE/timers | Fora do escopo; o dongle guarda tudo na flash. |
 | Aviso perdido antes de o repository assinar | Atraso até o próximo aviso | `listen` antes de `setNotifyValue` no adapter (§1), vínculo por identidade da conexão (§4) e reenvio do firmware a cada 15 s sem sessão (spec 05). |

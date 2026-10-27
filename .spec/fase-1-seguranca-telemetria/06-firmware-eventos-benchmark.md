@@ -222,10 +222,12 @@ não repetir flags. Os envs `*_debug` continuam `hmac` com `hex` completo.
 
 Todos os envs de benchmark são do perfil de hardware `dev` (spec 01 §8):
 mesmo `framework = arduino, espidf`, mesmo `sdkconfig.defaults` e, portanto,
-**NVS encryption ligada nos três perfis de `SECURITY_PROFILE`** — `none`
-desliga só as tags de bloco/handshake, não a cifra da NVS. As durações de
-NVS (`reserve_us`, `nvs_us`) incluem o AES-XTS em todos os perfis e não
-entram na diferença "com × sem segurança"; registrar no relatório. Cada env
+**NVS em claro nos três perfis de `SECURITY_PROFILE`** (plano B1 da spec 01
+§9.5: o `dev` não tem NVS encryption; ela só existe em `devsec`/`prod`). As
+durações de NVS (`reserve_us`, `nvs_us`) **não** incluem AES-XTS em nenhum
+perfil, então a diferença "com × sem segurança" não é contaminada por ele;
+o custo do AES-XTS da NVS só poderia ser medido no `devsec` e fica fora do
+benchmark (registrar no relatório). Cada env
 gera o próprio `sdkconfig.<env>` e compila o IDF inteiro (tempo de *build*
 maior que no Arduino puro).
 
@@ -297,8 +299,34 @@ biblioteca padrão do Python 3.11.
   cursor, head, flags}` alimentado por esses eventos; aceita `FORMAT v=1` e `v=2`.
 - Gerador de demonstração: trocar o trecho `UP_*`/`TIME_*` por uma sessão
   como a do §5.
-- **[Aberto]** Painel gráfico de benchmark no viewer. **Recomendação:** não
-  na Fase 1; o `bench_report.py` cobre o TCC.
+- **[Decisão] Criar o painel gráfico de benchmark no viewer** (além do
+  `bench_report.py`, que continua gerando `bench.md`/`bench.csv`). Ver §9.1.
+
+#### 9.1 Painel de benchmark (`tools/event-viewer/bench.html`)
+
+Página nova, no mesmo estilo de `index.html`/`simple.html` (JS puro, sem
+dependências nem *build*, `<script src="core.js">`), que carrega **um log
+por perfil** (arrastar `*.log` gerados pelo `capture.py`, ou `bench.csv`) e
+mostra as métricas B1–B12 do §7.3 de forma comparável:
+
+| Bloco do painel | Métricas | Gráfico |
+|---|---|---|
+| Seletor | Env/perfil (`none`/`hmac`/`asym`), cenário e data, lidos do nome do arquivo e do primeiro `FORMAT`/`KEYS` | Cartões com `n` de eventos por perfil. |
+| Custo de segurança | B1, B2, B3, B8, B9 | Barras agrupadas p50/p95 por perfil; faixas de `len` do B1 em barras empilhadas. |
+| Handshake | B4, B5 | Barras empilhadas `verify_us`/`nvs_us`/`tag_us`; histograma do ida-e-volta app + servidor. |
+| BLE | B6, B7 | Linha vazão × MTU por perfil; barras de overhead de fragmentação. |
+| Latência | B10 | Série temporal por `seq` com a linha `L_max = T_bloco + T_lat + t_envio`. |
+| Flash e memória | B11, B12 | Linha do tempo de `SYNC_NOTICE bit 2`/`SEG_DROP`/`SYNC_OVERFLOW`; mínimos de `STACK`/`HEAP`. |
+| Exportar | — | Botões "Baixar PNG" (canvas) e "Copiar tabela" (TSV) para o texto do TCC. |
+
+Implementação: `tools/event-viewer/bench-metrics.js` com as fórmulas B1–B12
+como funções puras sobre a lista de eventos já interpretada por `core.js`
+(mesmas fórmulas do `bench_report.py`; a regressão é o mesmo log sintético
+`tools/event-bench/tests/sample.log` conferido nos dois, com tolerância de
+0,1 %), e `bench.html` só desenha (canvas 2D, sem biblioteca de gráficos).
+Percentis por interpolação linear como no `bench_report.py`. Não toca nas
+categorias de `index.html`. Teste manual: abrir os três logs do protocolo do
+§7.2 e conferir que os números batem com o `bench.md`.
 
 ## Plano arquivo por arquivo
 
@@ -313,6 +341,7 @@ biblioteca padrão do Python 3.11.
 | Alterar | `docs/debug-events.md` | §8 desta spec. |
 | Criar | `esp32-firmware/tools/event-bench/capture.py`, `bench_report.py`, `README.md` | §7.2–7.3. |
 | Alterar | `tools/event-viewer/core.js` (+ `index.html` se listar tipos) | §9. |
+| Criar | `tools/event-viewer/bench.html`, `tools/event-viewer/bench-metrics.js` | §9.1 (painel gráfico de benchmark). |
 | Alterar | `test/support/Fakes.h` | `FakeClock::us`. |
 | Alterar | `test/test_events/test_main.cpp` | Ver Testes. |
 
@@ -340,6 +369,9 @@ Em placa: um log de 5 min do `collector_mock_debug` com o app passa no
 4. `capture.py` + `bench_report.py` + envs de benchmark. *Checkpoint:*
    relatório gerado para os três perfis no cenário estresse.
 5. Viewer. *Checkpoint:* `index.html` abre um log v2 sem erros e mostra a categoria `security`.
+6. Painel de benchmark (§9.1), depois do `bench_report.py`. *Checkpoint:*
+   `bench.html` abre os logs dos três perfis e os números de B1, B4, B6 e B10
+   coincidem com o `bench.md`.
 
 ## Critérios de aceite
 
@@ -348,6 +380,8 @@ Em placa: um log de 5 min do `collector_mock_debug` com o app passa no
 - `UP_*` e `TIME_*` não existem mais no código; `docs/debug-events.md` v2
   publicado e coerente com o código.
 - Envs `*_bench_{none,hmac,asym}` compilam; `bench_report.py` produz B1–B12.
+- `tools/event-viewer/bench.html` exibe B1–B12 dos três perfis, com os mesmos
+  números do `bench.md`.
 - Reconstruções 6.6–6.8 passam num log real de 5 min.
 
 ## Riscos e decisões em aberto
@@ -358,4 +392,4 @@ Em placa: um log de 5 min do `collector_mock_debug` com o app passa no
 | Pilha da tarefa do NimBLE (4 KB) | Estouro se o callback fizer trabalho | Callbacks só copiam e enfileiram; nenhum evento emitido neles (spec 04 §4). |
 | `COLLECTOR_EVENTS` altera o tempo total (formatação) | Benchmark enviesado | Os três perfis medidos com a mesma build de eventos; `_us` mede só o trecho de interesse. |
 | Variância do SHA compartilhado e do NimBLE | p95 instável | Relatar p50/p95 com n ≥ 200 blocos por perfil. |
-| **[Aberto]** Medir energia/consumo | Fora do log | Opcional com medidor USB; não é requisito do documento. |
+| **[Decisão]** Medir energia/consumo | Fora do log | **Opcional, com medidor USB se houver:** uma métrica extra para o TCC (corrente média por perfil no cenário estresse, anotada à mão ou em CSV do medidor, sem integrar ao `bench_report.py`); não é critério de aceite nem requisito do documento. |

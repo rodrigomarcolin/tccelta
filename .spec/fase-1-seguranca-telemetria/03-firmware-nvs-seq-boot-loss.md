@@ -59,13 +59,15 @@ acesso internamente; o mesmo objeto `NvsStore` (`Preferences` aberto uma vez)
 é usado pelas três tarefas sem mutex próprio, como hoje.
 
 **[Decisão] `NvsStore` continua em `Preferences`, e a `nvs` fica cifrada
-nos três perfis sem mudança de código** (spec 01 §7): o `initArduino`
-inicializa a `nvs` padrão com `nvs_flash_init()`, que, com NVS encryption
-(spec 01 §9.3), usa as chaves XTS da `nvs_key`; `Preferences::begin("collector")`
-sem rótulo só abre essa partição. Custo: cada leitura/escrita passa por
+em `devsec`/`prod` (em claro no `dev`) sem mudança de código** (spec 01 §7,
+plano B1): o `initArduino` inicializa a `nvs` padrão com `nvs_flash_init()`,
+que, com `CONFIG_NVS_ENCRYPTION` (só `devsec`/`prod`, spec 01 §9.3), usa as
+chaves XTS da `nvs_key`; `Preferences::begin("collector")` sem rótulo só
+abre essa partição. Custo em `devsec`/`prod`: cada leitura/escrita passa por
 AES-XTS (com o AES de hardware), incluído nos tempos `FLUSH reserve_us` e
-`HS_RESPONSE nvs_us` (spec 06) de **todos** os perfis. A tabela única
-(spec 01 §9.4) põe a `nvs` em `0x12000` (20 KB, mesmo tamanho de hoje).
+`HS_RESPONSE nvs_us` (spec 06); no `dev` — onde roda o benchmark — não há
+AES-XTS. A tabela única (spec 01 §9.4) põe a `nvs` em `0x12000` (20 KB, mesmo
+tamanho de hoje).
 
 **Transição:** o passo 0 da fase (spec 01 §9.5) exige `erase_flash` em toda
 placa (a tabela muda de offset). Por isso a migração de `last_seq` (abaixo)
@@ -328,6 +330,6 @@ Em placa (`collector_mock_debug`):
 | BOOT não gravado (flash cheia/erro) | Dados bloqueados até gravar o BOOT | Pendente com nova tentativa a cada `write` (spec 02 §8). |
 | `boot_id` dá a volta (65 535 boots) | Ambiguidade no servidor | Limite do documento (2¹⁶ boots); pular o 0 evita colisão com LOSS. |
 | Reflash com NVS apagada (`erase_flash`) em placa já registrada | `seq` recomeça; servidor rejeita (HEAD menor que o salvo) | Procedimento: reprovisionar e zerar o estado do dongle no servidor; nunca `erase_flash` em placa de campo. Com NVS encryption, `erase_flash` também apaga a `nvs_key`: o dongle gera outra e a `secnvs` antiga fica ilegível — reprovisionar sempre (spec 01 §11). |
-| Trocar a `nvs_key` (`provision.py --nvs-key new`) numa placa em uso | A `nvs` fica ilegível e é recriada: mesma consequência do `erase_flash` | Usar `--nvs-key auto`/`board` no reprovisionamento (spec 01 §11). |
-| **[Aberto]** Faixa vazia `[R, R−1]` no BOOT | A Fase 3 precisa tratar como "sem lacuna" | Combinado no §3; confirmar com a spec de ingestão da Fase 3. |
-| **[Aberto]** `c_S` a partir da época no servidor de bancada × servidor real | Placa usada na bancada recusa desafios do servidor real (0x02) | *Wipe* zera `last_cs` (§7); recomendar à Fase 3 emitir `c_S = max(c_S_banco + 1, segundos desde a época)`, o que também cobre placas reaproveitadas. |
+| Trocar a `nvs_key` (`provision.py --nvs-key new`, só `devsec`/`prod`) numa placa em uso | A `nvs` fica ilegível e é recriada: mesma consequência do `erase_flash` | Usar `--nvs-key auto`/`board` no reprovisionamento (spec 01 §11). |
+| Faixa vazia `[R, R−1]` no BOOT — **resolvido com a Fase 3** | A Fase 3 precisa tratar como "sem lacuna" | Combinado no §3; a spec 05 da Fase 3 aceita BOOT de faixa vazia sem registrar lacuna (caso de teste 20). |
+| `c_S` a partir da época no servidor de bancada × servidor real — **resolvido com a Fase 3** | Placa usada na bancada recusa desafios do servidor real (0x02) | *Wipe* zera `last_cs` (§7); a spec 04 da Fase 3 emite `c_S = max(ultimo_c_s + 1, segundos Unix)`, o que também cobre placas reaproveitadas. |

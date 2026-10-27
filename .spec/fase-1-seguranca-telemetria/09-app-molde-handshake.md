@@ -25,14 +25,15 @@ e `HandshakeTrigger`; `UnavailableSyncServerGateway`; `BenchSyncServer`
 
 **Fora:** `HttpsSyncServerGateway`, `dio`, JWT real, KMS (Fase 3); regras de
 quando disparar o handshake (spec 07 — coordenador); verificação de
-assinatura ECDSA no servidor de bancada (ver Riscos).
+assinatura ECDSA no servidor de bancada (**[Decisão]** não implementada;
+ver Riscos).
 
 ## Estado atual (verificado no código)
 
 | Peça | Onde | Hoje |
 |---|---|---|
 | HTTP | — | Nenhuma camada HTTP; `dio ^5.10.0` no `pubspec.yaml` sem uso. |
-| Criptografia | `lib/src/core/crypto/hkdf.dart` | `pointycastle` com `HMac(SHA256Digest(), 64)` já em uso (camada PSK legada). |
+| Criptografia | `lib/src/core/crypto/hkdf.dart` (camada PSK legada, **apagada** na Fase 1, spec 07 §1) | Nada de criptografia fica no app além do servidor de bancada: HMAC-SHA256 com o pacote `crypto` (`Hmac(sha256, key)`), adicionado ao `pubspec.yaml`; `pointycastle` não é mais dependência. |
 | Contrato HTTP da Fase 3 | `.spec/fase-3-servidor/03-api-go-arquitetura.md` (§HTTP) | `POST /v1/dongles/{id}/desafio` → `200 JSON {"desafio":"<b64 TLV 0x01>","expira_em":"<RFC3339>"}`; `POST /v1/dongles/{id}/desafio/resposta` com `{"resposta":"<b64 TLV 0x02>"}` → `{"ack":"<b64 TLV 0x04>","token":"<JWT>","token_expira_em":"<RFC3339>","t_lat_s":60}`; `POST /v1/dongles/blocos` (`Bearer`, `application/octet-stream`, 1–32 TLVs 0x03 concatenados) → `200 octet-stream` (TLV 0x04); `GET /v1/dongles/{id}/confirmacao` → TLV 0x04; erros `application/problem+json` com `codigo`; base64 RFC 4648 §4 com *padding*; `{id}` = DevId em 16 hex. |
 
 ## Design
@@ -271,7 +272,9 @@ nunca usa o de bancada (chaves de desenvolvimento). A Fase 3 acrescenta
 3. `syncServerGatewayProvider` com `'https'` como padrão.
 4. Testes de contrato: os mesmos cenários do `bench_sync_server_test.dart`
    rodados contra um servidor Go local (docker compose da Fase 3).
-5. Decidir o uso de `suggestedLatency` (spec 08, Riscos).
+5. `suggestedLatency` já é aplicado pelo coordenador como teto,
+   `min(local, servidor)` (spec 07 §7, spec 08 Riscos); nenhuma mudança no app
+   além de o gateway HTTPS preencher o campo.
 
 Nada mais no app muda: coordenador, buffer, BLE e UI ficam como estão.
 
@@ -286,7 +289,7 @@ Nada mais no app muda: coordenador, buffer, BLE e UI ficam como estão.
 | Alterar | `lib/src/core/errors/sync_failure.dart` | Falhas do §4. |
 | Criar | `lib/src/application/sync/handshake_runner.dart` | §5. |
 | Criar | `lib/src/infra/sync/unavailable_sync_server_gateway.dart` | §6. |
-| Criar | `lib/src/infra/sync/bench/{bench_sync_server,bench_sync_server_gateway,bench_keys,bench_faults,bench_crypto}.dart` | §7 (`bench_crypto`: HMAC-SHA256 com pointycastle e tags truncadas). |
+| Criar | `lib/src/infra/sync/bench/{bench_sync_server,bench_sync_server_gateway,bench_keys,bench_faults,bench_crypto}.dart` | §7 (`bench_crypto`: HMAC-SHA256 com o pacote `crypto` e tags truncadas). |
 | Alterar | `lib/src/ui/sync/sync_providers.dart` | §8 + `syncServerDatasourceProvider`, `syncServerRepositoryProvider`, `handshakeRunnerProvider`. |
 | Alterar | `lib/src/ui/settings/view/sync_settings_screen.dart` | Seção "Depuração": estatísticas e "esquecer estado" do servidor de bancada. |
 | Criar | Testes abaixo | — |
@@ -326,6 +329,6 @@ Nada mais no app muda: coordenador, buffer, BLE e UI ficam como estão.
 |---|---|---|
 | Chaves de desenvolvimento dentro do app de *debug* | Vazamento sem impacto (só valem para placas de bancada) | Nunca no *release* (`kReleaseMode` força o stub). |
 | Servidor de bancada diverge do servidor Go | Falsa sensação de conformidade | Os vetores e cenários do `bench_sync_server_test` viram teste de contrato da Fase 3 (§9). |
-| **[Aberto]** Verificação ECDSA (`asym`) no servidor de bancada | Perfil `asym` só tem tag conferida no host (`verify_block.py`, spec 01) | Opcional: `ECDSASigner` do pointycastle com a chave pública do `bench_keys.json`; não bloqueia a fase. |
+| **[Decisão]** Sem verificação ECDSA (`asym`) no servidor de bancada | Perfil `asym` só tem tag conferida no host (`verify_block.py`, spec 01) e, na Fase 3, no servidor | **Não implementar** no app (evita `pointycastle`/`ECDSASigner`); blocos `T = 64` são aceitos e contados como "não verificados". |
 | Relógio do celular para `c_S` | Celular com hora atrasada gera `c_S` menor que o último aceito → erro 0x02 | O servidor de bancada usa `max(último emitido + 1, época)`; após um 0x02, avança `lastIssuedCs` para `época + 3600` e tenta de novo. |
-| **[Aberto]** `GET /confirmacao` | Doc prevê "ao reconectar, antes de enviar" | Na Fase 1 não é chamado (o handshake já traz o ACK); a Fase 3 decide se o coordenador o usa. |
+| **[Decisão]** `GET /confirmacao` | Doc prevê "ao reconectar, antes de enviar" | Na Fase 1 **não é chamado** (o handshake já traz o ACK; o port mantém `latestConfirmation`); a Fase 3 decide se o coordenador o usa. |

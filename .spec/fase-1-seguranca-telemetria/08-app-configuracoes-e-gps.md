@@ -9,17 +9,21 @@
    espera entre tentativas (exponencial de 1 s a 5 min) é **constante no
    código** (spec 07, `kRetryMin`/`kRetryMax`).
 2. Envio da posição do celular ao dongle com `AT#GPS lat lon alt` (graus ×
-   10⁷ e milímetros) pelo NUS a cada `T_GPS`, enquanto conectado.
+   10⁷ e milímetros) pelo NUS a cada `T_GPS`, enquanto conectado — **inclusive
+   com o app em segundo plano e a tela apagada** (§4.1).
 
 ## Escopo
 
 **Dentro:** modelo, datasource, repository e view model das configurações;
-tela e rota; plugin de localização, permissões Android/iOS; `LocationRepository`;
-`reportGps` no `Obd2Repository`; `GpsReporter` (use case); testes.
+tela e rota; plugin de localização, permissões Android/iOS (inclusive
+localização em segundo plano, serviço em primeiro plano no Android e
+`UIBackgroundModes` no iOS); `LocationRepository`; `reportGps` no
+`Obd2Repository`; `GpsReporter` (use case); testes.
 
 **Fora:** uso de `T_lat`/`B_max` pelo coordenador (spec 07 — aqui só a fonte);
-`T_lat` sugerido pelo servidor no handshake (spec 09 guarda o valor; aplicar
-como *override* é decisão da Fase 3); localização em segundo plano.
+`T_lat` sugerido pelo servidor no handshake (spec 09 guarda o valor no
+`HandshakeOutcome`; a regra `min(local, servidor)` é aplicada pelo
+coordenador, spec 07 §7).
 
 ## Estado atual (verificado no código)
 
@@ -32,7 +36,7 @@ como *override* é decisão da Fase 3); localização em segundo plano.
 | Rotas | `lib/src/router/app_routes.dart`, `app_router.dart` | `/more`, `/settings` (PSK) etc. |
 | Comandos ELM327 | `lib/src/data/datasources/elm327_client.dart`, `lib/src/data/repositories/obd2_repository_impl.dart` | Um único `Elm327Client` por conexão, serializando comandos, criado dentro do `Obd2RepositoryImpl` e compartilhado por telemetria e DTC. |
 | Firmware | `esp32-firmware/src/collector/AtHashParser.cpp`, `GpsGate.cpp` | `AT#GPS lat lon alt`: lat ∈ [−900 000 000, 900 000 000], lon ∈ [−1 800 000 000, 1 800 000 000], alt ∈ int32; responde `OK` (ou `?` se inválido). Aceita no máximo 1 posição/s (tolerância de 100 ms); descarta no modo diagnóstico (`GPS_DROP`). |
-| Permissões | `android/app/src/main/AndroidManifest.xml`, `ios/Runner/Info.plist` | `ACCESS_FINE_LOCATION` com `android:maxSdkVersion="30"` (só para o scan BLE antigo); iOS sem texto de localização. |
+| Permissões | `android/app/src/main/AndroidManifest.xml`, `ios/Runner/Info.plist` | `ACCESS_FINE_LOCATION` com `android:maxSdkVersion="30"` (só para o scan BLE antigo); iOS sem texto de localização nem `UIBackgroundModes`. Hoje o envio de GPS para quando o app vai para segundo plano. |
 
 ## Design
 
@@ -123,12 +127,42 @@ O pacote `location` foi descartado por manutenção mais irregular, e o
 
 | Plataforma | Mudança |
 |---|---|
-| Android `AndroidManifest.xml` | Remover `android:maxSdkVersion="30"` de `ACCESS_FINE_LOCATION` (agora necessária em todas as versões) e adicionar `ACCESS_COARSE_LOCATION`. Sem `ACCESS_BACKGROUND_LOCATION`. |
-| iOS `Info.plist` | `NSLocationWhenInUseUsageDescription` = "O app envia a posição do celular ao dongle para registrar onde cada trecho da viagem aconteceu." |
+| Android `AndroidManifest.xml` | Remover `android:maxSdkVersion="30"` de `ACCESS_FINE_LOCATION` (agora necessária em todas as versões) e adicionar `ACCESS_COARSE_LOCATION`. **Segundo plano:** `ACCESS_BACKGROUND_LOCATION` (Android 10+), `FOREGROUND_SERVICE` e `FOREGROUND_SERVICE_LOCATION` (Android 14+), `POST_NOTIFICATIONS` (Android 13+, para a notificação do serviço) e o `<service android:name="com.baseflow.geolocator.GeolocatorLocationService" android:foregroundServiceType="location" android:exported="false"/>` do `geolocator`. |
+| iOS `Info.plist` | `NSLocationWhenInUseUsageDescription` = "O app envia a posição do celular ao dongle para registrar onde cada trecho da viagem aconteceu." e `NSLocationAlwaysAndWhenInUseUsageDescription` (mesmo texto, "mesmo com a tela apagada"). `UIBackgroundModes`: `location` e `bluetooth-central` (o BLE com o dongle precisa seguir atendido em segundo plano). |
 
 O app **só pede permissão a partir da UI** (botão da tela, §3); o
 `GpsReporter` nunca dispara diálogo — sem permissão, fica parado com estado
 `semPermissao`.
+
+#### 4.1 Rastreamento em segundo plano
+
+**[Decisão] Rastrear em segundo plano** (com o app em segundo plano ou a
+tela apagada o GPS continua sendo enviado ao dongle). Consequências:
+
+- **Permissão em duas etapas.** Android 11+ não permite pedir "o tempo todo"
+  no mesmo diálogo: primeiro `whileInUse`, depois `always` (o `geolocator`
+  abre a tela de ajustes). `LocationPermissionState` ganha `grantedWhileInUse`
+  (só em primeiro plano) além de `granted` (= "sempre"); a tela mostra qual
+  das duas está ativa e o botão "Permitir também em segundo plano" aparece
+  com `grantedWhileInUse`. Sem `granted` o `GpsReporter` envia apenas
+  enquanto o app está em primeiro plano (comportamento antigo).
+- **Android: serviço em primeiro plano.** `AndroidSettings(foregroundNotificationConfig:
+  ForegroundNotificationConfig(notificationTitle, notificationText, enableWakeLock: true))`
+  no fluxo `fixes(...)`; a notificação persistente "Registrando a posição do
+  veículo" mantém o processo (e, com ele, o `Timer` do `GpsReporter`, o
+  `SyncCoordinator` e a conexão BLE) vivos com a tela apagada. Sem a
+  notificação o Android encerra ou congela o isolate em segundo plano.
+- **iOS.** `AppleSettings(allowBackgroundLocationUpdates: true,
+  pauseLocationUpdatesAutomatically: false, showBackgroundLocationIndicator: true)`;
+  o `bluetooth-central` mantém o NUS/SYNC entregando eventos em segundo
+  plano.
+- **Duração.** O serviço/stream só roda com conexão `ready` + `gpsEnabled` +
+  permissão `granted`; ao desconectar, desligar o GPS ou chamar "Esquecer
+  dispositivo", o stream é cancelado e a notificação some.
+- **Custo.** Bateria e aviso de privacidade ao usuário (texto da permissão e
+  da notificação); a revisão das lojas exige justificar o uso de localização
+  em segundo plano (registrar no TCC; publicação nas lojas fica fora do
+  escopo).
 
 ### 5. `LocationRepository` e `GpsFix`
 
@@ -147,7 +181,7 @@ class GpsFix {
   static GpsFix fromDegrees({required double lat, required double lon, required double altM, required double accuracyM, required Duration at});
 }
 
-enum LocationPermissionState { granted, denied, deniedForever, serviceDisabled }
+enum LocationPermissionState { granted, grantedWhileInUse, denied, deniedForever, serviceDisabled }
 
 abstract interface class LocationRepository {
   Future<LocationPermissionState> permission();
@@ -202,7 +236,7 @@ class GpsReporter {
 
 | Condição | Comportamento |
 |---|---|
-| Conexão `ready` + `gpsEnabled` + permissão concedida | Assina `fixes(interval: T_GPS)`; `Timer.periodic(T_GPS)`: se há *fix* com idade ≤ 2 × `T_GPS` e precisão ≤ 100 m e nenhum envio em curso → `obd2.reportGps(fix)`. |
+| Conexão `ready` + `gpsEnabled` + permissão `granted` (ou `grantedWhileInUse` com o app em primeiro plano) | Assina `fixes(interval: T_GPS)` (no Android com serviço em primeiro plano, §4.1); `Timer.periodic(T_GPS)`: se há *fix* com idade ≤ 2 × `T_GPS` e precisão ≤ 100 m e nenhum envio em curso → `obd2.reportGps(fix)`. |
 | *Fix* velho ou impreciso | Não envia (o firmware não tem como saber; melhor ausência que posição errada). |
 | Falha do comando (`?`, *timeout*) | Registra em `status`; tenta no próximo período (sem *backoff*: é só 1 comando/s). |
 | `reconnecting`/`disconnected`/`failed` | Cancela fluxo e temporizador. |
@@ -231,7 +265,7 @@ no próprio `GpsReporter` (não configuráveis na Fase 1).
 | Criar | `lib/src/application/gps/gps_reporter.dart`, `lib/src/ui/gps/gps_providers.dart` | §7. |
 | Alterar | `lib/src/ui/connection/widgets/connection_guard.dart` | `ref.watch(gpsReporterProvider)`. |
 | Alterar | `pubspec.yaml` | `geolocator`. |
-| Alterar | `android/app/src/main/AndroidManifest.xml`, `ios/Runner/Info.plist` | §4. |
+| Alterar | `android/app/src/main/AndroidManifest.xml`, `ios/Runner/Info.plist` | §4 e §4.1 (permissões de segundo plano, serviço do `geolocator`, `UIBackgroundModes`). |
 | Alterar | `test/support/fake_obd2_repository.dart` | `reportGps` registrando as chamadas. |
 | Criar | `test/support/fake_location_repository.dart` | Fluxo de *fixes* controlável. |
 
@@ -245,17 +279,20 @@ no próprio `GpsReporter` (não configuráveis na Fase 1).
 | `test/ui/settings/sync_settings_screen_test.dart` | Renderiza os três steppers com valores; `+`/`−` respeitam passo e limites; botão de permissão aparece quando negada. |
 | `test/domain/location/gps_fix_test.dart` | `fromDegrees(-23.5505200, -46.6333090, 760.5)` → `-235505200 -466333090 760500`; arredondamento; `clamp`; `toAtCommand()`. |
 | `test/data/repositories/obd2_repository_impl_test.dart` (existente) | + `reportGps` escreve `AT#GPS …` no `ScriptedBleConnection` e aceita `OK\r>`; `?\r>` → `ObdCommandFailure`. |
-| `test/application/gps/gps_reporter_test.dart` (`fake_async`) | Envia a cada `T_GPS` com *fix* recente; não envia com *fix* velho ou impreciso; para ao desconectar; reinicia ao mudar `T_GPS`; sem permissão não envia nem pede. |
+| `test/application/gps/gps_reporter_test.dart` (`fake_async`) | Envia a cada `T_GPS` com *fix* recente; não envia com *fix* velho ou impreciso; para ao desconectar; reinicia ao mudar `T_GPS`; sem permissão não envia nem pede; com `grantedWhileInUse` envia só em primeiro plano e com `granted` segue enviando em segundo plano (ciclo de vida simulado). |
 
 Em bancada: com o app conectado ao dongle (`collector_mock_debug`), o log do
 firmware mostra `CMD txt="AT#GPS …"`, `GPS lat=… lon=… alt=…` e `REC kind=gps`
 a cada `T_GPS` (≥ 1 s), e nenhum `GPS_DROP reason=rate` com `T_GPS = 1 s`.
+**Segundo plano:** com permissão "o tempo todo", apagar a tela por 2 min e
+conferir que `REC kind=gps` continua ~1/s no log do firmware (Android: com a
+notificação do serviço visível; iOS: com o indicador de localização).
 
 ## Passos de implementação
 
 1. Modelo + datasource + repository + testes. *Checkpoint:* testes de configurações verdes.
 2. View model + tela + rota + cartão. *Checkpoint:* widget test verde; navegação manual Mais → Sincronização.
-3. `geolocator`, permissões, `LocationRepository`. *Checkpoint:* em aparelho, a tela mostra a permissão e o fluxo de *fixes* no log.
+3. `geolocator`, permissões (inclusive segundo plano, §4.1), `LocationRepository`. *Checkpoint:* em aparelho, a tela mostra a permissão e o fluxo de *fixes* no log, também com a tela apagada.
 4. `reportGps` + `GpsReporter`. *Checkpoint:* `gps_reporter_test` verde; em bancada, `REC kind=gps` no firmware.
 5. `fvm dart format .`, `fvm flutter analyze`, `fvm flutter test`.
 
@@ -266,8 +303,9 @@ a cada `T_GPS` (≥ 1 s), e nenhum `GPS_DROP reason=rate` com `T_GPS = 1 s`.
   reiniciar o app; espera entre tentativas como constante.
 - Com conexão pronta e permissão concedida, `AT#GPS lat lon alt` (graus × 10⁷,
   mm) sai pelo NUS a cada `T_GPS`, sem disputar respostas com a telemetria.
-- Permissões de localização declaradas em Android e iOS; nenhum pedido de
-  permissão fora da UI.
+- Permissões de localização declaradas em Android e iOS, inclusive segundo
+  plano (serviço em primeiro plano e `UIBackgroundModes`); nenhum pedido de
+  permissão fora da UI; com a tela apagada o GPS segue chegando ao dongle.
 - Cadeia datasource → repository → view model respeitada; `geolocator` só no
   datasource de localização.
 
@@ -276,6 +314,6 @@ a cada `T_GPS` (≥ 1 s), e nenhum `GPS_DROP reason=rate` com `T_GPS = 1 s`.
 | Risco / ponto | Impacto | Recomendação |
 |---|---|---|
 | `T_GPS = 1 s` + telemetria no mesmo NUS | Leituras do painel um pouco mais lentas (~20–50 ms por segundo) | Aceitável; medir no `RESP dur` do firmware. Se incomodar, padrão 2 s. |
-| Localização com app em segundo plano | GPS para quando o app vai para segundo plano | Fora do escopo; **[Aberto]** se o autor quiser rastrear com tela apagada, exige `ACCESS_BACKGROUND_LOCATION`/`UIBackgroundModes` e serviço em primeiro plano no Android. |
+| **[Decisão]** Localização com app em segundo plano | Mais permissões, notificação persistente no Android, consumo de bateria, justificativa nas lojas | Rastrear em segundo plano (§4.1): `ACCESS_BACKGROUND_LOCATION`, serviço em primeiro plano e `UIBackgroundModes`. |
 | Altitude elipsoidal × nível do mar | Diferenças de dezenas de metros entre plataformas | Registrar no TCC; o servidor não usa altitude para nada crítico. |
-| **[Aberto]** `T_lat` sugerido pelo servidor (`t_lat_s` no handshake, Fase 3) | Qual vale: o local ou o do servidor | Recomendação: o do servidor vira teto (`min(local, servidor)`) quando a Fase 3 existir; na Fase 1 só é guardado no `HandshakeOutcome`. |
+| **[Decisão]** `T_lat` sugerido pelo servidor (`t_lat_s` no handshake, Fase 3) | Qual vale: o local ou o do servidor | O servidor é teto: `T_lat` efetivo = `min(local, servidor)` quando `t_lat_s` vier no handshake; sem o campo (stub, servidor de bancada) vale o local. Aplicado pelo coordenador (spec 07 §7); a tela mostra o valor efetivo e o motivo. |

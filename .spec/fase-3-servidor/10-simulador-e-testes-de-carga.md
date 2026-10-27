@@ -6,11 +6,11 @@
 
 1. **Simulador em Go** (`tccelta simulador`) de dongles virtuais que geram blocos assinados com as **mesmas chaves importadas no Vault de teste**, incluindo BOOT, LOSS, OVERFLOW, reconexões com acúmulo offline e handshakes com `t_ms` e deriva realistas. Cada dongle virtual também faz o papel do app (HTTP, buffer, `T_lat`, K adaptativo, retentativas).
 2. **Testes de integração** com testcontainers (por pacote) e **testes ponta a ponta** com o compose (stack inteira).
-3. **Testes de carga** com metas explícitas e relatório.
+3. **Testes de carga** com metas explícitas e relatório — **documentados, mas não executados nesta fase** (decisão do autor: não fazer testes de carga agora, apenas documentar). O simulador, as metas M1–M6, os cenários `carga`/`reconexao`/`joelho` e o formato do relatório ficam especificados e implementados como código; **medir e versionar o relatório** fica para depois.
 
 ## Escopo
 
-Dentro: pacote `internal/simulador`, subcomando, cenários, infraestrutura de teste (`internal/testeinfra`), `compose.test.yaml`, metas, relatório, CI do backend. Fora: testes do app Flutter (spec 09) e do firmware (Fase 1).
+Dentro: pacote `internal/simulador`, subcomando, cenários, infraestrutura de teste (`internal/testeinfra`), `compose.test.yaml`, metas e formato do relatório (documentados; execução da carga adiada), CI do backend. Fora: testes do app Flutter (spec 09) e do firmware (Fase 1).
 
 ## Design
 
@@ -94,6 +94,7 @@ tccelta simulador --cenario <nome> --api http://api:8080 [--ca /path/ca.pem]
 | `e2e` | 3 dongles, cada um com: handshake → 200 blocos → perda de energia (BOOT) → 50 blocos → bloco corrompido (LOSS) → flash pequena + 5 min offline (OVERFLOW no handshake) → reconexão → drenagem. O dongle 3 também faz **queda de energia seguida de OVERFLOW que engole o segmento antes do BOOT** (caso 16 da spec 05) e um **BOOT corrompido** (LOSS `[ACK+1, seq]`, caso 18) | `seq_contiguo = HEAD` de cada dongle; `lacuna` com BOOT, LOSS e OVERFLOW nas faixas exatas; `count(leitura)` = registros gerados − perdidos; `boot.a_ms` não nulo nos boots com handshake e `origem_tempo='vizinhos'` no boot sem handshake; `ancora_tempo` ≥ 1 por boot com handshake; `bloco_rejeitado` vazio |
 | `protocolo-negativo` | app malicioso: troca 1 byte (⇒ `reler`, rejeitado); reenvia lotes antigos (⇒ duplicados, 0 linhas novas); fora de ordem (⇒ `salto`); token de outro DevId na confirmação (⇒ 403); resposta reapresentada (⇒ 409); 33 blocos (⇒ 429); desafios em rajada (⇒ 429 `desafios_pendentes`) | status e headers esperados; o estado final é igual ao de um app honesto, porque nenhum ataque altera dados aceitos |
 | `tempo` | 1 dongle com `DerivaPPM=+25`, `--acelerar 60` (6 h simuladas em 6 min), handshake a cada 20 min simulados | `boot.b` ≈ 25 ppm (±5); `incerteza_base_ms` ≤ meia largura do menor RTT; sem `deriva_excessiva`; com `DerivaPPM=+60` ⇒ alerta |
+| `geracao` | 1 dongle com `boot_id` inicial 65534 que reinicia 3× (65534 → 65535 → 1 → 2, a volta do u16), enviando blocos em cada boot; depois, o app virtual roda `tccelta worker reprocessar` (ensaio e `--aplicar`) sobre esse dongle | `dongle_estado.geracao_boot = 1` e `ultimo_boot_id = 2`; `boot` com `(0,65534)`, `(0,65535)`, `(1,1)`, `(1,2)` sem colisão de PK; `bloco_bruto`/`leitura`/`posicao` com a geração certa; alerta `geracao_boot_avancou` uma vez; após o reprocessamento `count(leitura)` igual ao anterior e `valor_bruto` intacto; `grupo_ancora` coerente com as âncoras de cada boot |
 | `carga` | N dongles em regime (`BlocosPorSegundo` realista × `--acelerar`) | métricas abaixo |
 | `reconexao` | N dongles acumulam `--acumulado` blocos offline e conectam todos dentro de `--rampa` | tempo de drenagem; 503 e 429 tolerados; `seq_contiguo = HEAD` ao fim para todos |
 | `joelho` | sobe N em degraus (100, 250, 500, 1.000, 2.000, …) a cada 2 min | primeiro degrau com p99 > 1 s ou 503 > 1 % ⇒ capacidade reportada |
@@ -101,6 +102,8 @@ tccelta simulador --cenario <nome> --api http://api:8080 [--ca /path/ca.pem]
 Saída: um resumo legível no stdout e `--relatorio` em JSON (`cenario`, `parametros`, `p50`/`p95`/`p99` por rota, `blocos_aceitos_por_s`, `linhas_por_s`, contagem por status, `drenagem_s`, `rtt_ancora_p50/p95`, `chamadas_kms_por_post`). O código de saída é 0 se todas as verificações e metas passaram e 1 caso contrário (usado pelo `make e2e` e pelo CI).
 
 ### Métricas-alvo
+
+> **Status: documentadas, não executadas nesta fase.** A tabela abaixo é o que se mediria; os números ficam em branco até alguém rodar `make carga` e versionar o relatório. Nada na fase depende de eles terem sido medidos.
 
 Medidas num host de referência, que precisa ser documentado no relatório: por exemplo, uma VM de 4 vCPU e 8 GB com tudo no mesmo host; banco com `TS_TUNE_MEMORY=4GB`. Na carga, o banco roda com `ALTER DATABASE tccelta SET tccelta.compressao_apos = '1 day'` **antes** do `migrar` (spec 02), porque `leitura` gera cerca de 150 GB/dia sem compressão a 34 mil linhas/s. Cada execução começa de volume limpo (`make limpar`).
 
@@ -143,13 +146,14 @@ func SubirAPI(t *testing.T, b *Banco, v *Vault, ajustes ...func(*config.Config))
 
 ### Ponta a ponta com a stack real (`compose.test.yaml` + `make e2e`)
 
-`compose.test.yaml` = `banco` + `vault` (dev) + `vault-bootstrap` + `migrar` + `api` (1 réplica) + `worker` + `ferramentas`, com os mesmos volumes e segredos separados da spec 01 e um nome de projeto próprio (`name: tccelta-teste`), para não colidir com a stack dev. `make e2e` (alvo da spec 01) executa, nesta ordem:
+`compose.test.yaml` = `banco` + `redis` + `vault` (dev) + `vault-bootstrap` + `migrar` + `api` (1 réplica) + `worker` + `ferramentas`, com os mesmos volumes e segredos separados da spec 01 e um nome de projeto próprio (`name: tccelta-teste`), para não colidir com a stack dev. `make e2e` (alvo da spec 01) executa, nesta ordem:
 
 1. `docker compose -f compose.test.yaml up -d --build --wait`;
 2. `provisionar importar --arquivo /testdata/dongles-teste.csv` (seed + teste dourado);
 3. `simulador --cenario e2e --chaves … --banco-url-env SIM_BANCO_URL`;
 4. `simulador --cenario protocolo-negativo …`;
 5. `simulador --cenario tempo --acelerar 120 …`;
+5b. `simulador --cenario geracao …` (volta do `boot_id` e reprocessamento);
 6. `down -v`, **sempre** (mesmo com falha), devolvendo o código de saída dos cenários.
 
 ### CI do backend (`.github/workflows/backend-ci.yml`)
@@ -193,14 +197,14 @@ A carga **não** roda no CI (é manual, com relatório versionado em `backend/do
 2. Dongle virtual + app virtual mínimo (handshake + lotes). **Checkpoint:** `simulador --cenario e2e` com 1 dongle e sem eventos chega a `seq_contiguo = HEAD`.
 3. Eventos (BOOT, LOSS, OVERFLOW, reconexão) + verificações SQL. **Checkpoint:** `make e2e` verde.
 4. `protocolo-negativo` e `tempo`. **Checkpoint:** verdes.
-5. `carga`, `reconexao`, `joelho` + relatório. **Checkpoint:** relatório M1–M6 registrado; metas não atingidas viram *issues* com a decisão de mitigação (por exemplo, o modo assíncrono da spec 05).
+5. `carga`, `reconexao`, `joelho` + relatório: **implementar os cenários e o gerador de relatório** (testes do próprio simulador verdes); **executar M1–M6 fica adiado** (decisão do autor). Quando for executado, **checkpoint:** relatório M1–M6 registrado; metas não atingidas viram *issues* com a decisão de mitigação (por exemplo, o modo assíncrono da spec 05).
 6. CI. **Checkpoint:** PR no `backend/` roda lint, unit, integração e e2e verdes.
 
 ## Critérios de aceite
 
 - [ ] O simulador usa o pacote `protocolo` da API e as chaves que estão no Vault de teste (nenhuma "porta dos fundos" de verificação).
 - [ ] `make e2e` cobre BOOT, LOSS, OVERFLOW, âncora, vizinhos, rejeição por tag, duplicados e reconexão, e sai com 0.
-- [ ] Relatório de carga com M1–M6 medido e versionado.
+- [ ] Metas de carga M1–M6 documentadas e cenários `carga`/`reconexao`/`joelho` implementados; **relatório medido e versionado: adiado** (não bloqueia a fase).
 - [ ] CI do backend ativo.
 
 ## Riscos
@@ -212,7 +216,8 @@ A carga **não** roda no CI (é manual, com relatório versionado em `backend/do
 | Testcontainers no Windows | `make teste-integracao` dentro de contêiner com `host.docker.internal`; alternativa: WSL2 |
 | Mil dongles provisionados poluem o Vault dev | o Vault dev é efêmero (memória); em prodlike, `--provisionar` é recusado sem `--confirmar` |
 
-## [Aberto]
+## Decisões do autor (antes em aberto)
 
-- **[Aberto] Testes de carga com o firmware real.** Recomendação: 1–3 dongles reais em bancada com o simulador de ECU (`simulador/` ECUSim) por 24 h, handshakes a cada 10 min, para medir a deriva real do cristal (calibra `DERIVA_MAX_PPM`, spec 06) e o RTT real da âncora via celular.
-- **[Aberto] k6/vegeta em vez do simulador próprio.** Recomendação: não. Blocos assinados, estado por dongle e o Go-Back-N exigem a lógica do protocolo, que o simulador já tem.
+- **[Decisão] Simulador próprio em Go** (descartados k6/vegeta): blocos assinados, estado por dongle e o Go-Back-N exigem a lógica do protocolo, que o simulador já tem, com o mesmo pacote `protocolo` da API e cenários BOOT/LOSS/OVERFLOW e K adaptativo.
+- **[Decisão] Não executar os testes de carga agora, só documentá-los** (ver *Objetivo* e a tabela de metas).
+- **[Decisão] Testes com o firmware real (1–3 dongles por 24 h):** não nesta fase. O procedimento para medir a deriva real do cristal e o RTT real da âncora está documentado na spec 06 (*Decisões do autor*, `DERIVA_MAX_PPM` mantido em 40 ppm sem medir).
