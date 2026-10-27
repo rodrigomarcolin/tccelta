@@ -78,6 +78,9 @@ class FakeDongle implements DongleSyncRepository {
   bool get isLinkUp => linkUp;
 
   @override
+  int get linkGeneration => generation;
+
+  @override
   int get mtu => 247;
 
   void _emit(DongleSyncEvent e) {

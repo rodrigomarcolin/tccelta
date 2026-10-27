@@ -54,6 +54,9 @@ class DongleSyncRepositoryImpl implements DongleSyncRepository {
   bool get isLinkUp => _linkUp;
 
   @override
+  int get linkGeneration => _generation;
+
+  @override
   int get mtu => _dongle.connection?.mtu ?? 23;
 
   void _emit(DongleSyncEvent e) {

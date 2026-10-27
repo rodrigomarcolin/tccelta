@@ -176,7 +176,7 @@ class HandshakeRunner {
       // Passo 7.
       return outcome;
     } finally {
-      await sub.cancel();
+      unawaited(sub.cancel());
     }
   }
 }

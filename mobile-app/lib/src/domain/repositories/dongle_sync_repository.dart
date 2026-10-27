@@ -78,6 +78,9 @@ abstract interface class DongleSyncRepository {
   /// `true` com o link SYNC utilizável.
   bool get isLinkUp;
 
+  /// Geração do link atual (incrementa a cada subida; 0 antes da primeira).
+  int get linkGeneration;
+
   /// MTU ATT da conexão atual (23 se desconhecido).
   int get mtu;
 
