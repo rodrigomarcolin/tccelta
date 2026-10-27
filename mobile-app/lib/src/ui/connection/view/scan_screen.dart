@@ -140,6 +140,13 @@ class ScanScreen extends HookConsumerWidget {
                           subtitleColor: AppColors.cyan500,
                           subtitleMono: false,
                           showValue: false,
+                          trailing:
+                              (state.hints[device.id]?.windowOpen ?? false)
+                              ? const StatusBadge(
+                                  label: 'PRONTO PARA PAREAR',
+                                  tone: StatusTone.ok,
+                                )
+                              : null,
                           selected: true,
                           // BT desligado: nada a conectar — desabilita o toque
                           // (onTap nulo) e esmaece o card.

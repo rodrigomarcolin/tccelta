@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/application/connection/forget_dongle_use_case.dart';
+import 'package:tccelta_mobile/src/application/connection/prepare_secure_connection_use_case.dart';
 import 'package:tccelta_mobile/src/core/persistence/shared_preferences_provider.dart';
 import 'package:tccelta_mobile/src/data/datasources/ble_permissions_datasource.dart';
 import 'package:tccelta_mobile/src/data/datasources/dongle_datasource.dart';
@@ -74,6 +75,16 @@ final Provider<LastDongleRepository> lastDongleRepositoryProvider =
 final Provider<ForgetDongleUseCase> forgetDongleUseCaseProvider =
     Provider<ForgetDongleUseCase>(
       (ref) => ForgetDongleUseCase(
+        ref.read(dongleRepositoryProvider),
+        ref.read(lastDongleRepositoryProvider),
+      ),
+    );
+
+/// Use case que decide o plano de conexão segura (restaurar, parear, esperar).
+final Provider<PrepareSecureConnectionUseCase>
+prepareSecureConnectionUseCaseProvider =
+    Provider<PrepareSecureConnectionUseCase>(
+      (ref) => PrepareSecureConnectionUseCase(
         ref.read(dongleRepositoryProvider),
         ref.read(lastDongleRepositoryProvider),
       ),

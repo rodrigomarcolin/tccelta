@@ -1,4 +1,5 @@
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_bond_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_signal_level.dart';
@@ -68,6 +69,37 @@ class DongleDatasource {
   /// Para o scan em andamento.
   Future<void> stopScan() => _ble.stopScan();
 
+  /// Se o SO deixa o app consultar, criar e remover bonds (Android).
+  bool get canManageBonds => _ble.canManageBonds;
+
+  /// Estado do bond do SO com [deviceId].
+  Future<BleBondState> bondState(String deviceId) => _ble.bondState(deviceId);
+
+  /// Remove o bond do SO com [deviceId] (Android).
+  Future<void> removeBond(String deviceId) => _ble.removeBond(deviceId);
+
+  /// Acompanha os anúncios de UM dongle (filtro por id), para saber quando a
+  /// janela de pareamento abre. Emite `null` enquanto o dongle não foi visto.
+  Stream<BleDevice?> watchDongle(
+    String deviceId, {
+    Duration timeout = const Duration(seconds: 120),
+  }) => _ble
+      .scan(
+        withRemoteIds: [deviceId],
+        timeout: timeout,
+        continuousUpdates: true,
+      )
+      .map((devices) {
+        for (final d in devices) {
+          if (d.id == deviceId) return d;
+        }
+        return null;
+      });
+
+  /// Prazo do pareamento/cifra: menor que o `PAIR_AUTH_TIMEOUT_MS` do firmware
+  /// (35 s), para o app desistir antes de o dongle derrubar a conexão.
+  static const Duration securingTimeout = Duration(seconds: 30);
+
   /// Conecta ao dongle [deviceId] com os UUIDs da NUS e abre também o canal
   /// do serviço SYNC (ausente em firmware antigo sem derrubar a conexão).
   Future<BleConnection> connect(String deviceId) => _ble.connect(
@@ -82,5 +114,6 @@ class DongleDatasource {
         txUuid: SyncConfig.tx,
       ),
     ],
+    securingTimeout: securingTimeout,
   );
 }

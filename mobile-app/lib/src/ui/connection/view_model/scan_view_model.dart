@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/core/errors/failure.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
+import 'package:tccelta_mobile/src/domain/ble/dongle_pairing_hint.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 
@@ -15,6 +16,7 @@ class ScanState {
     this.devices = const [],
     this.adapterOn = true,
     this.failure,
+    this.hints = const {},
   });
 
   /// Se o scan está ativo (mostra a barra de progresso/radar).
@@ -29,6 +31,10 @@ class ScanState {
   /// Falha corrente (nula quando não há erro).
   final Failure? failure;
 
+  /// Dica de pareamento do anúncio de cada dongle visto (por id), quando o
+  /// firmware a publica.
+  final Map<String, DonglePairingHint> hints;
+
   /// Cópia com campos sobrescritos. Use [clearFailure] para zerar a falha.
   ScanState copyWith({
     bool? isScanning,
@@ -36,11 +42,13 @@ class ScanState {
     bool? adapterOn,
     Failure? failure,
     bool clearFailure = false,
+    Map<String, DonglePairingHint>? hints,
   }) => ScanState(
     isScanning: isScanning ?? this.isScanning,
     devices: devices ?? this.devices,
     adapterOn: adapterOn ?? this.adapterOn,
     failure: clearFailure ? null : (failure ?? this.failure),
+    hints: hints ?? this.hints,
   );
 }
 
@@ -101,6 +109,10 @@ class ScanViewModel extends Notifier<ScanState> {
         devices: devices
             .where((d) => d.displayName.isNotEmpty)
             .toList(growable: false),
+        hints: {
+          for (final d in devices)
+            d.id: ?DonglePairingHint.fromManufacturerData(d.manufacturerData),
+        },
       ),
       onError: (Object e) => state = state.copyWith(
         isScanning: false,

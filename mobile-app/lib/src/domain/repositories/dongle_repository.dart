@@ -1,6 +1,9 @@
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_bond_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_link_error.dart';
+import 'package:tccelta_mobile/src/domain/ble/dongle_pairing_hint.dart';
 
 /// Contrato de acesso ao dongle OBD2 (interface no domain, impl no data).
 ///
@@ -32,4 +35,24 @@ abstract interface class DongleRepository {
 
   /// Encerra a conexão ativa (se houver).
   Future<void> disconnect();
+
+  /// Se o SO deixa o app consultar, criar e remover bonds (Android).
+  bool get canManageBonds;
+
+  /// Estado do bond do SO com [deviceId] (`unknown` no iOS).
+  Future<BleBondState> bondState(String deviceId);
+
+  /// Remove o bond do SO. Lança `BleBondFailure` se o SO não remover e
+  /// `BleBondUnsupportedFailure` no iOS.
+  Future<void> removeBond(String deviceId);
+
+  /// Dica de pareamento do anúncio do dongle; `null` = dongle não visto ou sem
+  /// o campo.
+  Stream<DonglePairingHint?> watchPairingHint(
+    String deviceId, {
+    Duration timeout,
+  });
+
+  /// Motivo da última falha da conexão ativa.
+  BleLinkError? get lastLinkError;
 }

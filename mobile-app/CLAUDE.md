@@ -16,7 +16,8 @@ O código é em português do Brasil (comentários, identificadores do domínio 
 
 O app se comunica com o dongle via **BLE usando o Nordic UART Service**. Este é o contrato que o app deve implementar (definido em `../esp32-firmware/src/connectivity/ble/BleConnectivity.h`):
 
-- O dispositivo anuncia-se como `OBD2Dongle`.
+- O dispositivo anuncia-se como `TCCeltaDongle`.
+- **O dongle exige pareamento LESC (bond) antes de qualquer escrita ou notificação.** O pareamento é Just Works, conduzido pelo SO, e só acontece na janela de 45 s aberta ao segurar o botão BOOT do dongle por 5 s. O anúncio traz uma dica (dados de fabricante `0xFFFF`: bit 0 janela aberta, bit 1 há bond) usada só para orientar a UI. Na feature `connection`, a fase `securing` e a `PairingScreen` cobrem o pareamento; o `ConnectingViewModel` decide o plano (restaurar, parear agora, esperar o botão) e trata bond perdido (Android remove o bond e pareia de novo; iOS orienta "Esquecer este dispositivo").
 - Service UUID `6E400001-B5A3-F393-E0A9-E50E24DCCA9E`.
 - **RX** `6E400002-…` (WRITE) — o app escreve aqui **comandos de texto ELM327**, ex.: `010C\r` (ler PID 0x0C = RPM do motor).
 - **TX** `6E400003-…` (NOTIFY) — o dongle envia **respostas de texto ELM327**, ex.: `41 0C 17 70\r>`.

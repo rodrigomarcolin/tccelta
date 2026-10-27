@@ -13,6 +13,10 @@ abstract final class AppRoutes {
   /// Procurar dongles próximos.
   static const String scan = '/scan';
 
+  /// Orientação de pareamento (segurar o botão, janela expirada, recusa,
+  /// esquecer o dispositivo no iOS).
+  static const String pairing = '/pairing';
+
   /// Handshake de conexão em andamento.
   static const String connecting = '/connecting';
 

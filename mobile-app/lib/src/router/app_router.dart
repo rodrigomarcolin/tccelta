@@ -5,6 +5,7 @@ import 'package:tccelta_mobile/src/ui/connection/view/bluetooth_off_screen.dart'
 import 'package:tccelta_mobile/src/ui/connection/view/connected_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/connecting_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/connection_lost_screen.dart';
+import 'package:tccelta_mobile/src/ui/connection/view/pairing_screen.dart';
 import 'package:tccelta_mobile/src/ui/connection/view/scan_screen.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/view/dtc_screen.dart';
 import 'package:tccelta_mobile/src/ui/more/view/more_screen.dart';
@@ -28,6 +29,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.scan,
       builder: (context, state) => const ScanScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.pairing,
+      builder: (context, state) => const PairingScreen(),
     ),
     GoRoute(
       path: AppRoutes.connecting,

@@ -4,8 +4,11 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/src/application/gps/gps_reporter.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_bond_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_link_error.dart';
+import 'package:tccelta_mobile/src/domain/ble/dongle_pairing_hint.dart';
 import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_settings.dart';
@@ -43,6 +46,24 @@ class _FakeDongle implements DongleRepository {
 
   @override
   Future<void> disconnect() async {}
+
+  @override
+  bool get canManageBonds => false;
+
+  @override
+  Future<BleBondState> bondState(String deviceId) async => BleBondState.unknown;
+
+  @override
+  Future<void> removeBond(String deviceId) async {}
+
+  @override
+  Stream<DonglePairingHint?> watchPairingHint(
+    String deviceId, {
+    Duration? timeout,
+  }) => const Stream.empty();
+
+  @override
+  BleLinkError? get lastLinkError => null;
 }
 
 GpsFix _fix(Duration at, {double accuracy = 5}) => GpsFix.fromDegrees(

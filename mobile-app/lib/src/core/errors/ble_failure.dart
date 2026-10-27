@@ -19,3 +19,19 @@ class BleConnectionFailure extends Failure {
   /// Erro cru que originou a falha (para logging/diagnóstico). @default null
   final Object? cause;
 }
+
+/// Falha ao remover o bond do SO com o dongle (a API oculta do Android pode
+/// ser bloqueada em versões novas; nesse caso o usuário remove nos Ajustes).
+class BleBondFailure extends Failure {
+  /// Cria a falha de bond com [message] e a [cause] original opcional.
+  const BleBondFailure(super.message, {this.cause});
+
+  /// Erro cru que originou a falha (para logging/diagnóstico). @default null
+  final Object? cause;
+}
+
+/// O SO não permite ao app gerenciar bonds (iOS: só nos Ajustes do sistema).
+class BleBondUnsupportedFailure extends Failure {
+  /// Cria a falha com [message].
+  const BleBondUnsupportedFailure(super.message);
+}

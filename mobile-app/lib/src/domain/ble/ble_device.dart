@@ -17,6 +17,7 @@ class BleDevice {
     required this.name,
     required this.rssi,
     this.signal = BleSignalLevel.weak,
+    this.manufacturerData = const {},
   });
 
   /// Id opaco de plataforma (remoteId) — usado para (re)conectar.
@@ -34,6 +35,10 @@ class BleDevice {
   /// Nível de sinal classificado a partir do [rssi] (preenchido no datasource).
   final BleSignalLevel signal;
 
+  /// Dados de fabricante do anúncio (Company ID -> bytes). Genérico: quem os
+  /// interpreta é o chamador (ex.: `DonglePairingHint`).
+  final Map<int, List<int>> manufacturerData;
+
   /// Rótulo para exibição: o [name] anunciado ou, se vazio, o [id]
   /// (MAC no Android, UUID no iOS) — nunca vazio.
   String get displayName => name.isNotEmpty ? name : id;
@@ -44,23 +49,42 @@ class BleDevice {
     String? name,
     int? rssi,
     BleSignalLevel? signal,
+    Map<int, List<int>>? manufacturerData,
   }) => BleDevice(
     id: id ?? this.id,
     name: name ?? this.name,
     rssi: rssi ?? this.rssi,
     signal: signal ?? this.signal,
+    manufacturerData: manufacturerData ?? this.manufacturerData,
   );
 
-  // `signal` é derivado de `rssi`, então fica FORA de ==/hashCode: dois
-  // dispositivos com mesmo id/name/rssi são iguais (e têm o mesmo nível).
+  // `signal` é derivado de `rssi`, então fica FORA de ==/hashCode. Os dados de
+  // fabricante entram: o estado da janela de pareamento muda sem mudar
+  // id/nome/rssi.
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is BleDevice &&
           other.id == id &&
           other.name == name &&
-          other.rssi == rssi;
+          other.rssi == rssi &&
+          _sameManufacturerData(other.manufacturerData, manufacturerData);
 
   @override
-  int get hashCode => Object.hash(id, name, rssi);
+  int get hashCode => Object.hash(id, name, rssi, manufacturerData.length);
+
+  static bool _sameManufacturerData(
+    Map<int, List<int>> a,
+    Map<int, List<int>> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      final other = b[entry.key];
+      if (other == null || other.length != entry.value.length) return false;
+      for (var i = 0; i < other.length; i++) {
+        if (other[i] != entry.value[i]) return false;
+      }
+    }
+    return true;
+  }
 }
