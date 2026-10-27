@@ -14,17 +14,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"tccelta/backend/internal/kms"
-	"tccelta/backend/internal/protocolo"
+	"tccelta/backend/internal/casodeuso/porta"
+	"tccelta/backend/internal/dominio/protocolo"
 )
-
-// Sessao é o que o JWT validado autoriza.
-type Sessao struct {
-	Dev      protocolo.DevID
-	CS       uint32
-	JTI      uuid.UUID
-	ExpiraEm time.Time
-}
 
 type claims struct {
 	jwt.RegisteredClaims
@@ -34,7 +26,7 @@ type claims struct {
 // Validador valida os tokens localmente com as chaves públicas em memória.
 type Validador struct {
 	chaves             atomic.Pointer[map[string]ed25519.PublicKey]
-	fonte              kms.AssinadorJWT
+	fonte              porta.AssinadorJWT
 	emissor, audiencia string
 	folga              time.Duration
 	agora              func() time.Time
@@ -43,7 +35,7 @@ type Validador struct {
 }
 
 // NovoValidador carrega as chaves; falha se o Vault não responder no boot.
-func NovoValidador(ctx context.Context, fonte kms.AssinadorJWT, emissor, audiencia string, folga time.Duration) (*Validador, error) {
+func NovoValidador(ctx context.Context, fonte porta.AssinadorJWT, emissor, audiencia string, folga time.Duration) (*Validador, error) {
 	v := &Validador{fonte: fonte, emissor: emissor, audiencia: audiencia, folga: folga, agora: time.Now}
 	if err := v.recarregar(ctx); err != nil {
 		return nil, err
@@ -104,7 +96,7 @@ func (v *Validador) AtualizarPeriodicamente(ctx context.Context, cada time.Durat
 }
 
 // Validar valida o JWT bruto.
-func (v *Validador) Validar(ctx context.Context, bruto string) (Sessao, error) {
+func (v *Validador) Validar(ctx context.Context, bruto string) (porta.Sessao, error) {
 	var cl claims
 	tentouRecarregar := false
 	keyfunc := func(t *jwt.Token) (any, error) {
@@ -141,27 +133,30 @@ func (v *Validador) Validar(ctx context.Context, bruto string) (Sessao, error) {
 	t, err := p.ParseWithClaims(bruto, &cl, keyfunc)
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) && !errors.Is(err, jwt.ErrTokenSignatureInvalid) {
-			return Sessao{}, ErrTokenExpirado
+			return porta.Sessao{}, ErrTokenExpirado
 		}
-		return Sessao{}, ErrTokenInvalido
+		return porta.Sessao{}, ErrTokenInvalido
 	}
 	if !t.Valid || cl.ExpiresAt == nil {
-		return Sessao{}, ErrTokenInvalido
+		return porta.Sessao{}, ErrTokenInvalido
 	}
 	if len(cl.Subject) != 16 {
-		return Sessao{}, ErrTokenInvalido
+		return porta.Sessao{}, ErrTokenInvalido
 	}
 	dev, err := protocolo.DevIDDeHex(strings.ToLower(cl.Subject))
 	if err != nil {
-		return Sessao{}, ErrTokenInvalido
+		return porta.Sessao{}, ErrTokenInvalido
 	}
 	cs, err := strconv.ParseUint(cl.CS.String(), 10, 32)
 	if err != nil || cs < 1 {
-		return Sessao{}, ErrTokenInvalido
+		return porta.Sessao{}, ErrTokenInvalido
 	}
 	jti, err := uuid.Parse(cl.ID)
 	if err != nil {
-		return Sessao{}, ErrTokenInvalido
+		return porta.Sessao{}, ErrTokenInvalido
 	}
-	return Sessao{Dev: dev, CS: uint32(cs), JTI: jti, ExpiraEm: cl.ExpiresAt.Time}, nil
+	return porta.Sessao{Dev: dev, CS: uint32(cs), JTI: jti, ExpiraEm: cl.ExpiresAt.Time}, nil
 }
+
+var _ porta.EmissorToken = (*Emissor)(nil)
+var _ porta.ValidadorToken = (*Validador)(nil)

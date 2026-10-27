@@ -11,10 +11,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"tccelta/backend/internal/banco/consultas"
+	"tccelta/backend/internal/repositorio"
 )
 
 // ErrBancoOcupado: lock_timeout, deadlock ou falha de serialização persistente (-> 503).
-var ErrBancoOcupado = errors.New("banco_ocupado")
+var ErrBancoOcupado = repositorio.ErrBancoOcupado
 
 // OpcoesTx são os timeouts locais da transação.
 type OpcoesTx struct{ LockTimeout, StatementTimeout time.Duration }

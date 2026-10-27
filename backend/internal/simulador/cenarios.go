@@ -12,9 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/ingestao"
-	"tccelta/backend/internal/pids"
-	"tccelta/backend/internal/protocolo"
+	"tccelta/backend/internal/casodeuso/catalogo"
+	"tccelta/backend/internal/dominio/pid"
+	"tccelta/backend/internal/dominio/protocolo"
+	"tccelta/backend/internal/repositorio/postgres"
+	"tccelta/backend/internal/reprocessamento"
 )
 
 // Opcoes configuram a execução de um cenário.
@@ -387,16 +389,16 @@ func geracao(ctx context.Context, o Opcoes) error {
 	v.ok(n == 1, "alerta geracao_boot_avancou uma vez (%d)", n)
 	// reprocessamento: ensaio e aplicar preservam a contagem
 	antes, _ := q.VerContarLeituras(ctx, est.DongleID)
-	cat := pids.Novo(q, o.Log)
-	if err := cat.Recarregar(ctx); err != nil {
+	cat := pid.Novo()
+	if err := catalogo.NovoSincronizar(postgres.Repositorios(q).Pids, cat, o.Log).Recarregar(ctx); err != nil {
 		return err
 	}
-	op := ingestao.OpcoesReprocesso{DongleID: est.DongleID, Aplicar: false}
-	if _, err := ingestao.Reprocessar(ctx, o.Pool, cat, op, o.Log, nil); err != nil {
+	op := reprocessamento.OpcoesReprocesso{DongleID: est.DongleID, Aplicar: false}
+	if _, err := reprocessamento.Reprocessar(ctx, o.Pool, cat, op, o.Log, nil); err != nil {
 		return err
 	}
 	op.Aplicar, op.Operador = true, "simulador"
-	if _, err := ingestao.Reprocessar(ctx, o.Pool, cat, op, o.Log, nil); err != nil {
+	if _, err := reprocessamento.Reprocessar(ctx, o.Pool, cat, op, o.Log, nil); err != nil {
 		v.ok(false, "reprocessar --aplicar: %v", err)
 	}
 	depois, _ := q.VerContarLeituras(ctx, est.DongleID)

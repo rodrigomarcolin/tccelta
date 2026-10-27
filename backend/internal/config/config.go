@@ -25,21 +25,14 @@ type BancoConfig struct {
 	PoolMin int32
 }
 
-type VaultConfig struct {
-	Addr            string
+// KMSConfig descreve o serviço KMS (módulo kms/), alcançado só por HTTP.
+type KMSConfig struct {
+	URL             string
 	CACert          string
 	ClientCert      string
 	ClientKey       string
-	RoleIDArquivo   string
-	SecretIDArquivo string
-	TokenArquivo    string
 	Timeout         time.Duration
-	Retentativas    int
-	MountAuth       string
-	MountRec        string
-	MountJWT        string
-	ChaveJWT        string
-	MaxSimultaneas  int
+	MaxConcorrencia int
 	VerifyLote      int
 	VerifyParalelo  int
 }
@@ -79,23 +72,17 @@ type WorkerConfig struct {
 	MeiaLarguraMinMs   float64
 }
 
-type RotacaoConfig struct {
-	Periodo     time.Duration
-	Verificacao time.Duration
-}
-
 type Config struct {
 	Ambiente           string
 	LogNivel           string
 	LogFormato         string
 	HTTP               HTTPConfig
 	Banco              BancoConfig
-	Vault              VaultConfig
+	KMS                KMSConfig
 	JWT                JWTConfig
 	Protocolo          ProtocoloConfig
 	Limites            LimitesConfig
 	Worker             WorkerConfig
-	Rotacao            RotacaoConfig
 	PermitirPerfilNone bool
 }
 
@@ -196,23 +183,15 @@ func CarregarDe(env func(string) string) (Config, error) {
 		PoolMax: int32(l.inteiro("BANCO_POOL_MAX", 40)),
 		PoolMin: int32(l.inteiro("BANCO_POOL_MIN", 4)),
 	}
-	c.Vault = VaultConfig{
-		Addr:            l.str("VAULT_ADDR", ""),
-		CACert:          l.str("VAULT_CACERT", ""),
-		ClientCert:      l.str("VAULT_CLIENT_CERT", ""),
-		ClientKey:       l.str("VAULT_CLIENT_KEY", ""),
-		RoleIDArquivo:   l.str("VAULT_APPROLE_ROLE_ID_ARQUIVO", ""),
-		SecretIDArquivo: l.str("VAULT_APPROLE_SECRET_ID_ARQUIVO", ""),
-		TokenArquivo:    l.str("VAULT_TOKEN_ARQUIVO", ""),
-		Timeout:         l.dur("VAULT_TIMEOUT", 2*time.Second),
-		Retentativas:    l.inteiro("VAULT_RETENTATIVAS", 1),
-		MountAuth:       l.str("VAULT_MOUNT_AUTH", "transit-auth"),
-		MountRec:        l.str("VAULT_MOUNT_REC", "transit-rec"),
-		MountJWT:        l.str("VAULT_MOUNT_JWT", "transit-jwt"),
-		ChaveJWT:        l.str("VAULT_CHAVE_JWT", "jwt"),
-		MaxSimultaneas:  l.inteiro("VAULT_MAX_SIMULTANEAS", 32),
-		VerifyLote:      l.inteiro("VAULT_VERIFY_LOTE", 32),
-		VerifyParalelo:  l.inteiro("VAULT_VERIFY_PARALELO", 1),
+	c.KMS = KMSConfig{
+		URL:             l.str("KMS_URL", ""),
+		CACert:          l.str("KMS_CACERT", ""),
+		ClientCert:      l.str("KMS_CLIENT_CERT", ""),
+		ClientKey:       l.str("KMS_CLIENT_KEY", ""),
+		Timeout:         l.dur("KMS_TIMEOUT", 2*time.Second),
+		MaxConcorrencia: l.inteiro("KMS_MAX_CONCORRENCIA", 32),
+		VerifyLote:      l.inteiro("KMS_VERIFY_LOTE", 32),
+		VerifyParalelo:  l.inteiro("KMS_VERIFY_PARALELO", 1),
 	}
 	c.JWT = JWTConfig{
 		Emissor:   l.str("JWT_EMISSOR", "tccelta-api"),
@@ -248,11 +227,6 @@ func CarregarDe(env func(string) string) (Config, error) {
 		SpanMin:            l.dur("ANCORA_SPAN_MIN", time.Hour),
 		MeiaLarguraMinMs:   l.real("MEIA_LARGURA_MIN_MS", 0.5),
 	}
-	c.Rotacao = RotacaoConfig{
-		Periodo:     l.dur("JWT_ROTACAO_PERIODO", 720*time.Hour),
-		Verificacao: l.dur("JWT_ROTACAO_VERIFICACAO", time.Hour),
-	}
-
 	switch c.Ambiente {
 	case "dev", "prodlike", "producao":
 	default:

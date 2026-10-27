@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"tccelta/backend/internal/protocolo"
+	"tccelta/backend/internal/dominio/protocolo"
 )
 
 // RespostaLote é o que o app virtual entende de POST /blocos.

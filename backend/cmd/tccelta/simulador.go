@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"flag"
 	"fmt"
 	"net/http"
@@ -25,7 +24,6 @@ func cmdSimulador(ctx context.Context, args []string) error {
 	cenario := fs.String("cenario", "e2e", "e2e|protocolo-negativo|tempo|geracao|carga|reconexao|joelho")
 	api := fs.String("api", "http://api:8080", "URL base da API")
 	chaves := fs.String("chaves", "", "CSV de dongles de teste")
-	provisionar := fs.Int("provisionar", 0, "provisiona N dongles de teste no Vault (token do provisionador)")
 	dongles := fs.Int("dongles", 0, "número de dongles virtuais")
 	duracao := fs.Duration("duracao", 2*time.Minute, "duração da carga")
 	acelerar := fs.Float64("acelerar", 1, "fator de aceleração do T_lat")
@@ -50,32 +48,13 @@ func cmdSimulador(ctx context.Context, args []string) error {
 	}
 	defer pool.Close()
 
-	var ks []simulador.Chaves
-	switch {
-	case *provisionar > 0:
-		p, fechar, err := novoProvisionador(ctx)
-		if err != nil {
-			return err
-		}
-		defer fechar()
-		for i := 0; i < *provisionar; i++ {
-			d, err := p.Novo(ctx, "hmac")
-			if err != nil {
-				return err
-			}
-			var c simulador.Chaves
-			copy(c.Dev[:], d.DevID)
-			c.KAuth, c.KRec = d.KAuth, d.KRec
-			ks = append(ks, c)
-		}
-	case *chaves != "":
-		if ks, err = lerCSVChaves(*chaves); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("informe --chaves ou --provisionar")
+	if *chaves == "" {
+		return fmt.Errorf("informe --chaves (CSV gerado por `tccelta-kms provisionar`)")
 	}
-	_ = rand.Reader
+	ks, err := lerCSVChaves(*chaves)
+	if err != nil {
+		return err
+	}
 	params := map[string]any{"api": *api, "dongles": *dongles, "duracao": duracao.String(), "tlat": tlat.String(), "acelerar": *acelerar}
 	r := simulador.NovoRelatorio(*cenario, params)
 	err = simulador.Executar(ctx, *cenario, simulador.Opcoes{API: *api, Pool: pool, Chaves: ks, Rel: r, Log: log, Dongles: *dongles,

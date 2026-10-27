@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"tccelta/backend/internal/protocolo"
+	"tccelta/backend/internal/dominio/protocolo"
 )
 
 // Chaves de um dongle virtual (as mesmas importadas no Vault de teste).
