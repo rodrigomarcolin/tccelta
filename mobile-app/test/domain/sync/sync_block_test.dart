@@ -45,9 +45,7 @@ void main() {
 
   test('frame curto ou tamanho incoerente lança', () {
     expect(
-      () => SyncBlock.fromFrame(
-        SyncFrame(SyncMessageType.block, Uint8List(5)),
-      ),
+      () => SyncBlock.fromFrame(SyncFrame(SyncMessageType.block, Uint8List(5))),
       throwsFormatException,
     );
     final data = Uint8List.fromList(SyncVectors.bootData)..[10] = 0xFF;

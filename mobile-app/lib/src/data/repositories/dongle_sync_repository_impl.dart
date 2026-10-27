@@ -135,9 +135,7 @@ class DongleSyncRepositoryImpl implements DongleSyncRepository {
             SyncMessageType.notice => NoticeReceived(
               NewBlockNotice.fromValue(frame.value),
             ),
-            SyncMessageType.block => BlockReceived(
-              SyncBlock.fromFrame(frame),
-            ),
+            SyncMessageType.block => BlockReceived(SyncBlock.fromFrame(frame)),
             SyncMessageType.response => ResponseReceived(
               frame,
               ResponseInfo.fromValue(frame.value),

@@ -94,13 +94,10 @@ class _DongleState {
 /// §4.3–4.4. Serve de oráculo de contrato para o servidor real.
 class BenchSyncServer {
   /// Cria o servidor; [now] e [random] são injetáveis para testes.
-  BenchSyncServer({
-    BenchKeys? keys,
-    DateTime Function()? now,
-    Random? random,
-  }) : keys = keys ?? BenchKeys.defaults(),
-       _now = now ?? DateTime.now,
-       _random = random ?? Random.secure();
+  BenchSyncServer({BenchKeys? keys, DateTime Function()? now, Random? random})
+    : keys = keys ?? BenchKeys.defaults(),
+      _now = now ?? DateTime.now,
+      _random = random ?? Random.secure();
 
   /// Validade de um desafio emitido.
   static const Duration challengeValidity = Duration(seconds: 60);

@@ -35,10 +35,7 @@ void main() {
 
     test('serializa comandos: um write por vez, em ordem', () async {
       final conn = ScriptedBleConnection(
-        responses: const {
-          '010C': '41 0C 17 70\r>',
-          '010D': '41 0D 3C\r>',
-        },
+        responses: const {'010C': '41 0C 17 70\r>', '010D': '41 0D 3C\r>'},
       );
       final client = Elm327Client(conn);
 

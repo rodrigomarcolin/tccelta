@@ -77,9 +77,7 @@ class AppTabBar extends StatelessWidget {
         child: Container(
           decoration: const BoxDecoration(
             color: AppColors.tabBarSurface,
-            border: Border(
-              top: BorderSide(color: AppColors.borderHairline),
-            ),
+            border: Border(top: BorderSide(color: AppColors.borderHairline)),
           ),
           padding: EdgeInsets.only(
             top: AppSpacing.s3,

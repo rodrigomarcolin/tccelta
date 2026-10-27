@@ -92,10 +92,8 @@ class Obd2Datasource {
   Future<List<ElmResponse>> readPidResponses(
     Obd2Pid pid, {
     int? expectedResponses,
-  }) async => _readServiceResponses(
-    pid.pid,
-    expectedResponses: expectedResponses,
-  );
+  }) async =>
+      _readServiceResponses(pid.pid, expectedResponses: expectedResponses);
 
   /// Lê o status de monitoramento (PID 0x01) de cada ECU que responder ao
   /// broadcast — carrega o bit do MIL (byte A, bit 7). Não usa [Obd2Pid]

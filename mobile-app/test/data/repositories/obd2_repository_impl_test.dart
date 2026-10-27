@@ -241,10 +241,7 @@ void main() {
       await repo.discoverSupported();
       final readings = await repo.readAll();
 
-      expect(
-        readings.map((r) => r.pid).toSet(),
-        {Obd2Pid.rpm, Obd2Pid.speed},
-      );
+      expect(readings.map((r) => r.pid).toSet(), {Obd2Pid.rpm, Obd2Pid.speed});
     });
 
     test('readMany lê só os PIDs pedidos, na ordem', () async {
@@ -253,10 +250,7 @@ void main() {
 
       final readings = await repo.readMany([Obd2Pid.speed, Obd2Pid.rpm]);
 
-      expect(readings.map((r) => r.pid).toList(), [
-        Obd2Pid.speed,
-        Obd2Pid.rpm,
-      ]);
+      expect(readings.map((r) => r.pid).toList(), [Obd2Pid.speed, Obd2Pid.rpm]);
       expect(readings[0].value, 60);
       expect(readings[1].value, 1500);
     });
@@ -478,24 +472,21 @@ void main() {
       expect(snapshot.active, isEmpty);
     });
 
-    test(
-      'leitura do Modo 03 incompleta vira falha, não "0 DTCs"',
-      () async {
-        final conn = ScriptedBleConnection(
-          responses: {
-            ..._initResponses,
-            '03': 'NO DATA\r>',
-            '07': '47 00\r>',
-            '0A': '4A 00\r>',
-            '0202': 'NO DATA\r>',
-            '0101': '41 01 00 00 00 00\r>',
-          },
-        );
-        final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+    test('leitura do Modo 03 incompleta vira falha, não "0 DTCs"', () async {
+      final conn = ScriptedBleConnection(
+        responses: {
+          ..._initResponses,
+          '03': 'NO DATA\r>',
+          '07': '47 00\r>',
+          '0A': '4A 00\r>',
+          '0202': 'NO DATA\r>',
+          '0101': '41 01 00 00 00 00\r>',
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
 
-        await expectLater(repo.readDtc(), throwsA(isA<DtcReadFailure>()));
-      },
-    );
+      await expectLater(repo.readDtc(), throwsA(isA<DtcReadFailure>()));
+    });
 
     test('sem conexão pronta lança DtcReadFailure', () async {
       final repo = Obd2RepositoryImpl(_FakeDongleRepository(null));

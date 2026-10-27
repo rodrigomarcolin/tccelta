@@ -68,11 +68,7 @@ class ElmResponseParser {
       .map((line) => line.trim())
       .where((line) => line.isNotEmpty);
 
-  static _Marker? _findMarker(
-    List<String> tokens,
-    int service,
-    int? pid,
-  ) {
+  static _Marker? _findMarker(List<String> tokens, int service, int? pid) {
     final serviceHex = _hex(service);
     final pidHex = pid == null ? null : _hex(pid);
     for (var i = 0; i < tokens.length; i++) {

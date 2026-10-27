@@ -90,16 +90,8 @@ class StatCard extends StatelessWidget {
        );
 
   /// Linha "label … valor mono" para fatos estáticos (protocolo, nº de PIDs).
-  const StatCard.info({
-    required String label,
-    Object? value,
-    Key? key,
-  }) : this._(
-         _Variant.info,
-         label: label,
-         value: value,
-         key: key,
-       );
+  const StatCard.info({required String label, Object? value, Key? key})
+    : this._(_Variant.info, label: label, value: value, key: key);
 
   /// Gauge à esquerda + valor/unidade e label à direita. O instrumento é
   /// passado em [gauge] — qualquer `GaugeVariant` (ou widget) serve.

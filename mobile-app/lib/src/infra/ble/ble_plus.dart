@@ -40,17 +40,14 @@ class FlutterBluePlusBleService implements BleService {
 
     controller
       ..onListen = () async {
-        sub = FlutterBluePlus.onScanResults.listen(
-          (results) {
-            for (final r in results) {
-              _seen[r.device.remoteId.str] = r.device;
-            }
-            if (!controller.isClosed) {
-              controller.add(results.map(_toDevice).toList());
-            }
-          },
-          onError: controller.addError,
-        );
+        sub = FlutterBluePlus.onScanResults.listen((results) {
+          for (final r in results) {
+            _seen[r.device.remoteId.str] = r.device;
+          }
+          if (!controller.isClosed) {
+            controller.add(results.map(_toDevice).toList());
+          }
+        }, onError: controller.addError);
         // Espelha o ciclo do scan: quando o FBP passa de "escaneando" para
         // "parado" (timeout), encerramos a stream (-> onDone a montante).
         scanningSub = FlutterBluePlus.isScanning.listen((scanning) {

@@ -39,15 +39,12 @@ class Obd2RepositoryImpl implements Obd2Repository {
     // Teardown proativo: quando o link cai (failed/disconnected), desmonta o
     // Elm327Client sem esperar a próxima leitura. `reconnecting` NÃO desmonta —
     // a recuperação é transparente e reaproveita a mesma conexão/cliente.
-    _phaseSub = _dongle.connectionPhase.listen(
-      (phase) {
-        if (phase == BleConnectionPhase.disconnected ||
-            phase == BleConnectionPhase.failed) {
-          _teardown();
-        }
-      },
-      onError: (_) => _teardown(),
-    );
+    _phaseSub = _dongle.connectionPhase.listen((phase) {
+      if (phase == BleConnectionPhase.disconnected ||
+          phase == BleConnectionPhase.failed) {
+        _teardown();
+      }
+    }, onError: (_) => _teardown());
   }
 
   final DongleRepository _dongle;
@@ -154,9 +151,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
     if (!_initialized) await initialize();
 
     final raw = await ds.readSupportedPids();
-    final supported = <Obd2Pid>{
-      for (final n in raw) ?Obd2Pid.fromByte(n),
-    };
+    final supported = <Obd2Pid>{for (final n in raw) ?Obd2Pid.fromByte(n)};
     _supported = supported;
     // A descoberta faz uma troca OBD (0100), então o protocolo já é detectável.
     _protocol ??= await ds.describeProtocol();
@@ -377,10 +372,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
     ];
   }
 
-  static ElmResponse? _responseForEcu(
-    List<ElmResponse> responses,
-    int? ecuId,
-  ) {
+  static ElmResponse? _responseForEcu(List<ElmResponse> responses, int? ecuId) {
     if (responses.isEmpty) return null;
     if (ecuId == null) return responses.first;
     for (final response in responses) {

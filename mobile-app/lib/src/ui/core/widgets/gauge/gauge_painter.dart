@@ -205,11 +205,7 @@ class GaugePainter extends CustomPainter {
     canvas
       ..drawLine(center, tip, needle)
       // Hub central.
-      ..drawCircle(
-        center,
-        6 * s,
-        Paint()..color = AppColors.textPrimary,
-      );
+      ..drawCircle(center, 6 * s, Paint()..color = AppColors.textPrimary);
   }
 
   @override

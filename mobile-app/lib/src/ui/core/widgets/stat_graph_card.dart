@@ -146,11 +146,7 @@ class StatGraphCard extends StatelessWidget {
   Widget _footer(num? min, num? avg, num? max) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _stat('mín', min),
-        _stat('méd', avg),
-        _stat('máx', max),
-      ],
+      children: [_stat('mín', min), _stat('méd', avg), _stat('máx', max)],
     );
   }
 

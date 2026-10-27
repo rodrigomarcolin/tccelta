@@ -297,9 +297,7 @@ class _SearchField extends StatelessWidget {
         ),
         filled: true,
         fillColor: AppColors.surfaceList,
-        contentPadding: const EdgeInsets.symmetric(
-          vertical: AppSpacing.s4,
-        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
         border: const OutlineInputBorder(
           borderRadius: AppRadii.brMd,
           borderSide: BorderSide(color: AppColors.borderHairline),

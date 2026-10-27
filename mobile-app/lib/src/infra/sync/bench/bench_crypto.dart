@@ -44,7 +44,5 @@ Uint8List _mac(Uint8List key, int type, Uint8List devId, Uint8List data) {
     ..addByte(type)
     ..add(devId)
     ..add(data);
-  return Uint8List.fromList(
-    Hmac(sha256, key).convert(input.toBytes()).bytes,
-  );
+  return Uint8List.fromList(Hmac(sha256, key).convert(input.toBytes()).bytes);
 }

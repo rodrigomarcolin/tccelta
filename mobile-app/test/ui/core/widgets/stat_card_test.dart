@@ -50,11 +50,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         wrap(
-          const StatCard.value(
-            label: 'Velocidade',
-            value: 60,
-            unit: 'km/h',
-          ),
+          const StatCard.value(label: 'Velocidade', value: 60, unit: 'km/h'),
         ),
       );
 

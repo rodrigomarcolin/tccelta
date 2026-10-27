@@ -242,9 +242,7 @@ class StatusBand extends StatelessWidget {
       ),
       decoration: const BoxDecoration(
         color: AppColors.surfaceList,
-        border: Border(
-          bottom: BorderSide(color: AppColors.borderHairline),
-        ),
+        border: Border(bottom: BorderSide(color: AppColors.borderHairline)),
       ),
       child: Row(
         children: [
