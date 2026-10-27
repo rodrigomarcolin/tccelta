@@ -1,4 +1,4 @@
-package kms
+package vault
 
 import (
 	"bytes"
@@ -17,7 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"tccelta/backend/internal/config"
+	"tccelta/kms/internal/config"
+	"tccelta/kms/internal/disjuntor"
 )
 
 // ErroVault é uma resposta de erro do Vault (status != 2xx).
@@ -43,7 +44,7 @@ type Cliente struct {
 	log     *slog.Logger
 	token   atomic.Pointer[string]
 	loginMu sync.Mutex
-	disj    *disjuntor
+	disj    *disjuntor.Disjuntor
 	sem     chan struct{}
 	pronto  atomic.Bool
 	parar   context.CancelFunc
@@ -79,7 +80,7 @@ func NovoCliente(ctx context.Context, cfg config.VaultConfig, log *slog.Logger) 
 	if n <= 0 {
 		n = 32
 	}
-	c := &Cliente{cfg: cfg, http: &http.Client{Transport: tr}, log: log, disj: novoDisjuntor(5, 10*time.Second),
+	c := &Cliente{cfg: cfg, http: &http.Client{Transport: tr}, log: log, disj: disjuntor.Novo(5, 10*time.Second),
 		sem: make(chan struct{}, n)}
 	if err := c.login(ctx); err != nil {
 		return nil, err
@@ -94,10 +95,10 @@ func NovoCliente(ctx context.Context, cfg config.VaultConfig, log *slog.Logger) 
 }
 
 // Pronto: token válido e disjuntor fechado.
-func (c *Cliente) Pronto() bool { return c.pronto.Load() && !c.disj.aberto() }
+func (c *Cliente) Pronto() bool { return c.pronto.Load() && !c.disj.Aberto() }
 
 // DisjuntorAberto para a métrica.
-func (c *Cliente) DisjuntorAberto() bool { return c.disj.aberto() }
+func (c *Cliente) DisjuntorAberto() bool { return c.disj.Aberto() }
 
 // Fechar para a renovação do token.
 func (c *Cliente) Fechar() {
@@ -248,7 +249,7 @@ func transitorio(err error) bool {
 
 // chamar aplica semáforo, disjuntor e retentativas. 4xx (exceto 403 de token vencido) são devolvidos tal qual.
 func (c *Cliente) chamar(ctx context.Context, metodo, caminho string, corpo map[string]any) (map[string]any, error) {
-	if !c.disj.permitir() {
+	if !c.disj.Permitir() {
 		return nil, ErrIndisponivel
 	}
 	select {
@@ -279,10 +280,10 @@ func (c *Cliente) chamar(ctx context.Context, metodo, caminho string, corpo map[
 		}
 	}
 	if err != nil && transitorio(err) {
-		c.disj.falha()
+		c.disj.Falha()
 		return nil, fmt.Errorf("%w: %v", ErrIndisponivel, err)
 	}
-	c.disj.sucesso() // 2xx e 4xx significam que o Vault está de pé
+	c.disj.Sucesso() // 2xx e 4xx significam que o Vault está de pé
 	return r, err
 }
 

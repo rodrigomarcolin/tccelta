@@ -6,3 +6,6 @@ scrape_configs:
   - job_name: worker
     metrics_path: /metricas
     static_configs: [{ targets: ["worker:9091"] }]
+  - job_name: kms
+    metrics_path: /metricas
+    static_configs: [{ targets: ["kms:9300"] }]

@@ -1,6 +1,4 @@
 saida/
 deploy/segredos/*
-deploy/certs/*
 !deploy/segredos/.gitkeep
-!deploy/certs/.gitkeep
 .env

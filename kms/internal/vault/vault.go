@@ -1,4 +1,4 @@
-package kms
+package vault
 
 import (
 	"context"
@@ -11,22 +11,20 @@ import (
 	"strings"
 	"time"
 
-	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/dongles"
-	"tccelta/backend/internal/metricas"
+	"tccelta/kms/internal/config"
 )
 
-// Vault implementa Autenticador e AssinadorJWT sobre o Transit.
+// Vault faz as operações do KMS sobre o Transit: HMAC de K_auth, verify de K_rec e assinatura do JWT.
 type Vault struct {
 	c   *Cliente
 	t   Transporte
 	cfg config.VaultConfig
 	log *slog.Logger
-	m   *metricas.M
+	m   Observador
 }
 
 // NovoVault faz o login e devolve o KMS pronto.
-func NovoVault(ctx context.Context, cfg config.VaultConfig, log *slog.Logger, m *metricas.M) (*Vault, error) {
+func NovoVault(ctx context.Context, cfg config.VaultConfig, log *slog.Logger, m Observador) (*Vault, error) {
 	c, err := NovoCliente(ctx, cfg, log)
 	if err != nil {
 		return nil, err
@@ -52,7 +50,13 @@ func (v *Vault) Fechar() {
 	}
 }
 
-func (v *Vault) observar(ctx context.Context, op string, t0 time.Time, err error) {
+// Observador recebe as métricas das chamadas ao Vault (implementado por internal/metricas).
+type Observador interface {
+	ChamadaVault(operacao, resultado string, d time.Duration)
+	Disjuntor(aberto bool)
+}
+
+func (v *Vault) observar(op string, t0 time.Time, err error) {
 	if v.m == nil {
 		return
 	}
@@ -60,14 +64,9 @@ func (v *Vault) observar(ctx context.Context, op string, t0 time.Time, err error
 	if err != nil {
 		res = "erro"
 	}
-	v.m.KMSChamadas.WithLabelValues(op, res, string(FaseDe(ctx))).Inc()
-	v.m.KMSDur.WithLabelValues(op).Observe(time.Since(t0).Seconds())
+	v.m.ChamadaVault(op, res, time.Since(t0))
 	if v.c != nil {
-		if v.c.DisjuntorAberto() {
-			v.m.KMSDisjuntor.Set(1)
-		} else {
-			v.m.KMSDisjuntor.Set(0)
-		}
+		v.m.Disjuntor(v.c.DisjuntorAberto())
 	}
 }
 
@@ -92,14 +91,14 @@ func resultados(r map[string]any) ([]any, error) {
 }
 
 // HMACAuth: HMAC-SHA256 completo com K_auth, em batch.
-func (v *Vault) HMACAuth(ctx context.Context, d dongles.Dongle, entradas [][]byte) (out [][]byte, err error) {
+func (v *Vault) HMACAuth(ctx context.Context, chave string, entradas [][]byte) (out [][]byte, err error) {
 	t0 := time.Now()
-	defer func() { v.observar(ctx, "hmac_auth", t0, err) }()
+	defer func() { v.observar("hmac_auth", t0, err) }()
 	itens := make([]any, len(entradas))
 	for i, e := range entradas {
 		itens[i] = map[string]any{"input": b64(e)}
 	}
-	r, err := v.t.Escrever(ctx, fmt.Sprintf("%s/hmac/%s/sha2-256", v.cfg.MountAuth, d.ChaveAuth), map[string]any{"batch_input": itens})
+	r, err := v.t.Escrever(ctx, fmt.Sprintf("%s/hmac/%s/sha2-256", v.cfg.MountAuth, chave), map[string]any{"batch_input": itens})
 	if err != nil {
 		return nil, traduzir(err)
 	}
@@ -125,9 +124,9 @@ func (v *Vault) HMACAuth(ctx context.Context, d dongles.Dongle, entradas [][]byt
 }
 
 // VerificarBlocos: verify com K_rec, em batch. Erro por item vira falha do KMS, não tag inválida.
-func (v *Vault) VerificarBlocos(ctx context.Context, d dongles.Dongle, entradas, tags [][]byte) (out []bool, err error) {
+func (v *Vault) VerificarBlocos(ctx context.Context, chave string, entradas, tags [][]byte) (out []bool, err error) {
 	t0 := time.Now()
-	defer func() { v.observar(ctx, "verify_rec", t0, err) }()
+	defer func() { v.observar("verify_rec", t0, err) }()
 	if len(entradas) != len(tags) {
 		return nil, errors.New("kms: entradas e tags com tamanhos diferentes")
 	}
@@ -135,7 +134,7 @@ func (v *Vault) VerificarBlocos(ctx context.Context, d dongles.Dongle, entradas,
 	for i := range entradas {
 		itens[i] = map[string]any{"input": b64(entradas[i]), "hmac": "vault:v1:" + b64(tags[i])}
 	}
-	r, err := v.t.Escrever(ctx, fmt.Sprintf("%s/verify/%s/sha2-256", v.cfg.MountRec, d.ChaveRec), map[string]any{"batch_input": itens})
+	r, err := v.t.Escrever(ctx, fmt.Sprintf("%s/verify/%s/sha2-256", v.cfg.MountRec, chave), map[string]any{"batch_input": itens})
 	if err != nil {
 		return nil, traduzir(err)
 	}
@@ -160,7 +159,7 @@ func (v *Vault) VerificarBlocos(ctx context.Context, d dongles.Dongle, entradas,
 // Assinar assina a signing string do JWT com a chave Ed25519.
 func (v *Vault) Assinar(ctx context.Context, entrada []byte) (sig []byte, versao int, err error) {
 	t0 := time.Now()
-	defer func() { v.observar(ctx, "sign_jwt", t0, err) }()
+	defer func() { v.observar("sign_jwt", t0, err) }()
 	r, err := v.t.Escrever(ctx, fmt.Sprintf("%s/sign/%s", v.cfg.MountJWT, v.cfg.ChaveJWT), map[string]any{"input": b64(entrada)})
 	if err != nil {
 		return nil, 0, traduzir(err)
@@ -225,8 +224,3 @@ func traduzir(err error) error {
 	}
 	return fmt.Errorf("%w: %v", ErrIndisponivel, err)
 }
-
-var (
-	_ Autenticador = (*Vault)(nil)
-	_ AssinadorJWT = (*Vault)(nil)
-)

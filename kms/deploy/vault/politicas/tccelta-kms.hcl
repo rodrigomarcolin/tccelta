@@ -1,5 +1,6 @@
+# Politica do servico KMS (unico cliente do Vault em runtime; a API nao tem credencial do Vault).
 # K_auth: gerar HMAC (Desafio 0x01 e ACK 0x04) e verificar a Resposta 0x02
-# (a API gera o HMAC completo e compara os 16 primeiros bytes em tempo constante).
+# (o KMS devolve o HMAC completo e a API compara os 16 primeiros bytes em tempo constante).
 path "transit-auth/hmac/*" {
   capabilities = ["update"]
 }

@@ -1,12 +1,13 @@
-package kms
+// Package disjuntor é o disjuntor (circuit breaker) das chamadas ao Vault.
+package disjuntor
 
 import (
 	"sync"
 	"time"
 )
 
-// disjuntor: 5 falhas seguidas abrem por 10 s; depois, meia-abertura com 1 sonda.
-type disjuntor struct {
+// Disjuntor: `limite` falhas seguidas abrem por `espera`; depois, meia-abertura com 1 sonda.
+type Disjuntor struct {
 	mu        sync.Mutex
 	falhas    int
 	limite    int
@@ -16,12 +17,13 @@ type disjuntor struct {
 	agora     func() time.Time
 }
 
-func novoDisjuntor(limite int, espera time.Duration) *disjuntor {
-	return &disjuntor{limite: limite, espera: espera, agora: time.Now}
+// Novo cria o disjuntor (o padrão do serviço é Novo(5, 10*time.Second)).
+func Novo(limite int, espera time.Duration) *Disjuntor {
+	return &Disjuntor{limite: limite, espera: espera, agora: time.Now}
 }
 
-// permitir diz se a chamada pode seguir.
-func (d *disjuntor) permitir() bool {
+// Permitir diz se a chamada pode seguir.
+func (d *Disjuntor) Permitir() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.falhas < d.limite {
@@ -37,13 +39,15 @@ func (d *disjuntor) permitir() bool {
 	return true
 }
 
-func (d *disjuntor) sucesso() {
+// Sucesso fecha o disjuntor.
+func (d *Disjuntor) Sucesso() {
 	d.mu.Lock()
 	d.falhas, d.sonda = 0, false
 	d.mu.Unlock()
 }
 
-func (d *disjuntor) falha() {
+// Falha conta uma falha e abre o disjuntor ao atingir o limite.
+func (d *Disjuntor) Falha() {
 	d.mu.Lock()
 	d.falhas++
 	d.sonda = false
@@ -53,7 +57,8 @@ func (d *disjuntor) falha() {
 	d.mu.Unlock()
 }
 
-func (d *disjuntor) aberto() bool {
+// Aberto diz se o disjuntor está recusando chamadas.
+func (d *Disjuntor) Aberto() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.falhas >= d.limite && d.agora().Before(d.abertoAte)

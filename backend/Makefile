@@ -7,15 +7,16 @@ SQLC_IMG     = sqlc/sqlc:1.27.0
 LINT_IMG     = golangci/golangci-lint:v1.64.8
 DOCKER_GO    = docker run --rm -v "$(CURDIR)":/src -w /src -v tccelta_gomod:/go/pkg/mod $(GO_IMG)
 FERR         = run --rm ferramentas
+KMSF         = run --rm kms-ferramentas
 SIM_DB       = --banco-url-env SIM_BANCO_URL
 
 .PHONY: env segredos certs build up up-tls up-tunel up-prodlike down limpar logs ps migrar migracao-nova sqlc sqlc-verificar \
-	vault-bootstrap vault-unseal vault-unseal-manual seed-dev provisionar kms-wrapping kms-importar reprocessar ca-exportar psql \
+	vault-bootstrap vault-unseal vault-unseal-manual saida-dir seed-dev provisionar kms-wrapping kms-importar reprocessar ca-exportar psql \
 	teste teste-integracao vetores lint e2e carga
 
 env:             ; [ -f .env ] || cp .env.example .env
 segredos:        ; sh scripts/gerar-segredos.sh
-certs:           ; sh scripts/gerar-certs.sh
+certs:           ; sh ../kms/scripts/gerar-certs.sh
 build:           ; $(COMPOSE) build
 up:              env segredos ; $(COMPOSE) up -d --build --wait
 up-tls:          env segredos ; $(COMPOSE) --profile tls up -d --build --wait
@@ -32,10 +33,17 @@ sqlc-verificar:  ; docker run --rm -v "$(CURDIR)":/src -w /src $(SQLC_IMG) diff
 vault-bootstrap: ; $(COMPOSE) run --rm vault-bootstrap
 vault-unseal:    ; $(COMPOSE_PL) run --rm vault-unseal
 vault-unseal-manual: ; $(COMPOSE_PL) exec -it vault vault operator unseal
-seed-dev:        ; $(COMPOSE) --profile ferramentas $(FERR) provisionar importar --arquivo /testdata/dongles-teste.csv
-provisionar:     ; $(COMPOSE) --profile ferramentas $(FERR) provisionar novo --saida /saida --quantidade $(or $(N),1) --hw $(or $(HW),dev)
-kms-wrapping:    ; $(COMPOSE) --profile ferramentas $(FERR) provisionar exportar-wrapping --saida /saida/kms_wrapping.json
-kms-importar:    ; $(COMPOSE) --profile ferramentas $(FERR) provisionar importar-registro --arquivo $(ARQ)
+seed-dev:        saida-dir
+	$(COMPOSE) --profile ferramentas $(KMSF) provisionar importar --arquivo /testdata/dongles-teste.csv --saida /saida/registros
+	$(COMPOSE) --profile ferramentas $(FERR) provisionar registrar --arquivo /saida/registros
+provisionar:     saida-dir
+	$(COMPOSE) --profile ferramentas $(KMSF) provisionar novo --saida /saida --quantidade $(or $(N),1) --hw $(or $(HW),dev)
+	$(COMPOSE) --profile ferramentas $(FERR) provisionar registrar --arquivo /saida
+kms-wrapping:    saida-dir ; $(COMPOSE) --profile ferramentas $(KMSF) provisionar exportar-wrapping --saida /saida/kms_wrapping.json
+kms-importar:    saida-dir
+	$(COMPOSE) --profile ferramentas $(KMSF) provisionar importar-registro --arquivo $(ARQ) --saida /saida/registros
+	$(COMPOSE) --profile ferramentas $(FERR) provisionar registrar --arquivo /saida/registros
+saida-dir:       ; mkdir -p saida && chmod a+rwx saida
 reprocessar:     ; $(COMPOSE) --profile ferramentas $(FERR) worker reprocessar --dongle $(DONGLE) --desde-seq $(or $(DESDE),1) $(if $(APLICAR),--aplicar,)
 ca-exportar:     ; $(COMPOSE) cp caddy:/data/caddy/pki/authorities/local/root.crt saida/caddy-root.crt
 psql:            ; $(COMPOSE) exec banco psql -U postgres -d tccelta
@@ -44,14 +52,19 @@ teste-integracao:; docker run --rm -v "$(CURDIR)":/src -w /src -v //var/run/dock
                      -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal --add-host=host.docker.internal:host-gateway \
                      -v tccelta_gomod:/go/pkg/mod $(GO_IMG) go test -p 1 -tags integracao -race ./...
 vetores:         ; docker run --rm -v "$(CURDIR)":/src -w /src python:3.12-slim python scripts/gerar_vetores.py \
-                   && cp internal/protocolo/testdata/vetores.json ../mobile-app/test/fixtures/protocolo_vetores.json
+                   && cp internal/dominio/protocolo/testdata/vetores.json ../mobile-app/test/fixtures/protocolo_vetores.json
 lint:            ; docker run --rm -v "$(CURDIR)":/src -w /src $(LINT_IMG) golangci-lint run
-e2e:             env segredos
+e2e:             env segredos saida-dir
 	$(COMPOSE_T) up -d --build --wait
-	$(COMPOSE_T) --profile ferramentas $(FERR) provisionar importar --arquivo /testdata/dongles-teste.csv
+	$(COMPOSE_T) --profile ferramentas $(KMSF) provisionar importar --arquivo /testdata/dongles-teste.csv --saida /saida/registros
+	$(COMPOSE_T) --profile ferramentas $(FERR) provisionar registrar --arquivo /saida/registros
 	$(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario e2e --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB) \
 	 && $(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario protocolo-negativo --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB) \
 	 && $(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario tempo --acelerar 120 --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB) \
 	 && $(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario geracao --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB); \
 	 st=$$?; $(COMPOSE_T) down -v; exit $$st
-carga:           ; $(COMPOSE) --profile ferramentas $(FERR) simulador --cenario carga --provisionar $(or $(N),1000) --api http://api:8080 $(SIM_DB) --relatorio /saida/relatorio.json
+carga:           saida-dir
+	rm -f saida/dongles-carga.csv
+	$(COMPOSE) --profile ferramentas $(KMSF) provisionar novo --sem-material --quantidade $(or $(N),1000) --saida /saida/carga --csv-saida /saida/dongles-carga.csv
+	$(COMPOSE) --profile ferramentas $(FERR) provisionar registrar --arquivo /saida/carga
+	$(COMPOSE) --profile ferramentas $(FERR) simulador --cenario carga --chaves /saida/dongles-carga.csv --api http://api:8080 $(SIM_DB) --relatorio /saida/relatorio.json
