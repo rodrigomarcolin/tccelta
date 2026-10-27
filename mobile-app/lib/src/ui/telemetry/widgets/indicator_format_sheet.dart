@@ -115,9 +115,7 @@ class IndicatorFormatSheet extends HookConsumerWidget {
         stepIndex.value = index + 1;
         return;
       }
-      Navigator.of(
-        context,
-      ).pop(IndicatorFormatResult.confirmed(draft.value));
+      Navigator.of(context).pop(IndicatorFormatResult.confirmed(draft.value));
     }
 
     return FractionallySizedBox(

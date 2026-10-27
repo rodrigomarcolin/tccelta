@@ -14,11 +14,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 /// (`permission_handler` é 100% pull/`Future`).
 void useOnAppResume(VoidCallback onResume) {
   final callback = useRef(onResume)..value = onResume;
-  useEffect(
-    () {
-      final listener = AppLifecycleListener(onResume: () => callback.value());
-      return listener.dispose;
-    },
-    const [],
-  );
+  useEffect(() {
+    final listener = AppLifecycleListener(onResume: () => callback.value());
+    return listener.dispose;
+  }, const []);
 }

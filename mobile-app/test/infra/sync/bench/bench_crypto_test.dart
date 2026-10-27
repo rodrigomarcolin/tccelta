@@ -28,11 +28,7 @@ void main() {
 
     test(
       'desafio',
-      () => check(
-        0x01,
-        SyncVectors.challengePayload,
-        SyncVectors.challengeTag,
-      ),
+      () => check(0x01, SyncVectors.challengePayload, SyncVectors.challengeTag),
     );
     test(
       'desafio com diagnóstico',
@@ -44,11 +40,7 @@ void main() {
     );
     test(
       'resposta',
-      () => check(
-        0x02,
-        SyncVectors.responsePayload,
-        SyncVectors.responseTag,
-      ),
+      () => check(0x02, SyncVectors.responsePayload, SyncVectors.responseTag),
     );
     test('ACK', () => check(0x04, SyncVectors.ackPayload, SyncVectors.ackTag));
   });

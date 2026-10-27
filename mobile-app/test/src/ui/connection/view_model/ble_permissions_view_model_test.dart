@@ -46,9 +46,7 @@ void main() {
   });
 
   test('permissão já concedida => converge para granted', () async {
-    final container = containerWith(
-      _FakeBlePermissionsRepository(has: true),
-    );
+    final container = containerWith(_FakeBlePermissionsRepository(has: true));
     // O `containerWith` já dispara o build (e o _check assíncrono) via listen.
     await container.pump();
     expect(

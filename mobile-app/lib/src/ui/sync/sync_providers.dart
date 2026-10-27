@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/application/sync/handshake_runner.dart';
 import 'package:tccelta_mobile/src/application/sync/sync_coordinator.dart';
+import 'package:tccelta_mobile/src/core/network/dio_client.dart';
 import 'package:tccelta_mobile/src/data/datasources/sync_server_datasource.dart';
 import 'package:tccelta_mobile/src/data/repositories/dongle_sync_repository_impl.dart';
 import 'package:tccelta_mobile/src/data/repositories/sync_server_repository_impl.dart';
@@ -10,17 +11,19 @@ import 'package:tccelta_mobile/src/domain/repositories/sync_server_repository.da
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_faults.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_sync_server.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_sync_server_gateway.dart';
+import 'package:tccelta_mobile/src/infra/sync/https_sync_server_gateway.dart';
+import 'package:tccelta_mobile/src/infra/sync/sync_api_client.dart';
 import 'package:tccelta_mobile/src/infra/sync/unavailable_sync_server_gateway.dart';
 import 'package:tccelta_mobile/src/services/sync/sync_server_gateway.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
 
 /// Servidor escolhido no build: `--dart-define=SYNC_SERVER=bench` usa o
-/// servidor de bancada embutido (só em debug); qualquer outro valor usa o
-/// gateway indisponível até a Fase 3 entregar o HTTPS.
+/// servidor de bancada embutido e `stub` o gateway indisponível (ambos só em
+/// debug); qualquer outro valor usa o gateway HTTPS.
 const String kSyncServerMode = String.fromEnvironment(
   'SYNC_SERVER',
-  defaultValue: 'stub',
+  defaultValue: 'https',
 );
 
 /// Servidor de bancada embutido (estado em memória), usado só no modo `bench`.
@@ -36,7 +39,10 @@ final Provider<SyncServerGateway> syncServerGatewayProvider =
           faults: BenchFaults.fromEnvironment(),
         );
       }
-      return const UnavailableSyncServerGateway();
+      if (kDebugMode && kSyncServerMode == 'stub') {
+        return const UnavailableSyncServerGateway();
+      }
+      return HttpsSyncServerGateway(SyncApiClient(ref.watch(syncDioProvider)));
     });
 
 /// Datasource do servidor.

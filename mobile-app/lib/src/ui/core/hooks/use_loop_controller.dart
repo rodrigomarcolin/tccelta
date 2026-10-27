@@ -18,16 +18,13 @@ import 'package:tccelta_mobile/src/core/theme/theme.dart';
 AnimationController useLoopController(Duration duration, {bool active = true}) {
   final controller = useAnimationController(duration: duration);
   final reduceMotion = useContext().reduceMotion;
-  useEffect(
-    () {
-      if (reduceMotion || !active) {
-        controller.stop();
-      } else {
-        unawaited(controller.repeat());
-      }
-      return null;
-    },
-    [controller, reduceMotion, active],
-  );
+  useEffect(() {
+    if (reduceMotion || !active) {
+      controller.stop();
+    } else {
+      unawaited(controller.repeat());
+    }
+    return null;
+  }, [controller, reduceMotion, active]);
   return controller;
 }

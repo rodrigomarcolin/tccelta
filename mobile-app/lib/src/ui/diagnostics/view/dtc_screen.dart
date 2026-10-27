@@ -60,10 +60,7 @@ class DtcScreen extends ConsumerWidget {
                         fullWidth: false,
                         icon: dtc.isLoading
                             ? null
-                            : const AppIcon(
-                                AppIconData.recarregar,
-                                size: 16,
-                              ),
+                            : const AppIcon(AppIconData.recarregar, size: 16),
                         onPressed: dtc.isLoading ? null : notifier.reread,
                         child: dtc.isLoading
                             ? const SizedBox(

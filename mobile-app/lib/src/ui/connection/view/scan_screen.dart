@@ -31,15 +31,12 @@ class ScanScreen extends HookConsumerWidget {
     // Dispara o scan uma única vez ao montar. O callback do useEffect roda
     // DURANTE o build, então adiamos a mutação do provider para o pós-frame
     // (equivale ao antigo initState + addPostFrameCallback).
-    useEffect(
-      () {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          unawaited(ref.read(scanViewModelProvider.notifier).startScan());
-        });
-        return null;
-      },
-      const [],
-    );
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(ref.read(scanViewModelProvider.notifier).startScan());
+      });
+      return null;
+    }, const []);
 
     Future<void> rescan() async {
       unawaited(ref.read(scanViewModelProvider.notifier).startScan());

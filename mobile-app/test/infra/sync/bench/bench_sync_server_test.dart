@@ -130,10 +130,7 @@ void main() {
     test('nonce errado e desafio vencido são 409', () {
       final ch = server.requestChallenge(benchDevId);
       expect(
-        () => server.submitResponse(
-          benchDevId,
-          respond(ch, nonceByte: 0xEE),
-        ),
+        () => server.submitResponse(benchDevId, respond(ch, nonceByte: 0xEE)),
         throwsA(isA<ServerChallengeRejected>()),
       );
       final ch2 = server.requestChallenge(benchDevId);

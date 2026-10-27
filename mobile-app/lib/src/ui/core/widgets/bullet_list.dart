@@ -57,10 +57,7 @@ class _BulletItem extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
-              text,
-              style: AppTypography.body.copyWith(height: 1.4),
-            ),
+            child: Text(text, style: AppTypography.body.copyWith(height: 1.4)),
           ),
         ],
       ),

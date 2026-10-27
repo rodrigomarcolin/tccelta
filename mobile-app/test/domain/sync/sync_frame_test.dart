@@ -27,9 +27,7 @@ void main() {
     );
     expect(
       ack.toTlv(),
-      hexBytes(
-        '04 1900 82000000 07000000 00 84EB2C1203B2720E492DB89E04F1FAE7',
-      ),
+      hexBytes('04 1900 82000000 07000000 00 84EB2C1203B2720E492DB89E04F1FAE7'),
     );
     expect(SyncFrame.batchRequest(62).toTlv(), hexBytes('05 0200 3E00'));
     expect(

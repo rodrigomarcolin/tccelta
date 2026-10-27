@@ -499,9 +499,7 @@ void main() {
     h.dongle.addData(1, 3);
     h.open();
     unawaited(
-      h.settingsRepo.save(
-        const SyncSettings(latency: Duration(seconds: 10)),
-      ),
+      h.settingsRepo.save(const SyncSettings(latency: Duration(seconds: 10))),
     );
     h.pump();
     h.elapse(const Duration(seconds: 11));

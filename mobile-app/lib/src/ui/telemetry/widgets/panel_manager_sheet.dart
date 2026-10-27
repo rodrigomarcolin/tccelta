@@ -40,9 +40,7 @@ class PanelManagerSheet extends HookConsumerWidget {
     // Empurra o sheet para cima do teclado — sem isso, o campo de renomear
     // (no passo de edição) fica escondido atrás dele ao ganhar foco.
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewInsetsOf(context).bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: DecoratedBox(
         decoration: const BoxDecoration(
           color: AppColors.surfaceCard,
@@ -83,10 +81,8 @@ class PanelManagerSheet extends HookConsumerWidget {
                               ),
                               canDelete: panels.panels.length > 1,
                               onBack: () => editingId.value = null,
-                              onRename: (name) => notifier.renamePanel(
-                                editingId.value!,
-                                name,
-                              ),
+                              onRename: (name) =>
+                                  notifier.renamePanel(editingId.value!, name),
                               onDuplicate: () {
                                 notifier.duplicatePanel(editingId.value!);
                                 editingId.value = null;

@@ -205,9 +205,7 @@ class PanelViewModel extends AsyncNotifier<PanelsState> {
       indicatorIds: [...source.indicatorIds],
       displays: {...source.displays},
     );
-    _apply(
-      (c) => c.copyWith(panels: [...c.panels, copy], activeId: copy.id),
-    );
+    _apply((c) => c.copyWith(panels: [...c.panels, copy], activeId: copy.id));
   }
 
   /// Renomeia o painel [id] — [name] é cortado em [PanelNameLimits.max]

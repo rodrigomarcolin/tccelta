@@ -82,10 +82,7 @@ class AppButton extends StatelessWidget {
           mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (icon != null) ...[
-              icon!,
-              const SizedBox(width: AppSpacing.s2),
-            ],
+            if (icon != null) ...[icon!, const SizedBox(width: AppSpacing.s2)],
             Flexible(child: child),
           ],
         ),

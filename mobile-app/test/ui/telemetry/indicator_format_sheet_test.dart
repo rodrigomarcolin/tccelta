@@ -92,9 +92,7 @@ class _HostState extends State<_Host> {
         }
       });
     }
-    return Scaffold(
-      body: Text('resultado: ${done ? 'pronto' : 'pendente'}'),
-    );
+    return Scaffold(body: Text('resultado: ${done ? 'pronto' : 'pendente'}'));
   }
 }
 
@@ -386,9 +384,7 @@ void main() {
           Obd2Pid.rpm,
         ).copyWith(format: IndicatorFormat.bar);
 
-        await tester.pumpWidget(
-          wrap(Obd2Pid.rpm, initial: initial),
-        );
+        await tester.pumpWidget(wrap(Obd2Pid.rpm, initial: initial));
         await tester.pumpAndSettle();
 
         expect(find.text('Número + barra'), findsOneWidget);

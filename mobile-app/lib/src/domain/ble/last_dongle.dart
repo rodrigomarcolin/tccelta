@@ -12,10 +12,8 @@ class LastDongle {
   const LastDongle({required this.id, required this.name});
 
   /// Reconstrói a partir do JSON salvo por [toJson].
-  factory LastDongle.fromJson(Map<String, dynamic> json) => LastDongle(
-    id: json['id'] as String,
-    name: json['name'] as String,
-  );
+  factory LastDongle.fromJson(Map<String, dynamic> json) =>
+      LastDongle(id: json['id'] as String, name: json['name'] as String);
 
   /// Id opaco de plataforma (remoteId) — usado para reconectar.
   final String id;

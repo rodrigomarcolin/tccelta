@@ -353,10 +353,7 @@ void main() {
         .first;
     final cardRect = tester.getRect(speedCell);
     final handleRect = tester.getRect(
-      find.descendant(
-        of: speedCell,
-        matching: find.byType(DragHandleDots),
-      ),
+      find.descendant(of: speedCell, matching: find.byType(DragHandleDots)),
     );
 
     expect(cardRect.height, greaterThanOrEqualTo(86));
@@ -436,34 +433,33 @@ void main() {
       expect(find.text('Pista'), findsNWidgets(2));
     });
 
-    testWidgets(
-      'duplicar um painel copia os indicadores e vira o ativo',
-      (tester) async {
-        await tester.pumpWidget(
-          app(readings: const [Obd2Reading(pid: Obd2Pid.rpm, value: 1500)]),
-        );
-        await tester.pump(const Duration(milliseconds: 10));
-        await addWithDefaultFormat(tester, '010C', Obd2Pid.rpm);
+    testWidgets('duplicar um painel copia os indicadores e vira o ativo', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        app(readings: const [Obd2Reading(pid: Obd2Pid.rpm, value: 1500)]),
+      );
+      await tester.pump(const Duration(milliseconds: 10));
+      await addWithDefaultFormat(tester, '010C', Obd2Pid.rpm);
 
-        await openManager(tester);
-        await tester.tap(editButton().first);
-        await tester.pumpAndSettle();
+      await openManager(tester);
+      await tester.tap(editButton().first);
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Duplicar painel'));
-        await tester.pumpAndSettle();
+      await tester.tap(find.text('Duplicar painel'));
+      await tester.pumpAndSettle();
 
-        expect(find.text('Meus painéis'), findsOneWidget); // voltou pra lista
-        // Aparece no cabeçalho, na aba e na linha da lista — todos ao mesmo
-        // tempo (o cabeçalho/aba ficam só visualmente cobertos pelo sheet).
-        expect(find.text('Painel 1 (cópia)'), findsWidgets);
+      expect(find.text('Meus painéis'), findsOneWidget); // voltou pra lista
+      // Aparece no cabeçalho, na aba e na linha da lista — todos ao mesmo
+      // tempo (o cabeçalho/aba ficam só visualmente cobertos pelo sheet).
+      expect(find.text('Painel 1 (cópia)'), findsWidgets);
 
-        await tester.tap(find.text('Concluir'));
-        await tester.pumpAndSettle();
+      await tester.tap(find.text('Concluir'));
+      await tester.pumpAndSettle();
 
-        expect(find.text('Painel 1 (cópia)'), findsWidgets);
-        expect(find.text('ROTAÇÃO DO MOTOR'), findsOneWidget);
-      },
-    );
+      expect(find.text('Painel 1 (cópia)'), findsWidgets);
+      expect(find.text('ROTAÇÃO DO MOTOR'), findsOneWidget);
+    });
 
     testWidgets(
       'excluir só é oferecido com mais de um painel, e exige confirmação',

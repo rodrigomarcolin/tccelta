@@ -125,10 +125,7 @@ class CardButton extends StatelessWidget {
             const SizedBox(width: AppSpacing.s4),
           ],
           Expanded(child: _titleAndSubtitle()),
-          if (showValue) ...[
-            const SizedBox(width: AppSpacing.s3),
-            _value(),
-          ],
+          if (showValue) ...[const SizedBox(width: AppSpacing.s3), _value()],
           if (trailing != null) ...[
             const SizedBox(width: AppSpacing.s2),
             trailing!,
