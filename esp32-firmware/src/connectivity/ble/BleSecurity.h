@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <NimBLEDevice.h>
+#include "connectivity/ble/LinkSecurityMode.h"
 
 /**
  * Segurança de enlace LESC Just Works sobre a NimBLE (spec fase-2/01): configuração
@@ -10,6 +11,11 @@
  */
 namespace ble_security {
 
+#if defined(LINK_SECURITY_OPEN)
+// Enlace aberto (só bancada, ver LinkSecurityMode.h): sem exigência de cifra.
+constexpr uint32_t kSecureRxProps = NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR;
+constexpr uint32_t kSecureTxProps = NIMBLE_PROPERTY::NOTIFY;
+#else
 /** Escrita app -> dongle: com e sem resposta, só em enlace cifrado. */
 constexpr uint32_t kSecureRxProps = NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC;
 /**
@@ -17,6 +23,7 @@ constexpr uint32_t kSecureRxProps = NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WR
  * de aplicação; READ_ENC (sem READ) só documenta a exigência.
  */
 constexpr uint32_t kSecureTxProps = NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_ENC;
+#endif
 
 /** Dados de fabricante do anúncio (spec fase-2/01 §5.5). */
 constexpr uint16_t kCompanyId = 0xFFFF;
