@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:tccelta_mobile/src/core/errors/ble_failure.dart';
 import 'package:tccelta_mobile/src/data/datasources/dongle_datasource.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_bond_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_link_error.dart';
+import 'package:tccelta_mobile/src/domain/ble/dongle_pairing_hint.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
 
 /// Impl do [DongleRepository] — *source of truth* da conexão.
@@ -64,6 +67,45 @@ class DongleRepositoryImpl implements DongleRepository {
 
   @override
   bool get isReady => _conn?.isReady ?? false;
+
+  @override
+  bool get canManageBonds => _ds.canManageBonds;
+
+  @override
+  Future<BleBondState> bondState(String deviceId) => _ds.bondState(deviceId);
+
+  @override
+  Future<void> removeBond(String deviceId) async {
+    if (!_ds.canManageBonds) {
+      throw const BleBondUnsupportedFailure(
+        'Este sistema só permite esquecer o dispositivo nos Ajustes',
+      );
+    }
+    try {
+      await _ds.removeBond(deviceId);
+    } on Object catch (e) {
+      throw BleBondFailure('Não foi possível remover o pareamento', cause: e);
+    }
+  }
+
+  @override
+  Stream<DonglePairingHint?> watchPairingHint(
+    String deviceId, {
+    Duration timeout = const Duration(seconds: 120),
+  }) => _ds
+      .watchDongle(deviceId, timeout: timeout)
+      .map(
+        (d) => d == null
+            ? null
+            : DonglePairingHint.fromManufacturerData(d.manufacturerData),
+      )
+      .handleError(
+        (Object e) =>
+            throw BleScanFailure('Falha ao observar o dongle', cause: e),
+      );
+
+  @override
+  BleLinkError? get lastLinkError => _conn?.lastError;
 
   @override
   Future<void> disconnect() async {

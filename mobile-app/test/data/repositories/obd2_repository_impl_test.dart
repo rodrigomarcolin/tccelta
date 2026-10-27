@@ -5,8 +5,11 @@ import 'package:tccelta_mobile/src/core/errors/dtc_failure.dart';
 import 'package:tccelta_mobile/src/core/errors/obd_failure.dart';
 import 'package:tccelta_mobile/src/data/repositories/obd2_repository_impl.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_bond_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_link_error.dart';
+import 'package:tccelta_mobile/src/domain/ble/dongle_pairing_hint.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
@@ -47,6 +50,24 @@ class _FakeDongleRepository implements DongleRepository {
 
   @override
   Future<void> disconnect() async {}
+
+  @override
+  bool get canManageBonds => false;
+
+  @override
+  Future<BleBondState> bondState(String deviceId) async => BleBondState.unknown;
+
+  @override
+  Future<void> removeBond(String deviceId) async {}
+
+  @override
+  Stream<DonglePairingHint?> watchPairingHint(
+    String deviceId, {
+    Duration? timeout,
+  }) => const Stream.empty();
+
+  @override
+  BleLinkError? get lastLinkError => null;
 }
 
 /// Respostas de init (`readDtc` também chama `initialize()`, além de

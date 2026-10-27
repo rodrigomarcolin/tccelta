@@ -72,6 +72,7 @@ class ConnectionGuard extends HookConsumerWidget {
     AppRoutes.bluetoothOff,
     AppRoutes.scan,
     AppRoutes.connecting,
+    AppRoutes.pairing,
     AppRoutes.connectionLost,
   };
 

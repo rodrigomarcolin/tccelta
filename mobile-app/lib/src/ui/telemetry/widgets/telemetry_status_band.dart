@@ -54,6 +54,7 @@ class TelemetryStatusBand extends ConsumerWidget {
       tone: StatusTone.warning,
     ),
     BleConnectionPhase.connecting ||
+    BleConnectionPhase.securing ||
     BleConnectionPhase.optimizingLink ||
     BleConnectionPhase.discovering ||
     BleConnectionPhase.enablingNotify => (

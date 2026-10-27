@@ -1,13 +1,18 @@
-/// Fases OBSERVÁVEIS pela camada BLE (Fase 1 — só transporte).
+import 'package:tccelta_mobile/src/domain/ble/ble_link_error.dart';
+
+/// Fases OBSERVÁVEIS pela camada BLE (só transporte e segurança do enlace).
 ///
 /// NÃO inclui init do ELM327 nem leitura de capacidades (bitmask de PIDs):
-/// isso é Fase 2 e roda em cima de uma [BleConnection] já `ready`.
+/// isso roda em cima de uma [BleConnection] já `ready`.
 enum BleConnectionPhase {
   /// Ainda não iniciada.
   idle,
 
   /// Abrindo o link GATT com o dispositivo.
   connecting,
+
+  /// Estabelecendo o enlace cifrado; o SO pode mostrar o pedido de pareamento.
+  securing,
 
   /// Negociando MTU (maior throughput por pacote).
   optimizingLink,
@@ -18,7 +23,7 @@ enum BleConnectionPhase {
   /// Habilitando notify na característica TX.
   enablingNotify,
 
-  /// Pronto: `write()` e `incoming` disponíveis (fim da Fase 1).
+  /// Pronto: `write()` e `incoming` disponíveis.
   ready,
 
   /// O link caiu; refazendo discover + notify automaticamente.
@@ -41,6 +46,9 @@ enum BleConnectionPhase {
 abstract interface class BleConnection {
   /// Stream das transições de fase da conexão.
   Stream<BleConnectionPhase> get phase;
+
+  /// Motivo do último `failed` (nulo se não houve falha).
+  BleLinkError? get lastError;
 
   /// Último valor de fase emitido (evita corrida ao assinar [phase] tarde).
   BleConnectionPhase get currentPhase;

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert' show ascii;
 
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_link_error.dart';
 
 /// [BleConnection] falsa e roteirizável para exercitar a camada ELM327/OBD-II
 /// sem hardware.
@@ -20,6 +21,10 @@ class ScriptedBleConnection implements BleConnection {
     this.autoRespond = true,
     this.ready = true,
   });
+
+  /// Motivo da última falha (sempre nulo neste fake).
+  @override
+  BleLinkError? get lastError => null;
 
   /// Mapa comando (normalizado) → resposta ELM327 crua (com prompt).
   final Map<String, String> responses;

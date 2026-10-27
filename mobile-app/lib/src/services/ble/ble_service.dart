@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_adapter_state.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_bond_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
 
@@ -13,15 +14,17 @@ abstract interface class BleService {
   Stream<BleAdapterState> get adapterState;
 
   /// Escaneia e emite a lista corrente de dispositivos que casam com os
-  /// filtros. Emite uma nova lista a cada atualização de resultados.
+  /// filtros (que são "OU" entre si). Emite uma nova lista a cada atualização
+  /// de resultados.
   ///
   /// Com [continuousUpdates] `true`, processa também anúncios repetidos para
   /// manter o RSSI atualizado em tempo real (custa mais bateria/CPU); com
   /// `false` (default), cada dispositivo é reportado uma vez e o RSSI congela
-  /// no 1º anúncio.
+  /// no 1º anúncio. [withRemoteIds] filtra por id de plataforma.
   Stream<List<BleDevice>> scan({
     List<String> withServiceUuids,
     List<String> withNames,
+    List<String> withRemoteIds,
     Duration timeout,
     bool continuousUpdates,
   });
@@ -29,9 +32,10 @@ abstract interface class BleService {
   /// Para o scan em andamento.
   Future<void> stopScan();
 
-  /// Conecta e prepara a conexão (MTU + discover + notify) de forma resiliente
-  /// a reconexão. Retorna o handle IMEDIATAMENTE; o progresso vem por
-  /// [BleConnection.phase].
+  /// Conecta e prepara a conexão (segurança + MTU + discover + notify) de forma
+  /// resiliente a reconexão. Retorna o handle IMEDIATAMENTE; o progresso vem
+  /// por [BleConnection.phase]. [securingTimeout] é o prazo do pareamento/cifra
+  /// (inclui o tempo do usuário no diálogo do SO).
   Future<BleConnection> connect({
     required String deviceId,
     required String serviceUuid,
@@ -39,7 +43,17 @@ abstract interface class BleService {
     required String txUuid,
     List<BleChannelSpec> extraChannels = const [],
     int mtu,
+    Duration securingTimeout,
   });
+
+  /// Se o SO permite ao app consultar, criar e remover bonds (Android).
+  bool get canManageBonds;
+
+  /// Estado do bond do SO com [deviceId]. Sem suporte: [BleBondState.unknown].
+  Future<BleBondState> bondState(String deviceId);
+
+  /// Remove o bond do SO com [deviceId]. Sem suporte: lança [UnsupportedError].
+  Future<void> removeBond(String deviceId);
 }
 
 /// Par RX/TX de um serviço GATT adicional, aberto na mesma conexão.

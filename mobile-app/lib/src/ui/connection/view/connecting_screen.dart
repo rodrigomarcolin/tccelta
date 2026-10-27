@@ -7,39 +7,59 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
+import 'package:tccelta_mobile/src/domain/ble/dongle_pairing_hint.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/view_model/connecting_view_model.dart';
 import 'package:tccelta_mobile/src/ui/connection/widgets/connection_background.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 
-/// Mapeia o estado do handshake nos 4 passos honestos.
+/// Etapas em que o fluxo depende de uma ação do usuário e segue para a tela
+/// de pareamento.
+bool needsUserAction(LinkSecurityStep step) => switch (step) {
+  LinkSecurityStep.waitingButton ||
+  LinkSecurityStep.rejected ||
+  LinkSecurityStep.windowExpired ||
+  LinkSecurityStep.forgetOnIos => true,
+  _ => false,
+};
+
+/// Mapeia o estado do handshake nos 5 passos honestos.
 ///
-/// Os 2 primeiros ("Conectando", "Otimizando · MTU") são dirigidos pela fase
-/// BLE (Fase 1); os 2 últimos ("Preparando adaptador · init ELM327", "Lendo
-/// capacidades do veículo") pela sub-fase de preparação OBD-II (Fase 2), que
-/// roda após o BLE ficar `ready`.
+/// Os 3 primeiros ("Conectando", "Pareando com segurança · LESC", "Otimizando
+/// · MTU") são dirigidos pela fase BLE; os 2 últimos ("Preparando adaptador ·
+/// init ELM327", "Lendo capacidades do veículo") pela sub-fase de preparação
+/// OBD-II, que roda após o BLE ficar `ready`.
 List<ConnectStep> connectingStepsFor(ConnectingState state) {
   final phase = state.phase;
   final ConnectStepState connectState;
+  final ConnectStepState secureState;
   final ConnectStepState optimizeState;
   switch (phase) {
     case BleConnectionPhase.idle:
     case BleConnectionPhase.connecting:
     case BleConnectionPhase.reconnecting:
       connectState = ConnectStepState.active;
+      secureState = ConnectStepState.pending;
+      optimizeState = ConnectStepState.pending;
+    case BleConnectionPhase.securing:
+      connectState = ConnectStepState.done;
+      secureState = ConnectStepState.active;
       optimizeState = ConnectStepState.pending;
     case BleConnectionPhase.optimizingLink:
     case BleConnectionPhase.discovering:
     case BleConnectionPhase.enablingNotify:
       connectState = ConnectStepState.done;
+      secureState = ConnectStepState.done;
       optimizeState = ConnectStepState.active;
     case BleConnectionPhase.ready:
       connectState = ConnectStepState.done;
+      secureState = ConnectStepState.done;
       optimizeState = ConnectStepState.done;
     case BleConnectionPhase.disconnected:
     case BleConnectionPhase.failed:
       connectState = ConnectStepState.pending;
+      secureState = ConnectStepState.pending;
       optimizeState = ConnectStepState.pending;
   }
 
@@ -67,6 +87,11 @@ List<ConnectStep> connectingStepsFor(ConnectingState state) {
   return [
     ConnectStep('Conectando', connectState),
     ConnectStep(
+      'Pareando com segurança',
+      secureState,
+      sublabel: '· LESC',
+    ),
+    ConnectStep(
       'Otimizando conexão',
       optimizeState,
       sublabel: optimizeSublabel,
@@ -82,10 +107,10 @@ List<ConnectStep> connectingStepsFor(ConnectingState state) {
 
 /// 1.4 — Handshake de conexão em andamento.
 ///
-/// Dirige os passos a partir das fases REAIS do BLE (Fase 1): "Conectando" e
-/// "Otimizando · MTU". Os passos de init do ELM327 e leitura de capacidades
-/// são Fase 2 e ficam pendentes por ora. Ao ficar `ready`, segue para
-/// Conectado; em falha, para Conexão perdida.
+/// Dirige os passos a partir das fases REAIS do BLE e da preparação OBD-II.
+/// Quando o dongle precisa de um gesto do usuário (botão, Ajustes), segue para
+/// a tela de pareamento; ao ficar `ready` e preparado, para Conectado; em
+/// falha sem tratamento específico, para Conexão perdida.
 class ConnectingScreen extends HookConsumerWidget {
   /// Cria a tela de conexão em andamento.
   const ConnectingScreen({super.key});
@@ -106,8 +131,16 @@ class ConnectingScreen extends HookConsumerWidget {
             context.go(AppRoutes.scan);
             return;
           }
+          final viewModel = ref.read(connectingViewModelProvider.notifier);
+          // Voltando da tela de pareamento a conexão já está em andamento.
+          if (viewModel.inProgress) return;
           unawaited(
-            ref.read(connectingViewModelProvider.notifier).connect(device.id),
+            viewModel.connect(
+              device.id,
+              hint: DonglePairingHint.fromManufacturerData(
+                device.manufacturerData,
+              ),
+            ),
           );
         });
         return null;
@@ -122,10 +155,13 @@ class ConnectingScreen extends HookConsumerWidget {
     // a preparação OBD-II terminou (protocolo + sensores já preenchidos).
     ref.listen(connectingViewModelProvider, (_, next) {
       if (!context.mounted) return;
-      if (next.phase == BleConnectionPhase.ready &&
+      if (needsUserAction(next.security)) {
+        context.pushReplacement(AppRoutes.pairing);
+      } else if (next.phase == BleConnectionPhase.ready &&
           next.prep == ConnectingPrep.done) {
         context.pushReplacement(AppRoutes.connected);
-      } else if (next.phase == BleConnectionPhase.failed) {
+      } else if (next.phase == BleConnectionPhase.failed &&
+          next.security == LinkSecurityStep.failed) {
         context.pushReplacement(AppRoutes.connectionLost);
       }
     });
