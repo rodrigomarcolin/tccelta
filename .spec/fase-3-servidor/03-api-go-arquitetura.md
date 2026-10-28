@@ -11,8 +11,8 @@ As regras são impostas pelo `depguard` em `backend/.golangci.yml` (`make lint`)
 
 ```mermaid
 flowchart TD
-    cmd[cmd/tccelta] --> api & worker & tools & adapter & config
-    api[api<br/>HTTP + ratelimit] --> usecase & port & domain
+    cmd[cmd/tccelta] --> http & worker & tools & adapter & config
+    http[http<br/>HTTP + ratelimit] --> usecase & port & domain
     usecase[usecase<br/>handshake, ingestion, session, catalog] --> domain & port
     port[port<br/>repositórios, KMS, tokens, métricas, relógio] --> domain
     adapter[adapter<br/>postgres, cache, memory, kmsclient, jwt, prometheus] --> port & domain
@@ -29,8 +29,8 @@ flowchart TD
 |---|---|
 | `domain` | puro: sem I/O nem dependência de outras camadas |
 | `usecase` | só enxerga `domain` e `port`; um caso de uso por arquivo (`Run`) |
-| `api` | só enxerga `usecase`, `port` e `domain` |
-| `adapter` | implementa `port`; não conhece `usecase` nem `api` |
+| `http` | só enxerga `usecase`, `port` e `domain` |
+| `adapter` | implementa `port`; não conhece `usecase` nem `http` |
 | `internal/kms` | não importa nenhum outro pacote do projeto (só `platform/breaker`); nada fora dele o importa |
 | `worker`, `worker/reprocess`, `tools/*` | exceção conhecida: usam `database`/`dbgen` direto, sem passar por portas |
 
@@ -80,7 +80,7 @@ Segredos por arquivo: `<NOME>_ARQUIVO`.
 | limites | `LIMITE_DESAFIO_MIN` (6), `LIMITE_RESPOSTA_MIN` (12), `LIMITE_BLOCOS_MIN` (120), `LIMITE_IP_MIN` (120), `INGESTAO_MAX_SIMULTANEAS` (32), `INGESTAO_ESPERA_VAGA` (100ms), `RETRY_AFTER_SOBRECARGA` (5), `REDIS_ENDERECO`, `REDIS_SENHA`, `REDIS_TIMEOUT` (50ms) |
 | worker | `WORKER_CONCORRENCIA` (4), `WORKER_INTERVALO_POLL` (30s), `WORKER_INTERVALO_EXPIRACAO` (60s), `ANCORA_JANELA_GRUPO` (10m), `DERIVA_MAX_PPM` (40), `ANCORA_SPAN_MIN` (1h), `MEIA_LARGURA_MIN_MS` (0,5) |
 
-## HTTP (`internal/api`)
+## HTTP (`internal/http`)
 
 `http.ServeMux` da stdlib. Servidor: `ReadHeaderTimeout` 5 s, `ReadTimeout` 15 s, `WriteTimeout` 30 s, `IdleTimeout` 120 s.
 
@@ -92,7 +92,7 @@ Segredos por arquivo: `<NOME>_ARQUIVO`.
 | `GET /v1/dongles/{id}/confirmacao` | recover, instrument, `limitIP`, `authenticateJWT(true)` (sub = `{id}`), `limitDevID` (60/min) |
 | `GET /saude/viva`, `GET /saude/pronta` | `pronta`: banco, KMS, catálogo de PIDs e chaves públicas do JWT; 503 `nao_pronto` em encerramento ou dependência fora |
 
-Rate limit (`api/ratelimit`): janela por minuto por escopo e chave (IP, DevId); `LocalLimiter` em memória, `RedisLimiter` (script Lua) e `LimiterWithFallback` (falha do Redis nunca vira 503; conta `tccelta_limiter_redis_failures_total`); semáforo `Concurrency` para a ingestão (`INGESTAO_MAX_SIMULTANEAS`, espera `INGESTAO_ESPERA_VAGA`, senão 503 `sobrecarga`). IP do cliente: `RemoteAddr`, ou `X-Real-IP` se vier de `PROXIES_CONFIAVEIS`.
+Rate limit (`http/ratelimit`): janela por minuto por escopo e chave (IP, DevId); `LocalLimiter` em memória, `RedisLimiter` (script Lua) e `LimiterWithFallback` (falha do Redis nunca vira 503; conta `tccelta_limiter_redis_failures_total`); semáforo `Concurrency` para a ingestão (`INGESTAO_MAX_SIMULTANEAS`, espera `INGESTAO_ESPERA_VAGA`, senão 503 `sobrecarga`). IP do cliente: `RemoteAddr`, ou `X-Real-IP` se vier de `PROXIES_CONFIAVEIS`.
 
 ### Erros (`problem+json`, RFC 9457)
 

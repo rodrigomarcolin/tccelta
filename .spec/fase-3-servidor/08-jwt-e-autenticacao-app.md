@@ -3,7 +3,7 @@
 Estado implementado: emissão e validação em `internal/adapter/jwt/{issuer,validator}.go`
 (portas `port.TokenIssuer`/`port.TokenValidator` em `internal/port/token.go`),
 caso de uso `internal/usecase/session/authenticate.go` e middleware
-`internal/api/authentication.go`. A chave de assinatura (Ed25519) fica no Vault e é
+`internal/http/authentication.go`. A chave de assinatura (Ed25519) fica no Vault e é
 usada só pelo KMS (`07`).
 
 ## Formato
@@ -52,7 +52,7 @@ sequenceDiagram
 
 ## Autenticação no HTTP
 
-`authenticateJWT(requireSubEqualID)` (`api/authentication.go`): exige `Authorization: Bearer <token>`; o caso de uso `session.Authenticate` valida o token, resolve o dongle (desconhecido ⇒ `token_invalido`) e aplica `VerifyAccess` (`dongle_inativo`, `perfil_nao_permitido`, ambos 403). O `Session` (`Dev`, `CS`, `JTI`, `ExpiresAt`) vai no contexto.
+`authenticateJWT(requireSubEqualID)` (`http/authentication.go`): exige `Authorization: Bearer <token>`; o caso de uso `session.Authenticate` valida o token, resolve o dongle (desconhecido ⇒ `token_invalido`) e aplica `VerifyAccess` (`dongle_inativo`, `perfil_nao_permitido`, ambos 403). O `Session` (`Dev`, `CS`, `JTI`, `ExpiresAt`) vai no contexto.
 
 | Situação | Resposta |
 |---|---|
@@ -70,4 +70,4 @@ Feita pelo serviço `jwt-rotacao` (ver `07`): tokens emitidos com a versão ante
 
 ## Testes
 
-`adapter/jwt` (emissão, `kid`, rotação durante a emissão, validação, expiração, claims inválidas), `usecase/session`, `api` (mapeamento de erros e cabeçalhos), cenário `negative-protocol` do simulador (token lixo ⇒ 401; token de outro dongle ⇒ 403).
+`adapter/jwt` (emissão, `kid`, rotação durante a emissão, validação, expiração, claims inválidas), `usecase/session`, `http` (mapeamento de erros e cabeçalhos), cenário `negative-protocol` do simulador (token lixo ⇒ 401; token de outro dongle ⇒ 403).

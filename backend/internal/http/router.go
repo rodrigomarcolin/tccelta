@@ -1,12 +1,12 @@
-package api
+package http
 
 import (
 	"log/slog"
 	"net/http"
 	"sync/atomic"
 
-	"tccelta/backend/internal/api/ratelimit"
 	"tccelta/backend/internal/config"
+	"tccelta/backend/internal/http/ratelimit"
 	"tccelta/backend/internal/port"
 )
 

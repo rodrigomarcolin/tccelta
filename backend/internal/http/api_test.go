@@ -1,4 +1,4 @@
-package api
+package http
 
 import (
 	"bytes"
@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"tccelta/backend/internal/adapter/jwt"
-	"tccelta/backend/internal/api/ratelimit"
 	"tccelta/backend/internal/config"
 	"tccelta/backend/internal/domain/dongle"
 	dhs "tccelta/backend/internal/domain/handshake"
 	ding "tccelta/backend/internal/domain/ingestion"
 	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/http/ratelimit"
 	"tccelta/backend/internal/port"
 	"tccelta/backend/internal/port/porttest"
 	hsUC "tccelta/backend/internal/usecase/handshake"

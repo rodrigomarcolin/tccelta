@@ -15,12 +15,12 @@ import (
 	"tccelta/backend/internal/adapter/kmsclient"
 	"tccelta/backend/internal/adapter/postgres"
 	metrics "tccelta/backend/internal/adapter/prometheus"
-	"tccelta/backend/internal/api"
-	"tccelta/backend/internal/api/ratelimit"
 	"tccelta/backend/internal/config"
 	"tccelta/backend/internal/database"
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/pid"
+	httpapi "tccelta/backend/internal/http"
+	"tccelta/backend/internal/http/ratelimit"
 	"tccelta/backend/internal/usecase/catalog"
 	hsUC "tccelta/backend/internal/usecase/handshake"
 	ingUC "tccelta/backend/internal/usecase/ingestion"
@@ -95,7 +95,7 @@ func cmdAPI(ctx context.Context) error {
 		VerifyParallel: cfg.KMS.VerifyParallel, AllowNoneProfile: cfg.AllowNoneProfile}
 
 	var closing atomic.Bool
-	deps := &api.Deps{
+	deps := &httpapi.Deps{
 		Cfg: cfg, Log: log, Met: met.HTTPPort(),
 		RequestChallenge: hsUC.NewIssueChallenge(repos, kms, met.HandshakePort(), now, log, paramsHS),
 		RespondChallenge: hsUC.NewRespondChallenge(repos, tx, kms, issuer, met.HandshakePort(), now, log, paramsHS),

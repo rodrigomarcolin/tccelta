@@ -56,7 +56,7 @@ internal/domain/{protocol,pid,dongle,handshake,ingestion,occurrence,timeline}   
 internal/port/                        todas as portas (+ porttest)
 internal/usecase/{catalog,handshake,ingestion,session}
 internal/adapter/{postgres,cache,memory,kmsclient,jwt,prometheus}
-internal/api/ (+ratelimit)            transporte HTTP
+internal/http/ (+ratelimit)            transporte HTTP
 internal/worker/ (+reprocess)         processamento assíncrono
 internal/tools/{simulator,provisioning}
 internal/database/                    pool, tx, listen, migrações, queries, dbgen (sqlc)

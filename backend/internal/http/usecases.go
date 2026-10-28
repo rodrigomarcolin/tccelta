@@ -1,6 +1,6 @@
-// Package api é só transporte: define os endpoints, valida o que é de HTTP (Content-Type, JSON,
+// Package http é só transporte: define os endpoints, valida o que é de HTTP (Content-Type, JSON,
 // base64, limite de corpo, {id}), chama um caso de uso e serializa a resposta.
-package api
+package http
 
 import (
 	"context"
