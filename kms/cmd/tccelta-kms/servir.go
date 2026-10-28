@@ -44,7 +44,7 @@ func cmdServir(ctx context.Context) error {
 	}
 	defer v.Fechar()
 
-	s := &servidor.Servidor{Vault: v, Log: log, Met: met, ExigirCertCliente: !cfg.Dev()}
+	s := &servidor.Servidor{Vault: v, Log: log, Met: met, ExigirCertCliente: !cfg.Dev(), ClienteCN: cfg.HTTP.TLSClienteCN}
 	srv := &http.Server{Addr: cfg.HTTP.Endereco, Handler: s.Roteador(), ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 16 << 10}
 	tls := cfg.HTTP.TLSCert != ""

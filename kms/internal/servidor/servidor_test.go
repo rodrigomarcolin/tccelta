@@ -227,6 +227,7 @@ func TestSaude(t *testing.T) {
 func TestExigirCertClienteSemTLS(t *testing.T) {
 	s, _, _ := novo(t)
 	s.ExigirCertCliente = true
+	s.ClienteCN = "api"
 	w := post(s.Roteador(), "/v1/hmac", map[string]any{"chave": "0011223344556677", "entradas": []string{b("a")}})
 	if w.Code != 401 || codigo(w) != "cliente_nao_autenticado" {
 		t.Fatal(w.Code, w.Body.String())
@@ -292,6 +293,7 @@ func TestMTLS(t *testing.T) {
 	}
 	s, _, _ := novo(t)
 	s.ExigirCertCliente = true
+	s.ClienteCN = "api"
 	srv := httptest.NewUnstartedServer(s.Roteador())
 	srv.TLS = tlsCfg
 	srv.StartTLS()
@@ -315,6 +317,21 @@ func TestMTLS(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != 200 {
 		t.Fatal(res.StatusCode)
+	}
+
+	// mesma CA, outro CN: autenticado, mas não autorizado
+	oc2, ok2 := p.emitir(t, "operador", false)
+	parOutroCN, err := tls.LoadX509KeyPair(oc2, ok2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = cliente(parOutroCN).Post(srv.URL+"/v1/hmac", "application/json", bytes.NewReader(corpo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 403 {
+		t.Fatal("CN diferente deveria dar 403, veio", res.StatusCode)
 	}
 
 	// sem certificado de cliente: a conexão é recusada

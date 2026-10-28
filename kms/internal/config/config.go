@@ -19,6 +19,7 @@ type HTTPConfig struct {
 	TLSCert          string
 	TLSKey           string
 	TLSClientCA      string // CA que assina o certificado do cliente (a API)
+	TLSClienteCN     string // CN exigido no certificado do cliente (fora de dev)
 }
 
 // VaultConfig é a conexão com o Vault (Transit).
@@ -120,6 +121,7 @@ func CarregarDe(env func(string) string) (Config, error) {
 		TLSCert:          l.str("KMS_TLS_CERT", ""),
 		TLSKey:           l.str("KMS_TLS_KEY", ""),
 		TLSClientCA:      l.str("KMS_TLS_CLIENT_CA", ""),
+		TLSClienteCN:     l.str("KMS_TLS_CLIENTE_CN", "tccelta-api"),
 	}
 	c.Vault = VaultConfig{
 		Addr:            l.str("VAULT_ADDR", ""),
