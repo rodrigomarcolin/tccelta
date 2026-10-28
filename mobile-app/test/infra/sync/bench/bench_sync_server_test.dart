@@ -6,6 +6,7 @@ import 'package:tccelta_mobile/src/domain/sync/handshake_messages.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_frame.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_protocol.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_crypto.dart';
+import 'package:tccelta_mobile/src/infra/sync/bench/bench_state_store.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_sync_server.dart';
 import 'package:tccelta_mobile/src/services/sync/sync_server_exceptions.dart';
 import 'package:tccelta_mobile/src/services/sync/sync_server_gateway.dart';
@@ -297,6 +298,96 @@ void main() {
       );
     });
 
+    group('persistência', () {
+      late _MemoryStore store;
+
+      BenchSyncServer reopen() => BenchSyncServer(
+        now: () => now,
+        random: Random(1),
+        store: store,
+      );
+
+      HandshakeEnvelope openOn(BenchSyncServer s, {int tail = 1}) {
+        final ch = s.requestChallenge(benchDevId);
+        return s.submitResponse(benchDevId, respond(ch, tail: tail, head: 3));
+      }
+
+      setUp(() => store = _MemoryStore());
+
+      test('o ACK sobrevive ao reinício e o desafio o informa', () {
+        final first = reopen();
+        final env = openOn(first);
+        first.postBlocks(env.token, [
+          for (var s = 1; s <= 3; s++) dataBlock(s).frame,
+        ]);
+
+        final second = reopen();
+        final info = ChallengeInfo.fromValue(
+          second.requestChallenge(benchDevId).challenge.value,
+        );
+        expect(info.ackSeq, 3);
+        expect(second.stats.accepted, 3);
+      });
+
+      test('a regra do TAIL parte do ACK salvo e não o rebaixa', () {
+        final first = reopen();
+        first.postBlocks(openOn(first).token, [
+          for (var s = 1; s <= 3; s++) dataBlock(s).frame,
+        ]);
+
+        // Dongle com flash liberada só até o segmento anterior: TAIL < ACK + 1.
+        final second = reopen();
+        final env = openOn(second);
+        expect(ackOf(env.ack).ackSeq, 3);
+        expect(second.stats.gaps, isEmpty);
+      });
+
+      test('c_S continua crescendo depois do reinício', () {
+        final first = reopen();
+        final before = ChallengeInfo.fromValue(
+          first.requestChallenge(benchDevId).challenge.value,
+        ).cS;
+        final after = ChallengeInfo.fromValue(
+          reopen().requestChallenge(benchDevId).challenge.value,
+        ).cS;
+        expect(after, greaterThan(before));
+      });
+
+      test('as lacunas são restauradas', () {
+        final first = reopen();
+        first.postBlocks(openOn(first).token, [
+          dataBlock(1).frame,
+          lossBlock(2, 5).frame,
+        ]);
+        final gaps = reopen().stats.gaps;
+        expect(gaps.single.cause, BenchGapCause.loss);
+        expect(gaps.single.from, 2);
+        expect(gaps.single.to, 5);
+      });
+
+      test('forgetDongles também limpa o que foi salvo', () {
+        final first = reopen();
+        final env = openOn(first);
+        first
+          ..postBlocks(env.token, [dataBlock(1).frame])
+          ..forgetDongles();
+        final info = ChallengeInfo.fromValue(
+          reopen().requestChallenge(benchDevId).challenge.value,
+        );
+        expect(info.ackSeq, 0);
+      });
+
+      test('estado ilegível ou de outra versão começa do zero', () {
+        store.state = {'v': 99, 'lastIssuedCs': 5};
+        expect(reopen().stats.accepted, 0);
+        store.state = {'v': 1, 'lastIssuedCs': 'x'};
+        final info = ChallengeInfo.fromValue(
+          reopen().requestChallenge(benchDevId).challenge.value,
+        );
+        expect(info.ackSeq, 0);
+      });
+    });
+
     test('forgetDongles zera o estado mas mantém lastIssuedCs', () {
       final env = open();
       server.postBlocks(env.token, [dataBlock(1).frame]);
@@ -311,4 +402,15 @@ void main() {
       expect(info.cS, greaterThan(before));
     });
   });
+}
+
+/// Armazenamento em memória que sobrevive à recriação do servidor.
+class _MemoryStore implements BenchStateStore {
+  Map<String, Object?>? state;
+
+  @override
+  Map<String, Object?>? load() => state;
+
+  @override
+  Future<void> save(Map<String, Object?> state) async => this.state = state;
 }

@@ -9,6 +9,7 @@ import 'package:tccelta_mobile/src/domain/sync/sync_frame.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_protocol.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_crypto.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_keys.dart';
+import 'package:tccelta_mobile/src/infra/sync/bench/bench_state_store.dart';
 import 'package:tccelta_mobile/src/services/sync/sync_server_exceptions.dart';
 import 'package:tccelta_mobile/src/services/sync/sync_server_gateway.dart';
 
@@ -89,15 +90,29 @@ class _DongleState {
   final Map<int, _Pending> pending = {};
 }
 
-/// Servidor de bancada em memória (lógica pura, sem rede): emite desafios,
-/// confere respostas, aceita lotes e devolve ACKs com as regras do documento
-/// §4.3–4.4. Serve de oráculo de contrato para o servidor real.
+/// Servidor de bancada (lógica pura, sem rede): emite desafios, confere
+/// respostas, aceita lotes e devolve ACKs com as regras do documento §4.3–4.4.
+/// Serve de oráculo de contrato para o servidor real.
+///
+/// Com um [BenchStateStore], o ACK por dongle, o último `c_S` emitido, as
+/// lacunas e os contadores sobrevivem ao reinício do app, como num servidor
+/// real. Desafios pendentes e tokens não são guardados: após o reinício o app
+/// refaz o handshake.
 class BenchSyncServer {
-  /// Cria o servidor; [now] e [random] são injetáveis para testes.
-  BenchSyncServer({BenchKeys? keys, DateTime Function()? now, Random? random})
-    : keys = keys ?? BenchKeys.defaults(),
-      _now = now ?? DateTime.now,
-      _random = random ?? Random.secure();
+  /// Cria o servidor; [now] e [random] são injetáveis para testes e o
+  /// armazenamento opcional guarda o estado entre execuções.
+  BenchSyncServer({
+    BenchKeys? keys,
+    DateTime Function()? now,
+    Random? random,
+    this._store,
+  }) : keys = keys ?? BenchKeys.defaults(),
+       _now = now ?? DateTime.now,
+       _random = random ?? Random.secure() {
+    _restore();
+  }
+
+  static const int _stateVersion = 1;
 
   /// Validade de um desafio emitido.
   static const Duration challengeValidity = Duration(seconds: 60);
@@ -114,6 +129,7 @@ class BenchSyncServer {
 
   final DateTime Function() _now;
   final Random _random;
+  final BenchStateStore? _store;
   final Map<String, _DongleState> _dongles = {};
   final Map<String, _Token> _tokens = {};
   final List<BenchGap> _gaps = [];
@@ -144,6 +160,69 @@ class BenchSyncServer {
     if (!_statsCtrl.isClosed) _statsCtrl.add(stats);
   }
 
+  Map<String, Object?> _snapshot() => {
+    'v': _stateVersion,
+    'lastIssuedCs': _lastIssuedCs,
+    'accepted': _accepted,
+    'rejected': _rejected,
+    'unverified': _unverified,
+    'lastAck': _lastAck,
+    'gaps': [
+      for (final g in _gaps) [g.from, g.to, g.cause.index],
+    ],
+    'dongles': {
+      for (final e in _dongles.entries)
+        e.key: {
+          'lastAcceptedCs': e.value.lastAcceptedCs,
+          'ackSeq': e.value.ackSeq,
+          'head': e.value.head,
+        },
+    },
+  };
+
+  void _persist() {
+    final store = _store;
+    if (store != null) unawaited(store.save(_snapshot()));
+  }
+
+  /// Carrega o estado salvo; ignora silenciosamente o que estiver ilegível
+  /// ou de outra versão, começando do zero.
+  void _restore() {
+    final saved = _store?.load();
+    if (saved == null || saved['v'] != _stateVersion) return;
+    try {
+      _lastIssuedCs = saved['lastIssuedCs']! as int;
+      _accepted = saved['accepted']! as int;
+      _rejected = saved['rejected']! as int;
+      _unverified = saved['unverified']! as int;
+      _lastAck = saved['lastAck'] as int?;
+      for (final g in saved['gaps']! as List<Object?>) {
+        final f = g! as List<Object?>;
+        _gaps.add(
+          BenchGap(
+            f[0]! as int,
+            f[1]! as int,
+            BenchGapCause.values[f[2]! as int],
+          ),
+        );
+      }
+      final dongles = saved['dongles']! as Map<String, Object?>;
+      for (final e in dongles.entries) {
+        final d = e.value! as Map<String, Object?>;
+        _dongles[e.key] = _DongleState()
+          ..lastAcceptedCs = d['lastAcceptedCs']! as int
+          ..ackSeq = d['ackSeq']! as int
+          ..head = d['head']! as int;
+      }
+    } on Object {
+      _lastIssuedCs = 0;
+      _accepted = _rejected = _unverified = 0;
+      _lastAck = null;
+      _gaps.clear();
+      _dongles.clear();
+    }
+  }
+
   /// Zera o estado de todos os dongles menos `lastIssuedCs` (mantém `c_S`
   /// crescente, já que o dongle persiste `last_cs`).
   void forgetDongles() {
@@ -154,12 +233,16 @@ class BenchSyncServer {
     _rejected = 0;
     _unverified = 0;
     _lastAck = null;
+    _persist();
     _notify();
   }
 
   /// Avança `lastIssuedCs` (recuperação após erro 0x02 por relógio atrasado).
   void bumpIssuedCs(int cS) {
-    if (cS > _lastIssuedCs) _lastIssuedCs = cS;
+    if (cS > _lastIssuedCs) {
+      _lastIssuedCs = cS;
+      _persist();
+    }
   }
 
   /// Emite o Desafio 0x01 para [devId].
@@ -169,6 +252,7 @@ class BenchSyncServer {
     final unixSeconds = now.millisecondsSinceEpoch ~/ 1000;
     final cS = max(_lastIssuedCs + 1, unixSeconds) & 0xFFFFFFFF;
     _lastIssuedCs = cS;
+    _persist();
     final nonce = Uint8List.fromList(
       List<int>.generate(16, (_) => _random.nextInt(256)),
     );
@@ -244,6 +328,7 @@ class BenchSyncServer {
     final expires = now.add(tokenValidity).toUtc();
     _tokens[token] = _Token(devId, info.cS, expires);
     _lastAck = st.ackSeq;
+    _persist();
     _notify();
     return HandshakeEnvelope(
       ack: _ack(devId, st.ackSeq, info.cS, anchorFailed: anchorFailed),
@@ -274,6 +359,7 @@ class BenchSyncServer {
       }
     }
     _lastAck = st.ackSeq;
+    _persist();
     _notify();
     final ack = _ack(tk.devId, st.ackSeq, tk.cS, anchorFailed: false);
     if (interrupted && st.ackSeq == before) throw ServerBatchNoProgress(ack);
