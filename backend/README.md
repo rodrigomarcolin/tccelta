@@ -30,7 +30,7 @@ internal/port/          TODAS as portas: repositórios + transação, KMS, token
 internal/usecase/      catalog, handshake, ingestion, session: dependem só de domain e port
 internal/adapter/      implementações das portas: postgres, cache (decorator), memory (testes), kmsclient,
                        jwt, prometheus
-internal/api/          transporte HTTP (+ api/ratelimit: rate limit e concorrência)
+internal/http/         transporte HTTP (+ http/ratelimit: rate limit e concorrência)
 internal/worker/       processamento assíncrono (+ worker/reprocess)
 internal/tools/        ferramentas de linha de comando: provisioning (cadastro no banco), simulator
 internal/database/     infraestrutura de banco: pool, transação, listen, migrações, queries e dbgen (sqlc)
@@ -41,8 +41,8 @@ deploy/                 caddy, postgres, observability, segredos e deploy/kms (V
 ```
 
 As camadas são impostas pelo `depguard` (`.golangci.yml`, rodado por `make lint`): `domain` é puro; `usecase` só
-enxerga `domain` e `port`; `api` só enxerga `usecase`, `port` e `domain`; os adaptadores implementam `port` e não
-conhecem `usecase` nem `api`; `internal/kms` não importa nenhum outro pacote do projeto (só `platform/breaker`) e
+enxerga `domain` e `port`; `http` só enxerga `usecase`, `port` e `domain`; os adaptadores implementam `port` e não
+conhecem `usecase` nem `http`; `internal/kms` não importa nenhum outro pacote do projeto (só `platform/breaker`) e
 nada fora dele o importa. Exceção conhecida: `worker`, `worker/reprocess`, `tools/provisioning` e `tools/simulator`
 usam `database`/`dbgen` direto, sem passar por portas.
 

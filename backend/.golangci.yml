@@ -24,7 +24,7 @@ linters-settings:
           - { pkg: tccelta/backend/internal/port, desc: "o dominio nao conhece as portas" }
           - { pkg: tccelta/backend/internal/usecase, desc: "o dominio nao conhece os casos de uso" }
           - { pkg: tccelta/backend/internal/adapter, desc: "o dominio nao conhece os adaptadores" }
-          - { pkg: tccelta/backend/internal/api, desc: "o dominio nao conhece o transporte" }
+          - { pkg: tccelta/backend/internal/http, desc: "o dominio nao conhece o transporte" }
       port:
         files: ["**/internal/port/**", "!**/internal/port/porttest/**"]
         deny:
@@ -34,7 +34,7 @@ linters-settings:
           - { pkg: tccelta/backend/internal/database, desc: "as portas nao conhecem a infraestrutura" }
           - { pkg: tccelta/backend/internal/usecase, desc: "as portas nao conhecem os casos de uso" }
           - { pkg: tccelta/backend/internal/adapter, desc: "as portas nao conhecem os adaptadores" }
-          - { pkg: tccelta/backend/internal/api, desc: "as portas nao conhecem o transporte" }
+          - { pkg: tccelta/backend/internal/http, desc: "as portas nao conhecem o transporte" }
       usecase:
         # os testes podem usar o adaptador em memoria
         files: ["**/internal/usecase/**", "!$test"]
@@ -44,9 +44,9 @@ linters-settings:
           - { pkg: net/http, desc: "casos de uso nao conhecem o transporte" }
           - { pkg: tccelta/backend/internal/database, desc: "casos de uso acessam o banco so pelas portas de internal/port" }
           - { pkg: tccelta/backend/internal/adapter, desc: "casos de uso dependem das portas, nunca dos adaptadores" }
-          - { pkg: tccelta/backend/internal/api, desc: "casos de uso nao conhecem o transporte" }
-      api:
-        files: ["**/internal/api/**", "!$test"]
+          - { pkg: tccelta/backend/internal/http, desc: "casos de uso nao conhecem o transporte" }
+      http:
+        files: ["**/internal/http/**", "!$test"]
         deny:
           - { pkg: github.com/jackc/pgx, desc: "o HTTP e so transporte" }
           - { pkg: tccelta/backend/internal/database, desc: "o HTTP e so transporte" }
@@ -55,7 +55,7 @@ linters-settings:
         files: ["**/internal/adapter/**"]
         deny:
           - { pkg: tccelta/backend/internal/usecase, desc: "adaptadores implementam portas, nao conhecem os casos de uso" }
-          - { pkg: tccelta/backend/internal/api, desc: "adaptadores nao conhecem o transporte" }
+          - { pkg: tccelta/backend/internal/http, desc: "adaptadores nao conhecem o transporte" }
       # O KMS e o unico cliente do Vault e outro processo: so enxerga a biblioteca padrao, o Prometheus e o
       # disjuntor compartilhado (platform/breaker, sem dependencias do projeto); nunca os demais pacotes de
       # tccelta/backend. Pacote -> regra: lista branca (strict) via allow.

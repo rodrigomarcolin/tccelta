@@ -42,7 +42,7 @@ Sobe a stack isolada `compose.test.yaml` (projeto `tccelta-teste`), reconstrói 
 
 ## Testes do backend
 
-`go test -race ./...` (`make teste`, em contêiner) cobre, por pacote, `domain/{protocol,pid,handshake,ingestion,timeline}`, `usecase/{handshake,ingestion,session,catalog}` (com `adapter/memory` e `port/porttest`), `api`, `api/ratelimit`, `adapter/{jwt,kmsclient}`, `config`, `platform/breaker`, `tools/provisioning`, `kms/{server,vault,provisioning,config}`. Vetores: `domain/protocol/testdata/vetores.json` (gerado por `scripts/gerar_vetores.py`) e `vetores_firmware.json` (do `vectors.py` da Fase 1). Não há testes dos adaptadores `postgres`/`database` nem do `worker`.
+`go test -race ./...` (`make teste`, em contêiner) cobre, por pacote, `domain/{protocol,pid,handshake,ingestion,timeline}`, `usecase/{handshake,ingestion,session,catalog}` (com `adapter/memory` e `port/porttest`), `api`, `http/ratelimit`, `adapter/{jwt,kmsclient}`, `config`, `platform/breaker`, `tools/provisioning`, `kms/{server,vault,provisioning,config}`. Vetores: `domain/protocol/testdata/vetores.json` (gerado por `scripts/gerar_vetores.py`) e `vetores_firmware.json` (do `vectors.py` da Fase 1). Não há testes dos adaptadores `postgres`/`database` nem do `worker`.
 
 ## CI (`.github/workflows/backend-ci.yml`, `working-directory: backend`)
 

@@ -2,7 +2,7 @@
 
 Estado implementado: `internal/usecase/handshake/{issue_challenge,respond_challenge}.go`
 (casos de uso), `internal/domain/handshake/{rules,types}.go` (regras puras),
-`internal/api/{request_challenge,respond_challenge}.go` (HTTP) e as consultas de
+`internal/http/{request_challenge,respond_challenge}.go` (HTTP) e as consultas de
 `challenge.sql`, `state.sql`, `context.sql`.
 
 ## Contrato HTTP
@@ -86,4 +86,4 @@ A pré-checagem corre sem lock; toda decisão que muda estado é refeita sob `pg
 
 ## Testes
 
-`usecase/handshake`, `domain/handshake`, `api` (testes unitários com `adapter/memory` e `port/porttest`), e os cenários `e2e`, `negative-protocol`, `time` e `generation` do simulador.
+`usecase/handshake`, `domain/handshake`, `http` (testes unitários com `adapter/memory` e `port/porttest`), e os cenários `e2e`, `negative-protocol`, `time` e `generation` do simulador.
