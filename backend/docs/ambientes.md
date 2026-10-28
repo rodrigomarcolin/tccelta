@@ -28,7 +28,7 @@ uma stack isolada para o `make e2e`. Ela é descrita no [README](../README.md#st
 | Portas no host | Banco 5432, Vault 8200, API 8080-8081 | Nenhuma dessas; só o Caddy (8443) | O KMS na interface da VPN (`KMS_BIND_IP:8300`); o Vault sem porta no host |
 | Redes `dados`, `kms`, `cofre` | Comuns | `internal: true` (sem saída para fora) | No `deploy/kms/compose.yaml`, uma rede `kms` comum só entre o Vault e o KMS; as redes da API não são definidas aqui |
 | Certificados | Nenhum | CA de laboratório (`make certs`, validade de 1 ano) | PKI própria; o script de laboratório não serve |
-| Dongles de teste (`seed-dev`, `provision new`, `cenario`) | Funcionam | O KMS os permite, mas o `kms-ferramentas` não foi ajustado ao Vault em TLS: **na prática não funcionam** | **Recusados** pelo KMS (`provision new` e `importar` do CSV) |
+| Dongles de teste (`seed-dev`, `provision new`, `scenario`) | Funcionam | O KMS os permite, mas o `kms-ferramentas` não foi ajustado ao Vault em TLS: **na prática não funcionam** | **Recusados** pelo KMS (`provision new` e `importar` do CSV) |
 | Registro de chave com `alg none` | Aceito | Aceito | **Recusado** |
 | Perfil de bloco `none` (`PERMITIR_PERFIL_NONE`) | Pode ser ligado | Pode ser ligado | **Proibido**: configuração inválida |
 
@@ -67,11 +67,11 @@ Para uma produção de verdade faltam:
 ## Trocar de um nível para outro
 
 Os dois primeiros compartilham o projeto `tccelta` e o volume do banco. Ao ir de dev para prodlike (ou voltar),
-rode `make limpar` primeiro: o Vault muda de modo (memória para raft). O bootstrap regenera um `secret_id` inválido
+rode `make clean` primeiro: o Vault muda de modo (memória para raft). O bootstrap regenera um `secret_id` inválido
 que sobre no volume, mas começar limpo evita surpresa. Depois: `make certs` e `make up-prodlike` (ou só `make up`).
-O `make limpar` apaga os dados de desenvolvimento.
+O `make clean` apaga os dados de desenvolvimento.
 
 **Contêineres de perfis desligados.** O `docker compose down` não remove os serviços de perfis que não estão
 ativos no comando (por exemplo o `caddy`, do perfil `tls`). Se a rede do projeto foi recriada, esse contêiner
 antigo guarda o ID da rede velha e o próximo `up` falha com `network ... not found`. Para derrubar tudo, inclusive
-o overlay prodlike e os perfis, use `make down-tudo` ou `make limpar-tudo`, que passam todos os perfis.
+o overlay prodlike e os perfis, use `make down-all` ou `make clean-all`, que passam todos os perfis.

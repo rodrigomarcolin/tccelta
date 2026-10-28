@@ -34,7 +34,7 @@ flowchart LR
 
 Opções: `--scenario`, `--api` (`http://api:8080`), `--keys` (CSV), `--dongles`, `--duration` (2m), `--speedup`, `--tlat` (60s), `--accumulated` (500), `--ramp` (30s), `--db-url-env` (`SIM_BANCO_URL`), `--report`, `--drift`.
 
-Todos os dongles partem do seq 1; o servidor guarda o estado por DevId, então cada execução usa dongles novos (`make cenario` e `make e2e` os criam: KMS primeiro, banco depois, CSV em `saida/dongles-<nome>.csv`). `load` e `knee` saem de um único IP e sofrem o limite por IP da API (`LIMITE_IP_MIN`).
+Todos os dongles partem do seq 1; o servidor guarda o estado por DevId, então cada execução usa dongles novos (`make scenario` e `make e2e` os criam: KMS primeiro, banco depois, CSV em `saida/dongles-<nome>.csv`). `load` e `knee` saem de um único IP e sofrem o limite por IP da API (`LIMITE_IP_MIN`).
 
 ## `make e2e`
 
@@ -42,7 +42,7 @@ Sobe a stack isolada `compose.test.yaml` (projeto `tccelta-teste`), reconstrói 
 
 ## Testes do backend
 
-`go test -race ./...` (`make teste`, em contêiner) cobre, por pacote, `domain/{protocol,pid,handshake,ingestion,timeline}`, `usecase/{handshake,ingestion,session,catalog,boottime,reprocess,provisioning}` (com `adapter/memory` e `port/porttest`), `api`, `http/ratelimit`, `adapter/{jwt,kmsclient}`, `config`, `platform/breaker`, `tools/provisioning`, `kms/{server,vault,provisioning,config}`. Vetores: `domain/protocol/testdata/vetores.json` (gerado por `scripts/gerar_vetores.py`) e `vetores_firmware.json` (do `vectors.py` da Fase 1). Não há testes dos adaptadores `postgres`/`database` nem do loop do `worker` (a lógica está em `usecase/boottime`).
+`go test -race ./...` (`make test`, em contêiner) cobre, por pacote, `domain/{protocol,pid,handshake,ingestion,timeline}`, `usecase/{handshake,ingestion,session,catalog,boottime,reprocess,provisioning}` (com `adapter/memory` e `port/porttest`), `api`, `http/ratelimit`, `adapter/{jwt,kmsclient}`, `config`, `platform/breaker`, `tools/provisioning`, `kms/{server,vault,provisioning,config}`. Vetores: `domain/protocol/testdata/vetores.json` (gerado por `scripts/gerar_vetores.py`) e `vetores_firmware.json` (do `vectors.py` da Fase 1). Não há testes dos adaptadores `postgres`/`database` nem do loop do `worker` (a lógica está em `usecase/boottime`).
 
 ## CI (`.github/workflows/backend-ci.yml`, `working-directory: backend`)
 
@@ -56,4 +56,4 @@ Sobe a stack isolada `compose.test.yaml` (projeto `tccelta-teste`), reconstrói 
 
 ## Metas de carga (documentadas, não medidas)
 
-M1: 1 000 dongles a 0,17 bloco/s, p99 `POST /blocos` < 300 ms, 0 respostas 5xx. M2: o mesmo com `T_lat` = 10 s. M3: reconexão de 200 dongles × 2 000 blocos drenada em < 10 min. M4: `knee` reporta a capacidade. M5: p95 do handshake < 150 ms. M6: `tccelta_kms_calls_total / tccelta_batches_total ≤ 2` e ≥ 95 % dos lotes sem chamada ao KMS dentro da transação (`phase="tx"`). `make carga [N=]` cria `N` dongles virtuais e roda `load` com relatório em `saida/relatorio.json`; nenhuma meta foi medida.
+M1: 1 000 dongles a 0,17 bloco/s, p99 `POST /blocos` < 300 ms, 0 respostas 5xx. M2: o mesmo com `T_lat` = 10 s. M3: reconexão de 200 dongles × 2 000 blocos drenada em < 10 min. M4: `knee` reporta a capacidade. M5: p95 do handshake < 150 ms. M6: `tccelta_kms_calls_total / tccelta_batches_total ≤ 2` e ≥ 95 % dos lotes sem chamada ao KMS dentro da transação (`phase="tx"`). `make load-test [N=]` cria `N` dongles virtuais e roda `load` com relatório em `saida/relatorio.json`; nenhuma meta foi medida.

@@ -9,8 +9,8 @@ goose e do código gerado pelo sqlc. Tudo em `backend/internal/database/`:
 
 | Peça | Uso |
 |---|---|
-| goose v3 (`NewProvider`) | `tccelta migrate [up\|down-to N\|status]`, migrations embutidas; `make migracao-nova NOME=` cria o arquivo |
-| sqlc 1.27 (`backend/sqlc.yaml`) | lê `migrations/` como esquema e `queries/` como consultas; saída `dbgen`, `pgx/v5`, `emit_interface`; `uuid`→`uuid.UUID`, `timestamptz`→`time.Time`, `geography`→`[]byte`. `make sqlc` / `make sqlc-verificar` (`sqlc diff`, usado na CI) |
+| goose v3 (`NewProvider`) | `tccelta migrate [up\|down-to N\|status]`, migrations embutidas; `make new-migration NAME=` cria o arquivo |
+| sqlc 1.27 (`backend/sqlc.yaml`) | lê `migrations/` como esquema e `queries/` como consultas; saída `dbgen`, `pgx/v5`, `emit_interface`; `uuid`→`uuid.UUID`, `timestamptz`→`time.Time`, `geography`→`[]byte`. `make sqlc` / `make sqlc-check` (`sqlc diff`, usado na CI) |
 | `database.InTransaction` | `SET LOCAL lock_timeout` (3 s) e `statement_timeout` (10 s); `55P03`, `57014` viram `port.ErrDatabaseBusy`; `40P01`/`40001` repetem a função uma vez |
 | `database.Listen` | `LISTEN` com reconexão (canais `pid_changed` e `boot_pending`) |
 

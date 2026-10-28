@@ -62,7 +62,7 @@ make seed-dev          # cadastra os 3 dongles de teste (KMS e banco)
 make ps                # confere o estado dos serviços
 make psql              # abre o psql no banco
 make logs S=api        # acompanha o log de um serviço
-make limpar            # derruba tudo e apaga os volumes (banco e Vault incluídos)
+make clean             # derruba tudo e apaga os volumes (banco e Vault incluídos)
 ```
 
 Todos os comandos rodam a partir de `backend/`.
@@ -77,8 +77,8 @@ Todos os comandos rodam a partir de `backend/`.
 | `COMPOSE_PL` | `docker compose -f compose.yaml -f compose.prodlike.yaml` | Mesma stack com o ajuste `prodlike` por cima |
 | `COMPOSE_T` | `docker compose -f compose.test.yaml` | Stack isolada de teste (projeto `tccelta-teste`), usada pelo `e2e` |
 | `DOCKER_GO` | `docker run --rm -v "$(CURDIR)":/src -w /src -v tccelta_gomod:/go/pkg/mod golang:1.24-bookworm` | Roda comandos Go; o volume `tccelta_gomod` guarda o cache dos módulos |
-| `FERR` | `run --rm ferramentas` | Serviço `ferramentas`: o binário `tccelta` (banco e API) |
-| `KMSF` | `run --rm kms-ferramentas` | Serviço `kms-ferramentas`: o binário `tccelta-kms` (Vault) |
+| `TOOLS` | `run --rm ferramentas` | Serviço `ferramentas`: o binário `tccelta` (banco e API) |
+| `KMS_TOOLS` | `run --rm kms-ferramentas` | Serviço `kms-ferramentas`: o binário `tccelta-kms` (Vault) |
 | `SIM_DB` | `--db-url-env SIM_BANCO_URL` | Aponta o simulador para a variável com a URL do banco |
 
 **Imagens de ferramenta (versões fixas)**: Go `golang:1.24-bookworm`, sqlc `sqlc/sqlc:1.27.0`,
@@ -90,12 +90,12 @@ Python `python:3.12-slim`.
 | Parâmetro | Usado por | Significado |
 |---|---|---|
 | `S=<serviço>` | `logs` | Serviço do compose (vazio = todos) |
-| `NOME=<nome>` | `migracao-nova` | Nome da migration |
-| `N=<n>`, `HW=dev\|devsec` | `provisionar` | Quantidade de dongles novos (padrão 1) e perfil de hardware (padrão `dev`) |
-| `N=<n>` | `carga` | Quantidade de dongles virtuais (padrão 1000) |
-| `ARQ=<caminho>` | `kms-importar` | `kms_record.json` gerado pelo `provision.py` do firmware |
-| `C=<cenário>`, `N=<n>`, `ARGS='…'` | `cenario` | Cenário do simulador, quantidade de dongles novos (padrão 3) e opções extras repassadas ao simulador |
-| `DONGLE=<16 hex>`, `DESDE=<seq>`, `APLICAR=1` | `reprocessar` | DevId, seq inicial (padrão 1) e se o reprocessamento é aplicado (sem `APLICAR`, é só um ensaio) |
+| `NAME=<nome>` | `new-migration` | Nome da migration |
+| `N=<n>`, `HW=dev\|devsec` | `provision` | Quantidade de dongles novos (padrão 1) e perfil de hardware (padrão `dev`) |
+| `N=<n>` | `load-test` | Quantidade de dongles virtuais (padrão 1000) |
+| `FILE=<caminho>` | `kms-import` | `kms_record.json` gerado pelo `provision.py` do firmware |
+| `C=<cenário>`, `N=<n>`, `ARGS='…'` | `scenario` | Cenário do simulador, quantidade de dongles novos (padrão 3) e opções extras repassadas ao simulador |
+| `DONGLE=<16 hex>`, `FROM=<seq>`, `APPLY=1` | `reprocess` | DevId, seq inicial (padrão 1) e se o reprocessamento é aplicado (sem `APPLY`, é só um ensaio) |
 
 ## Alvos
 
@@ -104,15 +104,15 @@ Python `python:3.12-slim`.
 | Alvo | O que faz | Observações |
 |---|---|---|
 | `env` | Copia `.env.example` para `.env` se ainda não existir | Não sobrescreve um `.env` seu |
-| `segredos` | Roda `scripts/gerar-segredos.sh`: gera, em `deploy/segredos/`, as senhas do Postgres (superusuário, dono, API, worker, provisionador), o token de desenvolvimento do Vault e a senha do Redis | Idempotente: só cria o que falta. Usa um contêiner `alpine` com `openssl`. Cria também um `cloudflared_token` vazio |
+| `secrets` | Roda `scripts/gerar-segredos.sh`: gera, em `deploy/segredos/`, as senhas do Postgres (superusuário, dono, API, worker, provisionador), o token de desenvolvimento do Vault e a senha do Redis | Idempotente: só cria o que falta. Usa um contêiner `alpine` com `openssl`. Cria também um `cloudflared_token` vazio |
 | `certs` | Roda `scripts/gerar-certs.sh`: PKI de laboratório em `deploy/kms/certs/` (CA, certificado do Vault, do KMS e certificado de cliente da API; ECDSA P-256, 1 ano) | Idempotente. A variável `KMS_HOST` acrescenta um nome extra aos certificados do Vault e do KMS |
 | `build` | `docker compose build` | Constrói as imagens sem subir |
-| `up` | `env` + `segredos`, depois `up -d --build --wait` | Sobe banco, Redis, Vault (modo dev), `vault-bootstrap`, `migrar`, KMS, API, worker e `jwt-rotacao`. `--wait` só retorna quando os healthchecks ficam verdes |
+| `up` | `env` + `secrets`, depois `up -d --build --wait` | Sobe banco, Redis, Vault (modo dev), `vault-bootstrap`, `migrar`, KMS, API, worker e `jwt-rotacao`. `--wait` só retorna quando os healthchecks ficam verdes |
 | `up-tls` | Igual ao `up`, com o perfil `tls` | Acrescenta o Caddy na porta `API_PORTA_TLS` (8443). É o caminho para o celular alcançar a API na rede local |
-| `up-tunel` | Igual ao `up`, com o perfil `tunel` | Acrescenta Caddy e `cloudflared`. O token do túnel vai em `deploy/segredos/cloudflared_token` |
-| `up-prodlike` | `env` + `segredos` + `certs`, depois sobe com `compose.prodlike.yaml` e o perfil `tls` | Vault em modo servidor (raft, TLS), mTLS entre API e KMS. Veja [prodlike](#prodlike) |
+| `up-tunnel` | Igual ao `up`, com o perfil `tunel` | Acrescenta Caddy e `cloudflared`. O token do túnel vai em `deploy/segredos/cloudflared_token` |
+| `up-prodlike` | `env` + `secrets` + `certs`, depois sobe com `compose.prodlike.yaml` e o perfil `tls` | Vault em modo servidor (raft, TLS), mTLS entre API e KMS. Veja [prodlike](#prodlike) |
 | `down` | `docker compose down` | Para e remove os contêineres; **mantém** os volumes |
-| `limpar` | `docker compose down -v` | Para tudo e **apaga os volumes** (banco, Vault, Redis). Começa do zero |
+| `clean` | `docker compose down -v` | Para tudo e **apaga os volumes** (banco, Vault, Redis). Começa do zero |
 | `ps` | Lista os serviços e a saúde | |
 | `logs` | `logs -f --tail=200 $(S)` | Segue o log. Ex.: `make logs S=kms` |
 
@@ -124,10 +124,10 @@ esse comportamento.
 
 | Alvo | O que faz |
 |---|---|
-| `migrar` | Roda o serviço `migrar` (`tccelta migrate`, equivalente a `up`). O `make up` já faz isso uma vez |
-| `migracao-nova NOME=x` | Cria um arquivo de migration SQL numerado em `internal/database/migrations/`, usando o goose |
+| `migrate` | Roda o serviço `migrar` (`tccelta migrate`, equivalente a `up`). O `make up` já faz isso uma vez |
+| `new-migration NAME=x` | Cria um arquivo de migration SQL numerado em `internal/database/migrations/`, usando o goose |
 | `sqlc` | Regenera o código de acesso ao banco em `internal/database/dbgen/` a partir das migrations e das queries (`internal/database/queries/`) |
-| `sqlc-verificar` | `sqlc diff`: falha se o código gerado estiver desatualizado. É a checagem que a CI usa |
+| `sqlc-check` | `sqlc diff`: falha se o código gerado estiver desatualizado. É a checagem que a CI usa |
 | `psql` | Abre o `psql` no contêiner `banco` (usuário `postgres`, banco `tccelta`) |
 
 ### Vault
@@ -149,10 +149,10 @@ dois passos são idempotentes. O formato do `record.json` está em
 | Alvo | O que faz | Resultado |
 |---|---|---|
 | `seed-dev` | Importa o `testdata/test-dongles.csv` e cadastra os dongles | 3 dongles de teste (`0011223344556677`, `…78`, `…79`, perfil `hmac`). **Chaves públicas e fixas**: nunca use em dongle real |
-| `provisionar [N=] [HW=]` | `tccelta-kms provision new` e depois `provision register` | Dongles novos com chaves aleatórias, em `saida/<devid>/`, incluindo o material para gravar no firmware |
+| `provision [N=] [HW=]` | `tccelta-kms provision new` e depois `provision register` | Dongles novos com chaves aleatórias, em `saida/<devid>/`, incluindo o material para gravar no firmware |
 | `kms-wrapping` | `provision export-wrapping` | Exporta as chaves públicas de embrulho para `saida/kms_wrapping.json`. É o que o `provision.py --kms-wrapping` do firmware usa no perfil `prod` |
-| `kms-importar ARQ=…` | `provision import-record` e depois `provision register` | Importa o `kms_record.json` gerado pelo `provision.py` do firmware |
-| `saida-dir` | Cria `saida/` com permissão aberta | Dependência dos alvos acima. O contêiner roda com usuário sem privilégio e precisa escrever lá |
+| `kms-import FILE=…` | `provision import-record` e depois `provision register` | Importa o `kms_record.json` gerado pelo `provision.py` do firmware |
+| `output-dir` | Cria `saida/` com permissão aberta | Dependência dos alvos acima. O contêiner roda com usuário sem privilégio e precisa escrever lá |
 
 O dongle de bancada do firmware (DevId `544343454C544101`) **não** está no `test-dongles.csv`. Para
 cadastrá-lo, monte um CSV com o mesmo formato (`dev_id_hex,k_auth_hex,k_rec_hex,perfil`) e rode os dois passos
@@ -162,21 +162,21 @@ cadastrá-lo, monte um CSV com o mesmo formato (`dev_id_hex,k_auth_hex,k_rec_hex
 
 | Alvo | O que faz | Observações |
 |---|---|---|
-| `reprocessar DONGLE=… [DESDE=n] [APLICAR=1]` | `tccelta worker reprocess`: refaz as tabelas `reading` e `position` a partir dos blocos brutos | Sem `APLICAR=1` é só um ensaio. Processa em janelas de 200 blocos |
-| `ca-exportar` | Copia a CA raiz do Caddy para `saida/caddy-root.crt` | Precisa do Caddy rodando (`up-tls`/`up-tunel`) com `CADDY_TLS=internal`. É o arquivo para instalar no celular |
+| `reprocess DONGLE=… [FROM=n] [APPLY=1]` | `tccelta worker reprocess`: refaz as tabelas `reading` e `position` a partir dos blocos brutos | Sem `APPLY=1` é só um ensaio. Processa em janelas de 200 blocos |
+| `ca-export` | Copia a CA raiz do Caddy para `saida/caddy-root.crt` | Precisa do Caddy rodando (`up-tls`/`up-tunnel`) com `CADDY_TLS=internal`. É o arquivo para instalar no celular |
 
 ### Testes e qualidade
 
 | Alvo | O que faz | Observações |
 |---|---|---|
-| `teste` | `go test -race ./...` em contêiner | Todo o módulo, inclusive o KMS |
-| `teste-integracao` | `go test -p 1 -tags integration -race ./...`, com o socket do Docker montado para o testcontainers | Hoje **nenhum arquivo** tem a tag `integration`, então o alvo só reexecuta os testes de unidade |
-| `vetores` | Roda `scripts/gerar_vetores.py`, que gera `internal/domain/protocol/testdata/vetores.json` e o copia para `../mobile-app/test/fixtures/protocolo_vetores.json` | O script foi escrito de forma independente do código Go, a partir da spec, para servir de referência cruzada. Os vetores do firmware (`vetores_firmware.json`) vêm de outro gerador, o `vectors.py` |
+| `test` | `go test -race ./...` em contêiner | Todo o módulo, inclusive o KMS |
+| `test-integration` | `go test -p 1 -tags integration -race ./...`, com o socket do Docker montado para o testcontainers | Hoje **nenhum arquivo** tem a tag `integration`, então o alvo só reexecuta os testes de unidade |
+| `vectors` | Roda `scripts/gerar_vetores.py`, que gera `internal/domain/protocol/testdata/vetores.json` e o copia para `../mobile-app/test/fixtures/protocolo_vetores.json` | O script foi escrito de forma independente do código Go, a partir da spec, para servir de referência cruzada. Os vetores do firmware (`vetores_firmware.json`) vêm de outro gerador, o `vectors.py` |
 | `lint` | `golangci-lint run` (v1.64.8) com `.golangci.yml` | Inclui a regra `depguard` que impede a API e o KMS de importarem um ao outro. Ainda não foi executado |
-| `build-ferramentas` | Reconstrói as imagens `ferramentas` e `kms-ferramentas` | O `docker compose run` só constrói uma imagem que **não existe**; depois de mudar o código, uma imagem antiga continua rodando o binário antigo. O `cenario` e o `e2e` já chamam este passo |
-| `cenario C=<nome> [N=3] [ARGS='…']` | Cria `N` dongles **novos** (KMS, depois banco), grava o CSV em `saida/dongles-<nome>.csv` e roda esse cenário do simulador sobre eles, na stack de desenvolvimento | Ex.: `make cenario C=negative-protocol` ou `make cenario C=time ARGS='--speedup 120'`. Cenários: `e2e`, `negative-protocol`, `time`, `generation`, `reconnection`, `load`, `knee` |
+| `build-tools` | Reconstrói as imagens `ferramentas` e `kms-ferramentas` | O `docker compose run` só constrói uma imagem que **não existe**; depois de mudar o código, uma imagem antiga continua rodando o binário antigo. O `scenario` e o `e2e` já chamam este passo |
+| `scenario C=<nome> [N=3] [ARGS='…']` | Cria `N` dongles **novos** (KMS, depois banco), grava o CSV em `saida/dongles-<nome>.csv` e roda esse cenário do simulador sobre eles, na stack de desenvolvimento | Ex.: `make scenario C=negative-protocol` ou `make scenario C=time ARGS='--speedup 120'`. Cenários: `e2e`, `negative-protocol`, `time`, `generation`, `reconnection`, `load`, `knee` |
 | `e2e` | Sobe a stack isolada `compose.test.yaml`, reconstrói as imagens de ferramentas e roda quatro cenários do simulador em sequência: `e2e`, `negative-protocol`, `time --speedup 120` e `generation`. **Cada cenário recebe 3 dongles novos** | Derruba a stack com `down -v` no fim, passando ou não, e devolve o código do primeiro cenário que falhou. Os comandos foram validados com `make -n` e `bash -n`, e o alvo foi executado depois pelo autor do projeto (resultado não registrado aqui) |
-| `carga [N=]` | Cria `N` dongles virtuais (só com as chaves, sem material de NVS), registra no banco e roda o cenário `load`, com relatório em `saida/relatorio.json` | O projeto decidiu não executar testes de carga por ora, só documentá-los. As metas M1 a M6 não foram medidas |
+| `load-test [N=]` | Cria `N` dongles virtuais (só com as chaves, sem material de NVS), registra no banco e roda o cenário `load`, com relatório em `saida/relatorio.json` | O projeto decidiu não executar testes de carga por ora, só documentá-los. As metas M1 a M6 não foram medidas |
 
 ## dev, prodlike e prod: o que muda
 
@@ -206,7 +206,7 @@ Perfis opcionais:
 | Perfil | Serviços | Como ativar |
 |---|---|---|
 | `tls` | `caddy` (HTTPS na `API_PORTA_TLS`, 8443) | `make up-tls` |
-| `tunel` | `caddy` (HTTP na 8081 da rede interna) e `cloudflared` | `make up-tunel` |
+| `tunel` | `caddy` (HTTP na 8081 da rede interna) e `cloudflared` | `make up-tunnel` |
 | `ferramentas` | `ferramentas` (`tccelta`) e `kms-ferramentas` (`tccelta-kms`) | Os alvos de provisionamento e do simulador já passam `--profile ferramentas` |
 | `observabilidade` | `prometheus` (`127.0.0.1:9099`) e `grafana` (`127.0.0.1:3000`) | `docker compose --profile observabilidade up -d` |
 
@@ -256,8 +256,8 @@ O `make env` cria o `.env` a partir de `.env.example`. As variáveis, e onde cad
 | Caminho | Origem |
 |---|---|
 | `.env` | `make env` |
-| `deploy/segredos/*` | `make segredos` (o `.gitkeep` é versionado) |
-| `saida/` | Provisionamento, `ca-exportar`, `carga` (registros dos dongles, `kms_wrapping.json`, `caddy-root.crt`, `relatorio.json`) |
+| `deploy/segredos/*` | `make secrets` (o `.gitkeep` é versionado) |
+| `saida/` | Provisionamento, `ca-export`, `load-test` (registros dos dongles, `kms_wrapping.json`, `caddy-root.crt`, `relatorio.json`) |
 | `deploy/kms/certs/` | `make certs` |
 
 Os arquivos de `saida/` contêm material de chave dos dongles. Apague-os quando não precisar mais.
@@ -299,24 +299,24 @@ binário `tccelta`.
 - **Porta já em uso.** Com `API_REPLICAS=2`, a API publica as portas 8080 e 8081. Num teste anterior, isso
   conflitou no Windows e foi contornado com `API_REPLICAS=1` no `.env`. Não reproduzi esse conflito.
 - **O celular não alcança a API.** A API escuta só em `127.0.0.1`. Suba com `make up-tls`, ponha o IP do PC
-  em `API_HOST`, libere a porta 8443 no firewall e instale a CA exportada pelo `make ca-exportar`.
-- **Recomeçar do zero.** `make limpar` e depois `make up`. Isso apaga o banco e o Vault; os dongles
+  em `API_HOST`, libere a porta 8443 no firewall e instale a CA exportada pelo `make ca-export`.
+- **Recomeçar do zero.** `make clean` e depois `make up`. Isso apaga o banco e o Vault; os dongles
   precisam ser cadastrados de novo (`make seed-dev`).
 - **Cenário do simulador devolve `422 resposta_inconsistente` no handshake.** Um dongle simulado recomeça do
   seq 1, e o servidor recusa se o mesmo DevId já tem um HEAD maior. Nada no simulador limpa o estado entre
   execuções, então reaproveitar os dongles de um cenário que já rodou (por exemplo, os três do
-  `test-dongles.csv`) falha. Use `make cenario C=<nome>`, que cria dongles novos a cada execução, ou zere o
-  banco (`make limpar`, `make up`, `make seed-dev`). O `make e2e` já cria dongles novos para cada um dos seus
+  `test-dongles.csv`) falha. Use `make scenario C=<nome>`, que cria dongles novos a cada execução, ou zere o
+  banco (`make clean`, `make up`, `make seed-dev`). O `make e2e` já cria dongles novos para cada um dos seus
   quatro cenários. Rodar o simulador à mão com `--keys /testdata/test-dongles.csv` só serve na primeira vez
   depois de um banco limpo.
 - **`role_id: open : no such file or directory` (ou outro comportamento que não bate com o código atual) ao
   usar as ferramentas.** A imagem `tccelta-ferramentas:local` é antiga: o `docker compose run` não reconstrói
-  imagens que já existem. Rode `make build-ferramentas` e repita.
+  imagens que já existem. Rode `make build-tools` e repita.
 
 ## Lacunas conhecidas
 
 - Nenhum alvo foi reexecutado depois do refactor (veja o aviso no topo).
-- `teste-integracao` não tem testes com a tag `integration`.
+- `test-integration` não tem testes com a tag `integration`.
 - `lint` e a regra de `depguard` nunca rodaram.
-- `carga` e as metas M1 a M6 não foram medidas.
+- `load-test` e as metas M1 a M6 não foram medidas.
 - O túnel, o perfil `observabilidade` e o `prodlike` nunca foram exercitados.
