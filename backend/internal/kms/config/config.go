@@ -13,141 +13,141 @@ import (
 
 // HTTPConfig é o servidor do KMS. Fora do ambiente dev, TLS com certificado de cliente (mTLS) é obrigatório.
 type HTTPConfig struct {
-	Endereco         string
-	MetricasEndereco string
-	SaudeRotacao     string
-	TLSCert          string
-	TLSKey           string
-	TLSClientCA      string // CA que assina o certificado do cliente (a API)
-	TLSClienteCN     string // CN exigido no certificado do cliente (fora de dev)
+	Address        string
+	MetricsAddress string
+	RotationHealth string
+	TLSCert        string
+	TLSKey         string
+	TLSClientCA    string // CA que assina o certificado do cliente (a API)
+	TLSClientCN    string // CN exigido no certificado do cliente (fora de dev)
 }
 
 // VaultConfig é a conexão com o Vault (Transit).
 type VaultConfig struct {
-	Addr            string
-	CACert          string
-	ClientCert      string
-	ClientKey       string
-	RoleIDArquivo   string
-	SecretIDArquivo string
-	TokenArquivo    string
-	Timeout         time.Duration
-	Retentativas    int
-	MountAuth       string
-	MountRec        string
-	MountJWT        string
-	ChaveJWT        string
-	MaxSimultaneas  int
+	Addr          string
+	CACert        string
+	ClientCert    string
+	ClientKey     string
+	RoleIDFile    string
+	SecretIDFile  string
+	TokenFile     string
+	Timeout       time.Duration
+	Retries       int
+	MountAuth     string
+	MountRec      string
+	MountJWT      string
+	JWTKey        string
+	MaxConcurrent int
 }
 
 // JWTConfig tem o que a rotação precisa saber do token emitido pela API.
 type JWTConfig struct {
-	Validade time.Duration
-	Folga    time.Duration
+	Validity time.Duration
+	Leeway   time.Duration
 }
 
-// RotacaoConfig é o ciclo de vida da chave do JWT.
-type RotacaoConfig struct {
-	Periodo     time.Duration
-	Verificacao time.Duration
+// RotationConfig é o ciclo de vida da chave do JWT.
+type RotationConfig struct {
+	Period        time.Duration
+	CheckInterval time.Duration
 }
 
 // Config é a configuração completa.
 type Config struct {
-	Ambiente   string
-	LogNivel   string
-	LogFormato string
-	HTTP       HTTPConfig
-	Vault      VaultConfig
-	JWT        JWTConfig
-	Rotacao    RotacaoConfig
+	Environment string
+	LogLevel    string
+	LogFormat   string
+	HTTP        HTTPConfig
+	Vault       VaultConfig
+	JWT         JWTConfig
+	Rotation    RotationConfig
 }
 
 // Dev diz se o ambiente é de desenvolvimento (permite HTTP simples).
-func (c Config) Dev() bool { return c.Ambiente == "dev" }
+func (c Config) Dev() bool { return c.Environment == "dev" }
 
-type leitor struct {
+type reader struct {
 	env  func(string) string
 	errs []string
 }
 
-func (l *leitor) str(nome, padrao string) string {
-	if v := l.env(nome); v != "" {
+func (l *reader) str(name, def string) string {
+	if v := l.env(name); v != "" {
 		return v
 	}
-	return padrao
+	return def
 }
 
-func (l *leitor) dur(nome string, padrao time.Duration) time.Duration {
-	v := l.env(nome)
+func (l *reader) dur(name string, def time.Duration) time.Duration {
+	v := l.env(name)
 	if v == "" {
-		return padrao
+		return def
 	}
 	d, err := time.ParseDuration(v)
 	if err != nil {
-		l.errs = append(l.errs, fmt.Sprintf("%s: duração inválida %q", nome, v))
-		return padrao
+		l.errs = append(l.errs, fmt.Sprintf("%s: duração inválida %q", name, v))
+		return def
 	}
 	return d
 }
 
-func (l *leitor) inteiro(nome string, padrao int) int {
-	v := l.env(nome)
+func (l *reader) integer(name string, def int) int {
+	v := l.env(name)
 	if v == "" {
-		return padrao
+		return def
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		l.errs = append(l.errs, fmt.Sprintf("%s: inteiro inválido %q", nome, v))
-		return padrao
+		l.errs = append(l.errs, fmt.Sprintf("%s: inteiro inválido %q", name, v))
+		return def
 	}
 	return n
 }
 
-// Carregar lê o ambiente do processo.
-func Carregar() (Config, error) { return CarregarDe(os.Getenv) }
+// Load lê o ambiente do processo.
+func Load() (Config, error) { return LoadFrom(os.Getenv) }
 
-// CarregarDe lê de uma função arbitrária (testes).
-func CarregarDe(env func(string) string) (Config, error) {
-	l := &leitor{env: env}
+// LoadFrom lê de uma função arbitrária (testes).
+func LoadFrom(env func(string) string) (Config, error) {
+	l := &reader{env: env}
 	var c Config
-	c.Ambiente = l.str("AMBIENTE", "dev")
-	c.LogNivel = l.str("LOG_NIVEL", "info")
-	c.LogFormato = l.str("LOG_FORMATO", "json")
+	c.Environment = l.str("AMBIENTE", "dev")
+	c.LogLevel = l.str("LOG_NIVEL", "info")
+	c.LogFormat = l.str("LOG_FORMATO", "json")
 	c.HTTP = HTTPConfig{
-		Endereco:         l.str("KMS_ENDERECO", ":8300"),
-		MetricasEndereco: l.str("KMS_METRICAS_ENDERECO", ":9300"),
-		SaudeRotacao:     l.str("KMS_SAUDE_ROTACAO", ":8092"),
-		TLSCert:          l.str("KMS_TLS_CERT", ""),
-		TLSKey:           l.str("KMS_TLS_KEY", ""),
-		TLSClientCA:      l.str("KMS_TLS_CLIENT_CA", ""),
-		TLSClienteCN:     l.str("KMS_TLS_CLIENTE_CN", "tccelta-api"),
+		Address:        l.str("KMS_ENDERECO", ":8300"),
+		MetricsAddress: l.str("KMS_METRICAS_ENDERECO", ":9300"),
+		RotationHealth: l.str("KMS_SAUDE_ROTACAO", ":8092"),
+		TLSCert:        l.str("KMS_TLS_CERT", ""),
+		TLSKey:         l.str("KMS_TLS_KEY", ""),
+		TLSClientCA:    l.str("KMS_TLS_CLIENT_CA", ""),
+		TLSClientCN:    l.str("KMS_TLS_CLIENTE_CN", "tccelta-api"),
 	}
 	c.Vault = VaultConfig{
-		Addr:            l.str("VAULT_ADDR", ""),
-		CACert:          l.str("VAULT_CACERT", ""),
-		ClientCert:      l.str("VAULT_CLIENT_CERT", ""),
-		ClientKey:       l.str("VAULT_CLIENT_KEY", ""),
-		RoleIDArquivo:   l.str("VAULT_APPROLE_ROLE_ID_ARQUIVO", ""),
-		SecretIDArquivo: l.str("VAULT_APPROLE_SECRET_ID_ARQUIVO", ""),
-		TokenArquivo:    l.str("VAULT_TOKEN_ARQUIVO", ""),
-		Timeout:         l.dur("VAULT_TIMEOUT", 2*time.Second),
-		Retentativas:    l.inteiro("VAULT_RETENTATIVAS", 1),
-		MountAuth:       l.str("VAULT_MOUNT_AUTH", "transit-auth"),
-		MountRec:        l.str("VAULT_MOUNT_REC", "transit-rec"),
-		MountJWT:        l.str("VAULT_MOUNT_JWT", "transit-jwt"),
-		ChaveJWT:        l.str("VAULT_CHAVE_JWT", "jwt"),
-		MaxSimultaneas:  l.inteiro("VAULT_MAX_SIMULTANEAS", 32),
+		Addr:          l.str("VAULT_ADDR", ""),
+		CACert:        l.str("VAULT_CACERT", ""),
+		ClientCert:    l.str("VAULT_CLIENT_CERT", ""),
+		ClientKey:     l.str("VAULT_CLIENT_KEY", ""),
+		RoleIDFile:    l.str("VAULT_APPROLE_ROLE_ID_ARQUIVO", ""),
+		SecretIDFile:  l.str("VAULT_APPROLE_SECRET_ID_ARQUIVO", ""),
+		TokenFile:     l.str("VAULT_TOKEN_ARQUIVO", ""),
+		Timeout:       l.dur("VAULT_TIMEOUT", 2*time.Second),
+		Retries:       l.integer("VAULT_RETENTATIVAS", 1),
+		MountAuth:     l.str("VAULT_MOUNT_AUTH", "transit-auth"),
+		MountRec:      l.str("VAULT_MOUNT_REC", "transit-rec"),
+		MountJWT:      l.str("VAULT_MOUNT_JWT", "transit-jwt"),
+		JWTKey:        l.str("VAULT_CHAVE_JWT", "jwt"),
+		MaxConcurrent: l.integer("VAULT_MAX_SIMULTANEAS", 32),
 	}
 	c.JWT = JWTConfig{
-		Validade: l.dur("JWT_VALIDADE", time.Hour),
-		Folga:    l.dur("JWT_FOLGA", 30*time.Second),
+		Validity: l.dur("JWT_VALIDADE", time.Hour),
+		Leeway:   l.dur("JWT_FOLGA", 30*time.Second),
 	}
-	c.Rotacao = RotacaoConfig{
-		Periodo:     l.dur("JWT_ROTACAO_PERIODO", 720*time.Hour),
-		Verificacao: l.dur("JWT_ROTACAO_VERIFICACAO", time.Hour),
+	c.Rotation = RotationConfig{
+		Period:        l.dur("JWT_ROTACAO_PERIODO", 720*time.Hour),
+		CheckInterval: l.dur("JWT_ROTACAO_VERIFICACAO", time.Hour),
 	}
-	switch c.Ambiente {
+	switch c.Environment {
 	case "dev", "prodlike", "producao":
 	default:
 		l.errs = append(l.errs, "AMBIENTE deve ser dev, prodlike ou producao")
@@ -158,8 +158,8 @@ func CarregarDe(env func(string) string) (Config, error) {
 	return c, nil
 }
 
-// ValidarServidor confere o que só o modo `servir` exige: Vault configurado e, fora de dev, mTLS.
-func (c Config) ValidarServidor() error {
+// ValidateServer confere o que só o modo `servir` exige: Vault configurado e, fora de dev, mTLS.
+func (c Config) ValidateServer() error {
 	var e []string
 	if c.Vault.Addr == "" {
 		e = append(e, "VAULT_ADDR não definida")

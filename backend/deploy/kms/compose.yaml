@@ -27,7 +27,7 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
-    command: ["servir"]
+    command: ["serve"]
     environment:
       AMBIENTE: ${AMBIENTE:-producao}
       VAULT_ADDR: https://vault:8200
@@ -43,7 +43,7 @@ services:
       - ${KMS_APPROLE_DIR:?defina o diretorio com kms_role_id e kms_secret_id}:/run/approle:ro
     depends_on: [vault]
     healthcheck:
-      test: ["CMD", "/tccelta-kms", "saude", "--url", "http://127.0.0.1:9300/saude/pronta"]
+      test: ["CMD", "/tccelta-kms", "health", "--url", "http://127.0.0.1:9300/saude/pronta"]
       interval: 15s
       timeout: 3s
       retries: 4

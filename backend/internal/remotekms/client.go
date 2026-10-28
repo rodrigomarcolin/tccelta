@@ -214,7 +214,7 @@ func (c *Client) VerifyBlocks(ctx context.Context, key string, inputs, tags [][]
 		req.Inputs[i], req.Tags[i] = b64(inputs[i]), b64(tags[i])
 	}
 	var resp respVerify
-	if err := c.call(ctx, http.MethodPost, "/v1/blocos/verificar", req, &resp); err != nil {
+	if err := c.call(ctx, http.MethodPost, "/v1/blocks/verify", req, &resp); err != nil {
 		return nil, err
 	}
 	if len(resp.Valid) != len(inputs) {
@@ -228,7 +228,7 @@ func (c *Client) Sign(ctx context.Context, input []byte) (sig []byte, version in
 	t0 := time.Now()
 	defer func() { c.observe(ctx, "sign_jwt", t0, err) }()
 	var resp respSign
-	if err := c.call(ctx, http.MethodPost, "/v1/jwt/assinar", reqSign{Input: b64(input)}, &resp); err != nil {
+	if err := c.call(ctx, http.MethodPost, "/v1/jwt/sign", reqSign{Input: b64(input)}, &resp); err != nil {
 		return nil, 0, err
 	}
 	sig, err = base64.StdEncoding.DecodeString(resp.Signature)
@@ -241,7 +241,7 @@ func (c *Client) Sign(ctx context.Context, input []byte) (sig []byte, version in
 // PublicKeys lê as chaves públicas vigentes do JWT, por versão.
 func (c *Client) PublicKeys(ctx context.Context) (map[int]ed25519.PublicKey, error) {
 	var resp respKeys
-	if err := c.call(ctx, http.MethodGet, "/v1/jwt/chaves", nil, &resp); err != nil {
+	if err := c.call(ctx, http.MethodGet, "/v1/jwt/keys", nil, &resp); err != nil {
 		return nil, err
 	}
 	out := make(map[int]ed25519.PublicKey, len(resp))

@@ -26,10 +26,10 @@ montar transit-auth; montar transit-rec; montar transit-jwt
 vault read transit-jwt/keys/jwt >/dev/null 2>&1 || \
   vault write -f transit-jwt/keys/jwt type=ed25519 exportable=false allow_plaintext_backup=false
 
-vault policy write tccelta-kms           /vault/politicas/tccelta-kms.hcl
-vault policy write tccelta-provisionador /vault/politicas/tccelta-provisionador.hcl
-vault policy write tccelta-rotacao-jwt   /vault/politicas/tccelta-rotacao-jwt.hcl
-if [ "$PERFIL" = dev ]; then vault policy write tccelta-teste-dourado /vault/politicas/tccelta-teste-dourado.hcl; fi
+vault policy write tccelta-kms           /vault/policies/tccelta-kms.hcl
+vault policy write tccelta-provisionador /vault/policies/tccelta-provisioner.hcl
+vault policy write tccelta-rotacao-jwt   /vault/policies/tccelta-jwt-rotation.hcl
+if [ "$PERFIL" = dev ]; then vault policy write tccelta-teste-dourado /vault/policies/tccelta-golden-test.hcl; fi
 
 vault auth list | grep -q '^approle/' || vault auth enable approle
 vault write auth/approle/role/tccelta-kms token_policies=tccelta-kms token_no_default_policy=true \

@@ -1,5 +1,5 @@
 // Package provisioning cadastra no banco os dongles que o serviço KMS já provisionou. O contrato
-// entre os dois lados é o arquivo registro.json (kms/docs/registro-dongle.md): a API e o KMS não
+// entre os dois lados é o arquivo record.json (docs/kms-dongle-record.md): a API e o KMS não
 // compartilham código.
 package provisioning
 
@@ -21,21 +21,21 @@ import (
 	"tccelta/backend/internal/database/dbgen"
 )
 
-// RecordSchema é o schema do registro.json.
-const RecordSchema = "tccelta.dongle.registro.v1"
+// RecordSchema é o schema do record.json.
+const RecordSchema = "tccelta.dongle.record.v1"
 
-// Record é o conteúdo de registro.json.
+// Record é o conteúdo de record.json.
 type Record struct {
 	Schema      string `json:"schema"`
-	DevID       string `json:"dev_id"` // 16 dígitos hexadecimais
-	Profile     string `json:"perfil"` // hmac | asym | none
-	KMSAuthKey  string `json:"kms_chave_auth"`
-	KMSRecKey   string `json:"kms_chave_rec"`
-	PublicKey   string `json:"chave_publica,omitempty"` // hex, 65 B não comprimidos (só perfil asym)
-	Description string `json:"descricao,omitempty"`
+	DevID       string `json:"dev_id"`  // 16 dígitos hexadecimais
+	Profile     string `json:"profile"` // hmac | asym | none
+	KMSAuthKey  string `json:"kms_auth_key"`
+	KMSRecKey   string `json:"kms_rec_key"`
+	PublicKey   string `json:"public_key,omitempty"` // hex, 65 B não comprimidos (só perfil asym)
+	Description string `json:"description,omitempty"`
 }
 
-// ReadRecord lê e valida um registro.json.
+// ReadRecord lê e valida um record.json.
 func ReadRecord(file string) (Record, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
@@ -67,12 +67,12 @@ func (r Record) Validate() error {
 		return fmt.Errorf("perfil %q", r.Profile)
 	}
 	if r.KMSAuthKey == "" || r.KMSRecKey == "" {
-		return errors.New("kms_chave_auth e kms_chave_rec são obrigatórias")
+		return errors.New("kms_auth_key e kms_rec_key são obrigatórias")
 	}
 	if r.Profile == "asym" {
 		p, err := hex.DecodeString(r.PublicKey)
 		if err != nil || len(p) != 65 || p[0] != 4 {
-			return errors.New("chave_publica inválida (perfil asym exige 65 B não comprimidos)")
+			return errors.New("public_key inválida (perfil asym exige 65 B não comprimidos)")
 		}
 	}
 	return nil
@@ -121,7 +121,7 @@ func Register(ctx context.Context, pool *pgxpool.Pool, r Record, log *slog.Logge
 	return true, nil
 }
 
-// RecordFiles lista os registro.json de um arquivo ou, se for diretório, de seus subdiretórios.
+// RecordFiles lista os record.json de um arquivo ou, se for diretório, de seus subdiretórios.
 func RecordFiles(path string) ([]string, error) {
 	st, err := os.Stat(path)
 	if err != nil {
@@ -132,7 +132,7 @@ func RecordFiles(path string) ([]string, error) {
 	}
 	var out []string
 	err = filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
-		if err == nil && !d.IsDir() && d.Name() == "registro.json" {
+		if err == nil && !d.IsDir() && d.Name() == "record.json" {
 			out = append(out, p)
 		}
 		return err

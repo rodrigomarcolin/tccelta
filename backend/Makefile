@@ -14,7 +14,7 @@ SIM_DB       = --db-url-env SIM_BANCO_URL
 # sempre recomeça do seq 1, e o servidor guarda o estado por DevId; reusar um DevId que outro cenário já
 # avançou dá 422 resposta_inconsistente. Cada cenário recebe 3 dongles recém-criados (KMS, depois banco).
 E2E_NOVOS     = ( rm -rf saida/e2e-$(1) saida/dongles-$(1).csv || true ) \
-	&& $(COMPOSE_T) --profile ferramentas $(KMSF) provisionar novo --sem-material --quantidade 3 --saida /saida/e2e-$(1) --csv-saida /saida/dongles-$(1).csv \
+	&& $(COMPOSE_T) --profile ferramentas $(KMSF) provision new --no-material --count 3 --out /saida/e2e-$(1) --csv-out /saida/dongles-$(1).csv \
 	&& $(COMPOSE_T) --profile ferramentas $(FERR) provision register --file /saida/e2e-$(1)
 E2E_SIMULAR   = $(COMPOSE_T) --profile ferramentas $(FERR) simulator --keys /saida/dongles-$(1).csv --api http://api:8080 $(SIM_DB) --scenario $(1)
 
@@ -42,14 +42,14 @@ vault-bootstrap: ; $(COMPOSE) run --rm vault-bootstrap
 vault-unseal:    ; $(COMPOSE_PL) run --rm vault-unseal
 vault-unseal-manual: ; $(COMPOSE_PL) exec -it vault vault operator unseal
 seed-dev:        saida-dir
-	$(COMPOSE) --profile ferramentas $(KMSF) provisionar importar --arquivo /testdata/test-dongles.csv --saida /saida/registros
+	$(COMPOSE) --profile ferramentas $(KMSF) provision import --file /testdata/test-dongles.csv --out /saida/registros
 	$(COMPOSE) --profile ferramentas $(FERR) provision register --file /saida/registros
 provisionar:     saida-dir
-	$(COMPOSE) --profile ferramentas $(KMSF) provisionar novo --saida /saida --quantidade $(or $(N),1) --hw $(or $(HW),dev)
+	$(COMPOSE) --profile ferramentas $(KMSF) provision new --out /saida --count $(or $(N),1) --hw $(or $(HW),dev)
 	$(COMPOSE) --profile ferramentas $(FERR) provision register --file /saida
-kms-wrapping:    saida-dir ; $(COMPOSE) --profile ferramentas $(KMSF) provisionar exportar-wrapping --saida /saida/kms_wrapping.json
+kms-wrapping:    saida-dir ; $(COMPOSE) --profile ferramentas $(KMSF) provision export-wrapping --out /saida/kms_wrapping.json
 kms-importar:    saida-dir
-	$(COMPOSE) --profile ferramentas $(KMSF) provisionar importar-registro --arquivo $(ARQ) --saida /saida/registros
+	$(COMPOSE) --profile ferramentas $(KMSF) provision import-record --file $(ARQ) --out /saida/registros
 	$(COMPOSE) --profile ferramentas $(FERR) provision register --file /saida/registros
 saida-dir:       ; mkdir -p saida && chmod a+rwx saida
 reprocessar:     ; $(COMPOSE) --profile ferramentas $(FERR) worker reprocess --dongle $(DONGLE) --from-seq $(or $(DESDE),1) $(if $(APLICAR),--apply,)
@@ -67,7 +67,7 @@ build-ferramentas:
 cenario:         saida-dir build-ferramentas
 	@[ -n "$(C)" ] || { echo "uso: make cenario C=<e2e|negative-protocol|time|generation|reconnection|...> [N=3] [ARGS='--speedup 120']"; exit 1; }
 	-rm -rf saida/cenario-$(C) saida/dongles-$(C).csv
-	$(COMPOSE) --profile ferramentas $(KMSF) provisionar novo --sem-material --quantidade $(or $(N),3) --saida /saida/cenario-$(C) --csv-saida /saida/dongles-$(C).csv
+	$(COMPOSE) --profile ferramentas $(KMSF) provision new --no-material --count $(or $(N),3) --out /saida/cenario-$(C) --csv-out /saida/dongles-$(C).csv
 	$(COMPOSE) --profile ferramentas $(FERR) provision register --file /saida/cenario-$(C)
 	$(COMPOSE) --profile ferramentas $(FERR) simulator --scenario $(C) --keys /saida/dongles-$(C).csv --api http://api:8080 $(SIM_DB) $(ARGS)
 e2e:             env segredos saida-dir
@@ -80,7 +80,7 @@ e2e:             env segredos saida-dir
 	 st=$$?; $(COMPOSE_T) down -v; exit $$st
 carga:           saida-dir
 	rm -f saida/dongles-carga.csv
-	$(COMPOSE) --profile ferramentas $(KMSF) provisionar novo --sem-material --quantidade $(or $(N),1000) --saida /saida/carga --csv-saida /saida/dongles-carga.csv
+	$(COMPOSE) --profile ferramentas $(KMSF) provision new --no-material --count $(or $(N),1000) --out /saida/carga --csv-out /saida/dongles-carga.csv
 	$(COMPOSE) --profile ferramentas $(FERR) provision register --file /saida/carga
 	$(COMPOSE) --profile ferramentas $(FERR) simulator --scenario load --keys /saida/dongles-carga.csv --api http://api:8080 $(SIM_DB) --report /saida/relatorio.json
 

@@ -51,7 +51,7 @@ services:
     secrets: [vault_dev_root_token]
     volumes:
       - ./deploy/kms/vault/scripts:/vault/scripts:ro
-      - ./deploy/kms/vault/politicas:/vault/politicas:ro
+      - ./deploy/kms/vault/policies:/vault/policies:ro
       - vault_approle_kms:/approle/kms
       - vault_approle_ferramentas:/approle/ferramentas
       - vault_approle_rotacao:/approle/rotacao
@@ -61,7 +61,7 @@ services:
     networks: [cofre]
   kms:
     <<: *kms
-    command: ["servir"]
+    command: ["serve"]
     environment:
       AMBIENTE: dev
       VAULT_ADDR: http://vault:8200
@@ -72,7 +72,7 @@ services:
     volumes: [vault_approle_kms:/run/approle:ro]
     depends_on: { vault-bootstrap: { condition: service_completed_successfully } }
     healthcheck:
-      test: ["CMD", "/tccelta-kms", "saude", "--url", "http://127.0.0.1:9300/saude/pronta"]
+      test: ["CMD", "/tccelta-kms", "health", "--url", "http://127.0.0.1:9300/saude/pronta"]
       interval: 5s
       retries: 20
     networks: [kms, cofre]
@@ -147,7 +147,7 @@ services:
   kms-ferramentas:
     <<: *kms
     image: tccelta-kms-ferramentas:local
-    build: { context: ., dockerfile: Dockerfile, target: kms-ferramentas }
+    build: { context: ., dockerfile: Dockerfile, target: kms-tools }
     profiles: [ferramentas]
     entrypoint: ["/tccelta-kms"]
     read_only: false

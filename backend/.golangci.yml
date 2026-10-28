@@ -48,7 +48,7 @@ linters-settings:
           - $gostd
           - github.com/prometheus
           - tccelta/backend/internal/kms
-      # O backend nao importa o KMS (so por HTTP, contrato em docs/kms-contrato-http.md).
+      # O backend nao importa o KMS (so por HTTP, contrato em docs/kms-http-contract.md).
       sem-kms:
         files: ["!**/internal/kms/**", "!**/cmd/tccelta-kms/**"]
         deny:

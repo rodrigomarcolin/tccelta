@@ -22,14 +22,14 @@ import (
 
 // Os exemplos abaixo são os de kms/docs/contrato-http.md: se o contrato mudar, os dois lados mudam.
 const (
-	reqHMACExample = `{"chave":"0011223344556677","entradas":["YQ==","Yg=="]}`
+	reqHMACExample = `{"key":"0011223344556677","inputs":["YQ==","Yg=="]}`
 	// os dois MACs são 32 bytes: 0x01 repetido e 0x02 repetido
 	respHMACExample = `{"macs":["AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=","AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="]}`
 
-	reqVerifyExample  = `{"chave":"0011223344556677","entradas":["YQ==","Yg=="],"tags":["dA==","dQ=="]}`
-	respVerifyExample = `{"validos":[true,false]}`
+	reqVerifyExample  = `{"key":"0011223344556677","inputs":["YQ==","Yg=="],"tags":["dA==","dQ=="]}`
+	respVerifyExample = `{"valid":[true,false]}`
 
-	reqSignExample = `{"entrada":"YWJj"}`
+	reqSignExample = `{"input":"YWJj"}`
 )
 
 func newTest(t *testing.T, h http.HandlerFunc, adjust ...func(*Options)) (*Client, *httptest.Server) {
@@ -75,7 +75,7 @@ func TestHMACAuth(t *testing.T) {
 
 func TestVerifyBlocks(t *testing.T) {
 	c, _ := newTest(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/blocos/verificar" {
+		if r.URL.Path != "/v1/blocks/verify" {
 			t.Errorf("caminho %s", r.URL.Path)
 		}
 		if got := bodyOf(t, r); got != reqVerifyExample {
@@ -96,13 +96,13 @@ func TestSignAndKeys(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	c, _ := newTest(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/v1/jwt/assinar":
+		case "/v1/jwt/sign":
 			if got := bodyOf(t, r); got != reqSignExample {
 				t.Errorf("corpo difere do contrato: %s", got)
 			}
 			sig := ed25519.Sign(priv, []byte("abc"))
-			_ = json.NewEncoder(w).Encode(map[string]any{"assinatura": base64.StdEncoding.EncodeToString(sig), "versao": 3})
-		case "/v1/jwt/chaves":
+			_ = json.NewEncoder(w).Encode(map[string]any{"signature": base64.StdEncoding.EncodeToString(sig), "version": 3})
+		case "/v1/jwt/keys":
 			if r.Method != "GET" {
 				t.Errorf("método %s", r.Method)
 			}
