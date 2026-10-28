@@ -20,11 +20,11 @@ E2E_SIMULAR   = $(COMPOSE_T) --profile ferramentas $(FERR) simulator --keys /sai
 
 .PHONY: env segredos certs build up up-tls up-tunel up-prodlike down limpar logs ps migrar migracao-nova sqlc sqlc-verificar \
 	vault-bootstrap vault-unseal vault-unseal-manual saida-dir seed-dev provisionar kms-wrapping kms-importar reprocessar ca-exportar psql \
-	teste teste-integracao vetores lint e2e carga cenario build-ferramentas
+	teste teste-integracao vetores lint e2e carga cenario build-ferramentas build-kms docker-kms down-tudo limpar-tudo
 
 env:             ; [ -f .env ] || cp .env.example .env
 segredos:        ; sh scripts/gerar-segredos.sh
-certs:           ; sh ../kms/scripts/gerar-certs.sh
+certs:           ; sh scripts/gerar-certs.sh
 build:           ; $(COMPOSE) build
 up:              env segredos ; $(COMPOSE) up -d --build --wait
 up-tls:          env segredos ; $(COMPOSE) --profile tls up -d --build --wait
@@ -83,3 +83,14 @@ carga:           saida-dir
 	$(COMPOSE) --profile ferramentas $(KMSF) provisionar novo --sem-material --quantidade $(or $(N),1000) --saida /saida/carga --csv-saida /saida/dongles-carga.csv
 	$(COMPOSE) --profile ferramentas $(FERR) provision register --file /saida/carga
 	$(COMPOSE) --profile ferramentas $(FERR) simulator --scenario load --keys /saida/dongles-carga.csv --api http://api:8080 $(SIM_DB) --report /saida/relatorio.json
+
+# --- KMS (cmd/tccelta-kms): mesmo modulo Go; imagem e processo proprios ---
+# `down-tudo` e `limpar-tudo` derrubam todos os servicos, inclusive os de perfis desligados (caddy, ferramentas...)
+# e os do overlay prodlike, que o `down` comum deixa para trás com a rede antiga ("network ... not found" no
+# próximo `up`).
+STACK = docker compose -f compose.yaml -f compose.prodlike.yaml \
+        --profile tls --profile tunel --profile ferramentas --profile observabilidade
+build-kms:       ; $(DOCKER_GO) go build -trimpath -o /tmp/tccelta-kms ./cmd/tccelta-kms
+docker-kms:      ; docker build --target kms -t tccelta-kms:local .
+down-tudo:       ; $(STACK) down --remove-orphans
+limpar-tudo:     ; $(STACK) down -v --remove-orphans

@@ -11,10 +11,10 @@ x-backend: &backend
   env_file: [.env]
   restart: unless-stopped
 
-# Servico KMS (modulo ../kms): imagem propria, sem acesso ao banco.
+# Servico KMS (cmd/tccelta-kms): imagem propria, sem acesso ao banco.
 x-kms: &kms
   image: tccelta-kms:local
-  build: { context: ../kms, dockerfile: Dockerfile, target: kms }
+  build: { context: ., dockerfile: Dockerfile, target: kms }
   read_only: true
   tmpfs: [/tmp]
   user: "65532:65532"
@@ -73,8 +73,8 @@ services:
       PERFIL: dev
     secrets: [vault_dev_root_token]
     volumes:
-      - ../kms/deploy/vault/scripts:/vault/scripts:ro
-      - ../kms/deploy/vault/politicas:/vault/politicas:ro
+      - ./deploy/kms/vault/scripts:/vault/scripts:ro
+      - ./deploy/kms/vault/politicas:/vault/politicas:ro
       - vault_approle_kms:/approle/kms
       - vault_approle_ferramentas:/approle/ferramentas
       - vault_approle_rotacao:/approle/rotacao
@@ -121,8 +121,8 @@ services:
     ports: ["127.0.0.1:8080-8081:8080"]
     networks: [borda, dados, kms]
 
-  # Servico KMS (modulo ../kms): unico cliente do Vault em runtime. Em producao pode ficar noutro host
-  # (../kms/deploy/compose.kms.yaml); a API so precisa de KMS_URL e, no prodlike, dos certificados mTLS.
+  # Servico KMS (cmd/tccelta-kms): unico cliente do Vault em runtime. Em producao pode ficar noutro host
+  # (deploy/kms/compose.yaml); a API so precisa de KMS_URL e, no prodlike, dos certificados mTLS.
   kms:
     <<: *kms
     command: ["servir"]
@@ -249,7 +249,7 @@ services:
   kms-ferramentas:
     <<: *kms
     image: tccelta-kms-ferramentas:local
-    build: { context: ../kms, dockerfile: Dockerfile, target: ferramentas }
+    build: { context: ., dockerfile: Dockerfile, target: kms-ferramentas }
     profiles: [ferramentas]
     entrypoint: ["/tccelta-kms"]
     command: ["ajuda"]

@@ -17,8 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"tccelta/kms/internal/config"
-	"tccelta/kms/internal/disjuntor"
+	"tccelta/backend/internal/kms/config"
+	"tccelta/backend/internal/kms/disjuntor"
 )
 
 // ErroVault é uma resposta de erro do Vault (status != 2xx).

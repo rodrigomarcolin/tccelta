@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"tccelta/kms/internal/vault"
+	"tccelta/backend/internal/kms/vault"
 )
 
 // fakeVault guarda quais chaves existem e quantas importações aconteceram.

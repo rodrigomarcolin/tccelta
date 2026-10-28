@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"tccelta/kms/internal/vault"
+	"tccelta/backend/internal/kms/vault"
 )
 
 // Falso emula os caminhos do Transit usados pelo KMS.

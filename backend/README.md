@@ -1,8 +1,9 @@
 # Backend TCCELTA: guia do Makefile
 
-O `backend/` é a API Go (`tccelta`), o worker e as ferramentas de linha de comando. O serviço KMS, que guarda
-as chaves dos dongles e fala com o Vault, é um módulo separado em [`../kms`](../kms/README.md). A API só
-conversa com o KMS por HTTP (contrato em [`../kms/docs/contrato-http.md`](../kms/docs/contrato-http.md)).
+O `backend/` é a API Go (`tccelta`), o worker e as ferramentas de linha de comando, e também o serviço KMS
+(`tccelta-kms`), que guarda as chaves dos dongles e fala com o Vault. É um único módulo Go, mas o KMS é outro
+binário, outra imagem e outro processo ([`docs/kms.md`](docs/kms.md)). A API só conversa com o KMS por HTTP
+(contrato em [`docs/kms-contrato-http.md`](docs/kms-contrato-http.md)).
 
 O que cada cenário do simulador e cada verificação do `make e2e` fazem está em
 [`docs/cenarios-simulador.md`](docs/cenarios-simulador.md).
@@ -12,7 +13,7 @@ dos `compose*.yaml`, dos scripts e do código dos binários, e **não** a partir
 ainda descrevem o desenho anterior (a API falando direto com o Vault).
 
 > **Estado de verificação.** Os alvos abaixo foram lidos, mas não foram reexecutados depois do refactor em
-> camadas e da criação do módulo `kms/` (a máquina em que o refactor foi feito não tinha o daemon do Docker).
+> camadas e da incorporação do KMS ao `backend/` (a máquina em que o refactor foi feito não tinha o daemon do Docker).
 > Antes do refactor, a stack subiu e os cenários do simulador passaram. Depois dele, o autor do projeto
 > executou `make up`, `make seed-dev` e `make e2e`; o `make lint` (regra `depguard` nova) e os cenários
 > `reconnection`, `load` e `knee` ainda não foram executados.
@@ -76,7 +77,7 @@ Python `python:3.12-slim`.
 |---|---|---|
 | `env` | Copia `.env.example` para `.env` se ainda não existir | Não sobrescreve um `.env` seu |
 | `segredos` | Roda `scripts/gerar-segredos.sh`: gera, em `deploy/segredos/`, as senhas do Postgres (superusuário, dono, API, worker, provisionador), o token de desenvolvimento do Vault e a senha do Redis | Idempotente: só cria o que falta. Usa um contêiner `alpine` com `openssl`. Cria também um `cloudflared_token` vazio |
-| `certs` | Roda `../kms/scripts/gerar-certs.sh`: PKI de laboratório em `kms/deploy/certs/` (CA, certificado do Vault, do KMS e certificado de cliente da API; ECDSA P-256, 1 ano) | Idempotente. A variável `KMS_HOST` acrescenta um nome extra aos certificados do Vault e do KMS |
+| `certs` | Roda `scripts/gerar-certs.sh`: PKI de laboratório em `deploy/kms/certs/` (CA, certificado do Vault, do KMS e certificado de cliente da API; ECDSA P-256, 1 ano) | Idempotente. A variável `KMS_HOST` acrescenta um nome extra aos certificados do Vault e do KMS |
 | `build` | `docker compose build` | Constrói as imagens sem subir |
 | `up` | `env` + `segredos`, depois `up -d --build --wait` | Sobe banco, Redis, Vault (modo dev), `vault-bootstrap`, `migrar`, KMS, API, worker e `jwt-rotacao`. `--wait` só retorna quando os healthchecks ficam verdes |
 | `up-tls` | Igual ao `up`, com o perfil `tls` | Acrescenta o Caddy na porta `API_PORTA_TLS` (8443). É o caminho para o celular alcançar a API na rede local |
@@ -114,7 +115,7 @@ esse comportamento.
 O provisionamento acontece sempre em **duas etapas**, nesta ordem: primeiro o KMS (importa K_auth e K_rec
 no Vault e grava um `registro.json`), depois o banco (`tccelta provision register` cadastra o dongle). Os
 dois passos são idempotentes. O formato do `registro.json` está em
-[`../kms/docs/registro-dongle.md`](../kms/docs/registro-dongle.md). Os arquivos ficam em `backend/saida/`
+[`docs/kms-registro-dongle.md`](docs/kms-registro-dongle.md). Os arquivos ficam em `backend/saida/`
 (ignorada pelo git).
 
 | Alvo | O que faz | Resultado |
@@ -140,7 +141,7 @@ cadastrá-lo, monte um CSV com o mesmo formato (`dev_id_hex,k_auth_hex,k_rec_hex
 
 | Alvo | O que faz | Observações |
 |---|---|---|
-| `teste` | `go test -race ./...` em contêiner | Só o módulo `backend/`. O `kms/` tem o próprio `make teste` |
+| `teste` | `go test -race ./...` em contêiner | Todo o módulo, inclusive o KMS |
 | `teste-integracao` | `go test -p 1 -tags integration -race ./...`, com o socket do Docker montado para o testcontainers | Hoje **nenhum arquivo** tem a tag `integration`, então o alvo só reexecuta os testes de unidade |
 | `vetores` | Roda `scripts/gerar_vetores.py`, que gera `internal/domain/protocol/testdata/vetores.json` e o copia para `../mobile-app/test/fixtures/protocolo_vetores.json` | O script foi escrito de forma independente do código Go, a partir da spec, para servir de referência cruzada. Os vetores do firmware (`vetores_firmware.json`) vêm de outro gerador, o `vectors.py` |
 | `lint` | `golangci-lint run` (v1.64.8) com `.golangci.yml` | Inclui a regra `depguard` que impede a API e o KMS de importarem um ao outro. Ainda não foi executado |
@@ -229,7 +230,7 @@ O `make env` cria o `.env` a partir de `.env.example`. As variáveis, e onde cad
 | `.env` | `make env` |
 | `deploy/segredos/*` | `make segredos` (o `.gitkeep` é versionado) |
 | `saida/` | Provisionamento, `ca-exportar`, `carga` (registros dos dongles, `kms_wrapping.json`, `caddy-root.crt`, `relatorio.json`) |
-| `../kms/deploy/certs/` | `make certs` |
+| `deploy/kms/certs/` | `make certs` |
 
 Os arquivos de `saida/` contêm material de chave dos dongles. Apague-os quando não precisar mais.
 

@@ -17,16 +17,16 @@ uma stack isolada para o `make e2e`. Ela é descrita no [README](../README.md#st
 
 | Aspecto | dev | prodlike | prod |
 |---|---|---|---|
-| Como sobe | `make up` (`compose.yaml`) | `make up-prodlike` (`compose.yaml` + `compose.prodlike.yaml`, perfil `tls`) | Não há alvo. Só `kms/deploy/compose.kms.yaml` (Vault + KMS num host, atrás de VPN); a API fica em outro host, sem definição aqui |
+| Como sobe | `make up` (`compose.yaml`) | `make up-prodlike` (`compose.yaml` + `compose.prodlike.yaml`, perfil `tls`) | Não há alvo. Só `deploy/kms/compose.yaml` (Vault + KMS num host, atrás de VPN); a API fica em outro host, sem definição aqui |
 | `AMBIENTE` | `dev` | `prodlike` | `producao` |
 | Vault | Modo dev: em memória (perde tudo ao reiniciar), token raiz fixo em arquivo, porta 8200 no host | Modo servidor: raft em volume, TLS 1.3, sem token raiz de desenvolvimento | Modo servidor com a mesma configuração (`vault.hcl`), com `IPC_LOCK`; só o KMS o alcança |
 | Init e unseal do Vault | Já nasce aberto | Automático, **de laboratório**: 1 chave, limiar 1, guardada em `init.json` no volume `vault_init` | Manual: o `init-unseal.sh` **recusa** `producao`. O script registra a intenção: 5 chaves, limiar 3 |
 | Auditoria do Vault | Desligada | Ligada (`auditoria.log`) | Ligada (o bootstrap liga em tudo que não é dev) |
 | KMS → Vault | HTTP | HTTPS (CA de laboratório) | HTTPS |
-| API → KMS | `http://kms:8300` | `https://kms:8300` com mTLS | O KMS exige mTLS. Pelo comentário do `compose.kms.yaml`, a API precisa de `KMS_URL` https, do certificado de cliente e da CA; a validação do lado da API não foi conferida |
+| API → KMS | `http://kms:8300` | `https://kms:8300` com mTLS | O KMS exige mTLS. Pelo comentário do `deploy/kms/compose.yaml`, a API precisa de `KMS_URL` https, do certificado de cliente e da CA; a validação do lado da API não foi conferida |
 | Identidade do cliente do KMS (mTLS) | Não confere (HTTP simples) | **Sim**: certificado de cliente assinado pela CA e com `CN` igual a `KMS_TLS_CLIENTE_CN` (padrão `tccelta-api`, o do `api-cliente.pem`); outro `CN` da mesma CA recebe `403 cliente_nao_autorizado` | **Sim**, mesma regra: sem `KMS_TLS_CERT`, `KMS_TLS_KEY` e `KMS_TLS_CLIENT_CA` o KMS nem inicia. O certificado de cliente da API precisa ter o `CN` configurado, ou o valor de `KMS_TLS_CLIENTE_CN` do KMS tem de ser ajustado ao `CN` emitido pela PKI |
 | Portas no host | Banco 5432, Vault 8200, API 8080-8081 | Nenhuma dessas; só o Caddy (8443) | O KMS na interface da VPN (`KMS_BIND_IP:8300`); o Vault sem porta no host |
-| Redes `dados`, `kms`, `cofre` | Comuns | `internal: true` (sem saída para fora) | No `compose.kms.yaml`, uma rede `kms` comum só entre o Vault e o KMS; as redes da API não são definidas aqui |
+| Redes `dados`, `kms`, `cofre` | Comuns | `internal: true` (sem saída para fora) | No `deploy/kms/compose.yaml`, uma rede `kms` comum só entre o Vault e o KMS; as redes da API não são definidas aqui |
 | Certificados | Nenhum | CA de laboratório (`make certs`, validade de 1 ano) | PKI própria; o script de laboratório não serve |
 | Dongles de teste (`seed-dev`, `provisionar novo`, `cenario`) | Funcionam | O KMS os permite, mas o `kms-ferramentas` não foi ajustado ao Vault em TLS: **na prática não funcionam** | **Recusados** pelo KMS (`provisionar novo` e `importar` do CSV) |
 | Registro de chave com `alg none` | Aceito | Aceito | **Recusado** |
@@ -74,4 +74,4 @@ O `make limpar` apaga os dados de desenvolvimento.
 **Contêineres de perfis desligados.** O `docker compose down` não remove os serviços de perfis que não estão
 ativos no comando (por exemplo o `caddy`, do perfil `tls`). Se a rede do projeto foi recriada, esse contêiner
 antigo guarda o ID da rede velha e o próximo `up` falha com `network ... not found`. Para derrubar tudo, inclusive
-o overlay prodlike e os perfis, use `make down` ou `make limpar` em `kms/`, que passam todos os perfis.
+o overlay prodlike e os perfis, use `make down-tudo` ou `make limpar-tudo`, que passam todos os perfis.

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"tccelta/kms/internal/vault"
+	"tccelta/backend/internal/kms/vault"
 )
 
 // problema escreve application/problem+json (RFC 9457), no mesmo formato da API.

@@ -39,5 +39,19 @@ linters-settings:
           - { pkg: tccelta/backend/internal/database, desc: "o HTTP e so transporte" }
           - { pkg: tccelta/backend/internal/repository, desc: "o HTTP chama casos de uso, nunca repositorios" }
           - { pkg: tccelta/backend/internal/remotekms, desc: "o HTTP chama casos de uso, nunca o KMS" }
+      # O KMS e o unico cliente do Vault e outro processo: so enxerga a biblioteca padrao e dependencias externas,
+      # nunca os demais pacotes de tccelta/backend (pacote -> regra: lista branca via allow).
+      kms-isolamento:
+        list-mode: strict
+        files: ["**/internal/kms/**", "**/cmd/tccelta-kms/**"]
+        allow:
+          - $gostd
+          - github.com/prometheus
+          - tccelta/backend/internal/kms
+      # O backend nao importa o KMS (so por HTTP, contrato em docs/kms-contrato-http.md).
+      sem-kms:
+        files: ["!**/internal/kms/**", "!**/cmd/tccelta-kms/**"]
+        deny:
+          - { pkg: tccelta/backend/internal/kms, desc: "o backend fala com o KMS so por HTTP (internal/remotekms)" }
 issues:
   exclude-dirs: [internal/database/dbgen]

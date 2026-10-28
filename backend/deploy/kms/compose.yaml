@@ -1,7 +1,7 @@
 # Vault + servico KMS num host separado da API (cenario de VPN; documentado, testado manualmente).
 # Pre-requisitos neste host:
-#   - sh scripts/gerar-certs.sh (ou certificados proprios) em deploy/certs: ca.pem, vault*.pem, kms*.pem
-#   - o Vault inicializado/deselado e o bootstrap executado (deploy/vault/scripts), que grava
+#   - sh scripts/gerar-certs.sh (ou certificados proprios) em deploy/kms/certs: ca.pem, vault*.pem, kms*.pem
+#   - o Vault inicializado/deselado e o bootstrap executado (deploy/kms/vault/scripts), que grava
 #     kms_role_id e kms_secret_id em ${KMS_APPROLE_DIR}
 #   - KMS_BIND_IP: IP da interface da VPN (wg0). O KMS NAO deve escutar em rede publica.
 # A API (outro host) so precisa de: KMS_URL=https://<KMS_BIND_IP>:8300, o certificado de cliente
@@ -20,7 +20,7 @@ services:
     networks: [kms]
   kms:
     image: tccelta-kms:local
-    build: { context: .., dockerfile: Dockerfile, target: kms }
+    build: { context: ../.., dockerfile: Dockerfile, target: kms }
     read_only: true
     tmpfs: [/tmp]
     user: "65532:65532"

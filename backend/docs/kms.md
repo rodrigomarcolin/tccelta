@@ -1,8 +1,8 @@
 # tccelta-kms
 
-Serviço KMS do TCC Elta: único cliente do Vault (Transit) em runtime. É um **módulo Go separado**
-(`tccelta/kms`) que pode ser implantado em outro host; a API (`backend/`) fala com ele só por HTTP
-([`docs/contrato-http.md`](docs/contrato-http.md)). Nenhum dos dois módulos importa o outro.
+Serviço KMS do TCC Elta: único cliente do Vault (Transit) em runtime. É um binário próprio (`cmd/tccelta-kms`) no mesmo módulo Go do `backend/`, com pacotes isolados por regra do depguard
+(`internal/kms`) que pode ser implantado em outro host; a API (`backend/`) fala com ele só por HTTP
+([`kms-contrato-http.md`](kms-contrato-http.md)). Nenhum pacote da API importa o KMS e vice-versa.
 
 ```
 app/firmware ──HTTPS──▶ API (backend/) ──HTTP(S) + mTLS──▶ tccelta-kms ──▶ Vault (Transit)
@@ -27,7 +27,7 @@ tccelta-kms provisionar verificar --arquivo dongles.csv
 tccelta-kms saude --url http://127.0.0.1:9300/saude/pronta
 ```
 
-`provisionar` grava `<saida>/<devid>/registro.json` ([`docs/registro-dongle.md`](docs/registro-dongle.md));
+`provisionar` grava `<saida>/<devid>/registro.json` ([`kms-registro-dongle.md`](kms-registro-dongle.md));
 o cadastro no banco é `tccelta provision register --file …` no backend.
 
 ## Configuração (variáveis de ambiente)
@@ -51,25 +51,25 @@ o cadastro no banco é `tccelta provision register --file …` no backend.
 ## Desenvolvimento
 
 ```
-make teste     # go test -race ./... (em contêiner)
+make teste     # go test -race ./... (em contêiner; todo o módulo)
 make lint      # golangci-lint
-make certs     # PKI de laboratório em deploy/certs (CA, Vault, KMS, cliente da API)
-make docker    # imagem tccelta-kms:local
+make certs     # PKI de laboratório em deploy/kms/certs (CA, Vault, KMS, cliente da API)
+make docker-kms # imagem tccelta-kms:local
 ```
 
 Para subir tudo junto (Postgres, Vault, KMS, API, worker) use o `backend/compose.yaml`; para o KMS num host
-separado, `deploy/compose.kms.yaml`.
+separado, `deploy/kms/compose.yaml`.
 
 ## Layout
 
 ```
 cmd/tccelta-kms/        servir | jwt | provisionar | saude
-internal/config/        variáveis de ambiente
-internal/vault/         cliente do Vault, operações do Transit, rotação do JWT (+ vaultteste: Vault falso)
-internal/disjuntor/     disjuntor das chamadas ao Vault
-internal/servidor/      um arquivo por endpoint, mTLS, problem+json
-internal/provisionamento/  importação BYOK, teste dourado, material NVS, registro.json
-internal/metricas/      séries tccelta_kmssvc_*
-deploy/                 Vault (config, políticas, scripts), compose do host separado, certs
-docs/                   contrato HTTP e registro do dongle
+internal/kms/config/        variáveis de ambiente
+internal/kms/vault/         cliente do Vault, operações do Transit, rotação do JWT (+ vaultteste: Vault falso)
+internal/kms/disjuntor/     disjuntor das chamadas ao Vault
+internal/kms/servidor/      um arquivo por endpoint, mTLS, problem+json
+internal/kms/provisionamento/  importação BYOK, teste dourado, material NVS, registro.json
+internal/kms/metricas/      séries tccelta_kmssvc_*
+deploy/kms/             Vault (config, políticas, scripts), compose do host separado, certs
+docs/kms-*.md        contrato HTTP e registro do dongle
 ```
