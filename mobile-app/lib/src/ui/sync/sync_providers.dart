@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tccelta_mobile/src/application/sync/handshake_runner.dart';
 import 'package:tccelta_mobile/src/application/sync/sync_coordinator.dart';
 import 'package:tccelta_mobile/src/core/network/dio_client.dart';
+import 'package:tccelta_mobile/src/core/persistence/shared_preferences_provider.dart';
 import 'package:tccelta_mobile/src/data/datasources/sync_server_datasource.dart';
 import 'package:tccelta_mobile/src/data/repositories/dongle_sync_repository_impl.dart';
 import 'package:tccelta_mobile/src/data/repositories/sync_server_repository_impl.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_sync_repository.dart';
 import 'package:tccelta_mobile/src/domain/repositories/sync_server_repository.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_faults.dart';
+import 'package:tccelta_mobile/src/infra/sync/bench/bench_state_store.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_sync_server.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_sync_server_gateway.dart';
 import 'package:tccelta_mobile/src/infra/sync/https_sync_server_gateway.dart';
@@ -26,9 +28,16 @@ const String kSyncServerMode = String.fromEnvironment(
   defaultValue: 'https',
 );
 
-/// Servidor de bancada embutido (estado em memória), usado só no modo `bench`.
+/// Servidor de bancada embutido, usado só no modo `bench`. O estado é guardado
+/// no aparelho e sobrevive ao reinício do app.
 final Provider<BenchSyncServer> benchSyncServerProvider =
-    Provider<BenchSyncServer>((ref) => BenchSyncServer());
+    Provider<BenchSyncServer>(
+      (ref) => BenchSyncServer(
+        store: SharedPreferencesBenchStateStore(
+          ref.read(sharedPreferencesProvider),
+        ),
+      ),
+    );
 
 /// Gateway do servidor conforme [kSyncServerMode].
 final Provider<SyncServerGateway> syncServerGatewayProvider =
