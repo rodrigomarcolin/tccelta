@@ -14,11 +14,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	metrics "tccelta/backend/internal/adapter/prometheus"
 	"tccelta/backend/internal/config"
 	"tccelta/backend/internal/database"
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/timeline"
-	"tccelta/backend/internal/observability/metrics"
 )
 
 // Worker processa a fila de boots pendentes.

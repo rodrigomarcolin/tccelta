@@ -18,6 +18,34 @@ ainda descrevem o desenho anterior (a API falando direto com o Vault).
 > executou `make up`, `make seed-dev` e `make e2e`; o `make lint` (regra `depguard` nova) e os cenários
 > `reconnection`, `load` e `knee` ainda não foram executados.
 
+## Estrutura do código
+
+Um módulo Go (`tccelta/backend`), dois binários: `cmd/tccelta` (API, worker e ferramentas) e `cmd/tccelta-kms` (KMS).
+
+```
+cmd/tccelta/            raiz de composição da API, do worker e das ferramentas (fina)
+cmd/tccelta-kms/        raiz de composição do KMS
+internal/domain/        regras puras (protocol, pid, dongle, handshake, ingestion, occurrence, timeline)
+internal/port/          TODAS as portas: repositórios + transação, KMS, tokens, métricas, relógio, erros (+ porttest)
+internal/usecase/      catalog, handshake, ingestion, session: dependem só de domain e port
+internal/adapter/      implementações das portas: postgres, cache (decorator), memory (testes), kmsclient,
+                       jwt, prometheus
+internal/api/          transporte HTTP (+ api/ratelimit: rate limit e concorrência)
+internal/worker/       processamento assíncrono (+ worker/reprocess)
+internal/tools/        ferramentas de linha de comando: provisioning (cadastro no banco), simulator
+internal/database/     infraestrutura de banco: pool, transação, listen, migrações, queries e dbgen (sqlc)
+internal/kms/          serviço KMS: server, vault, provisioning, config, metrics (isolado, veja abaixo)
+internal/platform/     utilitários sem dependências do projeto (breaker, usado pelo kmsclient e pelo KMS)
+internal/config/ version/   configuração da API e versão
+deploy/                 caddy, postgres, observability, segredos e deploy/kms (Vault, certs, compose do host separado)
+```
+
+As camadas são impostas pelo `depguard` (`.golangci.yml`, rodado por `make lint`): `domain` é puro; `usecase` só
+enxerga `domain` e `port`; `api` só enxerga `usecase`, `port` e `domain`; os adaptadores implementam `port` e não
+conhecem `usecase` nem `api`; `internal/kms` não importa nenhum outro pacote do projeto (só `platform/breaker`) e
+nada fora dele o importa. Exceção conhecida: `worker`, `worker/reprocess`, `tools/provisioning` e `tools/simulator`
+usam `database`/`dbgen` direto, sem passar por portas.
+
 ## Pré-requisitos
 
 - Docker (no Windows, Docker Desktop) com o daemon ligado. **Nada de Go, Python ou sqlc é instalado no

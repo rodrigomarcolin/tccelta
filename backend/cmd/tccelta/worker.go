@@ -13,16 +13,16 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"net/http"
 
+	"tccelta/backend/internal/adapter/postgres"
+	metrics "tccelta/backend/internal/adapter/prometheus"
 	"tccelta/backend/internal/config"
 	"tccelta/backend/internal/database"
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/pid"
 	"tccelta/backend/internal/domain/protocol"
-	"tccelta/backend/internal/observability/metrics"
-	"tccelta/backend/internal/repository/postgres"
-	"tccelta/backend/internal/reprocessing"
 	"tccelta/backend/internal/usecase/catalog"
 	"tccelta/backend/internal/worker"
+	"tccelta/backend/internal/worker/reprocess"
 )
 
 func cmdWorker(ctx context.Context, args []string) error {
@@ -85,7 +85,7 @@ func cmdReprocess(ctx context.Context, args []string) error {
 	if err := catalog.NewSync(postgres.Repositories(q).Pids, cat, log).Reload(ctx); err != nil {
 		return err
 	}
-	r, err := reprocessing.Reprocess(ctx, pool, cat, reprocessing.ReprocessOptions{DongleID: d.DongleID, FromSeq: *since, ToSeq: *until,
+	r, err := reprocess.Reprocess(ctx, pool, cat, reprocess.ReprocessOptions{DongleID: d.DongleID, FromSeq: *since, ToSeq: *until,
 		Batch: int32(*batch), Apply: *apply, Operator: os.Getenv("USER")}, log, nil)
 	mode := "ENSAIO (nada foi escrito; use --apply)"
 	if *apply {

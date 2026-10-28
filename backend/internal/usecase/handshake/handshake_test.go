@@ -12,13 +12,13 @@ import (
 
 	"github.com/google/uuid"
 
+	"tccelta/backend/internal/adapter/memory"
 	"tccelta/backend/internal/domain/dongle"
 	dhs "tccelta/backend/internal/domain/handshake"
 	"tccelta/backend/internal/domain/occurrence"
 	"tccelta/backend/internal/domain/protocol"
-	"tccelta/backend/internal/repository/memory"
-	"tccelta/backend/internal/usecase/port"
-	"tccelta/backend/internal/usecase/port/porttest"
+	"tccelta/backend/internal/port"
+	"tccelta/backend/internal/port/porttest"
 )
 
 var (

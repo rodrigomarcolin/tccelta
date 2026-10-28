@@ -1,7 +1,7 @@
 # Métricas expostas pela API
 
 A API e o worker expõem métricas no formato Prometheus. Este documento descreve cada série da família `tccelta_*`,
-os rótulos e os valores que o código produz. As séries foram lidas de `internal/observability/metrics/metrics.go`
+os rótulos e os valores que o código produz. As séries foram lidas de `internal/adapter/prometheus/metrics.go`
 e dos pontos do código que as incrementam; **nada aqui foi conferido contra uma execução**: o Prometheus e a coleta
 real nunca rodaram neste projeto.
 

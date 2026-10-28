@@ -7,18 +7,18 @@ import (
 	"time"
 
 	"tccelta/backend/internal/domain/pid"
-	"tccelta/backend/internal/repository"
+	"tccelta/backend/internal/port"
 )
 
 // Sync recarrega o catálogo a cada sinal de LISTEN pid_changed e a cada 5 min.
 type Sync struct {
-	pids repository.Pids
+	pids port.Pids
 	cat  *pid.Catalog
 	log  *slog.Logger
 }
 
 // NewSync liga o caso de uso ao repositório e ao catálogo.
-func NewSync(pids repository.Pids, cat *pid.Catalog, log *slog.Logger) *Sync {
+func NewSync(pids port.Pids, cat *pid.Catalog, log *slog.Logger) *Sync {
 	return &Sync{pids: pids, cat: cat, log: log}
 }
 

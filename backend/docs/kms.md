@@ -2,7 +2,7 @@
 
 Serviço KMS do TCC Elta: único cliente do Vault (Transit) em runtime. É um binário próprio (`cmd/tccelta-kms`) no mesmo módulo Go do `backend/`, com pacotes isolados por regra do depguard
 (`internal/kms`) que pode ser implantado em outro host; a API (`backend/`) fala com ele só por HTTP
-([`kms-http-contract.md`](kms-http-contract.md)). Nenhum pacote da API importa o KMS e vice-versa.
+([`kms-http-contract.md`](kms-http-contract.md)). Nenhum pacote da API importa o KMS e o KMS só importa o `internal/platform/breaker` (sem dependências).
 
 ```
 app/firmware ──HTTPS──▶ API (backend/) ──HTTP(S) + mTLS──▶ tccelta-kms ──▶ Vault (Transit)
@@ -64,12 +64,12 @@ separado, `deploy/kms/compose.yaml`.
 
 ```
 cmd/tccelta-kms/        serve | jwt | provision | health
-internal/kms/config/        variáveis de ambiente
-internal/kms/vault/         cliente do Vault, operações do Transit, rotação do JWT (+ vaulttest: Vault falso)
-internal/kms/breaker/       disjuntor das chamadas ao Vault
-internal/kms/server/        um arquivo por endpoint, mTLS, problem+json
+internal/kms/config/    variáveis de ambiente
+internal/kms/vault/     cliente do Vault, operações do Transit, rotação do JWT (+ vaulttest: Vault falso)
+internal/kms/server/    um arquivo por endpoint, mTLS, problem+json
 internal/kms/provisioning/  importação BYOK, teste dourado, material NVS, record.json
-internal/kms/metrics/        séries tccelta_kmssvc_*
-deploy/kms/             Vault (config, políticas, scripts), compose do host separado, certs
-docs/kms-*.md        contrato HTTP e registro do dongle
+internal/kms/metrics/   séries tccelta_kmssvc_*
+internal/platform/breaker/  disjuntor das chamadas ao Vault (compartilhado com o cliente do KMS da API)
+deploy/kms/             Vault (config, policies, scripts), compose do host separado, certs
+docs/kms-*.md           contrato HTTP e registro do dongle
 ```

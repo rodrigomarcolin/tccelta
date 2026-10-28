@@ -1,6 +1,6 @@
 # Cenários do simulador
 
-O simulador (`tccelta simulator`, código em `internal/simulator/`) testa a API sem hardware e sem celular. Ele
+O simulador (`tccelta simulator`, código em `internal/tools/simulator/`) testa a API sem hardware e sem celular. Ele
 cria **dongles virtuais** e **apps virtuais** em Go, que falam o protocolo real com a API usando o mesmo
 pacote `protocol` do servidor. Este documento descreve o que cada cenário faz e o que cada verificação
 confere, a partir do código (`scenarios.go`, `dongle.go`, `app.go`, `report.go`).

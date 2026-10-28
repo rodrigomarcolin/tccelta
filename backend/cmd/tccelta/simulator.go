@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/simulator"
+	"tccelta/backend/internal/tools/simulator"
 )
 
 func cmdSimulator(ctx context.Context, args []string) error {

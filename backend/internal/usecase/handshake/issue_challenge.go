@@ -11,9 +11,7 @@ import (
 
 	dhs "tccelta/backend/internal/domain/handshake"
 	"tccelta/backend/internal/domain/protocol"
-	"tccelta/backend/internal/observability"
-	"tccelta/backend/internal/repository"
-	"tccelta/backend/internal/usecase/port"
+	"tccelta/backend/internal/port"
 )
 
 // Params são os ajustes do handshake.
@@ -38,7 +36,7 @@ type IssuedChallenge struct {
 
 // IssueChallenge gera o Desafio 0x01 assinado com K_auth (POST /v1/dongles/{id}/desafio).
 type IssueChallenge struct {
-	repos repository.Repositories
+	repos port.Repositories
 	kms   port.Authenticator
 	met   port.MetricsHandshake
 	now   port.Clock
@@ -48,7 +46,7 @@ type IssueChallenge struct {
 }
 
 // NewIssueChallenge liga o caso de uso às suas portas.
-func NewIssueChallenge(repos repository.Repositories, kms port.Authenticator, met port.MetricsHandshake,
+func NewIssueChallenge(repos port.Repositories, kms port.Authenticator, met port.MetricsHandshake,
 	now port.Clock, log *slog.Logger, p Params) *IssueChallenge {
 	return &IssueChallenge{repos: repos, kms: kms, met: met, now: now, rand: rand.Reader, log: log, p: p}
 }
@@ -79,7 +77,7 @@ func (c *IssueChallenge) Run(ctx context.Context, e IssueChallengeInput) (Issued
 		return IssuedChallenge{}, err
 	}
 	msg := protocol.Challenge{CS: uint32(ch.CS), NS: ns, AckSeq: uint32(ch.ContiguousSeq), CConf: uint32(ch.CConf)}
-	macs, err := c.kms.HMACAuth(observability.WithKMSPhase(ctx, observability.PhasePre), d.AuthKey,
+	macs, err := c.kms.HMACAuth(port.WithKMSPhase(ctx, port.PhasePre), d.AuthKey,
 		[][]byte{protocol.TagInput(protocol.ChallengeType, d.DevID, msg.Payload())})
 	if err != nil {
 		return IssuedChallenge{}, err

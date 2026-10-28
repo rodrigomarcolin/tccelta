@@ -13,9 +13,7 @@ import (
 	"tccelta/backend/internal/domain/occurrence"
 	"tccelta/backend/internal/domain/protocol"
 	"tccelta/backend/internal/domain/timeline"
-	"tccelta/backend/internal/observability"
-	"tccelta/backend/internal/repository"
-	"tccelta/backend/internal/usecase/port"
+	"tccelta/backend/internal/port"
 )
 
 // RespondChallengeInput é a resposta do dongle. S2 é o instante de chegada da requisição.
@@ -39,8 +37,8 @@ type HandshakeResult struct {
 // RespondChallenge valida a resposta, ancora o tempo e emite o token
 // (POST /v1/dongles/{id}/desafio/resposta).
 type RespondChallenge struct {
-	repos repository.Repositories
-	tx    repository.Transactor
+	repos port.Repositories
+	tx    port.Transactor
 	kms   port.Authenticator
 	token port.TokenIssuer
 	met   port.MetricsHandshake
@@ -50,7 +48,7 @@ type RespondChallenge struct {
 }
 
 // NewRespondChallenge liga o caso de uso às suas portas.
-func NewRespondChallenge(repos repository.Repositories, tx repository.Transactor, kms port.Authenticator,
+func NewRespondChallenge(repos port.Repositories, tx port.Transactor, kms port.Authenticator,
 	token port.TokenIssuer, met port.MetricsHandshake, now port.Clock, log *slog.Logger, p Params) *RespondChallenge {
 	return &RespondChallenge{repos: repos, tx: tx, kms: kms, token: token, met: met, now: now, log: log, p: p}
 }
@@ -103,7 +101,7 @@ func (c *RespondChallenge) Run(ctx context.Context, e RespondChallengeInput) (Ha
 	}
 
 	// 5. tag K_auth
-	macs, err := c.kms.HMACAuth(observability.WithKMSPhase(ctx, observability.PhasePre), d.AuthKey,
+	macs, err := c.kms.HMACAuth(port.WithKMSPhase(ctx, port.PhasePre), d.AuthKey,
 		[][]byte{protocol.TagInput(protocol.ResponseType, d.DevID, payload)})
 	if err != nil {
 		return HandshakeResult{}, err
@@ -124,7 +122,7 @@ func (c *RespondChallenge) Run(ctx context.Context, e RespondChallengeInput) (Ha
 	// 7. transação
 	var res HandshakeResult
 	var errAfterCommit error
-	err = c.tx.InTransaction(ctx, func(ctx context.Context, rp repository.Repositories) error {
+	err = c.tx.InTransaction(ctx, func(ctx context.Context, rp port.Repositories) error {
 		errAfterCommit = nil
 		if err := rp.Dongles.Lock(ctx, d.ID); err != nil {
 			return err
@@ -204,7 +202,7 @@ func (c *RespondChallenge) Run(ctx context.Context, e RespondChallengeInput) (Ha
 		if !withAnchor {
 			am.Flags = protocol.FlagAckAnchorFailed
 		}
-		macs, err := c.kms.HMACAuth(observability.WithKMSPhase(ctx, observability.PhaseTx), d.AuthKey,
+		macs, err := c.kms.HMACAuth(port.WithKMSPhase(ctx, port.PhaseTx), d.AuthKey,
 			[][]byte{protocol.TagInput(protocol.AckType, d.DevID, am.Payload())})
 		if err != nil {
 			return err

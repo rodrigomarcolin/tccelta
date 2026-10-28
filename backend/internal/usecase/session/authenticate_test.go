@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
+	"tccelta/backend/internal/adapter/memory"
 	"tccelta/backend/internal/domain/dongle"
 	"tccelta/backend/internal/domain/protocol"
-	"tccelta/backend/internal/repository/memory"
-	"tccelta/backend/internal/usecase/port"
+	"tccelta/backend/internal/port"
 )
 
 type fakeValidator struct {
