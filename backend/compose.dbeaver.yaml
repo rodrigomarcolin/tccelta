@@ -1,0 +1,9 @@
+# Uso local: publica o Postgres para o DBeaver. O prodlike zera as portas do banco e marca a rede
+# `dados` como internal, onde o Docker não publica portas; por isso o banco entra também na `borda`.
+# Por padrão só em loopback. Para outro host da rede, defina DB_BIND com o IPv4 do PC (ou 0.0.0.0).
+# Não faz parte da stack; não versionar. Uso:
+#   docker compose -f compose.yaml -f compose.prodlike.yaml -f compose.dbeaver.yaml up -d banco
+services:
+  banco:
+    ports: ["${DB_BIND:-127.0.0.1}:5432:5432"]
+    networks: [dados, borda]
