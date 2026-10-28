@@ -29,7 +29,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"tccelta/kms/internal/vault"
+	"tccelta/backend/internal/kms/vault"
 )
 
 // SchemaRegistro é o schema do registro.json (docs/registro-dongle.md).

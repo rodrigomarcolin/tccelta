@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"tccelta/kms/internal/config"
+	"tccelta/backend/internal/kms/config"
 )
 
 // Vault faz as operações do KMS sobre o Transit: HMAC de K_auth, verify de K_rec e assinatura do JWT.

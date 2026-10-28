@@ -13,7 +13,7 @@ x-backend: &backend
 
 x-kms: &kms
   image: tccelta-kms:local
-  build: { context: ../kms, dockerfile: Dockerfile, target: kms }
+  build: { context: ., dockerfile: Dockerfile, target: kms }
   read_only: true
   tmpfs: [/tmp]
   user: "65532:65532"
@@ -50,8 +50,8 @@ services:
     environment: { VAULT_ADDR: "http://vault:8200", PERFIL: dev }
     secrets: [vault_dev_root_token]
     volumes:
-      - ../kms/deploy/vault/scripts:/vault/scripts:ro
-      - ../kms/deploy/vault/politicas:/vault/politicas:ro
+      - ./deploy/kms/vault/scripts:/vault/scripts:ro
+      - ./deploy/kms/vault/politicas:/vault/politicas:ro
       - vault_approle_kms:/approle/kms
       - vault_approle_ferramentas:/approle/ferramentas
       - vault_approle_rotacao:/approle/rotacao
@@ -147,7 +147,7 @@ services:
   kms-ferramentas:
     <<: *kms
     image: tccelta-kms-ferramentas:local
-    build: { context: ../kms, dockerfile: Dockerfile, target: ferramentas }
+    build: { context: ., dockerfile: Dockerfile, target: kms-ferramentas }
     profiles: [ferramentas]
     entrypoint: ["/tccelta-kms"]
     read_only: false

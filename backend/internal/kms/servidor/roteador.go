@@ -13,7 +13,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"tccelta/kms/internal/metricas"
+	"tccelta/backend/internal/kms/metricas"
 )
 
 // Vault é o que o servidor precisa das operações sobre o Transit.

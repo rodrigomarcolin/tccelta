@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"tccelta/kms/internal/config"
-	"tccelta/kms/internal/vault"
-	"tccelta/kms/internal/vault/vaultteste"
+	"tccelta/backend/internal/kms/config"
+	"tccelta/backend/internal/kms/vault"
+	"tccelta/backend/internal/kms/vault/vaultteste"
 )
 
 var cfg = config.VaultConfig{MountAuth: "transit-auth", MountRec: "transit-rec", MountJWT: "transit-jwt", ChaveJWT: "jwt"}

@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"tccelta/kms/internal/config"
+	"tccelta/backend/internal/kms/config"
 )
 
 // versao é preenchida no build (-ldflags "-X main.versao=...").

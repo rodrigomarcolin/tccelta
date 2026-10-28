@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"tccelta/kms/internal/config"
-	"tccelta/kms/internal/provisionamento"
-	"tccelta/kms/internal/vault"
+	"tccelta/backend/internal/kms/config"
+	"tccelta/backend/internal/kms/provisionamento"
+	"tccelta/backend/internal/kms/vault"
 )
 
 // cmdProvisionar importa as chaves no Vault e grava <saida>/<devid>/registro.json, que o backend

@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"tccelta/kms/internal/config"
-	"tccelta/kms/internal/vault"
+	"tccelta/backend/internal/kms/config"
+	"tccelta/backend/internal/kms/vault"
 )
 
 func servirSaude(ctx context.Context, addr string) {

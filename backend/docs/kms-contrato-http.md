@@ -1,7 +1,7 @@
 # Contrato HTTP entre a API e o KMS
 
 Este documento é a **fonte da verdade** do contrato. A API (`backend/internal/remotekms`) e o serviço
-(`kms/internal/servidor`) são módulos Go separados, sem nenhum import entre si; a única ligação é este
+(`backend/internal/kms/servidor`) são pacotes do mesmo módulo Go, sem nenhum import entre si (regra depguard); a única ligação é este
 contrato. Os dois lados têm testes que usam os exemplos abaixo, palavra por palavra.
 
 ## Convenções
@@ -130,4 +130,4 @@ Vault com o próprio timeout (`VAULT_TIMEOUT`), semáforo (`VAULT_MAX_SIMULTANEA
 ## Mudanças no contrato
 
 Mudar este arquivo exige mudar, no mesmo PR, `backend/internal/remotekms` (DTOs e testes) e
-`kms/internal/servidor` (handlers e testes).
+`backend/internal/kms/servidor` (handlers e testes).

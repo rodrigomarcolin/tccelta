@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"tccelta/kms/internal/config"
-	"tccelta/kms/internal/metricas"
-	"tccelta/kms/internal/servidor"
-	"tccelta/kms/internal/vault"
+	"tccelta/backend/internal/kms/config"
+	"tccelta/backend/internal/kms/metricas"
+	"tccelta/backend/internal/kms/servidor"
+	"tccelta/backend/internal/kms/vault"
 )
 
 // cmdServir sobe o serviço KMS: login no Vault (com novas tentativas), servidor HTTP (mTLS fora do
