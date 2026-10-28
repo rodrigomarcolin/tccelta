@@ -41,7 +41,7 @@ func cmdAPI(ctx context.Context) error {
 		return err
 	}
 	defer pool.Close()
-	met.RegisterPool(pool)
+	met.RegisterPool(poolStats(pool))
 
 	kms, err := kmsclient.New(kmsclient.Options{URL: cfg.KMS.URL, CACert: cfg.KMS.CACert, ClientCert: cfg.KMS.ClientCert,
 		ClientKey: cfg.KMS.ClientKey, Timeout: cfg.KMS.Timeout, MaxConcurrency: cfg.KMS.MaxConcurrency}, met.KMSPort())

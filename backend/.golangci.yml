@@ -10,10 +10,10 @@ linters-settings:
       - G115
   depguard:
     rules:
-      # Direção: domain <- port <- usecase <- api <- cmd, com os adaptadores (adapter/*) implementando port.
+      # Direção: domain <- port <- usecase <- http <- cmd, com os adaptadores (adapter/*) implementando port.
       # Os adaptadores só são ligados em cmd/tccelta (composition root).
-      # Excecao conhecida (melhoria futura: esconder atras de portas): worker, worker/reprocess, tools/provisioning
-      # e tools/simulator usam database/dbgen e adapter/postgres direto.
+      # Banco: so adapter/postgres, database (e dbgen) e cmd falam com pgx; o resto chega ao banco pelas portas.
+      # worker e tools sao ligados aos adaptadores por cmd.
       domain:
         files: ["**/internal/domain/**"]
         deny:
@@ -56,6 +56,17 @@ linters-settings:
         deny:
           - { pkg: tccelta/backend/internal/usecase, desc: "adaptadores implementam portas, nao conhecem os casos de uso" }
           - { pkg: tccelta/backend/internal/http, desc: "adaptadores nao conhecem o transporte" }
+      # worker (runtime assincrono) e tools (ferramentas) dependem de usecase e port; os adaptadores chegam por injecao em cmd.
+      runtime:
+        files: ["**/internal/worker/**", "**/internal/tools/**", "!$test"]
+        deny:
+          - { pkg: tccelta/backend/internal/adapter, desc: "worker e ferramentas recebem as portas de cmd, nunca importam adaptadores" }
+      # Nada fora de adapter/postgres, database e cmd importa o driver, o pacote database ou o sqlc gerado.
+      banco:
+        files: ["!**/internal/adapter/postgres/**", "!**/internal/database/**", "!**/cmd/**"]
+        deny:
+          - { pkg: github.com/jackc/pgx, desc: "o driver do banco so e importado por adapter/postgres, database e cmd" }
+          - { pkg: tccelta/backend/internal/database, desc: "o banco (database e dbgen) so e importado por adapter/postgres e cmd; o resto usa as portas" }
       # O KMS e o unico cliente do Vault e outro processo: so enxerga a biblioteca padrao, o Prometheus e o
       # disjuntor compartilhado (platform/breaker, sem dependencias do projeto); nunca os demais pacotes de
       # tccelta/backend. Pacote -> regra: lista branca (strict) via allow.

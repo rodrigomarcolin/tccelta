@@ -26,13 +26,13 @@ Um módulo Go (`tccelta/backend`), dois binários: `cmd/tccelta` (API, worker e 
 cmd/tccelta/            raiz de composição da API, do worker e das ferramentas (fina)
 cmd/tccelta-kms/        raiz de composição do KMS
 internal/domain/        regras puras (protocol, pid, dongle, handshake, ingestion, occurrence, timeline)
-internal/port/          TODAS as portas: repositórios + transação, KMS, tokens, métricas, relógio, erros (+ porttest)
-internal/usecase/      catalog, handshake, ingestion, session: dependem só de domain e port
+internal/port/          TODAS as portas: repositórios + transação, notificações, inspetor, KMS, tokens, métricas, relógio, erros (+ porttest)
+internal/usecase/       catalog, handshake, ingestion, session, boottime, reprocess, provisioning: dependem só de domain e port
 internal/adapter/      implementações das portas: postgres, cache (decorator), memory (testes), kmsclient,
                        jwt, prometheus
 internal/http/         transporte HTTP (+ http/ratelimit: rate limit e concorrência)
-internal/worker/       processamento assíncrono (+ worker/reprocess)
-internal/tools/        ferramentas de linha de comando: provisioning (cadastro no banco), simulator
+internal/worker/       runtime assíncrono do recálculo de tempo (LISTEN, agendamento, saúde); a lógica está em usecase/boottime
+internal/tools/        ferramentas de linha de comando: provisioning (lê e valida o record.json), simulator
 internal/database/     infraestrutura de banco: pool, transação, listen, migrações, queries e dbgen (sqlc)
 internal/kms/          serviço KMS: server, vault, provisioning, config, metrics (isolado, veja abaixo)
 internal/platform/     utilitários sem dependências do projeto (breaker, usado pelo kmsclient e pelo KMS)
@@ -43,8 +43,8 @@ deploy/                 caddy, postgres, observability, segredos e deploy/kms (V
 As camadas são impostas pelo `depguard` (`.golangci.yml`, rodado por `make lint`): `domain` é puro; `usecase` só
 enxerga `domain` e `port`; `http` só enxerga `usecase`, `port` e `domain`; os adaptadores implementam `port` e não
 conhecem `usecase` nem `http`; `internal/kms` não importa nenhum outro pacote do projeto (só `platform/breaker`) e
-nada fora dele o importa. Exceção conhecida: `worker`, `worker/reprocess`, `tools/provisioning` e `tools/simulator`
-usam `database`/`dbgen` direto, sem passar por portas.
+nada fora dele o importa. Só `adapter/postgres`, `database` (com `dbgen`) e `cmd` importam o driver (`pgx`) e o banco;
+`worker` e `tools` recebem as portas por injeção em `cmd` e não importam adaptadores.
 
 ## Pré-requisitos
 

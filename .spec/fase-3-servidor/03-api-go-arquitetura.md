@@ -11,14 +11,14 @@ As regras são impostas pelo `depguard` em `backend/.golangci.yml` (`make lint`)
 
 ```mermaid
 flowchart TD
-    cmd[cmd/tccelta] --> http & worker & tools & adapter & config
+    cmd[cmd/tccelta] --> http & worker & tools & usecase & adapter & config
     http[http<br/>HTTP + ratelimit] --> usecase & port & domain
-    usecase[usecase<br/>handshake, ingestion, session, catalog] --> domain & port
-    port[port<br/>repositórios, KMS, tokens, métricas, relógio] --> domain
+    usecase[usecase<br/>handshake, ingestion, session, catalog,<br/>boottime, reprocess, provisioning] --> domain & port
+    port[port<br/>repositórios, notificações, inspetor, KMS, tokens, métricas, relógio] --> domain
     adapter[adapter<br/>postgres, cache, memory, kmsclient, jwt, prometheus] --> port & domain
-    worker[worker + reprocess] --> database & domain
-    tools[tools: simulator, provisioning] --> database & domain
-    database[database<br/>pool, tx, listen, dbgen]
+    worker[worker<br/>runtime assíncrono] --> usecase & port
+    tools[tools: simulator, provisioning] --> usecase & port & domain
+    adapter -->|só postgres| database[database<br/>pool, tx, listen, dbgen]
     domain[domain<br/>protocol, pid, dongle, handshake, ingestion, occurrence, timeline]
     kmsclient[adapter/kmsclient] -.HTTP.-> kms[internal/kms<br/>isolado]
     kms --> breaker[platform/breaker]
@@ -32,21 +32,23 @@ flowchart TD
 | `http` | só enxerga `usecase`, `port` e `domain` |
 | `adapter` | implementa `port`; não conhece `usecase` nem `http` |
 | `internal/kms` | não importa nenhum outro pacote do projeto (só `platform/breaker`); nada fora dele o importa |
-| `worker`, `worker/reprocess`, `tools/*` | exceção conhecida: usam `database`/`dbgen` direto, sem passar por portas |
+| `worker`, `tools/*` | só enxergam `usecase`, `port` e `domain`; os adaptadores chegam por injeção em `cmd` |
+| `pgx`, `database`, `dbgen` | só `adapter/postgres`, `database` e `cmd` os importam |
 
 ### Portas (`internal/port/`)
 
 | Arquivo | Interfaces |
 |---|---|
-| `repository.go` | `Dongles` (`FindByDevID`, `Lock`), `Challenges`, `States`, `Boots`, `Blocks`, `Occurrences`, `Pids`, `Repositories`, `Transactor.InTransaction` |
+| `repository.go` | `Dongles` (`FindByDevID`, `Lock`, `Register`), `Challenges`, `States`, `Boots`, `AnchorGroups`, `Blocks`, `Occurrences`, `Pids`, `Repositories`, `Transactor.InTransaction`, `Notifications` (LISTEN) |
+| `inspector.go` | `Inspector`: leitura somente-consulta das verificações do simulador |
 | `kms.go` | `Authenticator` (`HMACAuth`, `VerifyBlocks`), `JWTSigner` (`Sign`, `PublicKeys`), `ErrKMSUnavailable` |
 | `token.go` | `TokenIssuer`, `TokenValidator`, `Session`, `IssuedToken`, `ErrInvalidToken`, `ErrTokenExpired` |
-| `metrics.go` | `MetricsHTTP`, `MetricsHandshake`, `MetricsIngestion` |
+| `metrics.go` | `MetricsHTTP`, `MetricsHandshake`, `MetricsIngestion`, `MetricsKMS`, `MetricsWorker`, `MetricsReprocess` |
 | `phase.go` | `WithKMSPhase`/`KMSPhaseFrom`: fase `pre` (fora da transação) ou `tx` (dentro) como rótulo das métricas do KMS |
 | `clock.go`, `errors.go` | `Clock`, `ErrDatabaseBusy` |
 | `porttest/` | dublês para testes |
 
-Adaptadores: `postgres` (um arquivo por repositório + `transactor.go`), `cache` (decorator de `Dongles`: 10 000 entradas, TTL 60 s; só na raiz de composição, dentro de transação vale o banco direto), `memory` (testes), `kmsclient` (HTTP para o KMS; timeout, semáforo, uma nova tentativa para falha de rede, disjuntor 5 falhas/10 s), `jwt` (emissor e validador), `prometheus`.
+Adaptadores: `postgres` (um arquivo por repositório + `transactor.go`, `notifications.go`, `inspector.go`), `cache` (decorator de `Dongles`: 10 000 entradas, TTL 60 s; só na raiz de composição, dentro de transação vale o banco direto), `memory` (testes), `kmsclient` (HTTP para o KMS; timeout, semáforo, uma nova tentativa para falha de rede, disjuntor 5 falhas/10 s), `jwt` (emissor e validador), `prometheus`.
 
 ## Pacote `domain/protocol`
 
