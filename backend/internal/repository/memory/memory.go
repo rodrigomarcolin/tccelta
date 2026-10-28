@@ -1,7 +1,7 @@
-// Package memoria implementa os repositórios em memória, só para testes dos casos de uso e do HTTP.
-// Não há locking nos repositórios: EmTransacao serializa as transações com um mutex e desfaz as
+// Package memory implementa os repositórios em memória, só para testes dos casos de uso e do HTTP.
+// Não há locking nos repositórios: InTransaction serializa as transações com um mutex e desfaz as
 // escritas se fn devolver erro; fora de transação, os testes são sequenciais.
-package memoria
+package memory
 
 import (
 	"bytes"
@@ -9,303 +9,303 @@ import (
 	"sync"
 	"time"
 
-	"tccelta/backend/internal/dominio/dongle"
-	"tccelta/backend/internal/dominio/handshake"
-	"tccelta/backend/internal/dominio/ingestao"
-	"tccelta/backend/internal/dominio/ocorrencia"
-	"tccelta/backend/internal/dominio/pid"
-	"tccelta/backend/internal/dominio/protocolo"
-	"tccelta/backend/internal/dominio/tempo"
-	"tccelta/backend/internal/repositorio"
+	"tccelta/backend/internal/domain/dongle"
+	"tccelta/backend/internal/domain/handshake"
+	"tccelta/backend/internal/domain/ingestion"
+	"tccelta/backend/internal/domain/occurrence"
+	"tccelta/backend/internal/domain/pid"
+	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/domain/timeline"
+	"tccelta/backend/internal/repository"
 )
 
-type chaveDesafio struct {
+type challengeKey struct {
 	dongle int32
 	cs     int64
 }
 
-// Desafio é um desafio guardado.
-type Desafio struct {
-	handshake.DesafioGravado
-	Resultado string
-	Final     handshake.Finalizacao
+// Challenge é um desafio guardado.
+type Challenge struct {
+	handshake.StoredChallenge
+	Result string
+	Final  handshake.Finalization
 }
 
-type chaveBoot struct{ dongle, geracao, boot int32 }
+type bootKey struct{ dongle, generation, boot int32 }
 
-// Banco é o estado em memória; tudo que é exportado serve para os testes conferirem o resultado.
-type Banco struct {
+// Database é o estado em memória; tudo que é exportado serve para os testes conferirem o resultado.
+type Database struct {
 	mu sync.Mutex
 
-	dongles  map[protocolo.DevID]dongle.Dongle
-	estados  map[int32]dongle.Estado
-	ultimoCS map[int32]int64
-	desafios map[chaveDesafio]Desafio
-	tmsBoot  map[chaveBoot]int64
-	vistos   map[[2]int64]bool // (dongle, seq) já gravados em bloco_bruto
-	Defs     []pid.Def
+	dongles    map[protocol.DevID]dongle.Dongle
+	states     map[int32]dongle.State
+	lastCS     map[int32]int64
+	challenges map[challengeKey]Challenge
+	tmsBoot    map[bootKey]int64
+	seen       map[[2]int64]bool // (dongle, seq) já gravados em raw_block
+	Defs       []pid.Def
 
-	Brutos       []ingestao.BlocoBruto
-	Rejeitados   []ingestao.Rejeitado
-	Leituras     []pid.Leitura
-	Posicoes     []pid.Posicao
-	Lacunas      []ocorrencia.Lacuna
-	Alertas      []ocorrencia.Alerta
-	Ancoras      []handshake.Ancora
-	Notificacoes []string
+	RawBlocks     []ingestion.RawBlock
+	Rejected      []ingestion.Rejected
+	Readings      []pid.Reading
+	Positions     []pid.Position
+	Gaps          []occurrence.Gap
+	Alerts        []occurrence.Alert
+	Anchors       []handshake.Anchor
+	Notifications []string
 }
 
-// Novo cria o banco vazio.
-func Novo() *Banco {
-	return &Banco{dongles: map[protocolo.DevID]dongle.Dongle{}, estados: map[int32]dongle.Estado{}, ultimoCS: map[int32]int64{},
-		desafios: map[chaveDesafio]Desafio{}, tmsBoot: map[chaveBoot]int64{}, vistos: map[[2]int64]bool{}}
+// New cria o banco vazio.
+func New() *Database {
+	return &Database{dongles: map[protocol.DevID]dongle.Dongle{}, states: map[int32]dongle.State{}, lastCS: map[int32]int64{},
+		challenges: map[challengeKey]Challenge{}, tmsBoot: map[bootKey]int64{}, seen: map[[2]int64]bool{}}
 }
 
-// AdicionarDongle cadastra um dongle (e seu estado zerado).
-func (b *Banco) AdicionarDongle(d dongle.Dongle) {
+// AddDongle cadastra um dongle (e seu estado zerado).
+func (b *Database) AddDongle(d dongle.Dongle) {
 	b.dongles[d.DevID] = d
-	b.estados[d.ID] = dongle.Estado{}
+	b.states[d.ID] = dongle.State{}
 }
 
-// DefinirEstado sobrescreve o estado do dongle.
-func (b *Banco) DefinirEstado(id int32, e dongle.Estado) { b.estados[id] = e }
+// SetState sobrescreve o estado do dongle.
+func (b *Database) SetState(id int32, e dongle.State) { b.states[id] = e }
 
-// Estado devolve o estado atual do dongle.
-func (b *Banco) Estado(id int32) dongle.Estado { return b.estados[id] }
+// State devolve o estado atual do dongle.
+func (b *Database) State(id int32) dongle.State { return b.states[id] }
 
-// Desafio devolve o desafio (dongle, c_S).
-func (b *Banco) Desafio(id int32, cs int64) (Desafio, bool) {
-	d, ok := b.desafios[chaveDesafio{id, cs}]
+// Challenge devolve o desafio (dongle, c_S).
+func (b *Database) Challenge(id int32, cs int64) (Challenge, bool) {
+	d, ok := b.challenges[challengeKey{id, cs}]
 	return d, ok
 }
 
-// Repositorios devolve os repositórios sobre o banco.
-func (b *Banco) Repositorios() repositorio.Repositorios {
-	return repositorio.Repositorios{Dongles: (*dongles)(b), Desafios: (*desafios)(b), Estados: (*estados)(b),
-		Boots: (*boots)(b), Blocos: (*blocos)(b), Ocorrencias: (*ocorrencias)(b), Pids: (*pids)(b)}
+// Repositories devolve os repositórios sobre o banco.
+func (b *Database) Repositories() repository.Repositories {
+	return repository.Repositories{Dongles: (*dongles)(b), Challenges: (*challenges)(b), States: (*states)(b),
+		Boots: (*boots)(b), Blocks: (*blocks)(b), Occurrences: (*occurrences)(b), Pids: (*pids)(b)}
 }
 
-// EmTransacao implementa repositorio.Transacionador.
-func (b *Banco) EmTransacao(ctx context.Context, fn func(ctx context.Context, r repositorio.Repositorios) error) error {
+// InTransaction implementa repository.Transactor.
+func (b *Database) InTransaction(ctx context.Context, fn func(ctx context.Context, r repository.Repositories) error) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	salvo := b.copiar()
-	if err := fn(ctx, b.Repositorios()); err != nil {
-		b.restaurar(salvo)
+	saved := b.clone()
+	if err := fn(ctx, b.Repositories()); err != nil {
+		b.restore(saved)
 		return err
 	}
 	return nil
 }
 
-func (b *Banco) copiar() *Banco {
-	c := Novo()
+func (b *Database) clone() *Database {
+	c := New()
 	for k, v := range b.dongles {
 		c.dongles[k] = v
 	}
-	for k, v := range b.estados {
-		c.estados[k] = v
+	for k, v := range b.states {
+		c.states[k] = v
 	}
-	for k, v := range b.ultimoCS {
-		c.ultimoCS[k] = v
+	for k, v := range b.lastCS {
+		c.lastCS[k] = v
 	}
-	for k, v := range b.desafios {
-		c.desafios[k] = v
+	for k, v := range b.challenges {
+		c.challenges[k] = v
 	}
 	for k, v := range b.tmsBoot {
 		c.tmsBoot[k] = v
 	}
-	for k, v := range b.vistos {
-		c.vistos[k] = v
+	for k, v := range b.seen {
+		c.seen[k] = v
 	}
-	c.Brutos, c.Rejeitados, c.Leituras, c.Posicoes = b.Brutos[:len(b.Brutos):len(b.Brutos)], b.Rejeitados[:len(b.Rejeitados):len(b.Rejeitados)],
-		b.Leituras[:len(b.Leituras):len(b.Leituras)], b.Posicoes[:len(b.Posicoes):len(b.Posicoes)]
-	c.Lacunas, c.Alertas = b.Lacunas[:len(b.Lacunas):len(b.Lacunas)], b.Alertas[:len(b.Alertas):len(b.Alertas)]
-	c.Ancoras, c.Notificacoes = b.Ancoras[:len(b.Ancoras):len(b.Ancoras)], b.Notificacoes[:len(b.Notificacoes):len(b.Notificacoes)]
+	c.RawBlocks, c.Rejected, c.Readings, c.Positions = b.RawBlocks[:len(b.RawBlocks):len(b.RawBlocks)], b.Rejected[:len(b.Rejected):len(b.Rejected)],
+		b.Readings[:len(b.Readings):len(b.Readings)], b.Positions[:len(b.Positions):len(b.Positions)]
+	c.Gaps, c.Alerts = b.Gaps[:len(b.Gaps):len(b.Gaps)], b.Alerts[:len(b.Alerts):len(b.Alerts)]
+	c.Anchors, c.Notifications = b.Anchors[:len(b.Anchors):len(b.Anchors)], b.Notifications[:len(b.Notifications):len(b.Notifications)]
 	return c
 }
 
-func (b *Banco) restaurar(c *Banco) {
-	b.dongles, b.estados, b.ultimoCS, b.desafios, b.tmsBoot, b.vistos = c.dongles, c.estados, c.ultimoCS, c.desafios, c.tmsBoot, c.vistos
-	b.Brutos, b.Rejeitados, b.Leituras, b.Posicoes = c.Brutos, c.Rejeitados, c.Leituras, c.Posicoes
-	b.Lacunas, b.Alertas, b.Ancoras, b.Notificacoes = c.Lacunas, c.Alertas, c.Ancoras, c.Notificacoes
+func (b *Database) restore(c *Database) {
+	b.dongles, b.states, b.lastCS, b.challenges, b.tmsBoot, b.seen = c.dongles, c.states, c.lastCS, c.challenges, c.tmsBoot, c.seen
+	b.RawBlocks, b.Rejected, b.Readings, b.Positions = c.RawBlocks, c.Rejected, c.Readings, c.Positions
+	b.Gaps, b.Alerts, b.Anchors, b.Notifications = c.Gaps, c.Alerts, c.Anchors, c.Notifications
 }
 
-type dongles Banco
+type dongles Database
 
-func (r *dongles) BuscarPorDevID(_ context.Context, dev protocolo.DevID) (dongle.Dongle, error) {
+func (r *dongles) FindByDevID(_ context.Context, dev protocol.DevID) (dongle.Dongle, error) {
 	d, ok := r.dongles[dev]
 	if !ok {
-		return dongle.Dongle{}, dongle.ErrDesconhecido
+		return dongle.Dongle{}, dongle.ErrUnknown
 	}
 	return d, nil
 }
-func (r *dongles) Travar(context.Context, int32) error { return nil }
+func (r *dongles) Lock(context.Context, int32) error { return nil }
 
-type desafios Banco
+type challenges Database
 
-func (r *desafios) Emitir(_ context.Context, e handshake.Emissao) (handshake.Desafio, error) {
+func (r *challenges) Issue(_ context.Context, e handshake.Issuance) (handshake.Challenge, error) {
 	pend := 0
-	for k, d := range r.desafios {
-		if k.dongle == e.DongleID && d.RespondidoEm == nil && d.ExpiraEm.After(e.S1) {
+	for k, d := range r.challenges {
+		if k.dongle == e.DongleID && d.AnsweredAt == nil && d.ExpiresAt.After(e.S1) {
 			pend++
 		}
 	}
-	if pend >= e.MaxPendentes {
-		return handshake.Desafio{}, handshake.ErrDesafiosPendentes
+	if pend >= e.MaxPending {
+		return handshake.Challenge{}, handshake.ErrPendingChallenges
 	}
-	r.ultimoCS[e.DongleID]++
-	cs := r.ultimoCS[e.DongleID]
-	r.desafios[chaveDesafio{e.DongleID, cs}] = Desafio{DesafioGravado: handshake.DesafioGravado{Nonce: e.Nonce, S1: e.S1, ExpiraEm: e.ExpiraEm}}
-	est := r.estados[e.DongleID]
-	return handshake.Desafio{CS: cs, SeqContiguo: est.SeqContiguo, CConf: est.CConf}, nil
+	r.lastCS[e.DongleID]++
+	cs := r.lastCS[e.DongleID]
+	r.challenges[challengeKey{e.DongleID, cs}] = Challenge{StoredChallenge: handshake.StoredChallenge{Nonce: e.Nonce, S1: e.S1, ExpiresAt: e.ExpiresAt}}
+	est := r.states[e.DongleID]
+	return handshake.Challenge{CS: cs, ContiguousSeq: est.ContiguousSeq, CConf: est.CConf}, nil
 }
 
-func (r *desafios) Buscar(_ context.Context, id int32, cs int64) (handshake.DesafioGravado, error) {
-	d, ok := r.desafios[chaveDesafio{id, cs}]
+func (r *challenges) Find(_ context.Context, id int32, cs int64) (handshake.StoredChallenge, error) {
+	d, ok := r.challenges[challengeKey{id, cs}]
 	if !ok {
-		return handshake.DesafioGravado{}, handshake.ErrDesafioInvalido
+		return handshake.StoredChallenge{}, handshake.ErrInvalidChallenge
 	}
-	return d.DesafioGravado, nil
+	return d.StoredChallenge, nil
 }
 
-func (r *desafios) Consumir(_ context.Context, c handshake.Consumo) (time.Time, error) {
-	k := chaveDesafio{c.DongleID, c.CS}
-	d, ok := r.desafios[k]
-	if !ok || !bytes.Equal(d.Nonce, c.Nonce) || d.RespondidoEm != nil || !d.ExpiraEm.After(c.S2) {
-		return time.Time{}, handshake.ErrDesafioInvalido
+func (r *challenges) Consume(_ context.Context, c handshake.Consumption) (time.Time, error) {
+	k := challengeKey{c.DongleID, c.CS}
+	d, ok := r.challenges[k]
+	if !ok || !bytes.Equal(d.Nonce, c.Nonce) || d.AnsweredAt != nil || !d.ExpiresAt.After(c.S2) {
+		return time.Time{}, handshake.ErrInvalidChallenge
 	}
 	s2 := c.S2
-	d.RespondidoEm = &s2
-	r.desafios[k] = d
+	d.AnsweredAt = &s2
+	r.challenges[k] = d
 	return d.S1, nil
 }
 
-func (r *desafios) Finalizar(_ context.Context, f handshake.Finalizacao) error {
-	k := chaveDesafio{f.DongleID, f.CS}
-	d := r.desafios[k]
-	d.Resultado, d.Final = f.Resultado, f
-	r.desafios[k] = d
+func (r *challenges) Finalize(_ context.Context, f handshake.Finalization) error {
+	k := challengeKey{f.DongleID, f.CS}
+	d := r.challenges[k]
+	d.Result, d.Final = f.Result, f
+	r.challenges[k] = d
 	return nil
 }
 
-func (r *desafios) MarcarTagInvalida(_ context.Context, id int32, cs int64, nonce []byte) error {
-	k := chaveDesafio{id, cs}
-	if d, ok := r.desafios[k]; ok && bytes.Equal(d.Nonce, nonce) {
-		d.Resultado = "tag_invalida"
-		r.desafios[k] = d
+func (r *challenges) MarkInvalidTag(_ context.Context, id int32, cs int64, nonce []byte) error {
+	k := challengeKey{id, cs}
+	if d, ok := r.challenges[k]; ok && bytes.Equal(d.Nonce, nonce) {
+		d.Result = "invalid_tag"
+		r.challenges[k] = d
 	}
 	return nil
 }
 
-type estados Banco
+type states Database
 
-func (r *estados) Ler(_ context.Context, id int32) (dongle.Estado, error) {
-	e := r.estados[id]
-	e.UltimoAck = nil
+func (r *states) Read(_ context.Context, id int32) (dongle.State, error) {
+	e := r.states[id]
+	e.LastAck = nil
 	return e, nil
 }
 
-func (r *estados) LerSnapshot(_ context.Context, id int32) (dongle.Estado, error) {
-	e := r.estados[id]
-	return dongle.Estado{SeqContiguo: e.SeqContiguo, CConf: e.CConf, UltimoAck: e.UltimoAck}, nil
+func (r *states) ReadSnapshot(_ context.Context, id int32) (dongle.State, error) {
+	e := r.states[id]
+	return dongle.State{ContiguousSeq: e.ContiguousSeq, CConf: e.CConf, LastAck: e.LastAck}, nil
 }
 
-func (r *estados) LerUltimoAck(_ context.Context, id int32) ([]byte, error) {
-	return r.estados[id].UltimoAck, nil
+func (r *states) ReadLastAck(_ context.Context, id int32) ([]byte, error) {
+	return r.states[id].LastAck, nil
 }
 
-func (r *estados) AtualizarHandshake(_ context.Context, a handshake.Atualizacao) error {
-	e := r.estados[a.DongleID]
-	e.SeqContiguo, e.MaiorSeqVisto, e.HeadSeq, e.CConf, e.UltimoAck = a.SeqContiguo, max(e.MaiorSeqVisto, a.SeqContiguo), a.HeadSeq, a.CConf, a.UltimoAck
-	r.estados[a.DongleID] = e
+func (r *states) UpdateHandshake(_ context.Context, a handshake.Update) error {
+	e := r.states[a.DongleID]
+	e.ContiguousSeq, e.MaxSeenSeq, e.HeadSeq, e.CConf, e.LastAck = a.ContiguousSeq, max(e.MaxSeenSeq, a.ContiguousSeq), a.HeadSeq, a.CConf, a.LastAck
+	r.states[a.DongleID] = e
 	return nil
 }
 
-func (r *estados) AtualizarIngestao(_ context.Context, a ingestao.AtualizacaoEstado) error {
-	e := r.estados[a.DongleID]
-	e.SeqContiguo, e.MaiorSeqVisto, e.UltimoAck = a.SeqContiguo, max(e.MaiorSeqVisto, a.MaiorVisto, a.SeqContiguo), a.UltimoAck
-	e.GeracaoBoot, e.UltimoBootID = a.GeracaoBoot, a.UltimoBootID
-	r.estados[a.DongleID] = e
+func (r *states) UpdateIngestion(_ context.Context, a ingestion.StateUpdate) error {
+	e := r.states[a.DongleID]
+	e.ContiguousSeq, e.MaxSeenSeq, e.LastAck = a.ContiguousSeq, max(e.MaxSeenSeq, a.MaxSeen, a.ContiguousSeq), a.LastAck
+	e.BootGeneration, e.LastBootID = a.BootGeneration, a.LastBootID
+	r.states[a.DongleID] = e
 	return nil
 }
 
-type boots Banco
+type boots Database
 
-func (r *boots) TMsUltimo(_ context.Context, id int32, bootIDs []int32, gMin, gMax int32) ([]tempo.RefBoot, error) {
-	var out []tempo.RefBoot
+func (r *boots) LastTMs(_ context.Context, id int32, bootIDs []int32, gMin, gMax int32) ([]timeline.RefBoot, error) {
+	var out []timeline.RefBoot
 	for _, bid := range bootIDs {
 		for g := gMin; g <= gMax; g++ {
-			if t, ok := r.tmsBoot[chaveBoot{id, g, bid}]; ok {
-				out = append(out, tempo.RefBoot{Geracao: g, BootID: bid, TMsUltimo: t})
+			if t, ok := r.tmsBoot[bootKey{id, g, bid}]; ok {
+				out = append(out, timeline.RefBoot{Generation: g, BootID: bid, LastTMs: t})
 			}
 		}
 	}
 	return out, nil
 }
 
-func (r *boots) GarantirPendente(context.Context, int32, int32, int32, time.Time) error { return nil }
+func (r *boots) EnsurePending(context.Context, int32, int32, int32, time.Time) error { return nil }
 
-func (r *boots) AtualizarIngestao(_ context.Context, id int32, _ time.Time, ags []ingestao.AgregadoBoot) error {
-	for _, a := range ags {
-		k := chaveBoot{id, a.Geracao, a.BootID}
-		r.tmsBoot[k] = max(r.tmsBoot[k], a.TFim)
+func (r *boots) UpdateIngestion(_ context.Context, id int32, _ time.Time, aggs []ingestion.BootAggregate) error {
+	for _, a := range aggs {
+		k := bootKey{id, a.Generation, a.BootID}
+		r.tmsBoot[k] = max(r.tmsBoot[k], a.TEnd)
 	}
 	return nil
 }
 
-func (r *boots) InserirAncora(_ context.Context, a handshake.Ancora) error {
-	r.Ancoras = append(r.Ancoras, a)
+func (r *boots) InsertAnchor(_ context.Context, a handshake.Anchor) error {
+	r.Anchors = append(r.Anchors, a)
 	return nil
 }
 
-func (r *boots) NotificarPendente(_ context.Context, chave string) error {
-	r.Notificacoes = append(r.Notificacoes, chave)
+func (r *boots) NotifyPending(_ context.Context, key string) error {
+	r.Notifications = append(r.Notifications, key)
 	return nil
 }
 
-type blocos Banco
+type blocks Database
 
-func (r *blocos) InserirBrutos(_ context.Context, id int32, _ int64, _ time.Time, bs []ingestao.BlocoBruto) (int, error) {
+func (r *blocks) InsertRawBlocks(_ context.Context, id int32, _ int64, _ time.Time, bs []ingestion.RawBlock) (int, error) {
 	n := 0
 	for _, x := range bs {
 		k := [2]int64{int64(id), x.Seq}
-		if r.vistos[k] {
+		if r.seen[k] {
 			continue
 		}
-		r.vistos[k] = true
-		r.Brutos = append(r.Brutos, x)
+		r.seen[k] = true
+		r.RawBlocks = append(r.RawBlocks, x)
 		n++
 	}
 	return n, nil
 }
 
-func (r *blocos) RegistrarRejeitado(_ context.Context, x ingestao.Rejeitado) error {
-	r.Rejeitados = append(r.Rejeitados, x)
+func (r *blocks) RegisterRejected(_ context.Context, x ingestion.Rejected) error {
+	r.Rejected = append(r.Rejected, x)
 	return nil
 }
 
-func (r *blocos) CopiarLeituras(_ context.Context, _ int32, _ time.Time, ls []pid.Leitura) error {
-	r.Leituras = append(r.Leituras, ls...)
+func (r *blocks) CopyReadings(_ context.Context, _ int32, _ time.Time, ls []pid.Reading) error {
+	r.Readings = append(r.Readings, ls...)
 	return nil
 }
 
-func (r *blocos) CopiarPosicoes(_ context.Context, _ int32, _ time.Time, ps []pid.Posicao) error {
-	r.Posicoes = append(r.Posicoes, ps...)
+func (r *blocks) CopyPositions(_ context.Context, _ int32, _ time.Time, ps []pid.Position) error {
+	r.Positions = append(r.Positions, ps...)
 	return nil
 }
 
-type ocorrencias Banco
+type occurrences Database
 
-func (r *ocorrencias) InserirLacuna(_ context.Context, l ocorrencia.Lacuna) error {
-	r.Lacunas = append(r.Lacunas, l)
+func (r *occurrences) InsertGap(_ context.Context, l occurrence.Gap) error {
+	r.Gaps = append(r.Gaps, l)
 	return nil
 }
 
-func (r *ocorrencias) InserirAlerta(_ context.Context, a ocorrencia.Alerta) error {
-	r.Alertas = append(r.Alertas, a)
+func (r *occurrences) InsertAlert(_ context.Context, a occurrence.Alert) error {
+	r.Alerts = append(r.Alerts, a)
 	return nil
 }
 
-type pids Banco
+type pids Database
 
-func (r *pids) Listar(context.Context) ([]pid.Def, error) { return r.Defs, nil }
+func (r *pids) List(context.Context) ([]pid.Def, error) { return r.Defs, nil }

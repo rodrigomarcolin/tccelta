@@ -1,9 +1,9 @@
-package protocolo
+package protocol
 
 import "encoding/binary"
 
-// Desafio é a mensagem 0x01 (servidor -> dongle).
-type Desafio struct {
+// Challenge é a mensagem 0x01 (servidor -> dongle).
+type Challenge struct {
 	CS, AckSeq, CConf uint32
 	NS                [16]byte
 	Flags             uint8
@@ -11,7 +11,7 @@ type Desafio struct {
 }
 
 // Payload devolve V sem a tag.
-func (d Desafio) Payload() []byte {
+func (d Challenge) Payload() []byte {
 	p := make([]byte, 0, 31)
 	p = binary.LittleEndian.AppendUint32(p, d.CS)
 	p = append(p, d.NS[:]...)
@@ -24,23 +24,23 @@ func (d Desafio) Payload() []byte {
 	return p
 }
 
-// Montar devolve o TLV completo (T|L|V) com a tag de 16 B.
-func (d Desafio) Montar(tag []byte) ([]byte, error) {
+// Build devolve o TLV completo (T|L|V) com a tag de 16 B.
+func (d Challenge) Build(tag []byte) ([]byte, error) {
 	if d.Flags&^1 != 0 {
-		return nil, ErrFlagsReservadas
+		return nil, ErrReservedFlags
 	}
-	if len(tag) != TamTagAuth {
-		return nil, ErrTamanhoInvalido
+	if len(tag) != AuthTagSize {
+		return nil, ErrInvalidSize
 	}
 	v := append(d.Payload(), tag...)
-	return AnexarTLV(nil, TipoDesafio, v), nil
+	return AppendTLV(nil, ChallengeType, v), nil
 }
 
-// DecodificarDesafio decodifica V (45 ou 47 B) e devolve a tag.
-func DecodificarDesafio(v []byte) (Desafio, []byte, error) {
-	var d Desafio
-	if len(v) != LDesafio && len(v) != LDesafioDiag {
-		return d, nil, ErrTamanhoInvalido
+// DecodeChallenge decodifica V (45 ou 47 B) e devolve a tag.
+func DecodeChallenge(v []byte) (Challenge, []byte, error) {
+	var d Challenge
+	if len(v) != LChallenge && len(v) != LChallengeDiag {
+		return d, nil, ErrInvalidSize
 	}
 	d.CS = binary.LittleEndian.Uint32(v[0:4])
 	copy(d.NS[:], v[4:20])
@@ -48,32 +48,32 @@ func DecodificarDesafio(v []byte) (Desafio, []byte, error) {
 	d.CConf = binary.LittleEndian.Uint32(v[24:28])
 	d.Flags = v[28]
 	if d.Flags&^1 != 0 {
-		return d, nil, ErrFlagsReservadas
+		return d, nil, ErrReservedFlags
 	}
 	n := 29
 	if d.Flags&1 != 0 {
-		if len(v) != LDesafioDiag {
-			return d, nil, ErrTamanhoInvalido
+		if len(v) != LChallengeDiag {
+			return d, nil, ErrInvalidSize
 		}
 		d.DiagMin = binary.LittleEndian.Uint16(v[29:31])
 		n = 31
-	} else if len(v) != LDesafio {
-		return d, nil, ErrTamanhoInvalido
+	} else if len(v) != LChallenge {
+		return d, nil, ErrInvalidSize
 	}
 	return d, v[n:], nil
 }
 
-// Resposta é a mensagem 0x02 (dongle -> servidor).
-type Resposta struct {
+// Response é a mensagem 0x02 (dongle -> servidor).
+type Response struct {
 	CS, TailSeq, HeadSeq, TMs uint32
 	NS                        [16]byte
 	BootID                    uint16
 }
 
-// DecodificarResposta decodifica V (50 B).
-func DecodificarResposta(v []byte) (r Resposta, payload, tag []byte, err error) {
-	if len(v) != LResposta {
-		return r, nil, nil, ErrTamanhoInvalido
+// DecodeResponse decodifica V (50 B).
+func DecodeResponse(v []byte) (r Response, payload, tag []byte, err error) {
+	if len(v) != LResponse {
+		return r, nil, nil, ErrInvalidSize
 	}
 	r.CS = binary.LittleEndian.Uint32(v[0:4])
 	copy(r.NS[:], v[4:20])
@@ -85,7 +85,7 @@ func DecodificarResposta(v []byte) (r Resposta, payload, tag []byte, err error) 
 }
 
 // Payload devolve V sem a tag.
-func (r Resposta) Payload() []byte {
+func (r Response) Payload() []byte {
 	p := make([]byte, 0, 34)
 	p = binary.LittleEndian.AppendUint32(p, r.CS)
 	p = append(p, r.NS[:]...)
@@ -96,9 +96,9 @@ func (r Resposta) Payload() []byte {
 	return p
 }
 
-// Montar devolve o TLV completo (simulador).
-func (r Resposta) Montar(tag []byte) []byte {
-	return AnexarTLV(nil, TipoResposta, append(r.Payload(), tag...))
+// Build devolve o TLV completo (simulador).
+func (r Response) Build(tag []byte) []byte {
+	return AppendTLV(nil, ResponseType, append(r.Payload(), tag...))
 }
 
 // Ack é a mensagem 0x04 (servidor -> dongle).
@@ -107,8 +107,8 @@ type Ack struct {
 	Flags         uint8
 }
 
-// FlagAckAncoraFalhou: a âncora de tempo falhou, repetir o handshake.
-const FlagAckAncoraFalhou uint8 = 1 << 0
+// FlagAckAnchorFailed: a âncora de tempo falhou, repetir o handshake.
+const FlagAckAnchorFailed uint8 = 1 << 0
 
 // Payload devolve V sem a tag (9 B).
 func (a Ack) Payload() []byte {
@@ -118,22 +118,22 @@ func (a Ack) Payload() []byte {
 	return append(p, a.Flags)
 }
 
-// Montar devolve o TLV completo com a tag de 16 B.
-func (a Ack) Montar(tag []byte) []byte {
-	return AnexarTLV(nil, TipoAck, append(a.Payload(), tag...))
+// Build devolve o TLV completo com a tag de 16 B.
+func (a Ack) Build(tag []byte) []byte {
+	return AppendTLV(nil, AckType, append(a.Payload(), tag...))
 }
 
-// DecodificarAck decodifica V (25 B) e devolve a tag.
-func DecodificarAck(v []byte) (Ack, []byte, error) {
+// DecodeAck decodifica V (25 B) e devolve a tag.
+func DecodeAck(v []byte) (Ack, []byte, error) {
 	var a Ack
 	if len(v) != LAck {
-		return a, nil, ErrTamanhoInvalido
+		return a, nil, ErrInvalidSize
 	}
 	a.AckSeq = binary.LittleEndian.Uint32(v[0:4])
 	a.CConf = binary.LittleEndian.Uint32(v[4:8])
 	a.Flags = v[8]
 	if a.Flags&^1 != 0 {
-		return a, nil, ErrFlagsReservadas
+		return a, nil, ErrReservedFlags
 	}
 	return a, v[9:], nil
 }

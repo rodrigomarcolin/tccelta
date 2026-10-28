@@ -1,31 +1,31 @@
-package porta
+package port
 
 import "time"
 
-// MetricasHandshake são os eventos do handshake.
-type MetricasHandshake interface {
-	Handshake(resultado string)
-	Lacuna(causa string)
-	AncoraRTT(d time.Duration)
+// MetricsHandshake são os eventos do handshake.
+type MetricsHandshake interface {
+	Handshake(result string)
+	Gap(cause string)
+	AnchorRTT(d time.Duration)
 }
 
-// MetricasIngestao são os eventos do lote.
-type MetricasIngestao interface {
-	Blocos(resultado string, n int)
-	Lote(status string)
-	DuracaoTxIngestao(d time.Duration)
-	Linhas(tabela string, n int)
-	Lacuna(causa string)
+// MetricsIngestion são os eventos do lote.
+type MetricsIngestion interface {
+	Blocks(result string, n int)
+	Batch(status string)
+	IngestionTxDuration(d time.Duration)
+	Rows(table string, n int)
+	Gap(cause string)
 }
 
-// MetricasHTTP são os eventos de transporte.
-type MetricasHTTP interface {
-	Requisicao(rota string, status int, d time.Duration)
-	Rejeicao(motivo string)
+// MetricsHTTP são os eventos de transporte.
+type MetricsHTTP interface {
+	Request(route string, status int, d time.Duration)
+	Rejection(reason string)
 }
 
-// MetricasKMS são os eventos das chamadas ao KMS.
-type MetricasKMS interface {
-	ChamadaKMS(operacao, resultado, fase string, d time.Duration)
-	DisjuntorKMS(aberto bool)
+// MetricsKMS são os eventos das chamadas ao KMS.
+type MetricsKMS interface {
+	KMSCall(operation, result, phase string, d time.Duration)
+	KMSBreaker(open bool)
 }

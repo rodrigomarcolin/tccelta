@@ -1,4 +1,4 @@
-package ingestao
+package ingestion
 
 import (
 	"errors"
@@ -9,50 +9,50 @@ import (
 
 // Erros do lote.
 var (
-	ErrLoteMalformado = errors.New("lote_malformado")
-	ErrLoteGrande     = errors.New("lote_grande")
-	ErrSemConfirmacao = errors.New("sem_confirmacao")
-	ErrInvariante     = errors.New("invariante_violada")
+	ErrMalformedBatch = errors.New("lote_malformado")
+	ErrBatchTooLarge  = errors.New("lote_grande")
+	ErrNoConfirmation = errors.New("sem_confirmacao")
+	ErrInvariant      = errors.New("invariante_violada")
 )
 
-// BlocoBruto é uma linha de bronze.bloco_bruto.
-type BlocoBruto struct {
+// RawBlock é uma linha de bronze.raw_block.
+type RawBlock struct {
 	Seq        int64
 	BootID     int32
-	Geracao    int32
+	Generation int32
 	T0Ms       int64
-	Marcador   string
+	Marker     string
 	Payload    []byte
-	Assinatura []byte
+	Signature  []byte
 }
 
-// Rejeitado é um bloco recusado, guardado para auditoria.
-type Rejeitado struct {
-	DongleID     int32
-	Seq          int64
-	BootID       int32
-	T0Ms         int64
-	Payload      []byte
-	Assinatura   []byte
-	Motivo       Motivo
-	Detalhe      string
-	HashConteudo []byte
-	TokenJTI     uuid.UUID
-	RecebidoEm   time.Time
+// Rejected é um bloco recusado, guardado para auditoria.
+type Rejected struct {
+	DongleID    int32
+	Seq         int64
+	BootID      int32
+	T0Ms        int64
+	Payload     []byte
+	Signature   []byte
+	Reason      Reason
+	Detail      string
+	ContentHash []byte
+	TokenJTI    uuid.UUID
+	ReceivedAt  time.Time
 }
 
-// AgregadoBoot resume os blocos aceitos de um (geração, boot_id) no lote.
-type AgregadoBoot struct {
-	Geracao, BootID            int32
-	SeqIni, SeqFim, TIni, TFim int64
-	DeslMax                    float64
+// BootAggregate resume os blocos aceitos de um (geração, boot_id) no lote.
+type BootAggregate struct {
+	Generation, BootID           int32
+	FromSeq, ToSeq, TStart, TEnd int64
+	MaxOffset                    float64
 }
 
-// AtualizacaoEstado é o novo estado do dongle depois de um lote.
-type AtualizacaoEstado struct {
-	DongleID                  int32
-	SeqContiguo, MaiorVisto   int64
-	UltimoAck                 []byte
-	Agora                     time.Time
-	GeracaoBoot, UltimoBootID int32
+// StateUpdate é o novo estado do dongle depois de um lote.
+type StateUpdate struct {
+	DongleID                   int32
+	ContiguousSeq, MaxSeen     int64
+	LastAck                    []byte
+	Now                        time.Time
+	BootGeneration, LastBootID int32
 }

@@ -1,4 +1,4 @@
-package porta
+package port
 
 import (
 	"context"
@@ -7,37 +7,37 @@ import (
 
 	"github.com/google/uuid"
 
-	"tccelta/backend/internal/dominio/protocolo"
+	"tccelta/backend/internal/domain/protocol"
 )
 
-// TokenEmitido é o resultado de EmissorToken.Emitir.
-type TokenEmitido struct {
-	Token    string
-	JTI      uuid.UUID
-	ExpiraEm time.Time
+// IssuedToken é o resultado de TokenIssuer.Issue.
+type IssuedToken struct {
+	Token     string
+	JTI       uuid.UUID
+	ExpiresAt time.Time
 }
 
-// Sessao é o que o token validado autoriza.
-type Sessao struct {
-	Dev      protocolo.DevID
-	CS       uint32
-	JTI      uuid.UUID
-	ExpiraEm time.Time
+// Session é o que o token validado autoriza.
+type Session struct {
+	Dev       protocol.DevID
+	CS        uint32
+	JTI       uuid.UUID
+	ExpiresAt time.Time
 }
 
-// EmissorToken emite o token de sessão do handshake.
-type EmissorToken interface {
-	Emitir(ctx context.Context, dev protocolo.DevID, cs uint32) (TokenEmitido, error)
-	Validade() time.Duration
+// TokenIssuer emite o token de sessão do handshake.
+type TokenIssuer interface {
+	Issue(ctx context.Context, dev protocol.DevID, cs uint32) (IssuedToken, error)
+	Validity() time.Duration
 }
 
-// ValidadorToken valida o token bruto; devolve ErrTokenInvalido ou ErrTokenExpirado.
-type ValidadorToken interface {
-	Validar(ctx context.Context, bruto string) (Sessao, error)
+// TokenValidator valida o token bruto; devolve ErrInvalidToken ou ErrTokenExpired.
+type TokenValidator interface {
+	Validate(ctx context.Context, raw string) (Session, error)
 }
 
 // Erros de validação do token.
 var (
-	ErrTokenInvalido = errors.New("token_invalido")
-	ErrTokenExpirado = errors.New("token_expirado")
+	ErrInvalidToken = errors.New("token_invalido")
+	ErrTokenExpired = errors.New("token_expirado")
 )

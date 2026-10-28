@@ -1,52 +1,52 @@
--- name: EmitirDesafio :one
--- Incrementa c_S (lock de linha curto em dongle_estado) e insere o desafio,
--- só se o dongle tiver menos de @max_pendentes desafios pendentes no prazo.
+-- name: IssueChallenge :one
+-- Incrementa c_S (lock de linha curto em dongle_state) e insere o desafio,
+-- só se o dongle tiver menos de @max_pending desafios pendentes no prazo.
 WITH cs AS (
-  UPDATE dongle_estado e
-     SET ultimo_c_s = GREATEST(e.ultimo_c_s + 1, @agora_s::bigint)   -- @agora_s = segundos Unix do relógio da API
+  UPDATE dongle_state e
+     SET last_c_s = GREATEST(e.last_c_s + 1, @now_s::bigint)   -- @now_s = segundos Unix do relógio da API
    WHERE e.dongle_id = @dongle_id
-     AND GREATEST(e.ultimo_c_s + 1, @agora_s::bigint) <= 4294967295
-     AND (SELECT count(*) FROM desafio d
+     AND GREATEST(e.last_c_s + 1, @now_s::bigint) <= 4294967295
+     AND (SELECT count(*) FROM challenge d
            WHERE d.dongle_id = @dongle_id
-             AND d.respondido_em IS NULL
-             AND d.expira_em > @s1) < @max_pendentes::int
-  RETURNING e.ultimo_c_s AS c_s, e.seq_contiguo, e.c_conf
+             AND d.answered_at IS NULL
+             AND d.expires_at > @s1) < @max_pending::int
+  RETURNING e.last_c_s AS c_s, e.contiguous_seq, e.c_conf
 ), ins AS (
-  INSERT INTO desafio (dongle_id, c_s, nonce, s1, expira_em, ack_seq_emitido, c_conf_emitido, flags_c, diag_min)
-  SELECT @dongle_id, cs.c_s, @nonce, @s1, @expira_em, cs.seq_contiguo, cs.c_conf, @flags_c, @diag_min
+  INSERT INTO challenge (dongle_id, c_s, nonce, s1, expires_at, issued_ack_seq, issued_c_conf, flags_c, diag_min)
+  SELECT @dongle_id, cs.c_s, @nonce, @s1, @expires_at, cs.contiguous_seq, cs.c_conf, @flags_c, @diag_min
   FROM cs
   RETURNING c_s
 )
-SELECT cs.c_s, cs.seq_contiguo, cs.c_conf FROM cs JOIN ins USING (c_s);
+SELECT cs.c_s, cs.contiguous_seq, cs.c_conf FROM cs JOIN ins USING (c_s);
 
--- name: BuscarDesafio :one
-SELECT nonce, s1, expira_em, respondido_em FROM desafio
+-- name: FindChallenge :one
+SELECT nonce, s1, expires_at, answered_at FROM challenge
 WHERE dongle_id = @dongle_id AND c_s = @c_s;
 
--- name: MarcarTagInvalida :exec
-UPDATE desafio
-   SET tentativas_tag_invalida = tentativas_tag_invalida + 1,
-       resultado = COALESCE(resultado, 'tag_invalida')
- WHERE dongle_id = @dongle_id AND c_s = @c_s AND nonce = @nonce AND respondido_em IS NULL;
+-- name: MarkInvalidTag :exec
+UPDATE challenge
+   SET invalid_tag_attempts = invalid_tag_attempts + 1,
+       result = COALESCE(result, 'invalid_tag')
+ WHERE dongle_id = @dongle_id AND c_s = @c_s AND nonce = @nonce AND answered_at IS NULL;
 
--- name: ConsumirDesafio :one
+-- name: ConsumeChallenge :one
 -- Uso único: pertence ao dongle, nonce confere, pendente e no prazo. Duas
 -- respostas simultâneas: só uma recebe a linha.
-UPDATE desafio
-   SET respondido_em = @s2, boot_id = @boot_id, t_ms = @t_ms,
+UPDATE challenge
+   SET answered_at = @s2, boot_id = @boot_id, t_ms = @t_ms,
        head_seq = @head_seq, tail_seq = @tail_seq
  WHERE dongle_id = @dongle_id AND c_s = @c_s AND nonce = @nonce
-   AND respondido_em IS NULL AND expira_em > @s2
+   AND answered_at IS NULL AND expires_at > @s2
 RETURNING s1;
 
--- name: FinalizarDesafio :exec
-UPDATE desafio
-   SET resultado = @resultado, ack_seq = @ack_seq, perda_ini = @perda_ini,
-       perda_fim = @perda_fim, token_jti = @token_jti, t_ms = COALESCE(@t_ms_desembrulhado, t_ms),
-       geracao_boot = COALESCE(@geracao_boot, geracao_boot)
+-- name: FinalizeChallenge :exec
+UPDATE challenge
+   SET result = @result, ack_seq = @ack_seq, loss_start = @loss_start,
+       loss_end = @loss_end, token_jti = @token_jti, t_ms = COALESCE(@unwrapped_t_ms, t_ms),
+       boot_generation = COALESCE(@boot_generation, boot_generation)
  WHERE dongle_id = @dongle_id AND c_s = @c_s;
 
--- name: ExpirarDesafios :execrows
+-- name: ExpireChallenges :execrows
 -- Job periódico do worker (spec 06).
-UPDATE desafio SET resultado = 'expirado'
- WHERE respondido_em IS NULL AND resultado IS NULL AND expira_em < @agora;
+UPDATE challenge SET result = 'expired'
+ WHERE answered_at IS NULL AND result IS NULL AND expires_at < @now;

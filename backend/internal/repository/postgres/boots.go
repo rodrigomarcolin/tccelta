@@ -4,51 +4,51 @@ import (
 	"context"
 	"time"
 
-	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/dominio/handshake"
-	"tccelta/backend/internal/dominio/ingestao"
-	"tccelta/backend/internal/dominio/tempo"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/handshake"
+	"tccelta/backend/internal/domain/ingestion"
+	"tccelta/backend/internal/domain/timeline"
 )
 
-type boots struct{ q consultas.Querier }
+type boots struct{ q dbgen.Querier }
 
-func (r *boots) TMsUltimo(ctx context.Context, dongleID int32, bootIDs []int32, gMin, gMax int32) ([]tempo.RefBoot, error) {
-	rows, err := r.q.LerTMsUltimoBoots(ctx, dongleID, bootIDs, gMin, gMax)
+func (r *boots) LastTMs(ctx context.Context, dongleID int32, bootIDs []int32, gMin, gMax int32) ([]timeline.RefBoot, error) {
+	rows, err := r.q.ReadLastBootTMs(ctx, dongleID, bootIDs, gMin, gMax)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]tempo.RefBoot, 0, len(rows))
+	out := make([]timeline.RefBoot, 0, len(rows))
 	for _, x := range rows {
-		if x.TMsUltimo != nil {
-			out = append(out, tempo.RefBoot{Geracao: x.GeracaoBoot, BootID: x.BootID, TMsUltimo: *x.TMsUltimo})
+		if x.LastTMs != nil {
+			out = append(out, timeline.RefBoot{Generation: x.BootGeneration, BootID: x.BootID, LastTMs: *x.LastTMs})
 		}
 	}
 	return out, nil
 }
 
-func (r *boots) GarantirPendente(ctx context.Context, dongleID, geracao, bootID int32, agora time.Time) error {
-	return r.q.GarantirBootPendente(ctx, dongleID, geracao, bootID, agora)
+func (r *boots) EnsurePending(ctx context.Context, dongleID, generation, bootID int32, now time.Time) error {
+	return r.q.EnsurePendingBoot(ctx, dongleID, generation, bootID, now)
 }
 
-func (r *boots) AtualizarIngestao(ctx context.Context, dongleID int32, agora time.Time, ags []ingestao.AgregadoBoot) error {
-	p := consultas.AtualizarBootsIngestaoParams{DongleID: dongleID, Agora: agora}
-	for _, x := range ags {
-		p.Geracoes = append(p.Geracoes, x.Geracao)
+func (r *boots) UpdateIngestion(ctx context.Context, dongleID int32, now time.Time, aggs []ingestion.BootAggregate) error {
+	p := dbgen.UpdateIngestionBootsParams{DongleID: dongleID, Now: now}
+	for _, x := range aggs {
+		p.Generations = append(p.Generations, x.Generation)
 		p.BootIds = append(p.BootIds, x.BootID)
-		p.SeqInis = append(p.SeqInis, x.SeqIni)
-		p.SeqFims = append(p.SeqFims, x.SeqFim)
-		p.TInis = append(p.TInis, x.TIni)
-		p.TFims = append(p.TFims, x.TFim)
-		p.DeslMaxs = append(p.DeslMaxs, x.DeslMax)
+		p.FromSeqs = append(p.FromSeqs, x.FromSeq)
+		p.ToSeqs = append(p.ToSeqs, x.ToSeq)
+		p.TStarts = append(p.TStarts, x.TStart)
+		p.TEnds = append(p.TEnds, x.TEnd)
+		p.MaxOffsets = append(p.MaxOffsets, x.MaxOffset)
 	}
-	return r.q.AtualizarBootsIngestao(ctx, p)
+	return r.q.UpdateIngestionBoots(ctx, p)
 }
 
-func (r *boots) InserirAncora(ctx context.Context, a handshake.Ancora) error {
-	return r.q.InserirAncora(ctx, consultas.InserirAncoraParams{DongleID: a.DongleID, GeracaoBoot: a.GeracaoBoot, BootID: a.BootID,
+func (r *boots) InsertAnchor(ctx context.Context, a handshake.Anchor) error {
+	return r.q.InsertAnchor(ctx, dbgen.InsertAnchorParams{DongleID: a.DongleID, BootGeneration: a.BootGeneration, BootID: a.BootID,
 		TMs: a.TMs, Nonce: a.Nonce, S1: a.S1, S2: a.S2})
 }
 
-func (r *boots) NotificarPendente(ctx context.Context, chave string) error {
-	return r.q.NotificarBootPendente(ctx, chave)
+func (r *boots) NotifyPending(ctx context.Context, key string) error {
+	return r.q.NotifyPendingBoot(ctx, key)
 }

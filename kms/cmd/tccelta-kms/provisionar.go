@@ -15,7 +15,7 @@ import (
 )
 
 // cmdProvisionar importa as chaves no Vault e grava <saida>/<devid>/registro.json, que o backend
-// cadastra no banco com `tccelta provisionar registrar`.
+// cadastra no banco com `tccelta provision register`.
 func cmdProvisionar(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("uso: provisionar <novo|importar|importar-registro|exportar-wrapping|verificar>")

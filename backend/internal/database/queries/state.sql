@@ -1,22 +1,22 @@
--- estado.sql
--- name: TravarDongle :exec
+-- state.sql
+-- name: LockDongle :exec
 SELECT pg_advisory_xact_lock(1, @dongle_id::int);
 
--- name: LerEstado :one
-SELECT seq_contiguo, maior_seq_visto, head_seq, tail_seq, ultimo_c_s, c_conf, geracao_boot, ultimo_boot_id
-FROM dongle_estado WHERE dongle_id = @dongle_id;
+-- name: ReadState :one
+SELECT contiguous_seq, max_seen_seq, head_seq, tail_seq, last_c_s, c_conf, boot_generation, last_boot_id
+FROM dongle_state WHERE dongle_id = @dongle_id;
 
--- name: AtualizarEstadoHandshake :exec
-UPDATE dongle_estado SET
-  seq_contiguo     = @seq_contiguo,
-  maior_seq_visto  = GREATEST(maior_seq_visto, @seq_contiguo),
+-- name: UpdateHandshakeState :exec
+UPDATE dongle_state SET
+  contiguous_seq     = @contiguous_seq,
+  max_seen_seq  = GREATEST(max_seen_seq, @contiguous_seq),
   head_seq         = @head_seq,
   tail_seq         = @tail_seq,
-  head_relatado_em = @s2,
+  head_reported_at = @s2,
   c_conf           = @c_conf,
-  ultimo_ack       = @ultimo_ack,
-  ultimo_ack_em    = @agora
+  last_ack       = @last_ack,
+  last_ack_at    = @now
 WHERE dongle_id = @dongle_id;
 
--- name: LerUltimoAck :one
-SELECT ultimo_ack FROM dongle_estado WHERE dongle_id = @dongle_id;
+-- name: ReadLastAck :one
+SELECT last_ack FROM dongle_state WHERE dongle_id = @dongle_id;

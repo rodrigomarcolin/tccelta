@@ -3,45 +3,45 @@ package postgres
 import (
 	"context"
 
-	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/dominio/dongle"
-	"tccelta/backend/internal/dominio/handshake"
-	"tccelta/backend/internal/dominio/ingestao"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/dongle"
+	"tccelta/backend/internal/domain/handshake"
+	"tccelta/backend/internal/domain/ingestion"
 )
 
-type estados struct{ q consultas.Querier }
+type states struct{ q dbgen.Querier }
 
-func (r *estados) Ler(ctx context.Context, dongleID int32) (dongle.Estado, error) {
-	e, err := r.q.LerEstado(ctx, dongleID)
+func (r *states) Read(ctx context.Context, dongleID int32) (dongle.State, error) {
+	e, err := r.q.ReadState(ctx, dongleID)
 	if err != nil {
-		return dongle.Estado{}, err
+		return dongle.State{}, err
 	}
-	return dongle.Estado{SeqContiguo: e.SeqContiguo, MaiorSeqVisto: e.MaiorSeqVisto, HeadSeq: e.HeadSeq, CConf: e.CConf,
-		GeracaoBoot: e.GeracaoBoot, UltimoBootID: e.UltimoBootID}, nil
+	return dongle.State{ContiguousSeq: e.ContiguousSeq, MaxSeenSeq: e.MaxSeenSeq, HeadSeq: e.HeadSeq, CConf: e.CConf,
+		BootGeneration: e.BootGeneration, LastBootID: e.LastBootID}, nil
 }
 
-func (r *estados) LerSnapshot(ctx context.Context, dongleID int32) (dongle.Estado, error) {
-	e, err := r.q.LerSnapshotEstado(ctx, dongleID)
+func (r *states) ReadSnapshot(ctx context.Context, dongleID int32) (dongle.State, error) {
+	e, err := r.q.ReadStateSnapshot(ctx, dongleID)
 	if err != nil {
-		return dongle.Estado{}, err
+		return dongle.State{}, err
 	}
-	return dongle.Estado{SeqContiguo: e.SeqContiguo, CConf: e.CConf, UltimoAck: e.UltimoAck}, nil
+	return dongle.State{ContiguousSeq: e.ContiguousSeq, CConf: e.CConf, LastAck: e.LastAck}, nil
 }
 
-func (r *estados) LerUltimoAck(ctx context.Context, dongleID int32) ([]byte, error) {
-	return r.q.LerUltimoAck(ctx, dongleID)
+func (r *states) ReadLastAck(ctx context.Context, dongleID int32) ([]byte, error) {
+	return r.q.ReadLastAck(ctx, dongleID)
 }
 
-func (r *estados) AtualizarHandshake(ctx context.Context, a handshake.Atualizacao) error {
-	tail, s2, agora := a.TailSeq, a.S2, a.Agora
-	return r.q.AtualizarEstadoHandshake(ctx, consultas.AtualizarEstadoHandshakeParams{
-		SeqContiguo: a.SeqContiguo, HeadSeq: a.HeadSeq, TailSeq: &tail, S2: &s2, CConf: a.CConf, UltimoAck: a.UltimoAck,
-		Agora: &agora, DongleID: a.DongleID})
+func (r *states) UpdateHandshake(ctx context.Context, a handshake.Update) error {
+	tail, s2, now := a.TailSeq, a.S2, a.Now
+	return r.q.UpdateHandshakeState(ctx, dbgen.UpdateHandshakeStateParams{
+		ContiguousSeq: a.ContiguousSeq, HeadSeq: a.HeadSeq, TailSeq: &tail, S2: &s2, CConf: a.CConf, LastAck: a.LastAck,
+		Now: &now, DongleID: a.DongleID})
 }
 
-func (r *estados) AtualizarIngestao(ctx context.Context, a ingestao.AtualizacaoEstado) error {
-	agora := a.Agora
-	return r.q.AtualizarEstadoIngestao(ctx, consultas.AtualizarEstadoIngestaoParams{
-		SeqContiguo: a.SeqContiguo, MaiorVisto: a.MaiorVisto, UltimoAck: a.UltimoAck, Agora: &agora,
-		GeracaoBoot: a.GeracaoBoot, UltimoBootID: a.UltimoBootID, DongleID: a.DongleID})
+func (r *states) UpdateIngestion(ctx context.Context, a ingestion.StateUpdate) error {
+	now := a.Now
+	return r.q.UpdateIngestionState(ctx, dbgen.UpdateIngestionStateParams{
+		ContiguousSeq: a.ContiguousSeq, MaxSeen: a.MaxSeen, LastAck: a.LastAck, Now: &now,
+		BootGeneration: a.BootGeneration, LastBootID: a.LastBootID, DongleID: a.DongleID})
 }

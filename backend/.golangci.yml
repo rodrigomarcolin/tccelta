@@ -10,34 +10,34 @@ linters-settings:
       - G115
   depguard:
     rules:
-      # Direção: dominio <- repositorio + casodeuso/porta <- casodeuso/* <- httpapi <- cmd.
-      # Os adaptadores (repositorio/postgres, kmsremoto, observabilidade/metricas, token) só são
+      # Direção: domain <- repository + usecase/port <- usecase/* <- httpapi <- cmd.
+      # Os adaptadores (repository/postgres, remotekms, observability/metrics, token) só são
       # ligados em cmd/tccelta/api.go.
-      dominio:
-        files: ["**/internal/dominio/**"]
+      domain:
+        files: ["**/internal/domain/**"]
         deny:
           - { pkg: github.com/jackc/pgx, desc: "o dominio e puro: sem banco" }
-          - { pkg: tccelta/backend/internal/banco, desc: "o dominio e puro: sem banco" }
+          - { pkg: tccelta/backend/internal/database, desc: "o dominio e puro: sem banco" }
           - { pkg: github.com/prometheus, desc: "o dominio e puro: sem metricas" }
           - { pkg: net/http, desc: "o dominio e puro: sem transporte" }
-          - { pkg: tccelta/backend/internal/repositorio, desc: "o dominio nao conhece os repositorios" }
-          - { pkg: tccelta/backend/internal/casodeuso, desc: "o dominio nao conhece os casos de uso" }
-      casodeuso:
-        files: ["**/internal/casodeuso/**"]
+          - { pkg: tccelta/backend/internal/repository, desc: "o dominio nao conhece os repositorios" }
+          - { pkg: tccelta/backend/internal/usecase, desc: "o dominio nao conhece os casos de uso" }
+      usecase:
+        files: ["**/internal/usecase/**"]
         deny:
-          - { pkg: github.com/jackc/pgx, desc: "casos de uso acessam o banco so por internal/repositorio" }
-          - { pkg: tccelta/backend/internal/banco, desc: "casos de uso acessam o banco so por internal/repositorio" }
-          - { pkg: github.com/prometheus, desc: "metricas so pelas portas de casodeuso/porta" }
+          - { pkg: github.com/jackc/pgx, desc: "casos de uso acessam o banco so por internal/repository" }
+          - { pkg: tccelta/backend/internal/database, desc: "casos de uso acessam o banco so por internal/repository" }
+          - { pkg: github.com/prometheus, desc: "metricas so pelas portas de usecase/port" }
           - { pkg: net/http, desc: "casos de uso nao conhecem o transporte" }
-          - { pkg: tccelta/backend/internal/kmsremoto, desc: "o KMS entra pela porta porta.Autenticador" }
-          - { pkg: tccelta/backend/internal/observabilidade/metricas, desc: "metricas so pelas portas de casodeuso/porta" }
-          - { pkg: tccelta/backend/internal/repositorio/postgres, desc: "use as interfaces de internal/repositorio" }
+          - { pkg: tccelta/backend/internal/remotekms, desc: "o KMS entra pela porta port.Authenticator" }
+          - { pkg: tccelta/backend/internal/observability/metrics, desc: "metricas so pelas portas de usecase/port" }
+          - { pkg: tccelta/backend/internal/repository/postgres, desc: "use as interfaces de internal/repository" }
       httpapi:
         files: ["**/internal/httpapi/**"]
         deny:
           - { pkg: github.com/jackc/pgx, desc: "o HTTP e so transporte" }
-          - { pkg: tccelta/backend/internal/banco, desc: "o HTTP e so transporte" }
-          - { pkg: tccelta/backend/internal/repositorio, desc: "o HTTP chama casos de uso, nunca repositorios" }
-          - { pkg: tccelta/backend/internal/kmsremoto, desc: "o HTTP chama casos de uso, nunca o KMS" }
+          - { pkg: tccelta/backend/internal/database, desc: "o HTTP e so transporte" }
+          - { pkg: tccelta/backend/internal/repository, desc: "o HTTP chama casos de uso, nunca repositorios" }
+          - { pkg: tccelta/backend/internal/remotekms, desc: "o HTTP chama casos de uso, nunca o KMS" }
 issues:
-  exclude-dirs: [internal/banco/consultas]
+  exclude-dirs: [internal/database/dbgen]

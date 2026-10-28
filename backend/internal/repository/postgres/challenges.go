@@ -7,57 +7,57 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/dominio/handshake"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/handshake"
 )
 
-type desafios struct{ q consultas.Querier }
+type challenges struct{ q dbgen.Querier }
 
-func (r *desafios) Emitir(ctx context.Context, e handshake.Emissao) (handshake.Desafio, error) {
-	row, err := r.q.EmitirDesafio(ctx, consultas.EmitirDesafioParams{
-		AgoraS: e.S1.Unix(), DongleID: e.DongleID, S1: e.S1, MaxPendentes: int32(e.MaxPendentes),
-		Nonce: e.Nonce, ExpiraEm: e.ExpiraEm, FlagsC: 0,
+func (r *challenges) Issue(ctx context.Context, e handshake.Issuance) (handshake.Challenge, error) {
+	row, err := r.q.IssueChallenge(ctx, dbgen.IssueChallengeParams{
+		NowS: e.S1.Unix(), DongleID: e.DongleID, S1: e.S1, MaxPending: int32(e.MaxPending),
+		Nonce: e.Nonce, ExpiresAt: e.ExpiresAt, FlagsC: 0,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return handshake.Desafio{}, handshake.ErrDesafiosPendentes
+			return handshake.Challenge{}, handshake.ErrPendingChallenges
 		}
-		return handshake.Desafio{}, err
+		return handshake.Challenge{}, err
 	}
-	return handshake.Desafio{CS: row.CS, SeqContiguo: row.SeqContiguo, CConf: row.CConf}, nil
+	return handshake.Challenge{CS: row.CS, ContiguousSeq: row.ContiguousSeq, CConf: row.CConf}, nil
 }
 
-func (r *desafios) Buscar(ctx context.Context, dongleID int32, cs int64) (handshake.DesafioGravado, error) {
-	row, err := r.q.BuscarDesafio(ctx, dongleID, cs)
+func (r *challenges) Find(ctx context.Context, dongleID int32, cs int64) (handshake.StoredChallenge, error) {
+	row, err := r.q.FindChallenge(ctx, dongleID, cs)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return handshake.DesafioGravado{}, handshake.ErrDesafioInvalido
+			return handshake.StoredChallenge{}, handshake.ErrInvalidChallenge
 		}
-		return handshake.DesafioGravado{}, err
+		return handshake.StoredChallenge{}, err
 	}
-	return handshake.DesafioGravado{Nonce: row.Nonce, S1: row.S1, ExpiraEm: row.ExpiraEm, RespondidoEm: row.RespondidoEm}, nil
+	return handshake.StoredChallenge{Nonce: row.Nonce, S1: row.S1, ExpiresAt: row.ExpiresAt, AnsweredAt: row.AnsweredAt}, nil
 }
 
-func (r *desafios) Consumir(ctx context.Context, c handshake.Consumo) (time.Time, error) {
+func (r *challenges) Consume(ctx context.Context, c handshake.Consumption) (time.Time, error) {
 	s2, boot, tms, head, tail := c.S2, c.BootID, c.TMs, c.HeadSeq, c.TailSeq
-	s1, err := r.q.ConsumirDesafio(ctx, consultas.ConsumirDesafioParams{S2: &s2, BootID: &boot, TMs: &tms,
+	s1, err := r.q.ConsumeChallenge(ctx, dbgen.ConsumeChallengeParams{S2: &s2, BootID: &boot, TMs: &tms,
 		HeadSeq: &head, TailSeq: &tail, DongleID: c.DongleID, CS: c.CS, Nonce: c.Nonce})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return time.Time{}, handshake.ErrDesafioInvalido
+			return time.Time{}, handshake.ErrInvalidChallenge
 		}
 		return time.Time{}, err
 	}
 	return s1, nil
 }
 
-func (r *desafios) Finalizar(ctx context.Context, f handshake.Finalizacao) error {
-	res := f.Resultado
-	return r.q.FinalizarDesafio(ctx, consultas.FinalizarDesafioParams{Resultado: &res, AckSeq: f.AckSeq,
-		PerdaIni: f.PerdaIni, PerdaFim: f.PerdaFim, TokenJti: f.TokenJTI, TMsDesembrulhado: f.TMsDesembrulhado,
-		GeracaoBoot: f.GeracaoBoot, DongleID: f.DongleID, CS: f.CS})
+func (r *challenges) Finalize(ctx context.Context, f handshake.Finalization) error {
+	res := f.Result
+	return r.q.FinalizeChallenge(ctx, dbgen.FinalizeChallengeParams{Result: &res, AckSeq: f.AckSeq,
+		LossStart: f.LossStart, LossEnd: f.LossEnd, TokenJti: f.TokenJTI, UnwrappedTMs: f.UnwrappedTMs,
+		BootGeneration: f.BootGeneration, DongleID: f.DongleID, CS: f.CS})
 }
 
-func (r *desafios) MarcarTagInvalida(ctx context.Context, dongleID int32, cs int64, nonce []byte) error {
-	return r.q.MarcarTagInvalida(ctx, dongleID, cs, nonce)
+func (r *challenges) MarkInvalidTag(ctx context.Context, dongleID int32, cs int64, nonce []byte) error {
+	return r.q.MarkInvalidTag(ctx, dongleID, cs, nonce)
 }

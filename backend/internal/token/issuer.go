@@ -11,38 +11,38 @@ import (
 
 	"github.com/google/uuid"
 
-	"tccelta/backend/internal/casodeuso/porta"
-	"tccelta/backend/internal/dominio/protocolo"
+	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/usecase/port"
 )
 
 var (
-	ErrTokenInvalido = porta.ErrTokenInvalido
-	ErrTokenExpirado = porta.ErrTokenExpirado
+	ErrInvalidToken = port.ErrInvalidToken
+	ErrTokenExpired = port.ErrTokenExpired
 )
 
-// Emissor monta o JWT e o assina no KMS.
-type Emissor struct {
-	assinador          porta.AssinadorJWT
-	emissor, audiencia string
-	validade           time.Duration
-	relogio            func() time.Time
-	versao             atomic.Int32
+// Issuer monta o JWT e o assina no KMS.
+type Issuer struct {
+	signer           port.JWTSigner
+	issuer, audience string
+	validity         time.Duration
+	clock            func() time.Time
+	version          atomic.Int32
 }
 
-// NovoEmissor cria o emissor.
-func NovoEmissor(a porta.AssinadorJWT, emissor, audiencia string, validade time.Duration) *Emissor {
-	return &Emissor{assinador: a, emissor: emissor, audiencia: audiencia, validade: validade}
+// NewIssuer cria o emissor.
+func NewIssuer(a port.JWTSigner, issuer, audience string, validity time.Duration) *Issuer {
+	return &Issuer{signer: a, issuer: issuer, audience: audience, validity: validity}
 }
 
-// DefinirRelogio troca o relógio (testes).
-func (e *Emissor) DefinirRelogio(f func() time.Time) { e.relogio = f }
+// SetClock troca o relógio (testes).
+func (e *Issuer) SetClock(f func() time.Time) { e.clock = f }
 
-// Validade é a duração dos tokens emitidos.
-func (e *Emissor) Validade() time.Duration { return e.validade }
+// Validity é a duração dos tokens emitidos.
+func (e *Issuer) Validity() time.Duration { return e.validity }
 
-func (e *Emissor) agora() time.Time {
-	if e.relogio != nil {
-		return e.relogio()
+func (e *Issuer) now() time.Time {
+	if e.clock != nil {
+		return e.clock()
 	}
 	return time.Now()
 }
@@ -55,50 +55,50 @@ func seg(v any) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// Emitir monta header.claims em base64url, assina a signing string e devolve o JWT compacto.
+// Issue monta header.claims em base64url, assina a signing string e devolve o JWT compacto.
 // O kid é "jwt-v<versão devolvida pelo Vault>".
-func (e *Emissor) Emitir(ctx context.Context, dev protocolo.DevID, cs uint32) (porta.TokenEmitido, error) {
-	now := e.agora()
+func (e *Issuer) Issue(ctx context.Context, dev protocol.DevID, cs uint32) (port.IssuedToken, error) {
+	now := e.now()
 	jti := uuid.New()
-	exp := now.Add(e.validade)
+	exp := now.Add(e.validity)
 	claims := map[string]any{
-		"iss": e.emissor, "aud": e.audiencia, "sub": dev.Hex(), "jti": jti.String(),
+		"iss": e.issuer, "aud": e.audience, "sub": dev.Hex(), "jti": jti.String(),
 		"iat": now.Unix(), "nbf": now.Unix(), "exp": exp.Unix(), "cs": cs,
 	}
 	cl, err := seg(claims)
 	if err != nil {
-		return porta.TokenEmitido{}, err
+		return port.IssuedToken{}, err
 	}
 	// O kid depende da versão da chave que assina, e o header entra na signing string: usa a última
 	// versão conhecida; se o Vault assinar com outra (rotação), refaz uma vez com a versão certa.
-	versao := int(e.versao.Load())
-	if versao == 0 {
-		ks, err := e.assinador.ChavesPublicas(ctx)
+	version := int(e.version.Load())
+	if version == 0 {
+		ks, err := e.signer.PublicKeys(ctx)
 		if err != nil {
-			return porta.TokenEmitido{}, err
+			return port.IssuedToken{}, err
 		}
 		for k := range ks {
-			if k > versao {
-				versao = k
+			if k > version {
+				version = k
 			}
 		}
 	}
-	for tentativa := 0; tentativa < 2; tentativa++ {
-		hd, err := seg(map[string]any{"alg": "EdDSA", "typ": "JWT", "kid": "jwt-v" + fmt.Sprint(versao)})
+	for attempt := 0; attempt < 2; attempt++ {
+		hd, err := seg(map[string]any{"alg": "EdDSA", "typ": "JWT", "kid": "jwt-v" + fmt.Sprint(version)})
 		if err != nil {
-			return porta.TokenEmitido{}, err
+			return port.IssuedToken{}, err
 		}
-		assinar := hd + "." + cl
-		sig, v, err := e.assinador.Assinar(ctx, []byte(assinar))
+		sign := hd + "." + cl
+		sig, v, err := e.signer.Sign(ctx, []byte(sign))
 		if err != nil {
-			return porta.TokenEmitido{}, err
+			return port.IssuedToken{}, err
 		}
-		e.versao.Store(int32(v))
-		if v != versao {
-			versao = v
+		e.version.Store(int32(v))
+		if v != version {
+			version = v
 			continue
 		}
-		return porta.TokenEmitido{Token: assinar + "." + base64.RawURLEncoding.EncodeToString(sig), JTI: jti, ExpiraEm: exp}, nil
+		return port.IssuedToken{Token: sign + "." + base64.RawURLEncoding.EncodeToString(sig), JTI: jti, ExpiresAt: exp}, nil
 	}
-	return porta.TokenEmitido{}, fmt.Errorf("%w: versão da chave do JWT mudou durante a emissão", porta.ErrKMSIndisponivel)
+	return port.IssuedToken{}, fmt.Errorf("%w: versão da chave do JWT mudou durante a emissão", port.ErrKMSUnavailable)
 }

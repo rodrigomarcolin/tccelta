@@ -1,4 +1,4 @@
-package simulador
+package simulator
 
 import (
 	"encoding/json"
@@ -9,32 +9,32 @@ import (
 	"time"
 )
 
-// Relatorio acumula latências por rota e contagens por status.
-type Relatorio struct {
-	mu      sync.Mutex
-	lat     map[string][]time.Duration
-	Status  map[string]map[int]int
-	Inicio  time.Time
-	Cenario string
-	Params  map[string]any
-	Extras  map[string]any
+// Report acumula latências por rota e contagens por status.
+type Report struct {
+	mu       sync.Mutex
+	lat      map[string][]time.Duration
+	Status   map[string]map[int]int
+	Start    time.Time
+	Scenario string
+	Params   map[string]any
+	Extra    map[string]any
 }
 
-// NovoRelatorio cria o relatório.
-func NovoRelatorio(cenario string, params map[string]any) *Relatorio {
-	return &Relatorio{lat: map[string][]time.Duration{}, Status: map[string]map[int]int{}, Inicio: time.Now(),
-		Cenario: cenario, Params: params, Extras: map[string]any{}}
+// NewReport cria o relatório.
+func NewReport(scenario string, params map[string]any) *Report {
+	return &Report{lat: map[string][]time.Duration{}, Status: map[string]map[int]int{}, Start: time.Now(),
+		Scenario: scenario, Params: params, Extra: map[string]any{}}
 }
 
-// Observar registra uma chamada.
-func (r *Relatorio) Observar(rota string, status int, d time.Duration) {
+// Observe registra uma chamada.
+func (r *Report) Observe(route string, status int, d time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.lat[rota] = append(r.lat[rota], d)
-	if r.Status[rota] == nil {
-		r.Status[rota] = map[int]int{}
+	r.lat[route] = append(r.lat[route], d)
+	if r.Status[route] == nil {
+		r.Status[route] = map[int]int{}
 	}
-	r.Status[rota][status]++
+	r.Status[route][status]++
 }
 
 func pct(v []time.Duration, p float64) float64 {
@@ -47,37 +47,37 @@ func pct(v []time.Duration, p float64) float64 {
 	return float64(s[i].Microseconds()) / 1000
 }
 
-// Resumo devolve o relatório em forma de mapa (JSON).
-func (r *Relatorio) Resumo() map[string]any {
+// Summary devolve o relatório em forma de mapa (JSON).
+func (r *Report) Summary() map[string]any {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	rotas := map[string]any{}
+	routes := map[string]any{}
 	total := 0
 	for k, v := range r.lat {
-		rotas[k] = map[string]any{"n": len(v), "p50_ms": pct(v, .5), "p95_ms": pct(v, .95), "p99_ms": pct(v, .99), "status": r.Status[k]}
+		routes[k] = map[string]any{"n": len(v), "p50_ms": pct(v, .5), "p95_ms": pct(v, .95), "p99_ms": pct(v, .99), "status": r.Status[k]}
 		total += len(v)
 	}
-	dur := time.Since(r.Inicio).Seconds()
-	out := map[string]any{"cenario": r.Cenario, "parametros": r.Params, "duracao_s": dur, "rotas": rotas,
-		"requisicoes_por_s": float64(total) / max(dur, 0.001)}
-	for k, v := range r.Extras {
+	dur := time.Since(r.Start).Seconds()
+	out := map[string]any{"scenario": r.Scenario, "params": r.Params, "duration_s": dur, "routes": routes,
+		"requests_per_s": float64(total) / max(dur, 0.001)}
+	for k, v := range r.Extra {
 		out[k] = v
 	}
 	return out
 }
 
-// Escrever imprime o resumo e grava o JSON.
-func (r *Relatorio) Escrever(arq string) error {
-	b, _ := json.MarshalIndent(r.Resumo(), "", "  ")
+// Write imprime o resumo e grava o JSON.
+func (r *Report) Write(file string) error {
+	b, _ := json.MarshalIndent(r.Summary(), "", "  ")
 	fmt.Println(string(b))
-	if arq == "" {
+	if file == "" {
 		return nil
 	}
-	return os.WriteFile(arq, b, 0o600)
+	return os.WriteFile(file, b, 0o600)
 }
 
 // Cinco_xx conta respostas 5xx.
-func (r *Relatorio) Cinco() int {
+func (r *Report) Count5xx() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	n := 0

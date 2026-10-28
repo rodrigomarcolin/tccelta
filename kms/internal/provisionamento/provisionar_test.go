@@ -138,7 +138,7 @@ func TestImportarCSV(t *testing.T) {
 	}
 }
 
-// registroDourado é o registro.json que o backend (`tccelta provisionar registrar`) deve aceitar;
+// registroDourado é o registro.json que o backend (`tccelta provision register`) deve aceitar;
 // o teste correspondente no backend usa o mesmo texto (contrato em docs/registro-dongle.md).
 const registroDourado = `{
   "schema": "tccelta.dongle.registro.v1",

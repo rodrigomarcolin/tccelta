@@ -13,34 +13,34 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"net/http"
 
-	"tccelta/backend/internal/banco"
-	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/casodeuso/catalogo"
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/dominio/pid"
-	"tccelta/backend/internal/dominio/protocolo"
-	"tccelta/backend/internal/observabilidade/metricas"
-	"tccelta/backend/internal/repositorio/postgres"
-	"tccelta/backend/internal/reprocessamento"
+	"tccelta/backend/internal/database"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/pid"
+	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/observability/metrics"
+	"tccelta/backend/internal/repository/postgres"
+	"tccelta/backend/internal/reprocessing"
+	"tccelta/backend/internal/usecase/catalog"
 	"tccelta/backend/internal/worker"
 )
 
 func cmdWorker(ctx context.Context, args []string) error {
-	if len(args) > 0 && args[0] == "reprocessar" {
-		return cmdReprocessar(ctx, args[1:])
+	if len(args) > 0 && args[0] == "reprocess" {
+		return cmdReprocess(ctx, args[1:])
 	}
-	cfg, err := config.Carregar()
+	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	log := novoLog(cfg)
-	met := metricas.Nova()
-	pool, err := banco.NovoPool(ctx, cfg.Banco, log)
+	log := newLogger(cfg)
+	met := metrics.New()
+	pool, err := database.NewPool(ctx, cfg.Database, log)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	met.RegistrarPool(pool)
+	met.RegisterPool(pool)
 	go func() {
 		addr := os.Getenv("METRICAS_ENDERECO")
 		if addr == "" {
@@ -52,55 +52,55 @@ func cmdWorker(ctx context.Context, args []string) error {
 	}()
 	w := &worker.Worker{Pool: pool, Cfg: cfg.Worker, Log: log, Met: met}
 	log.Info("worker.iniciado")
-	return w.Executar(ctx, cfg.HTTP.SaudeWorker)
+	return w.Run(ctx, cfg.HTTP.WorkerHealth)
 }
 
-func cmdReprocessar(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("reprocessar", flag.ContinueOnError)
+func cmdReprocess(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("reprocess", flag.ContinueOnError)
 	dongle := fs.String("dongle", "", "DevId (16 hex)")
-	desde := fs.Int64("desde-seq", 1, "seq inicial")
-	ate := fs.Int64("ate-seq", 0, "seq final (0 = até o fim)")
-	lote := fs.Int("lote", 200, "blocos por janela")
-	aplicar := fs.Bool("aplicar", false, "aplica (sem isto é só um ensaio)")
+	since := fs.Int64("from-seq", 1, "seq inicial")
+	until := fs.Int64("to-seq", 0, "seq final (0 = até o fim)")
+	batch := fs.Int("batch", 200, "blocos por janela")
+	apply := fs.Bool("apply", false, "aplica (sem isto é só um ensaio)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	dev, err := protocolo.DevIDDeHex(*dongle)
+	dev, err := protocol.DevIDFromHex(*dongle)
 	if err != nil {
 		return fmt.Errorf("--dongle: %w", err)
 	}
-	cfg, _ := config.Carregar()
-	log := novoLog(cfg)
-	pool, err := poolDeEnv(ctx, "ADMIN_", log)
+	cfg, _ := config.Load()
+	log := newLogger(cfg)
+	pool, err := poolFromEnv(ctx, "ADMIN_", log)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	q := consultas.New(pool)
-	d, err := q.BuscarDonglePorDevId(ctx, dev[:])
+	q := dbgen.New(pool)
+	d, err := q.FindDongleByDevID(ctx, dev[:])
 	if err != nil {
 		return fmt.Errorf("dongle não cadastrado: %w", err)
 	}
-	cat := pid.Novo()
-	if err := catalogo.NovoSincronizar(postgres.Repositorios(q).Pids, cat, log).Recarregar(ctx); err != nil {
+	cat := pid.New()
+	if err := catalog.NewSync(postgres.Repositories(q).Pids, cat, log).Reload(ctx); err != nil {
 		return err
 	}
-	r, err := reprocessamento.Reprocessar(ctx, pool, cat, reprocessamento.OpcoesReprocesso{DongleID: d.DongleID, DesdeSeq: *desde, AteSeq: *ate,
-		Lote: int32(*lote), Aplicar: *aplicar, Operador: os.Getenv("USER")}, log, nil)
-	modo := "ENSAIO (nada foi escrito; use --aplicar)"
-	if *aplicar {
-		modo = "APLICADO"
+	r, err := reprocessing.Reprocess(ctx, pool, cat, reprocessing.ReprocessOptions{DongleID: d.DongleID, FromSeq: *since, ToSeq: *until,
+		Batch: int32(*batch), Apply: *apply, Operator: os.Getenv("USER")}, log, nil)
+	mode := "ENSAIO (nada foi escrito; use --apply)"
+	if *apply {
+		mode = "APLICADO"
 	}
-	fmt.Printf("%s: blocos=%d linhas_atuais=%d linhas_novas=%d último_seq=%s\n", modo, r.Blocos, r.LinhasRemovidas, r.LinhasInseridas, strconv.FormatInt(r.UltimoSeq, 10))
+	fmt.Printf("%s: blocos=%d linhas_atuais=%d linhas_novas=%d último_seq=%s\n", mode, r.Blocks, r.RemovedRows, r.InsertedRows, strconv.FormatInt(r.LastSeq, 10))
 	return err
 }
 
-func cmdMigrar(ctx context.Context, args []string) error {
-	cfg, err := config.Carregar()
+func cmdMigrate(ctx context.Context, args []string) error {
+	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	dsn, err := banco.DSN(cfg.Banco)
+	dsn, err := database.DSN(cfg.Database)
 	if err != nil {
 		return err
 	}
@@ -110,27 +110,27 @@ func cmdMigrar(ctx context.Context, args []string) error {
 	}
 	var db *sql.DB = stdlib.OpenDB(*pc)
 	defer db.Close()
-	acao := "up"
+	action := "up"
 	if len(args) > 0 {
-		acao = args[0]
+		action = args[0]
 	}
-	switch acao {
+	switch action {
 	case "up":
-		if err := banco.Migrar(ctx, db); err != nil {
+		if err := database.Migrate(ctx, db); err != nil {
 			return err
 		}
 		fmt.Println("migrations aplicadas")
 	case "down-to":
 		if len(args) < 2 {
-			return fmt.Errorf("uso: migrar down-to N")
+			return fmt.Errorf("uso: migrate down-to N")
 		}
 		n, err := strconv.ParseInt(args[1], 10, 64)
 		if err != nil {
 			return err
 		}
-		return banco.DescerAte(ctx, db, n)
+		return database.DownTo(ctx, db, n)
 	case "status":
-		st, err := banco.Status(ctx, db)
+		st, err := database.Status(ctx, db)
 		if err != nil {
 			return err
 		}
@@ -138,7 +138,7 @@ func cmdMigrar(ctx context.Context, args []string) error {
 			fmt.Printf("%05d %s %s\n", s.Source.Version, s.State, s.Source.Path)
 		}
 	default:
-		return fmt.Errorf("ação desconhecida %q", acao)
+		return fmt.Errorf("ação desconhecida %q", action)
 	}
 	return nil
 }

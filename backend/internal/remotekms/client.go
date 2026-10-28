@@ -1,6 +1,6 @@
-// Package kmsremoto é o adaptador HTTP do serviço KMS: implementa porta.Autenticador e
-// porta.AssinadorJWT chamando os endpoints do contrato em kms/docs/contrato-http.md.
-package kmsremoto
+// Package remotekms é o adaptador HTTP do serviço KMS: implementa port.Authenticator e
+// porta.JWTSigner chamando os endpoints do contrato em kms/docs/contrato-http.md.
+package remotekms
 
 import (
 	"bytes"
@@ -20,36 +20,36 @@ import (
 	"sync"
 	"time"
 
-	"tccelta/backend/internal/casodeuso/porta"
-	"tccelta/backend/internal/observabilidade"
+	"tccelta/backend/internal/observability"
+	"tccelta/backend/internal/usecase/port"
 )
 
-// Opcoes configuram o cliente.
-type Opcoes struct {
-	URL             string
-	CACert          string // PEM da CA que assina o certificado do KMS (mTLS)
-	ClientCert      string
-	ClientKey       string
-	Timeout         time.Duration
-	MaxConcorrencia int
+// Options configuram o cliente.
+type Options struct {
+	URL            string
+	CACert         string // PEM da CA que assina o certificado do KMS (mTLS)
+	ClientCert     string
+	ClientKey      string
+	Timeout        time.Duration
+	MaxConcurrency int
 }
 
-// Cliente chama o serviço KMS por HTTP (keep-alive, HTTP/2 sobre TLS, mTLS opcional).
-type Cliente struct {
+// Client chama o serviço KMS por HTTP (keep-alive, HTTP/2 sobre TLS, mTLS opcional).
+type Client struct {
 	base    string
 	http    *http.Client
 	timeout time.Duration
-	sem     chan struct{}
-	disj    *disjuntor
-	met     porta.MetricasKMS
+	without chan struct{}
+	brk     *breaker
+	met     port.MetricsKMS
 
 	mu          sync.Mutex
-	sondaEm     time.Time
-	sondaResult bool
+	probeAt     time.Time
+	probeResult bool
 }
 
-// Novo cria o cliente. met pode ser nil.
-func Novo(o Opcoes, met porta.MetricasKMS) (*Cliente, error) {
+// New cria o cliente. met pode ser nil.
+func New(o Options, met port.MetricsKMS) (*Client, error) {
 	if o.URL == "" {
 		return nil, errors.New("KMS_URL não definida")
 	}
@@ -79,65 +79,65 @@ func Novo(o Opcoes, met porta.MetricasKMS) (*Cliente, error) {
 	if o.Timeout <= 0 {
 		o.Timeout = 2 * time.Second
 	}
-	n := o.MaxConcorrencia
+	n := o.MaxConcurrency
 	if n <= 0 {
 		n = 32
 	}
-	return &Cliente{base: strings.TrimRight(o.URL, "/"), http: &http.Client{Transport: tr}, timeout: o.Timeout,
-		sem: make(chan struct{}, n), disj: novoDisjuntor(5, 10*time.Second), met: met}, nil
+	return &Client{base: strings.TrimRight(o.URL, "/"), http: &http.Client{Transport: tr}, timeout: o.Timeout,
+		without: make(chan struct{}, n), brk: newBreaker(5, 10*time.Second), met: met}, nil
 }
 
 func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
 
-func indisponivel(formato string, a ...any) error {
-	return fmt.Errorf("%w: %s", porta.ErrKMSIndisponivel, fmt.Sprintf(formato, a...))
+func unavailable(format string, a ...any) error {
+	return fmt.Errorf("%w: %s", port.ErrKMSUnavailable, fmt.Sprintf(format, a...))
 }
 
-// chamar faz uma requisição JSON com semáforo, disjuntor e timeout. Erro de rede, timeout e 5xx/429
-// viram porta.ErrKMSIndisponivel e contam para o disjuntor; 4xx são bug de contrato e voltam como erro comum.
-func (c *Cliente) chamar(ctx context.Context, metodo, caminho string, req, resp any) error {
-	if !c.disj.permitir() {
-		return indisponivel("disjuntor aberto")
+// call faz uma requisição JSON com semáforo, disjuntor e timeout. Erro de rede, timeout e 5xx/429
+// viram porta.ErrKMSUnavailable e contam para o disjuntor; 4xx são bug de contrato e voltam como erro comum.
+func (c *Client) call(ctx context.Context, method, path string, req, resp any) error {
+	if !c.brk.allow() {
+		return unavailable("disjuntor aberto")
 	}
 	select {
-	case c.sem <- struct{}{}:
-		defer func() { <-c.sem }()
+	case c.without <- struct{}{}:
+		defer func() { <-c.without }()
 	case <-ctx.Done():
-		return indisponivel("sem vaga para chamar o KMS: %v", ctx.Err())
+		return unavailable("sem vaga para chamar o KMS: %v", ctx.Err())
 	}
-	var corpo []byte
+	var body []byte
 	if req != nil {
 		var err error
-		if corpo, err = json.Marshal(req); err != nil {
+		if body, err = json.Marshal(req); err != nil {
 			return err
 		}
 	}
 	var err error
-	for tent := 0; tent < 2; tent++ {
-		err = c.uma(ctx, metodo, caminho, corpo, resp)
-		if err == nil || !errors.Is(err, porta.ErrKMSIndisponivel) || ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
+	for attempt := 0; attempt < 2; attempt++ {
+		err = c.once(ctx, method, path, body, resp)
+		if err == nil || !errors.Is(err, port.ErrKMSUnavailable) || ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
 			break
 		}
 	}
 	switch {
 	case err == nil:
-		c.disj.sucesso()
-	case errors.Is(err, porta.ErrKMSIndisponivel):
-		c.disj.falha()
+		c.brk.success()
+	case errors.Is(err, port.ErrKMSUnavailable):
+		c.brk.failure()
 	default:
-		c.disj.sucesso() // o serviço respondeu: está de pé
+		c.brk.success() // o serviço respondeu: está de pé
 	}
 	return err
 }
 
-func (c *Cliente) uma(ctx context.Context, metodo, caminho string, corpo []byte, resp any) error {
+func (c *Client) once(ctx context.Context, method, path string, body []byte, resp any) error {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	var rd io.Reader
-	if corpo != nil {
-		rd = bytes.NewReader(corpo)
+	if body != nil {
+		rd = bytes.NewReader(body)
 	}
-	r, err := http.NewRequestWithContext(ctx, metodo, c.base+caminho, rd)
+	r, err := http.NewRequestWithContext(ctx, method, c.base+path, rd)
 	if err != nil {
 		return err
 	}
@@ -145,28 +145,28 @@ func (c *Cliente) uma(ctx context.Context, metodo, caminho string, corpo []byte,
 	r.Header.Set("Accept", "application/json")
 	res, err := c.http.Do(r)
 	if err != nil {
-		return indisponivel("%v", err)
+		return unavailable("%v", err)
 	}
 	defer res.Body.Close()
-	dados, err := io.ReadAll(io.LimitReader(res.Body, 8<<20))
+	data, err := io.ReadAll(io.LimitReader(res.Body, 8<<20))
 	if err != nil {
-		return indisponivel("%v", err)
+		return unavailable("%v", err)
 	}
 	switch {
 	case res.StatusCode/100 == 2:
-		if err := json.Unmarshal(dados, resp); err != nil {
-			return indisponivel("resposta inválida: %v", err)
+		if err := json.Unmarshal(data, resp); err != nil {
+			return unavailable("resposta inválida: %v", err)
 		}
 		return nil
 	case res.StatusCode >= 500 || res.StatusCode == http.StatusTooManyRequests:
-		return indisponivel("status %d", res.StatusCode)
+		return unavailable("status %d", res.StatusCode)
 	}
-	var p problema
-	_ = json.Unmarshal(dados, &p)
-	return fmt.Errorf("kms: status %d (%s): %s", res.StatusCode, p.Codigo, p.Detail)
+	var p problem
+	_ = json.Unmarshal(data, &p)
+	return fmt.Errorf("kms: status %d (%s): %s", res.StatusCode, p.Code, p.Detail)
 }
 
-func (c *Cliente) observar(ctx context.Context, op string, t0 time.Time, err error) {
+func (c *Client) observe(ctx context.Context, op string, t0 time.Time, err error) {
 	if c.met == nil {
 		return
 	}
@@ -174,103 +174,103 @@ func (c *Cliente) observar(ctx context.Context, op string, t0 time.Time, err err
 	if err != nil {
 		res = "erro"
 	}
-	c.met.ChamadaKMS(op, res, string(observabilidade.FaseKMSDe(ctx)), time.Since(t0))
-	c.met.DisjuntorKMS(c.disj.aberto())
+	c.met.KMSCall(op, res, string(observability.KMSPhaseFrom(ctx)), time.Since(t0))
+	c.met.KMSBreaker(c.brk.open())
 }
 
 // HMACAuth: HMAC-SHA256 completo (32 B) de cada entrada com a chave K_auth de nome `chave`.
-func (c *Cliente) HMACAuth(ctx context.Context, chave string, entradas [][]byte) (out [][]byte, err error) {
+func (c *Client) HMACAuth(ctx context.Context, key string, inputs [][]byte) (out [][]byte, err error) {
 	t0 := time.Now()
-	defer func() { c.observar(ctx, "hmac_auth", t0, err) }()
-	req := reqHMAC{Chave: chave, Entradas: make([]string, len(entradas))}
-	for i, e := range entradas {
-		req.Entradas[i] = b64(e)
+	defer func() { c.observe(ctx, "hmac_auth", t0, err) }()
+	req := reqHMAC{Key: key, Inputs: make([]string, len(inputs))}
+	for i, e := range inputs {
+		req.Inputs[i] = b64(e)
 	}
 	var resp respHMAC
-	if err := c.chamar(ctx, http.MethodPost, "/v1/hmac", req, &resp); err != nil {
+	if err := c.call(ctx, http.MethodPost, "/v1/hmac", req, &resp); err != nil {
 		return nil, err
 	}
-	if len(resp.MACs) != len(entradas) {
-		return nil, indisponivel("macs com tamanho errado")
+	if len(resp.MACs) != len(inputs) {
+		return nil, unavailable("macs com tamanho errado")
 	}
 	out = make([][]byte, len(resp.MACs))
 	for i, m := range resp.MACs {
 		if out[i], err = base64.StdEncoding.DecodeString(m); err != nil || len(out[i]) != 32 {
-			return nil, indisponivel("mac %d inválido", i)
+			return nil, unavailable("mac %d inválido", i)
 		}
 	}
 	return out, nil
 }
 
-// VerificarBlocos: verifica tags de 32 B com a chave K_rec de nome `chave`, numa única chamada.
-func (c *Cliente) VerificarBlocos(ctx context.Context, chave string, entradas, tags [][]byte) (out []bool, err error) {
+// VerifyBlocks: verifica tags de 32 B com a chave K_rec de nome `chave`, numa única chamada.
+func (c *Client) VerifyBlocks(ctx context.Context, key string, inputs, tags [][]byte) (out []bool, err error) {
 	t0 := time.Now()
-	defer func() { c.observar(ctx, "verify_rec", t0, err) }()
-	if len(entradas) != len(tags) {
+	defer func() { c.observe(ctx, "verify_rec", t0, err) }()
+	if len(inputs) != len(tags) {
 		return nil, errors.New("kms: entradas e tags com tamanhos diferentes")
 	}
-	req := reqVerificar{Chave: chave, Entradas: make([]string, len(entradas)), Tags: make([]string, len(tags))}
-	for i := range entradas {
-		req.Entradas[i], req.Tags[i] = b64(entradas[i]), b64(tags[i])
+	req := reqVerify{Key: key, Inputs: make([]string, len(inputs)), Tags: make([]string, len(tags))}
+	for i := range inputs {
+		req.Inputs[i], req.Tags[i] = b64(inputs[i]), b64(tags[i])
 	}
-	var resp respVerificar
-	if err := c.chamar(ctx, http.MethodPost, "/v1/blocos/verificar", req, &resp); err != nil {
+	var resp respVerify
+	if err := c.call(ctx, http.MethodPost, "/v1/blocos/verificar", req, &resp); err != nil {
 		return nil, err
 	}
-	if len(resp.Validos) != len(entradas) {
-		return nil, indisponivel("validos com tamanho errado")
+	if len(resp.Valid) != len(inputs) {
+		return nil, unavailable("validos com tamanho errado")
 	}
-	return resp.Validos, nil
+	return resp.Valid, nil
 }
 
-// Assinar assina a signing string do JWT com a chave Ed25519 do KMS.
-func (c *Cliente) Assinar(ctx context.Context, entrada []byte) (sig []byte, versao int, err error) {
+// Sign assina a signing string do JWT com a chave Ed25519 do KMS.
+func (c *Client) Sign(ctx context.Context, input []byte) (sig []byte, version int, err error) {
 	t0 := time.Now()
-	defer func() { c.observar(ctx, "sign_jwt", t0, err) }()
-	var resp respAssinar
-	if err := c.chamar(ctx, http.MethodPost, "/v1/jwt/assinar", reqAssinar{Entrada: b64(entrada)}, &resp); err != nil {
+	defer func() { c.observe(ctx, "sign_jwt", t0, err) }()
+	var resp respSign
+	if err := c.call(ctx, http.MethodPost, "/v1/jwt/assinar", reqSign{Input: b64(input)}, &resp); err != nil {
 		return nil, 0, err
 	}
-	sig, err = base64.StdEncoding.DecodeString(resp.Assinatura)
-	if err != nil || len(sig) != ed25519.SignatureSize || resp.Versao < 1 {
-		return nil, 0, indisponivel("assinatura inválida")
+	sig, err = base64.StdEncoding.DecodeString(resp.Signature)
+	if err != nil || len(sig) != ed25519.SignatureSize || resp.Version < 1 {
+		return nil, 0, unavailable("assinatura inválida")
 	}
-	return sig, resp.Versao, nil
+	return sig, resp.Version, nil
 }
 
-// ChavesPublicas lê as chaves públicas vigentes do JWT, por versão.
-func (c *Cliente) ChavesPublicas(ctx context.Context) (map[int]ed25519.PublicKey, error) {
-	var resp respChaves
-	if err := c.chamar(ctx, http.MethodGet, "/v1/jwt/chaves", nil, &resp); err != nil {
+// PublicKeys lê as chaves públicas vigentes do JWT, por versão.
+func (c *Client) PublicKeys(ctx context.Context) (map[int]ed25519.PublicKey, error) {
+	var resp respKeys
+	if err := c.call(ctx, http.MethodGet, "/v1/jwt/chaves", nil, &resp); err != nil {
 		return nil, err
 	}
 	out := make(map[int]ed25519.PublicKey, len(resp))
 	for k, v := range resp {
 		n, err := strconv.Atoi(k)
 		if err != nil {
-			return nil, indisponivel("versão %q inválida", k)
+			return nil, unavailable("versão %q inválida", k)
 		}
 		raw, err := base64.StdEncoding.DecodeString(v)
 		if err != nil || len(raw) != ed25519.PublicKeySize {
-			return nil, indisponivel("chave pública v%s inválida", k)
+			return nil, unavailable("chave pública v%s inválida", k)
 		}
 		out[n] = ed25519.PublicKey(raw)
 	}
 	if len(out) == 0 {
-		return nil, indisponivel("nenhuma chave pública")
+		return nil, unavailable("nenhuma chave pública")
 	}
 	return out, nil
 }
 
-// Pronto: disjuntor fechado e o /saude/pronta do KMS respondendo 200 (consulta em cache por 2 s).
-func (c *Cliente) Pronto(ctx context.Context) bool {
-	if c.disj.aberto() {
+// Ready: disjuntor fechado e o /saude/pronta do KMS respondendo 200 (consulta em cache por 2 s).
+func (c *Client) Ready(ctx context.Context) bool {
+	if c.brk.open() {
 		return false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if time.Since(c.sondaEm) < 2*time.Second {
-		return c.sondaResult
+	if time.Since(c.probeAt) < 2*time.Second {
+		return c.probeResult
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
@@ -282,11 +282,11 @@ func (c *Cliente) Pronto(ctx context.Context) bool {
 			ok = res.StatusCode == http.StatusOK
 		}
 	}
-	c.sondaEm, c.sondaResult = time.Now(), ok
+	c.probeAt, c.probeResult = time.Now(), ok
 	return ok
 }
 
 var (
-	_ porta.Autenticador = (*Cliente)(nil)
-	_ porta.AssinadorJWT = (*Cliente)(nil)
+	_ port.Authenticator = (*Client)(nil)
+	_ port.JWTSigner     = (*Client)(nil)
 )

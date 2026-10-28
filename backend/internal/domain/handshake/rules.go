@@ -6,39 +6,39 @@ import (
 	"time"
 )
 
-// Faixa é um intervalo fechado de seq.
-type Faixa struct{ Ini, Fim uint32 }
+// Range é um intervalo fechado de seq.
+type Range struct{ Start, End uint32 }
 
-// Estado é o recorte de dongle_estado usado pelas regras.
-type Estado struct {
-	SeqContiguo, HeadSeq, CConf uint32
-	GeracaoBoot, UltimoBootID   uint16
+// State é o recorte de dongle_state usado pelas regras.
+type State struct {
+	ContiguousSeq, HeadSeq, CConf uint32
+	BootGeneration, LastBootID    uint16
 }
 
 // Erros de regra.
 var (
-	ErrDesafiosPendentes = errors.New("desafios_pendentes")
-	ErrDesafioInvalido   = errors.New("desafio_invalido")
-	ErrCSAntigo          = errors.New("c_s_antigo")
-	ErrTagInvalida       = errors.New("tag_invalida")
-	ErrRespostaInconsist = errors.New("resposta_inconsistente")
+	ErrPendingChallenges    = errors.New("desafios_pendentes")
+	ErrInvalidChallenge     = errors.New("desafio_invalido")
+	ErrStaleCS              = errors.New("c_s_antigo")
+	ErrInvalidTag           = errors.New("tag_invalida")
+	ErrInconsistentResponse = errors.New("resposta_inconsistente")
 )
 
-// AplicarTail aplica a consistência e a regra do TAIL_seq (OVERFLOW).
-func AplicarTail(e Estado, tail, head uint32) (ack uint32, perda *Faixa, err error) {
+// ApplyTail aplica a consistência e a regra do TAIL_seq (OVERFLOW).
+func ApplyTail(e State, tail, head uint32) (ack uint32, loss *Range, err error) {
 	if uint64(tail) > uint64(head)+1 || head < e.HeadSeq {
-		return 0, nil, ErrRespostaInconsist
+		return 0, nil, ErrInconsistentResponse
 	}
-	ack = e.SeqContiguo
+	ack = e.ContiguousSeq
 	if uint64(tail) > uint64(ack)+1 {
-		perda = &Faixa{Ini: ack + 1, Fim: tail - 1}
+		loss = &Range{Start: ack + 1, End: tail - 1}
 		ack = tail - 1
 	}
-	return ack, perda, nil
+	return ack, loss, nil
 }
 
-// AvaliarAncora: âncora só se 0 <= rtt <= max; rtt negativo gera alerta.
-func AvaliarAncora(s1, s2 time.Time, max time.Duration) (ok bool, alertaRelogio bool) {
+// EvaluateAnchor: âncora só se 0 <= rtt <= max; rtt negativo gera alerta.
+func EvaluateAnchor(s1, s2 time.Time, max time.Duration) (ok bool, clockAlert bool) {
 	rtt := s2.Sub(s1)
 	if rtt < 0 {
 		return false, true
@@ -46,18 +46,18 @@ func AvaliarAncora(s1, s2 time.Time, max time.Duration) (ok bool, alertaRelogio 
 	return rtt <= max, false
 }
 
-// GeracaoDoHandshake infere a geração do boot_id sem gravar o estado.
-func GeracaoDoHandshake(e Estado, bootID uint16) uint16 {
-	if bootID == 0 || bootID >= e.UltimoBootID {
-		return e.GeracaoBoot
+// HandshakeGeneration infere a geração do boot_id sem gravar o estado.
+func HandshakeGeneration(e State, bootID uint16) uint16 {
+	if bootID == 0 || bootID >= e.LastBootID {
+		return e.BootGeneration
 	}
-	return e.GeracaoBoot + 1
+	return e.BootGeneration + 1
 }
 
-// TruncarMicro arredonda S1 para baixo no microssegundo; TetoMicro arredonda S2 para cima.
-func TruncarMicro(t time.Time) time.Time { return t.Truncate(time.Microsecond) }
+// TruncateMicro arredonda S1 para baixo no microssegundo; MicroCeiling arredonda S2 para cima.
+func TruncateMicro(t time.Time) time.Time { return t.Truncate(time.Microsecond) }
 
-func TetoMicro(t time.Time) time.Time {
+func MicroCeiling(t time.Time) time.Time {
 	r := t.Truncate(time.Microsecond)
 	if r.Before(t) {
 		r = r.Add(time.Microsecond)

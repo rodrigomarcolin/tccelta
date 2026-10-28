@@ -1,5 +1,5 @@
-// Package tempo contém o algoritmo puro da âncora de tempo por boot (spec 06).
-package tempo
+// Package timeline contém o algoritmo puro da âncora de tempo por boot (spec 06).
+package timeline
 
 import (
 	"fmt"
@@ -7,23 +7,23 @@ import (
 	"sort"
 )
 
-// Desembrulhar escolhe t32 + k*2^32 mais próximo da referência (ref < 0 = sem referência).
-func Desembrulhar(t32 uint32, ref int64) int64 {
-	const volta = int64(1) << 32
+// Unwrap escolhe t32 + k*2^32 mais próximo da referência (ref < 0 = sem referência).
+func Unwrap(t32 uint32, ref int64) int64 {
+	const back = int64(1) << 32
 	if ref < 0 {
 		return int64(t32)
 	}
-	base := ref &^ (volta - 1)
-	melhor := base + int64(t32)
-	for _, c := range []int64{base - volta + int64(t32), base + int64(t32), base + volta + int64(t32)} {
-		if abs64(c-ref) < abs64(melhor-ref) {
-			melhor = c
+	base := ref &^ (back - 1)
+	best := base + int64(t32)
+	for _, c := range []int64{base - back + int64(t32), base + int64(t32), base + back + int64(t32)} {
+		if abs64(c-ref) < abs64(best-ref) {
+			best = c
 		}
 	}
-	if melhor < 0 {
-		melhor = int64(t32)
+	if best < 0 {
+		best = int64(t32)
 	}
-	return melhor
+	return best
 }
 
 func abs64(x int64) int64 {
@@ -33,209 +33,209 @@ func abs64(x int64) int64 {
 	return x
 }
 
-// Ancora é uma medida (t_ms do dongle, S1 e S2 do servidor em ms Unix).
-type Ancora struct {
+// Anchor é uma medida (t_ms do dongle, S1 e S2 do servidor em ms Unix).
+type Anchor struct {
 	TMs        int64
 	S1Ms, S2Ms float64
 }
 
-// Grupo é um conjunto de âncoras próximas com interseção não vazia.
-type Grupo struct {
-	Lo, Hi             float64
-	TCentro            float64
-	TPrimeiro, TUltimo int64
-	N                  int
+// Group é um conjunto de âncoras próximas com interseção não vazia.
+type Group struct {
+	Lo, Hi        float64
+	TCenter       float64
+	FirstT, LastT int64
+	N             int
 }
 
-func (g Grupo) Centro() float64      { return (g.Lo + g.Hi) / 2 }
-func (g Grupo) MeiaLargura() float64 { return (g.Hi - g.Lo) / 2 }
+func (g Group) Center() float64    { return (g.Lo + g.Hi) / 2 }
+func (g Group) HalfWidth() float64 { return (g.Hi - g.Lo) / 2 }
 
-// Alerta é um alerta operacional gerado pelo algoritmo.
-type Alerta struct {
-	Tipo    string
-	Detalhe map[string]any
+// Alert é um alerta operacional gerado pelo algoritmo.
+type Alert struct {
+	Type   string
+	Detail map[string]any
 }
 
-// Estimativa é o resultado: hora_real(t) = AMs + (1+B)*t.
-type Estimativa struct {
-	AMs             float64
-	B               float64
-	IncertezaBaseMs int
-	Origem          string // "ancoras" | "vizinhos" | ""
-	Grupos          []Grupo
-	Alertas         []Alerta
+// Estimate é o resultado: hora_real(t) = AMs + (1+B)*t.
+type Estimate struct {
+	AMs               float64
+	B                 float64
+	BaseUncertaintyMs int
+	Source            string // "anchors" | "neighbors" | ""
+	Groups            []Group
+	Alerts            []Alert
 }
 
 // Config são os parâmetros do algoritmo.
 type Config struct {
-	JanelaGrupoMs    float64
-	DerivaMaxPPM     float64
-	MeiaLarguraMinMs float64
-	SpanMinMs        float64
+	GroupWindowMs  float64
+	MaxDriftPPM    float64
+	MinHalfWidthMs float64
+	SpanMinMs      float64
 }
 
-// ConfigPadrao: 10 min, 40 ppm, 0,5 ms, 1 h.
-func ConfigPadrao() Config {
-	return Config{JanelaGrupoMs: 600000, DerivaMaxPPM: 40, MeiaLarguraMinMs: 0.5, SpanMinMs: 3600000}
+// DefaultConfig: 10 min, 40 ppm, 0,5 ms, 1 h.
+func DefaultConfig() Config {
+	return Config{GroupWindowMs: 600000, MaxDriftPPM: 40, MinHalfWidthMs: 0.5, SpanMinMs: 3600000}
 }
 
-// AgruparAncoras forma os grupos (janela contada da primeira âncora do grupo).
-func AgruparAncoras(a []Ancora, c Config) ([]Grupo, []Alerta) {
+// GroupAnchors forma os grupos (janela contada da primeira âncora do grupo).
+func GroupAnchors(a []Anchor, c Config) ([]Group, []Alert) {
 	if len(a) == 0 {
 		return nil, nil
 	}
-	a = append([]Ancora(nil), a...)
+	a = append([]Anchor(nil), a...)
 	sort.Slice(a, func(i, j int) bool { return a[i].TMs < a[j].TMs })
-	var grupos []Grupo
-	var alertas []Alerta
-	var soma float64
-	var cur Grupo
-	abrir := func(x Ancora) {
-		cur = Grupo{Lo: x.S1Ms - float64(x.TMs), Hi: x.S2Ms - float64(x.TMs), TPrimeiro: x.TMs, TUltimo: x.TMs, N: 1}
-		soma = float64(x.TMs)
+	var groups []Group
+	var alerts []Alert
+	var sum float64
+	var cur Group
+	open := func(x Anchor) {
+		cur = Group{Lo: x.S1Ms - float64(x.TMs), Hi: x.S2Ms - float64(x.TMs), FirstT: x.TMs, LastT: x.TMs, N: 1}
+		sum = float64(x.TMs)
 	}
-	fechar := func() {
-		cur.TCentro = soma / float64(cur.N)
-		grupos = append(grupos, cur)
+	close := func() {
+		cur.TCenter = sum / float64(cur.N)
+		groups = append(groups, cur)
 	}
-	abrir(a[0])
+	open(a[0])
 	for _, x := range a[1:] {
 		lo, hi := x.S1Ms-float64(x.TMs), x.S2Ms-float64(x.TMs)
-		if float64(x.TMs-cur.TPrimeiro) >= c.JanelaGrupoMs {
-			fechar()
-			abrir(x)
+		if float64(x.TMs-cur.FirstT) >= c.GroupWindowMs {
+			close()
+			open(x)
 			continue
 		}
 		nlo, nhi := math.Max(cur.Lo, lo), math.Min(cur.Hi, hi)
 		if nlo > nhi {
-			alertas = append(alertas, Alerta{"intersecao_vazia", map[string]any{
-				"t_ms_a": cur.TUltimo, "t_ms_b": x.TMs, "diferenca_ms": nlo - nhi}})
-			fechar()
-			abrir(x)
+			alerts = append(alerts, Alert{"empty_intersection", map[string]any{
+				"t_ms_a": cur.LastT, "t_ms_b": x.TMs, "difference_ms": nlo - nhi}})
+			close()
+			open(x)
 			continue
 		}
 		cur.Lo, cur.Hi = nlo, nhi
-		cur.TUltimo = x.TMs
+		cur.LastT = x.TMs
 		cur.N++
-		soma += float64(x.TMs)
+		sum += float64(x.TMs)
 	}
-	fechar()
-	return grupos, alertas
+	close()
+	return groups, alerts
 }
 
-// AjustarReta devolve (a, b, sigmaB, usouReta). Com um grupo, ou grupos próximos/ruidosos, b = 0.
-func ajustar(g []Grupo, c Config) (a, b, sigma float64) {
+// FitLine devolve (a, b, sigmaB, usouReta). Com um grupo, ou grupos próximos/ruidosos, b = 0.
+func adjust(g []Group, c Config) (a, b, sigma float64) {
 	if len(g) == 1 {
-		return g[0].Centro(), 0, 0
+		return g[0].Center(), 0, 0
 	}
-	w := func(x Grupo) float64 { h := math.Max(x.MeiaLargura(), c.MeiaLarguraMinMs); return 1 / (h * h) }
+	w := func(x Group) float64 { h := math.Max(x.HalfWidth(), c.MinHalfWidthMs); return 1 / (h * h) }
 	var S, Sx, Sy float64
 	for _, x := range g {
 		S += w(x)
-		Sx += w(x) * x.TCentro
-		Sy += w(x) * x.Centro()
+		Sx += w(x) * x.TCenter
+		Sy += w(x) * x.Center()
 	}
-	xm, y0 := Sx/S, g[0].Centro()
+	xm, y0 := Sx/S, g[0].Center()
 	var Sxx, Sxy float64
 	for _, x := range g {
-		dx, dy := x.TCentro-xm, x.Centro()-y0
+		dx, dy := x.TCenter-xm, x.Center()-y0
 		Sxx += w(x) * dx * dx
 		Sxy += w(x) * dx * dy
 	}
-	mediaY := Sy / S
+	meanY := Sy / S
 	if Sxx < 1e-9 {
-		return mediaY, 0, 0
+		return meanY, 0, 0
 	}
 	b = Sxy / Sxx
 	sigma = math.Sqrt(1 / Sxx)
-	span := g[len(g)-1].TCentro - g[0].TCentro
+	span := g[len(g)-1].TCenter - g[0].TCenter
 	if span < c.SpanMinMs || math.Abs(b) <= sigma {
-		return mediaY, 0, sigma
+		return meanY, 0, sigma
 	}
-	// o(t) = y0' + b (t - xm) ; a = mediaY - b*xm
-	return mediaY - b*xm, b, sigma
+	// o(t) = y0' + b (t - xm) ; a = meanY - b*xm
+	return meanY - b*xm, b, sigma
 }
 
-// AjustarReta expõe (a, b) do ajuste.
-func AjustarReta(g []Grupo, c Config) (a, b float64) {
-	a, b, _ = ajustar(g, c)
+// FitLine expõe (a, b) do ajuste.
+func FitLine(g []Group, c Config) (a, b float64) {
+	a, b, _ = adjust(g, c)
 	return
 }
 
-// EstimarPorAncoras agrupa, ajusta a reta e gera alertas.
-func EstimarPorAncoras(an []Ancora, c Config) Estimativa {
-	g, al := AgruparAncoras(an, c)
+// EstimateFromAnchors agrupa, ajusta a reta e gera alertas.
+func EstimateFromAnchors(an []Anchor, c Config) Estimate {
+	g, al := GroupAnchors(an, c)
 	if len(g) == 0 {
-		return Estimativa{}
+		return Estimate{}
 	}
-	a, b, sigma := ajustar(g, c)
-	minMeia := math.Inf(1)
+	a, b, sigma := adjust(g, c)
+	minHalf := math.Inf(1)
 	for _, x := range g {
-		minMeia = math.Min(minMeia, x.MeiaLargura())
+		minHalf = math.Min(minHalf, x.HalfWidth())
 	}
-	if math.Abs(b)-2*sigma > c.DerivaMaxPPM*1e-6 {
-		al = append(al, Alerta{"deriva_excessiva", map[string]any{"b_ppm": b * 1e6, "sigma_b_ppm": sigma * 1e6}})
+	if math.Abs(b)-2*sigma > c.MaxDriftPPM*1e-6 {
+		al = append(al, Alert{"excessive_drift", map[string]any{"b_ppm": b * 1e6, "sigma_b_ppm": sigma * 1e6}})
 	}
-	return Estimativa{AMs: a, B: b, IncertezaBaseMs: int(math.Ceil(minMeia)), Origem: "ancoras", Grupos: g, Alertas: al}
+	return Estimate{AMs: a, B: b, BaseUncertaintyMs: int(math.Ceil(minHalf)), Source: "anchors", Groups: g, Alerts: al}
 }
 
-// ReferenciaVizinho descreve um boot ancorado vizinho.
-type ReferenciaVizinho struct {
-	AMs, B                 float64
-	IncertezaBaseMs        int
-	TMsPrimeiro, TMsUltimo int64
+// NeighborReference descreve um boot ancorado vizinho.
+type NeighborReference struct {
+	AMs, B            float64
+	BaseUncertaintyMs int
+	FirstTMs, LastTMs int64
 }
 
-// FaixaBoot é a faixa de t_ms do boot sem âncora.
-type FaixaBoot struct{ TMsPrimeiro, TMsUltimo int64 }
+// BootRange é a faixa de t_ms do boot sem âncora.
+type BootRange struct{ FirstTMs, LastTMs int64 }
 
-// EstimarPorVizinhos usa os boots ancorados mais próximos e o limite pelo recebimento.
-func EstimarPorVizinhos(ant, prox *ReferenciaVizinho, f FaixaBoot, deslocMaxMs *float64, c Config) Estimativa {
-	if ant == nil {
-		return Estimativa{}
+// EstimateFromNeighbors usa os boots ancorados mais próximos e o limite pelo recebimento.
+func EstimateFromNeighbors(prev, next *NeighborReference, f BootRange, maxOffsetMs *float64, c Config) Estimate {
+	if prev == nil {
+		return Estimate{}
 	}
-	ppm := c.DerivaMaxPPM * 1e-6
-	tFim := ant.AMs + (1+ant.B)*float64(ant.TMsUltimo)
-	uP := float64(ant.IncertezaBaseMs) + ppm*float64(ant.TMsUltimo-ant.TMsPrimeiro)
-	lo := (tFim - uP) - float64(f.TMsPrimeiro)
+	ppm := c.MaxDriftPPM * 1e-6
+	tEnd := prev.AMs + (1+prev.B)*float64(prev.LastTMs)
+	uP := float64(prev.BaseUncertaintyMs) + ppm*float64(prev.LastTMs-prev.FirstTMs)
+	lo := (tEnd - uP) - float64(f.FirstTMs)
 	hi := math.Inf(1)
-	if prox != nil {
-		tIni := prox.AMs + (1+prox.B)*float64(prox.TMsPrimeiro)
-		uN := float64(prox.IncertezaBaseMs) + ppm*float64(prox.TMsUltimo-prox.TMsPrimeiro)
-		hi = (tIni + uN) - float64(f.TMsUltimo)
+	if next != nil {
+		tStart := next.AMs + (1+next.B)*float64(next.FirstTMs)
+		uN := float64(next.BaseUncertaintyMs) + ppm*float64(next.LastTMs-next.FirstTMs)
+		hi = (tStart + uN) - float64(f.LastTMs)
 	}
-	if deslocMaxMs != nil {
-		hi = math.Min(hi, *deslocMaxMs)
+	if maxOffsetMs != nil {
+		hi = math.Min(hi, *maxOffsetMs)
 	}
 	if math.IsInf(hi, 1) {
-		return Estimativa{}
+		return Estimate{}
 	}
 	if lo > hi {
-		return Estimativa{Alertas: []Alerta{{"intersecao_vazia", map[string]any{"lo_ms": lo, "hi_ms": hi, "origem": "vizinhos"}}}}
+		return Estimate{Alerts: []Alert{{"empty_intersection", map[string]any{"lo_ms": lo, "hi_ms": hi, "source": "neighbors"}}}}
 	}
-	return Estimativa{AMs: (lo + hi) / 2, B: 0, IncertezaBaseMs: int(math.Ceil((hi - lo) / 2)), Origem: "vizinhos"}
+	return Estimate{AMs: (lo + hi) / 2, B: 0, BaseUncertaintyMs: int(math.Ceil((hi - lo) / 2)), Source: "neighbors"}
 }
 
-// Incerteza de uma leitura: meia largura do grupo mais próximo + deriva máxima * distância ao centro.
-func Incerteza(t int64, grupos []Grupo, c Config) float64 {
-	if len(grupos) == 0 {
+// Uncertainty de uma leitura: meia largura do grupo mais próximo + deriva máxima * distância ao centro.
+func Uncertainty(t int64, groups []Group, c Config) float64 {
+	if len(groups) == 0 {
 		return math.Inf(1)
 	}
-	melhor := grupos[0]
-	for _, g := range grupos[1:] {
-		if math.Abs(float64(t)-g.TCentro) < math.Abs(float64(t)-melhor.TCentro) {
-			melhor = g
+	best := groups[0]
+	for _, g := range groups[1:] {
+		if math.Abs(float64(t)-g.TCenter) < math.Abs(float64(t)-best.TCenter) {
+			best = g
 		}
 	}
-	return melhor.MeiaLargura() + c.DerivaMaxPPM*1e-6*math.Abs(float64(t)-melhor.TCentro)
+	return best.HalfWidth() + c.MaxDriftPPM*1e-6*math.Abs(float64(t)-best.TCenter)
 }
 
-func (e Estimativa) String() string {
-	return fmt.Sprintf("{%s a=%.1f b=%.2fppm u=%dms grupos=%d}", e.Origem, e.AMs, e.B*1e6, e.IncertezaBaseMs, len(e.Grupos))
+func (e Estimate) String() string {
+	return fmt.Sprintf("{%s a=%.1f b=%.2fppm u=%dms grupos=%d}", e.Source, e.AMs, e.B*1e6, e.BaseUncertaintyMs, len(e.Groups))
 }
 
 // RefBoot é a referência de t_ms (o último t_ms conhecido) de um boot.
 type RefBoot struct {
-	Geracao, BootID int32
-	TMsUltimo       int64
+	Generation, BootID int32
+	LastTMs            int64
 }

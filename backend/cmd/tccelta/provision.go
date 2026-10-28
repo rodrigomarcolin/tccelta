@@ -10,55 +10,55 @@ import (
 	"strings"
 
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/provisionamento"
-	"tccelta/backend/internal/simulador"
+	"tccelta/backend/internal/provisioning"
+	"tccelta/backend/internal/simulator"
 )
 
-// cmdProvisionar cadastra no banco os dongles que o serviço KMS provisionou (`tccelta-kms provisionar`).
+// cmdProvision cadastra no banco os dongles que o serviço KMS provisionou (`tccelta-kms provisionar`).
 // A parte do Vault não existe mais aqui: o contrato entre as duas pontas é o arquivo registro.json.
-func cmdProvisionar(ctx context.Context, args []string) error {
-	if len(args) == 0 || args[0] != "registrar" {
-		return fmt.Errorf("uso: provisionar registrar --arquivo registro.json|diretório")
+func cmdProvision(ctx context.Context, args []string) error {
+	if len(args) == 0 || args[0] != "register" {
+		return fmt.Errorf("uso: provision register --file registro.json|diretório")
 	}
-	fs := flag.NewFlagSet("registrar", flag.ContinueOnError)
-	arq := fs.String("arquivo", "", "registro.json, ou diretório com subpastas <devid>/registro.json")
+	fs := flag.NewFlagSet("register", flag.ContinueOnError)
+	file := fs.String("file", "", "registro.json, ou diretório com subpastas <devid>/registro.json")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if *arq == "" {
-		return fmt.Errorf("informe --arquivo")
+	if *file == "" {
+		return fmt.Errorf("informe --file")
 	}
-	cfg, err := config.Carregar()
+	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	log := novoLog(cfg)
-	arquivos, err := provisionamento.ArquivosRegistro(*arq)
+	log := newLogger(cfg)
+	files, err := provisioning.RecordFiles(*file)
 	if err != nil {
 		return err
 	}
-	if len(arquivos) == 0 {
-		return fmt.Errorf("nenhum registro.json em %s", *arq)
+	if len(files) == 0 {
+		return fmt.Errorf("nenhum registro.json em %s", *file)
 	}
-	regs := make([]provisionamento.Registro, 0, len(arquivos))
-	for _, a := range arquivos { // valida tudo antes de tocar no banco
-		r, err := provisionamento.LerRegistro(a)
+	regs := make([]provisioning.Record, 0, len(files))
+	for _, a := range files { // valida tudo antes de tocar no banco
+		r, err := provisioning.ReadRecord(a)
 		if err != nil {
 			return err
 		}
 		regs = append(regs, r)
 	}
-	pool, err := poolDeEnv(ctx, "", log)
+	pool, err := poolFromEnv(ctx, "", log)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 	for _, r := range regs {
-		criado, err := provisionamento.Registrar(ctx, pool, r, log)
+		created, err := provisioning.Register(ctx, pool, r, log)
 		if err != nil {
 			return fmt.Errorf("dongle %s: %w", r.DevID, err)
 		}
-		if criado {
+		if created {
 			fmt.Printf("dongle %s cadastrado\n", r.DevID)
 		} else {
 			fmt.Printf("dongle %s já estava cadastrado\n", r.DevID)
@@ -67,9 +67,9 @@ func cmdProvisionar(ctx context.Context, args []string) error {
 	return nil
 }
 
-// lerCSVChaves lê dev_id_hex,k_auth_hex,k_rec_hex,perfil (dongles de teste do simulador).
-func lerCSVChaves(arq string) ([]simulador.Chaves, error) {
-	f, err := os.Open(arq)
+// readKeysCSV lê dev_id_hex,k_auth_hex,k_rec_hex,perfil (dongles de teste do simulador).
+func readKeysCSV(file string) ([]simulator.Keys, error) {
+	f, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
@@ -81,9 +81,9 @@ func lerCSVChaves(arq string) ([]simulador.Chaves, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []simulador.Chaves
+	var out []simulator.Keys
 	for _, r := range recs {
-		var c simulador.Chaves
+		var c simulator.Keys
 		dev, e1 := hex.DecodeString(strings.TrimSpace(r[0]))
 		ka, e2 := hex.DecodeString(strings.TrimSpace(r[1]))
 		kr, e3 := hex.DecodeString(strings.TrimSpace(r[2]))

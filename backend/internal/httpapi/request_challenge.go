@@ -7,43 +7,43 @@ import (
 	"net/http"
 	"time"
 
-	"tccelta/backend/internal/casodeuso/handshake"
-	dhs "tccelta/backend/internal/dominio/handshake"
-	"tccelta/backend/internal/dominio/protocolo"
+	dhs "tccelta/backend/internal/domain/handshake"
+	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/usecase/handshake"
 )
 
-type saidaDesafio struct {
-	Desafio  string    `json:"desafio"`
-	ExpiraEm time.Time `json:"expira_em"`
+type challengeOutput struct {
+	Challenge string    `json:"desafio"`
+	ExpiresAt time.Time `json:"expira_em"`
 }
 
-// devDoCaminho lê {id} (DevId hex); responde 400 se for inválido.
-func devDoCaminho(w http.ResponseWriter, r *http.Request) (protocolo.DevID, bool) {
-	dev, err := protocolo.DevIDDeHex(r.PathValue("id"))
+// devFromPath lê {id} (DevId hex); responde 400 se for inválido.
+func devFromPath(w http.ResponseWriter, r *http.Request) (protocol.DevID, bool) {
+	dev, err := protocol.DevIDFromHex(r.PathValue("id"))
 	if err != nil {
-		problema(w, 400, "devid_invalido", "DevId deve ter 16 dígitos hexadecimais", 0)
-		return protocolo.DevID{}, false
+		problem(w, 400, "devid_invalido", "DevId deve ter 16 dígitos hexadecimais", 0)
+		return protocol.DevID{}, false
 	}
 	return dev, true
 }
 
-// pedirDesafio: POST /v1/dongles/{id}/desafio.
-func (d *Deps) pedirDesafio(w http.ResponseWriter, r *http.Request) {
-	dev, ok := devDoCaminho(w, r)
+// requestChallenge: POST /v1/dongles/{id}/desafio.
+func (d *Deps) requestChallenge(w http.ResponseWriter, r *http.Request) {
+	dev, ok := devFromPath(w, r)
 	if !ok {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 0)
-	out, err := d.PedirDesafio.Executar(r.Context(), handshake.EmitirDesafioEntrada{DevID: dev})
+	out, err := d.RequestChallenge.Run(r.Context(), handshake.IssueChallengeInput{DevID: dev})
 	if err != nil {
-		if errors.Is(err, dhs.ErrDesafiosPendentes) {
-			problema(w, 429, "desafios_pendentes", "há desafios pendentes demais", out.RetryAfter)
+		if errors.Is(err, dhs.ErrPendingChallenges) {
+			problem(w, 429, "desafios_pendentes", "há desafios pendentes demais", out.RetryAfter)
 			return
 		}
-		d.erro(w, err)
+		d.err(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(saidaDesafio{Desafio: base64.StdEncoding.EncodeToString(out.TLV), ExpiraEm: out.ExpiraEm.UTC()})
+	_ = json.NewEncoder(w).Encode(challengeOutput{Challenge: base64.StdEncoding.EncodeToString(out.TLV), ExpiresAt: out.ExpiresAt.UTC()})
 }

@@ -34,7 +34,7 @@ services:
     volumes:
       - banco_dados:/home/postgres/pgdata
       # Monta SO o arquivo, com nome que ordena depois dos scripts de init da propria imagem.
-      - ./deploy/postgres/init/00-papeis.sh:/docker-entrypoint-initdb.d/900-papeis.sh:ro
+      - ./deploy/postgres/init/00-roles.sh:/docker-entrypoint-initdb.d/900-roles.sh:ro
     command: ["postgres", "-c", "shared_preload_libraries=timescaledb",
               "-c", "max_connections=200", "-c", "log_min_duration_statement=500ms",
               "-c", "timescaledb.telemetry_level=off"]
@@ -85,9 +85,9 @@ services:
 
   migrar:
     <<: *backend
-    command: ["migrar"]
+    command: ["migrate"]
     environment:
-      BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
+      BANCO_URL: postgres://tccelta_owner@banco:5432/tccelta?sslmode=disable
       BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
     secrets: [pg_senha_dono]
     depends_on: { banco: { condition: service_healthy } }
@@ -112,7 +112,7 @@ services:
       kms: { condition: service_healthy }
       redis: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "/tccelta", "saude", "--url", "http://127.0.0.1:8080/saude/pronta"]
+      test: ["CMD", "/tccelta", "health", "--url", "http://127.0.0.1:8080/saude/pronta"]
       interval: 10s
       timeout: 3s
       retries: 6
@@ -154,7 +154,7 @@ services:
     secrets: [pg_senha_worker]
     depends_on: { migrar: { condition: service_completed_successfully } }
     healthcheck:
-      test: ["CMD", "/tccelta", "saude", "--url", "http://127.0.0.1:8090/saude/viva"]
+      test: ["CMD", "/tccelta", "health", "--url", "http://127.0.0.1:8090/saude/viva"]
       interval: 15s
       timeout: 3s
       retries: 4
@@ -229,14 +229,14 @@ services:
     build: { context: ., dockerfile: Dockerfile, target: ferramentas }
     profiles: [ferramentas]
     entrypoint: ["/tccelta"]
-    command: ["ajuda"]
+    command: ["help"]
     read_only: false
     environment:
-      BANCO_URL: postgres://tccelta_provisionador@banco:5432/tccelta?sslmode=disable
+      BANCO_URL: postgres://tccelta_provisioner@banco:5432/tccelta?sslmode=disable
       BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_provisionador
-      SIM_BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
+      SIM_BANCO_URL: postgres://tccelta_owner@banco:5432/tccelta?sslmode=disable
       SIM_BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
-      ADMIN_BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
+      ADMIN_BANCO_URL: postgres://tccelta_owner@banco:5432/tccelta?sslmode=disable
       ADMIN_BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
     secrets: [pg_senha_provisionador, pg_senha_dono]
     volumes:
@@ -245,7 +245,7 @@ services:
     networks: [borda, dados]
 
   # Provisionamento do lado do Vault (`tccelta-kms provisionar ...`): grava os registro.json em ./saida,
-  # que `ferramentas` (tccelta provisionar registrar) cadastra no banco.
+  # que `ferramentas` (tccelta provision register) cadastra no banco.
   kms-ferramentas:
     <<: *kms
     image: tccelta-kms-ferramentas:local
@@ -269,7 +269,7 @@ services:
     image: prom/prometheus:v2.55.1
     profiles: [observabilidade]
     volumes:
-      - ./deploy/observabilidade/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_dados:/prometheus
     ports: ["127.0.0.1:9099:9090"]
     networks: [borda, dados, kms]

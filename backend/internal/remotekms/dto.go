@@ -1,40 +1,40 @@
-package kmsremoto
+package remotekms
 
 // DTOs do contrato HTTP com o serviço KMS (kms/docs/contrato-http.md). Duplicados de propósito: a API
 // não importa nada do módulo kms, a única ligação entre os dois é este contrato.
 
 type reqHMAC struct {
-	Chave    string   `json:"chave"`
-	Entradas []string `json:"entradas"` // base64 padrão
+	Key    string   `json:"chave"`
+	Inputs []string `json:"entradas"` // base64 padrão
 }
 
 type respHMAC struct {
 	MACs []string `json:"macs"` // base64 padrão, HMAC-SHA256 completo (32 B)
 }
 
-type reqVerificar struct {
-	Chave    string   `json:"chave"`
-	Entradas []string `json:"entradas"`
-	Tags     []string `json:"tags"`
+type reqVerify struct {
+	Key    string   `json:"chave"`
+	Inputs []string `json:"entradas"`
+	Tags   []string `json:"tags"`
 }
 
-type respVerificar struct {
-	Validos []bool `json:"validos"`
+type respVerify struct {
+	Valid []bool `json:"validos"`
 }
 
-type reqAssinar struct {
-	Entrada string `json:"entrada"` // base64 padrão
+type reqSign struct {
+	Input string `json:"entrada"` // base64 padrão
 }
 
-type respAssinar struct {
-	Assinatura string `json:"assinatura"` // base64 padrão, 64 B
-	Versao     int    `json:"versao"`
+type respSign struct {
+	Signature string `json:"assinatura"` // base64 padrão, 64 B
+	Version   int    `json:"versao"`
 }
 
-// respChaves: versão da chave -> chave pública Ed25519 em base64 padrão.
-type respChaves map[string]string
+// respKeys: versão da chave -> chave pública Ed25519 em base64 padrão.
+type respKeys map[string]string
 
-type problema struct {
-	Codigo string `json:"codigo"`
+type problem struct {
+	Code   string `json:"codigo"`
 	Detail string `json:"detail"`
 }

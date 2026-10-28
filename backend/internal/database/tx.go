@@ -1,4 +1,4 @@
-package banco
+package database
 
 import (
 	"context"
@@ -10,20 +10,20 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/repositorio"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/repository"
 )
 
-// ErrBancoOcupado: lock_timeout, deadlock ou falha de serialização persistente (-> 503).
-var ErrBancoOcupado = repositorio.ErrBancoOcupado
+// ErrDatabaseBusy: lock_timeout, deadlock ou falha de serialização persistente (-> 503).
+var ErrDatabaseBusy = repository.ErrDatabaseBusy
 
-// OpcoesTx são os timeouts locais da transação.
-type OpcoesTx struct{ LockTimeout, StatementTimeout time.Duration }
+// TxOptions são os timeouts locais da transação.
+type TxOptions struct{ LockTimeout, StatementTimeout time.Duration }
 
-// OpcoesPadrao: lock_timeout 3 s, statement_timeout 10 s.
-var OpcoesPadrao = OpcoesTx{LockTimeout: 3 * time.Second, StatementTimeout: 10 * time.Second}
+// DefaultOptions: lock_timeout 3 s, statement_timeout 10 s.
+var DefaultOptions = TxOptions{LockTimeout: 3 * time.Second, StatementTimeout: 10 * time.Second}
 
-func codigo(err error) string {
+func code(err error) string {
 	var pe *pgconn.PgError
 	if errors.As(err, &pe) {
 		return pe.Code
@@ -31,28 +31,28 @@ func codigo(err error) string {
 	return ""
 }
 
-// EmTransacao abre uma transação READ COMMITTED, aplica SET LOCAL dos timeouts, executa fn e faz
-// commit/rollback. 55P03 vira ErrBancoOcupado; 40P01 e 40001 repetem fn uma vez.
-func EmTransacao(ctx context.Context, pool *pgxpool.Pool, o OpcoesTx,
-	fn func(ctx context.Context, q *consultas.Queries, tx pgx.Tx) error) error {
+// InTransaction abre uma transação READ COMMITTED, aplica SET LOCAL dos timeouts, executa fn e faz
+// commit/rollback. 55P03 vira ErrDatabaseBusy; 40P01 e 40001 repetem fn uma vez.
+func InTransaction(ctx context.Context, pool *pgxpool.Pool, o TxOptions,
+	fn func(ctx context.Context, q *dbgen.Queries, tx pgx.Tx) error) error {
 	var err error
-	for tentativa := 0; tentativa < 2; tentativa++ {
-		err = umaTransacao(ctx, pool, o, fn)
-		switch codigo(err) {
+	for attempt := 0; attempt < 2; attempt++ {
+		err = oneTransaction(ctx, pool, o, fn)
+		switch code(err) {
 		case "40P01", "40001":
 			continue
 		}
 		break
 	}
-	switch codigo(err) {
+	switch code(err) {
 	case "55P03", "40P01", "40001", "57014":
-		return fmt.Errorf("%w: %v", ErrBancoOcupado, err)
+		return fmt.Errorf("%w: %v", ErrDatabaseBusy, err)
 	}
 	return err
 }
 
-func umaTransacao(ctx context.Context, pool *pgxpool.Pool, o OpcoesTx,
-	fn func(ctx context.Context, q *consultas.Queries, tx pgx.Tx) error) error {
+func oneTransaction(ctx context.Context, pool *pgxpool.Pool, o TxOptions,
+	fn func(ctx context.Context, q *dbgen.Queries, tx pgx.Tx) error) error {
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
@@ -68,7 +68,7 @@ func umaTransacao(ctx context.Context, pool *pgxpool.Pool, o OpcoesTx,
 			return err
 		}
 	}
-	if err := fn(ctx, consultas.New(tx), tx); err != nil {
+	if err := fn(ctx, dbgen.New(tx), tx); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
