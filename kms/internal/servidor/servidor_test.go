@@ -300,7 +300,7 @@ func TestMTLS(t *testing.T) {
 	raiz := x509.NewCertPool()
 	raiz.AppendCertsFromPEM(p.caPEM)
 	cliente := func(certs ...tls.Certificate) *http.Client {
-		return &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: raiz, Certificates: certs}}}
+		return &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: raiz, Certificates: certs}}}
 	}
 	corpo, _ := json.Marshal(map[string]any{"chave": "0011223344556677", "entradas": []string{b("a")}})
 

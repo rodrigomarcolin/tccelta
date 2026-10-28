@@ -87,7 +87,7 @@ func NovoCliente(ctx context.Context, cfg config.VaultConfig, log *slog.Logger) 
 	}
 	c.pronto.Store(true)
 	if cfg.TokenArquivo == "" {
-		lc, cancel := context.WithCancel(context.Background())
+		lc, cancel := context.WithCancel(context.WithoutCancel(ctx))
 		c.parar = cancel
 		go c.manter(lc)
 	}
