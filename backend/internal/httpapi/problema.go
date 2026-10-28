@@ -27,7 +27,7 @@ func problema(w http.ResponseWriter, status int, codigo, detalhe string, retryAf
 }
 
 func (d *Deps) retry503() time.Duration {
-	return time.Duration(d.Cfg.Limites.RetryAfterSobrecarga)*time.Second + time.Duration(rand.Intn(3000))*time.Millisecond
+	return time.Duration(d.Cfg.Limites.RetryAfterSobrecarga)*time.Second + time.Duration(rand.Intn(3000))*time.Millisecond //nolint:gosec // G404: jitter, nao e segredo
 }
 
 func (d *Deps) rej(motivo string) { d.Met.Rejeicao(motivo) }

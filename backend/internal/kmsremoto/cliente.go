@@ -263,7 +263,7 @@ func (c *Cliente) ChavesPublicas(ctx context.Context) (map[int]ed25519.PublicKey
 }
 
 // Pronto: disjuntor fechado e o /saude/pronta do KMS respondendo 200 (consulta em cache por 2 s).
-func (c *Cliente) Pronto() bool {
+func (c *Cliente) Pronto(ctx context.Context) bool {
 	if c.disj.aberto() {
 		return false
 	}
@@ -272,7 +272,7 @@ func (c *Cliente) Pronto() bool {
 	if time.Since(c.sondaEm) < 2*time.Second {
 		return c.sondaResult
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	ok := false
 	if r, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/saude/pronta", nil); err == nil {

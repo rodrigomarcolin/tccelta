@@ -58,7 +58,7 @@ func escutarUmaVez(ctx context.Context, pool *pgxpool.Pool, canal string, out ch
 		n, err := conn.WaitForNotification(ctx)
 		if err != nil {
 			// a conexão pode estar quebrada: descarta do pool
-			_ = conn.Close(context.Background())
+			_ = conn.Close(context.WithoutCancel(ctx))
 			return err
 		}
 		enviar(out, n.Payload)

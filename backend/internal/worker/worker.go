@@ -296,7 +296,7 @@ func (w *Worker) Executar(ctx context.Context, saudeAddr string) error {
 	}
 	<-ctx.Done()
 	if srv != nil {
-		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		_ = srv.Shutdown(sctx)
 		cancel()
 	}

@@ -106,9 +106,9 @@ func cmdAPI(ctx context.Context) error {
 		Semaforo:         limites.NovaConcorrencia(cfg.Limites.IngestaoMaxSimultaneas, cfg.Limites.IngestaoEsperaVaga),
 		NaoPronto:        &encerrando,
 		Prontidao: func() bool {
-			c, cancel := context.WithTimeout(context.Background(), time.Second)
+			c, cancel := context.WithTimeout(ctx, time.Second)
 			defer cancel()
-			return pool.Ping(c) == nil && kms.Pronto() && cat.Carregado() && val.Pronto()
+			return pool.Ping(c) == nil && kms.Pronto(c) && cat.Carregado() && val.Pronto()
 		}}
 	srv := &http.Server{Addr: cfg.HTTP.Endereco, Handler: deps.Roteador(), ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 16 << 10}
@@ -127,7 +127,7 @@ func cmdAPI(ctx context.Context) error {
 	}
 	encerrando.Store(true) // /saude/pronta => 503: o Caddy tira a réplica do balanceamento
 	time.Sleep(2 * time.Second)
-	sctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 25*time.Second)
 	defer cancel()
 	err = srv.Shutdown(sctx)
 	_ = msrv.Shutdown(sctx)
