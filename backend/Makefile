@@ -10,9 +10,17 @@ FERR         = run --rm ferramentas
 KMSF         = run --rm kms-ferramentas
 SIM_DB       = --banco-url-env SIM_BANCO_URL
 
+# Dongles novos para um cenário do simulador (stack de teste): $(call E2E_NOVOS,<cenario>). O dongle virtual
+# sempre recomeça do seq 1, e o servidor guarda o estado por DevId; reusar um DevId que outro cenário já
+# avançou dá 422 resposta_inconsistente. Cada cenário recebe 3 dongles recém-criados (KMS, depois banco).
+E2E_NOVOS     = ( rm -rf saida/e2e-$(1) saida/dongles-$(1).csv || true ) \
+	&& $(COMPOSE_T) --profile ferramentas $(KMSF) provisionar novo --sem-material --quantidade 3 --saida /saida/e2e-$(1) --csv-saida /saida/dongles-$(1).csv \
+	&& $(COMPOSE_T) --profile ferramentas $(FERR) provisionar registrar --arquivo /saida/e2e-$(1)
+E2E_SIMULAR   = $(COMPOSE_T) --profile ferramentas $(FERR) simulador --chaves /saida/dongles-$(1).csv --api http://api:8080 $(SIM_DB) --cenario $(1)
+
 .PHONY: env segredos certs build up up-tls up-tunel up-prodlike down limpar logs ps migrar migracao-nova sqlc sqlc-verificar \
 	vault-bootstrap vault-unseal vault-unseal-manual saida-dir seed-dev provisionar kms-wrapping kms-importar reprocessar ca-exportar psql \
-	teste teste-integracao vetores lint e2e carga
+	teste teste-integracao vetores lint e2e carga cenario build-ferramentas
 
 env:             ; [ -f .env ] || cp .env.example .env
 segredos:        ; sh scripts/gerar-segredos.sh
@@ -54,14 +62,21 @@ teste-integracao:; docker run --rm -v "$(CURDIR)":/src -w /src -v //var/run/dock
 vetores:         ; docker run --rm -v "$(CURDIR)":/src -w /src python:3.12-slim python scripts/gerar_vetores.py \
                    && cp internal/dominio/protocolo/testdata/vetores.json ../mobile-app/test/fixtures/protocolo_vetores.json
 lint:            ; docker run --rm -v "$(CURDIR)":/src -w /src $(LINT_IMG) golangci-lint run
+build-ferramentas:
+	$(COMPOSE) --profile ferramentas build ferramentas kms-ferramentas
+cenario:         saida-dir build-ferramentas
+	@[ -n "$(C)" ] || { echo "uso: make cenario C=<e2e|protocolo-negativo|tempo|geracao|reconexao|...> [N=3] [ARGS='--acelerar 120']"; exit 1; }
+	-rm -rf saida/cenario-$(C) saida/dongles-$(C).csv
+	$(COMPOSE) --profile ferramentas $(KMSF) provisionar novo --sem-material --quantidade $(or $(N),3) --saida /saida/cenario-$(C) --csv-saida /saida/dongles-$(C).csv
+	$(COMPOSE) --profile ferramentas $(FERR) provisionar registrar --arquivo /saida/cenario-$(C)
+	$(COMPOSE) --profile ferramentas $(FERR) simulador --cenario $(C) --chaves /saida/dongles-$(C).csv --api http://api:8080 $(SIM_DB) $(ARGS)
 e2e:             env segredos saida-dir
 	$(COMPOSE_T) up -d --build --wait
-	$(COMPOSE_T) --profile ferramentas $(KMSF) provisionar importar --arquivo /testdata/dongles-teste.csv --saida /saida/registros
-	$(COMPOSE_T) --profile ferramentas $(FERR) provisionar registrar --arquivo /saida/registros
-	$(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario e2e --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB) \
-	 && $(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario protocolo-negativo --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB) \
-	 && $(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario tempo --acelerar 120 --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB) \
-	 && $(COMPOSE_T) --profile ferramentas $(FERR) simulador --cenario geracao --chaves /testdata/dongles-teste.csv --api http://api:8080 $(SIM_DB); \
+	$(COMPOSE_T) --profile ferramentas build ferramentas kms-ferramentas
+	$(call E2E_NOVOS,e2e) && $(call E2E_SIMULAR,e2e) \
+	 && $(call E2E_NOVOS,protocolo-negativo) && $(call E2E_SIMULAR,protocolo-negativo) \
+	 && $(call E2E_NOVOS,tempo) && $(call E2E_SIMULAR,tempo) --acelerar 120 \
+	 && $(call E2E_NOVOS,geracao) && $(call E2E_SIMULAR,geracao); \
 	 st=$$?; $(COMPOSE_T) down -v; exit $$st
 carga:           saida-dir
 	rm -f saida/dongles-carga.csv
