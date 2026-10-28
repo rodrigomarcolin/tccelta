@@ -31,7 +31,7 @@ original das specs (`git show 99a6d77:.spec/fase-3-servidor/<arquivo>`).
 - Perfis `asym`/`none`: implementar verificação ECDSA P-256 local (chave pública já cadastrada em `dongle.public_key`) e aceitar tag vazia, ou recusar o cadastro desses perfis (`backend/internal/usecase/ingestion/receive_batch.go`, `backend/internal/kms/server/body.go`).
 - `X-Lote-Acao` não é usado pelo app: ou o coordenador passa a consumir `reler`/`aguardar`, ou o cabeçalho sai do contrato.
 - Limite por IP (`LIMITE_IP_MIN`) distorce `load`/`knee` (todos os dongles virtuais saem do mesmo IP); parametrizar por dongle no simulador ou desligar no ambiente de carga.
-- Testes sem cobertura: `backend/internal/worker` (fila, TX2, expiração), `adapter/postgres`, `database`, `http` com banco real; `mobile-app/test` não cobre `main.dart` (override da CA).
+- Testes sem cobertura: o laço de `backend/internal/worker` (LISTEN, drenagem, ticker; TX2 e expiração já cobertos em `usecase/boottime`), `adapter/postgres`, `database`, `http` com banco real; `mobile-app/test` não cobre `main.dart` (override da CA).
 - Métricas sem `# HELP` e sem séries `go_*`/`process_*` (`backend/docs/metricas.md`); Prometheus/Grafana (perfil `observabilidade`) e o túnel nunca foram exercitados.
 - Vault de produção: unseal manual 3 de 5, auto-unseal/HA, backup de banco e Vault e um compose da API em produção estão só documentados (`backend/docs/ambientes.md`).
 - Redes `dados`, `kms` e `cofre` não são `internal` no dev (`backend/compose.yaml`); só o overlay prodlike as isola.
