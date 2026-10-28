@@ -4,14 +4,18 @@ O `backend/` é a API Go (`tccelta`), o worker e as ferramentas de linha de coma
 as chaves dos dongles e fala com o Vault, é um módulo separado em [`../kms`](../kms/README.md). A API só
 conversa com o KMS por HTTP (contrato em [`../kms/docs/contrato-http.md`](../kms/docs/contrato-http.md)).
 
+O que cada cenário do simulador e cada verificação do `make e2e` fazem está em
+[`docs/cenarios-simulador.md`](docs/cenarios-simulador.md).
+
 Este documento descreve o `Makefile` como ele está hoje. Tudo foi escrito a partir do próprio `Makefile`,
 dos `compose*.yaml`, dos scripts e do código dos binários, e **não** a partir das specs em `.spec/`, que
 ainda descrevem o desenho anterior (a API falando direto com o Vault).
 
 > **Estado de verificação.** Os alvos abaixo foram lidos, mas não foram reexecutados depois do refactor em
 > camadas e da criação do módulo `kms/` (a máquina em que o refactor foi feito não tinha o daemon do Docker).
-> Antes do refactor, a stack subiu e os cenários do simulador passaram. Depois dele, `make up`, `make e2e`, o
-> build das imagens e o `make lint` (regra `depguard` nova) ainda não foram executados.
+> Antes do refactor, a stack subiu e os cenários do simulador passaram. Depois dele, o autor do projeto
+> executou `make up`, `make seed-dev` e `make e2e`; o `make lint` (regra `depguard` nova) e os cenários
+> `reconexao`, `carga` e `joelho` ainda não foram executados.
 
 ## Pré-requisitos
 
@@ -61,6 +65,7 @@ Python `python:3.12-slim`.
 | `N=<n>`, `HW=dev\|devsec` | `provisionar` | Quantidade de dongles novos (padrão 1) e perfil de hardware (padrão `dev`) |
 | `N=<n>` | `carga` | Quantidade de dongles virtuais (padrão 1000) |
 | `ARQ=<caminho>` | `kms-importar` | `kms_record.json` gerado pelo `provision.py` do firmware |
+| `C=<cenário>`, `N=<n>`, `ARGS='…'` | `cenario` | Cenário do simulador, quantidade de dongles novos (padrão 3) e opções extras repassadas ao simulador |
 | `DONGLE=<16 hex>`, `DESDE=<seq>`, `APLICAR=1` | `reprocessar` | DevId, seq inicial (padrão 1) e se o reprocessamento é aplicado (sem `APLICAR`, é só um ensaio) |
 
 ## Alvos
@@ -139,7 +144,9 @@ cadastrá-lo, monte um CSV com o mesmo formato (`dev_id_hex,k_auth_hex,k_rec_hex
 | `teste-integracao` | `go test -p 1 -tags integracao -race ./...`, com o socket do Docker montado para o testcontainers | Hoje **nenhum arquivo** tem a tag `integracao`, então o alvo só reexecuta os testes de unidade |
 | `vetores` | Roda `scripts/gerar_vetores.py`, que gera `internal/dominio/protocolo/testdata/vetores.json` e o copia para `../mobile-app/test/fixtures/protocolo_vetores.json` | O script foi escrito de forma independente do código Go, a partir da spec, para servir de referência cruzada. Os vetores do firmware (`vetores_firmware.json`) vêm de outro gerador, o `vectors.py` |
 | `lint` | `golangci-lint run` (v1.64.8) com `.golangci.yml` | Inclui a regra `depguard` que impede a API e o KMS de importarem um ao outro. Ainda não foi executado |
-| `e2e` | Sobe a stack isolada `compose.test.yaml`, importa os dongles de teste e roda quatro cenários do simulador em sequência: `e2e`, `protocolo-negativo`, `tempo --acelerar 120` e `geracao` | Derruba a stack com `down -v` no fim, passando ou não, e devolve o código do primeiro cenário que falhou. Nunca foi executado |
+| `build-ferramentas` | Reconstrói as imagens `ferramentas` e `kms-ferramentas` | O `docker compose run` só constrói uma imagem que **não existe**; depois de mudar o código, uma imagem antiga continua rodando o binário antigo. O `cenario` e o `e2e` já chamam este passo |
+| `cenario C=<nome> [N=3] [ARGS='…']` | Cria `N` dongles **novos** (KMS, depois banco), grava o CSV em `saida/dongles-<nome>.csv` e roda esse cenário do simulador sobre eles, na stack de desenvolvimento | Ex.: `make cenario C=protocolo-negativo` ou `make cenario C=tempo ARGS='--acelerar 120'`. Cenários: `e2e`, `protocolo-negativo`, `tempo`, `geracao`, `reconexao`, `carga`, `joelho` |
+| `e2e` | Sobe a stack isolada `compose.test.yaml`, reconstrói as imagens de ferramentas e roda quatro cenários do simulador em sequência: `e2e`, `protocolo-negativo`, `tempo --acelerar 120` e `geracao`. **Cada cenário recebe 3 dongles novos** | Derruba a stack com `down -v` no fim, passando ou não, e devolve o código do primeiro cenário que falhou. Os comandos foram validados com `make -n` e `bash -n`, e o alvo foi executado depois pelo autor do projeto (resultado não registrado aqui) |
 | `carga [N=]` | Cria `N` dongles virtuais (só com as chaves, sem material de NVS), registra no banco e roda o cenário `carga`, com relatório em `saida/relatorio.json` | O projeto decidiu não executar testes de carga por ora, só documentá-los. As metas M1 a M6 não foram medidas |
 
 ## Stacks e perfis
@@ -264,8 +271,16 @@ binário `tccelta`.
   em `API_HOST`, libere a porta 8443 no firewall e instale a CA exportada pelo `make ca-exportar`.
 - **Recomeçar do zero.** `make limpar` e depois `make up`. Isso apaga o banco e o Vault; os dongles
   precisam ser cadastrados de novo (`make seed-dev`).
-- **E2E devolve `422 resposta_inconsistente`.** Um dongle simulado recomeça do seq 1, e o servidor recusa se o
-  mesmo DevId já tem um HEAD maior. O `make e2e` evita isso porque derruba os volumes da stack de teste no fim.
+- **Cenário do simulador devolve `422 resposta_inconsistente` no handshake.** Um dongle simulado recomeça do
+  seq 1, e o servidor recusa se o mesmo DevId já tem um HEAD maior. Nada no simulador limpa o estado entre
+  execuções, então reaproveitar os dongles de um cenário que já rodou (por exemplo, os três do
+  `dongles-teste.csv`) falha. Use `make cenario C=<nome>`, que cria dongles novos a cada execução, ou zere o
+  banco (`make limpar`, `make up`, `make seed-dev`). O `make e2e` já cria dongles novos para cada um dos seus
+  quatro cenários. Rodar o simulador à mão com `--chaves /testdata/dongles-teste.csv` só serve na primeira vez
+  depois de um banco limpo.
+- **`role_id: open : no such file or directory` (ou outro comportamento que não bate com o código atual) ao
+  usar as ferramentas.** A imagem `tccelta-ferramentas:local` é antiga: o `docker compose run` não reconstrói
+  imagens que já existem. Rode `make build-ferramentas` e repita.
 
 ## Lacunas conhecidas
 
