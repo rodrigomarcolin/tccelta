@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-  <!-- Somente debug (plano B na LAN): confia na CA do Caddy instalada no aparelho e
-       permite HTTP puro para o emulador falar com a API na porta 8080. O release
-       confia so nas CAs do sistema e nao permite HTTP. -->
+  <!-- Somente debug: confia na CA instalada pelo usuario (navegador e pilha Java) e
+       permite HTTP puro para o emulador falar com a API na porta 8080. O cliente
+       Dart do app NAO usa esta configuracao: a CA local do Caddy chega a ele pelo
+       asset assets/dev/caddy-root.crt. O release confia so nas CAs do sistema e
+       nao permite HTTP. -->
   <debug-overrides>
     <trust-anchors>
       <certificates src="system" />
