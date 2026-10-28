@@ -4,7 +4,6 @@ package prometheus
 import (
 	"net/http"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -77,14 +76,17 @@ func New() *M {
 	return m
 }
 
-// RegisterPool expõe tccelta_pool_* a partir de pgxpool.Stat().
-func (m *M) RegisterPool(p *pgxpool.Pool) {
+// PoolStats são as contagens de conexões do pool de banco.
+type PoolStats struct{ Total, InUse, Idle int32 }
+
+// RegisterPool expõe tccelta_pool_* a partir de stats, que cmd liga ao pool (esse pacote não conhece o driver).
+func (m *M) RegisterPool(stats func() PoolStats) {
 	g := func(name string, f func() float64) {
 		m.Reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "tccelta_pool_" + name}, f))
 	}
-	g("connections_total", func() float64 { return float64(p.Stat().TotalConns()) })
-	g("connections_in_use", func() float64 { return float64(p.Stat().AcquiredConns()) })
-	g("connections_idle", func() float64 { return float64(p.Stat().IdleConns()) })
+	g("connections_total", func() float64 { return float64(stats().Total) })
+	g("connections_in_use", func() float64 { return float64(stats().InUse) })
+	g("connections_idle", func() float64 { return float64(stats().Idle) })
 }
 
 // Handler serve /metricas.

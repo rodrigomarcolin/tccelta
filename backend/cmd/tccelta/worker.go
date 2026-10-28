@@ -44,7 +44,7 @@ func cmdWorker(ctx context.Context, args []string) error {
 		return err
 	}
 	defer pool.Close()
-	met.RegisterPool(pool)
+	met.RegisterPool(poolStats(pool))
 	go func() {
 		addr := os.Getenv("METRICAS_ENDERECO")
 		if addr == "" {

@@ -11,7 +11,7 @@ flowchart LR
     SC[scenarios.go<br/>e2e, negative-protocol, time, generation,<br/>reconnection, load, knee] --> APP[AppVirtual app.go<br/>contrato HTTP real]
     APP --> DV[DongleVirtual dongle.go<br/>flash em memória, assina com K_rec]
     APP -->|HTTP| API[(API real)]
-    SC -->|SELECT, papel owner| DB[(PostgreSQL)]
+    SC -->|port.Inspector: SELECT, papel owner| DB|SELECT, papel owner| DB[(PostgreSQL)]
     SC --> REP[Report report.go<br/>latências por rota, JSON]
     DV --> P[domain/protocol<br/>mesmo pacote da API]
 ```
@@ -42,7 +42,7 @@ Sobe a stack isolada `compose.test.yaml` (projeto `tccelta-teste`), reconstrói 
 
 ## Testes do backend
 
-`go test -race ./...` (`make teste`, em contêiner) cobre, por pacote, `domain/{protocol,pid,handshake,ingestion,timeline}`, `usecase/{handshake,ingestion,session,catalog}` (com `adapter/memory` e `port/porttest`), `api`, `http/ratelimit`, `adapter/{jwt,kmsclient}`, `config`, `platform/breaker`, `tools/provisioning`, `kms/{server,vault,provisioning,config}`. Vetores: `domain/protocol/testdata/vetores.json` (gerado por `scripts/gerar_vetores.py`) e `vetores_firmware.json` (do `vectors.py` da Fase 1). Não há testes dos adaptadores `postgres`/`database` nem do `worker`.
+`go test -race ./...` (`make teste`, em contêiner) cobre, por pacote, `domain/{protocol,pid,handshake,ingestion,timeline}`, `usecase/{handshake,ingestion,session,catalog,boottime,reprocess,provisioning}` (com `adapter/memory` e `port/porttest`), `api`, `http/ratelimit`, `adapter/{jwt,kmsclient}`, `config`, `platform/breaker`, `tools/provisioning`, `kms/{server,vault,provisioning,config}`. Vetores: `domain/protocol/testdata/vetores.json` (gerado por `scripts/gerar_vetores.py`) e `vetores_firmware.json` (do `vectors.py` da Fase 1). Não há testes dos adaptadores `postgres`/`database` nem do loop do `worker` (a lógica está em `usecase/boottime`).
 
 ## CI (`.github/workflows/backend-ci.yml`, `working-directory: backend`)
 

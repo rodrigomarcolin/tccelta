@@ -1,9 +1,10 @@
 # 06 — Worker assíncrono (âncora de tempo por boot)
 
-Estado implementado: `internal/worker/worker.go` (processo e transações),
+Estado implementado: `internal/worker/worker.go` (runtime assíncrono),
+`internal/usecase/boottime/boottime.go` (cálculo e transações),
 `internal/domain/timeline/timeline.go` (algoritmo puro), consultas em
 `internal/database/queries/worker.sql`, composição em `cmd/tccelta/worker.go`.
-O worker usa `database`/`dbgen` direto (sem portas) e não tem acesso ao Vault.
+O worker acessa o banco só pelas portas de `internal/port` (ligadas em `cmd/tccelta/worker.go`) e não tem acesso ao Vault.
 
 ## Processo
 

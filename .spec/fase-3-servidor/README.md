@@ -54,10 +54,10 @@ flowchart LR
 cmd/tccelta/  cmd/tccelta-kms/        raízes de composição (finas)
 internal/domain/{protocol,pid,dongle,handshake,ingestion,occurrence,timeline}   regras puras
 internal/port/                        todas as portas (+ porttest)
-internal/usecase/{catalog,handshake,ingestion,session}
+internal/usecase/{catalog,handshake,ingestion,session,boottime,reprocess,provisioning}
 internal/adapter/{postgres,cache,memory,kmsclient,jwt,prometheus}
 internal/http/ (+ratelimit)            transporte HTTP
-internal/worker/ (+reprocess)         processamento assíncrono
+internal/worker/                      runtime assíncrono do recálculo de tempo
 internal/tools/{simulator,provisioning}
 internal/database/                    pool, tx, listen, migrações, queries, dbgen (sqlc)
 internal/kms/{server,vault,provisioning,config,metrics}   serviço KMS isolado

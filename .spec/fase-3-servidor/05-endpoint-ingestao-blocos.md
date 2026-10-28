@@ -3,7 +3,7 @@
 Estado implementado: `internal/usecase/ingestion/{receive_batch,get_confirmation}.go`,
 regras puras em `internal/domain/ingestion/apply.go`, HTTP em
 `internal/http/{receive_batch,get_confirmation}.go`, reprocessamento em
-`internal/worker/reprocess/`.
+`internal/usecase/reprocess/`.
 
 ## Contrato HTTP
 

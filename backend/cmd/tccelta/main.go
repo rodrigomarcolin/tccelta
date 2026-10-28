@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	metrics "tccelta/backend/internal/adapter/prometheus"
 	"tccelta/backend/internal/config"
 	"tccelta/backend/internal/database"
 	"tccelta/backend/internal/version"
@@ -108,4 +109,12 @@ func cmdHealth(args []string) error {
 		return fmt.Errorf("status %d", r.StatusCode)
 	}
 	return nil
+}
+
+// poolStats liga as contagens do pool às métricas tccelta_pool_*.
+func poolStats(pool *pgxpool.Pool) func() metrics.PoolStats {
+	return func() metrics.PoolStats {
+		s := pool.Stat()
+		return metrics.PoolStats{Total: s.TotalConns(), InUse: s.AcquiredConns(), Idle: s.IdleConns()}
+	}
 }
