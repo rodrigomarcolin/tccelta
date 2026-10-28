@@ -9,12 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"tccelta/backend/internal/adapter/postgres"
-	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/pid"
 	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/port"
 	"tccelta/backend/internal/port/porttest"
 	"tccelta/backend/internal/usecase/catalog"
 	"tccelta/backend/internal/usecase/reprocess"
@@ -23,7 +20,9 @@ import (
 // Options configuram a execução de um cenário.
 type Options struct {
 	API         string
-	Pool        *pgxpool.Pool // papel com SELECT (tccelta_owner em dev/teste)
+	Inspect     port.Inspector    // leitura de verificação (papel com SELECT; tccelta_owner em dev/teste)
+	Repos       port.Repositories // catálogo de PIDs e reprocessamento (o cenário generation)
+	Tx          port.Transactor   // transações do reprocessamento
 	Keys        []Keys
 	Report      *Report
 	Log         *slog.Logger
@@ -94,10 +93,10 @@ func client() *http.Client {
 }
 
 // waitForBoots espera o worker fechar a fila de tempo do dongle.
-func waitForBoots(ctx context.Context, q *dbgen.Queries, id int32, maxWait time.Duration) []dbgen.VerifyListBootsRow {
+func waitForBoots(ctx context.Context, q port.Inspector, id int32, maxWait time.Duration) []port.InspectedBoot {
 	end := time.Now().Add(maxWait)
 	for {
-		bs, _ := q.VerifyListBoots(ctx, id)
+		bs, _ := q.Boots(ctx, id)
 		pend := false
 		for _, b := range bs {
 			pend = pend || b.TimePending
@@ -109,7 +108,7 @@ func waitForBoots(ctx context.Context, q *dbgen.Queries, id int32, maxWait time.
 	}
 }
 
-func covered(ls []dbgen.VerifyListGapsRow, seq uint32) bool {
+func covered(ls []port.InspectedGap, seq uint32) bool {
 	for _, l := range ls {
 		if int64(seq) >= l.FromSeq && int64(seq) <= l.ToSeq {
 			return true
@@ -133,7 +132,7 @@ func generateAndDrain(ctx context.Context, a *AppVirtual, n int) error {
 
 func e2e(ctx context.Context, o Options) error {
 	v := &verifier{log: o.Log}
-	q := dbgen.New(o.Pool)
+	q := o.Inspect
 	for i, ch := range o.Keys {
 		d := NewDongle(ch, ConfigDongle{FlashCapacity: 30})
 		a := NewApp(o.API, d, client(), o.Report)
@@ -189,13 +188,13 @@ func e2e(ctx context.Context, o Options) error {
 			}
 		}
 		dev := ch.Dev
-		est, err := q.VerifyDongleState(ctx, dev[:])
+		est, err := q.DongleState(ctx, dev)
 		if err != nil {
 			return err
 		}
 		head := d.Head()
 		v.ok(est.ContiguousSeq == int64(head) && est.HeadSeq == int64(head), "dongle %d: contiguous_seq=%d head=%d (dongle=%d)", i, est.ContiguousSeq, est.HeadSeq, head)
-		ls, _ := q.VerifyListGaps(ctx, est.DongleID)
+		ls, _ := q.Gaps(ctx, est.DongleID)
 		causes := map[string]int{}
 		for _, l := range ls {
 			causes[l.Cause]++
@@ -208,12 +207,12 @@ func e2e(ctx context.Context, o Options) error {
 				wantPos++
 			}
 		}
-		n, _ := q.VerifyCountReadings(ctx, est.DongleID)
-		pos, _ := q.VerifyCountPositions(ctx, est.DongleID)
+		n, _ := q.CountReadings(ctx, est.DongleID)
+		pos, _ := q.CountPositions(ctx, est.DongleID)
 		v.ok(n > 0 && n == expected && pos == wantPos, "dongle %d: leituras=%d/%d posicoes=%d/%d", i, n, expected, pos, wantPos)
-		rej, _ := q.VerifyCountRejected(ctx, est.DongleID)
+		rej, _ := q.CountRejected(ctx, est.DongleID)
 		v.ok(rej == 0, "dongle %d: rejected_block vazio (%d)", i, rej)
-		anc, _ := q.VerifyCountAnchors(ctx, est.DongleID)
+		anc, _ := q.CountAnchors(ctx, est.DongleID)
 		v.ok(anc >= 1, "dongle %d: ancoras=%d", i, anc)
 		bs := waitForBoots(ctx, q, est.DongleID, 15*time.Second)
 		withTime := 0
@@ -229,7 +228,7 @@ func e2e(ctx context.Context, o Options) error {
 
 func negative(ctx context.Context, o Options) error {
 	v := &verifier{log: o.Log}
-	q := dbgen.New(o.Pool)
+	q := o.Inspect
 	if len(o.Keys) < 2 {
 		return errors.New("precisa de 2 dongles")
 	}
@@ -243,8 +242,8 @@ func negative(ctx context.Context, o Options) error {
 		return err
 	}
 	dev := o.Keys[0].Dev
-	est0, _ := q.VerifyDongleState(ctx, dev[:])
-	l0, _ := q.VerifyCountReadings(ctx, est0.DongleID)
+	est0, _ := q.DongleState(ctx, dev)
+	l0, _ := q.CountReadings(ctx, est0.DongleID)
 
 	// a) 1 byte trocado no 2º bloco => 200 interrompido, reler, rejeitado
 	d.GenerateBlocks(3)
@@ -253,7 +252,7 @@ func negative(ctx context.Context, o Options) error {
 	tampered[20] ^= 0xFF
 	r, err := a.SendBatch(ctx, [][]byte{tlvs[0], tampered, tlvs[2]})
 	v.ok(err == nil && r.Status == 200 && r.Action == "reler" && r.Reason == "tag_invalida" && !r.Full, "byte trocado => reler/tag_invalida (status=%d acao=%s err=%v)", r.Status, r.Action, err)
-	rej, _ := q.VerifyCountRejected(ctx, est0.DongleID)
+	rej, _ := q.CountRejected(ctx, est0.DongleID)
 	v.ok(rej >= 1, "bloco adulterado em rejected_block (%d)", rej)
 	if len(r.AckTLV) > 0 {
 		_, _ = d.ProcessAck(r.AckTLV)
@@ -270,7 +269,7 @@ func negative(ctx context.Context, o Options) error {
 	}
 	stale := d.ReadForSending(1)
 	_ = stale
-	l1, _ := q.VerifyCountReadings(ctx, est0.DongleID)
+	l1, _ := q.CountReadings(ctx, est0.DongleID)
 	oldHead := d.Head()
 	_ = oldHead
 	// d) 33 blocos => 429
@@ -313,16 +312,16 @@ func negative(ctx context.Context, o Options) error {
 	if err := a.Drain(ctx); err != nil {
 		return err
 	}
-	est, _ := q.VerifyDongleState(ctx, dev[:])
+	est, _ := q.DongleState(ctx, dev)
 	v.ok(est.ContiguousSeq == int64(d.Head()), "estado final: contiguous_seq=%d head=%d", est.ContiguousSeq, d.Head())
-	l2, _ := q.VerifyCountReadings(ctx, est0.DongleID)
+	l2, _ := q.CountReadings(ctx, est0.DongleID)
 	v.ok(l2 > l0 && l2 >= l1, "nenhum ataque alterou dados aceitos (leituras %d -> %d)", l0, l2)
 	return v.result()
 }
 
 func timeScenario(ctx context.Context, o Options) error {
 	v := &verifier{log: o.Log}
-	q := dbgen.New(o.Pool)
+	q := o.Inspect
 	d := NewDongle(o.Keys[0], ConfigDongle{DriftPPM: o.Drift})
 	a := NewApp(o.API, d, client(), o.Report)
 	for i := 0; i < 4; i++ {
@@ -336,13 +335,13 @@ func timeScenario(ctx context.Context, o Options) error {
 		time.Sleep(time.Second)
 	}
 	dev := o.Keys[0].Dev
-	est, _ := q.VerifyDongleState(ctx, dev[:])
+	est, _ := q.DongleState(ctx, dev)
 	bs := waitForBoots(ctx, q, est.DongleID, 15*time.Second)
 	v.ok(len(bs) > 0 && bs[len(bs)-1].AMs != nil && bs[len(bs)-1].TimeSource != nil && *bs[len(bs)-1].TimeSource == "anchors", "boot com time_source=anchors")
 	if len(bs) > 0 && bs[len(bs)-1].BaseUncertaintyMs != nil {
 		v.ok(*bs[len(bs)-1].BaseUncertaintyMs <= 2000, "base_uncertainty_ms=%d <= RTT máximo", *bs[len(bs)-1].BaseUncertaintyMs)
 	}
-	h, err := q.VerifyReadingTime(ctx, est.DongleID)
+	h, err := q.ReadingTime(ctx, est.DongleID)
 	if err == nil {
 		diff := float64(time.Now().UnixMilli()) - h
 		if diff < 0 {
@@ -352,14 +351,14 @@ func timeScenario(ctx context.Context, o Options) error {
 	} else {
 		v.ok(false, "hora da leitura: %v", err)
 	}
-	an, _ := q.VerifyCountAnchors(ctx, est.DongleID)
+	an, _ := q.CountAnchors(ctx, est.DongleID)
 	v.ok(an >= 4, "ancoras=%d", an)
 	return v.result()
 }
 
 func generation(ctx context.Context, o Options) error {
 	v := &verifier{log: o.Log}
-	q := dbgen.New(o.Pool)
+	q := o.Inspect
 	d := NewDongle(o.Keys[0], ConfigDongle{InitialBoot: 65534})
 	a := NewApp(o.API, d, client(), o.Report)
 	if err := a.Handshake(ctx); err != nil {
@@ -378,7 +377,7 @@ func generation(ctx context.Context, o Options) error {
 		}
 	}
 	dev := o.Keys[0].Dev
-	est, _ := q.VerifyDongleState(ctx, dev[:])
+	est, _ := q.DongleState(ctx, dev)
 	v.ok(est.BootGeneration == 1 && est.LastBootID == 2, "boot_generation=%d last_boot_id=%d (esperado 1 e 2)", est.BootGeneration, est.LastBootID)
 	bs := waitForBoots(ctx, q, est.DongleID, 15*time.Second)
 	got := map[[2]int32]bool{}
@@ -386,15 +385,15 @@ func generation(ctx context.Context, o Options) error {
 		got[[2]int32{b.BootGeneration, b.BootID}] = true
 	}
 	v.ok(got[[2]int32{0, 65534}] && got[[2]int32{0, 65535}] && got[[2]int32{1, 1}] && got[[2]int32{1, 2}], "boots (0,65534) (0,65535) (1,1) (1,2): %v", got)
-	n, _ := q.VerifyCountAlerts(ctx, est.DongleID, "boot_generation_advanced")
+	n, _ := q.CountAlerts(ctx, est.DongleID, "boot_generation_advanced")
 	v.ok(n == 1, "alerta boot_generation_advanced uma vez (%d)", n)
 	// reprocessamento: ensaio e aplicar preservam a contagem
-	before, _ := q.VerifyCountReadings(ctx, est.DongleID)
+	before, _ := q.CountReadings(ctx, est.DongleID)
 	cat := pid.New()
-	if err := catalog.NewSync(postgres.Repositories(q).Pids, cat, o.Log).Reload(ctx); err != nil {
+	if err := catalog.NewSync(o.Repos.Pids, cat, o.Log).Reload(ctx); err != nil {
 		return err
 	}
-	uc := reprocess.New(postgres.Repositories(q), postgres.NewTransactor(o.Pool), cat, porttest.Nop{}, o.Log)
+	uc := reprocess.New(o.Repos, o.Tx, cat, porttest.Nop{}, o.Log)
 	op := reprocess.Options{DongleID: est.DongleID, Apply: false}
 	if _, err := uc.Run(ctx, op); err != nil {
 		return err
@@ -403,7 +402,7 @@ func generation(ctx context.Context, o Options) error {
 	if _, err := uc.Run(ctx, op); err != nil {
 		v.ok(false, "reprocess --apply: %v", err)
 	}
-	after, _ := q.VerifyCountReadings(ctx, est.DongleID)
+	after, _ := q.CountReadings(ctx, est.DongleID)
 	v.ok(before == after && before > 0, "reprocessamento preserva a contagem de leituras (%d -> %d)", before, after)
 	return v.result()
 }
@@ -467,7 +466,7 @@ func reconnection(ctx context.Context, o Options) error {
 		o.Accumulated = 500
 	}
 	v := &verifier{log: o.Log}
-	q := dbgen.New(o.Pool)
+	q := o.Inspect
 	var wg sync.WaitGroup
 	cli := client()
 	t0 := time.Now()
@@ -501,7 +500,7 @@ func reconnection(ctx context.Context, o Options) error {
 	o.Report.Extra["drain_s"] = drain
 	for _, p := range pairs {
 		dev := p.c.Dev
-		est, err := q.VerifyDongleState(ctx, dev[:])
+		est, err := q.DongleState(ctx, dev)
 		if err != nil {
 			return err
 		}

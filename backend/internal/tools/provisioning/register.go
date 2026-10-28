@@ -1,24 +1,19 @@
-// Package provisioning cadastra no banco os dongles que o serviço KMS já provisionou. O contrato
-// entre os dois lados é o arquivo record.json (docs/kms-dongle-record.md): a API e o KMS não
-// compartilham código.
+// Package provisioning lê e valida o record.json dos dongles que o serviço KMS já provisionou; o cadastro no banco é o
+// caso de uso usecase/provisioning. O contrato entre os dois lados é o arquivo
+// record.json (docs/kms-dongle-record.md): a API e o KMS não compartilham código.
 package provisioning
 
 import (
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/dongle"
 )
 
 // RecordSchema é o schema do record.json.
@@ -78,47 +73,19 @@ func (r Record) Validate() error {
 	return nil
 }
 
-// Register insere dongle e dongle_state numa transação. Idempotente: DevId já cadastrado é pulado
-// (criado = false).
-func Register(ctx context.Context, pool *pgxpool.Pool, r Record, log *slog.Logger) (created bool, err error) {
+// Registration valida o record e o converte no cadastro que o caso de uso usecase/provisioning grava.
+func (r Record) Registration() (dongle.Registration, error) {
 	if err := r.Validate(); err != nil {
-		return false, err
+		return dongle.Registration{}, err
 	}
+	var g dongle.Registration
 	dev, _ := hex.DecodeString(r.DevID)
-	if _, err := dbgen.New(pool).FindDongleByDevID(ctx, dev); err == nil {
-		log.Info("provisionamento.ja_cadastrado", "dev_id", r.DevID)
-		return false, nil
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return false, err
-	}
-	var pub []byte
+	copy(g.DevID[:], dev)
+	g.Profile, g.AuthKey, g.RecKey, g.Description = r.Profile, r.KMSAuthKey, r.KMSRecKey, r.Description
 	if r.PublicKey != "" {
-		pub, _ = hex.DecodeString(r.PublicKey)
+		g.PublicKey, _ = hex.DecodeString(r.PublicKey)
 	}
-	var desc *string
-	if r.Description != "" {
-		d := r.Description
-		desc = &d
-	}
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	q := dbgen.New(tx)
-	id, err := q.InsertDongle(ctx, dbgen.InsertDongleParams{DevID: dev, SecurityProfile: r.Profile,
-		KmsAuthKey: r.KMSAuthKey, KmsRecKey: r.KMSRecKey, PublicKey: pub, Description: desc})
-	if err != nil {
-		return false, fmt.Errorf("cadastro: %w", err)
-	}
-	if err := q.InsertDongleState(ctx, id); err != nil {
-		return false, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return false, err
-	}
-	log.Info("provisionamento.cadastrado", "dev_id", r.DevID, "perfil", r.Profile)
-	return true, nil
+	return g, nil
 }
 
 // RecordFiles lista os record.json de um arquivo ou, se for diretório, de seus subdiretórios.
