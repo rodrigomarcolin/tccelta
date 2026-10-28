@@ -62,7 +62,7 @@ func GerarMaterial(ctx context.Context, d Dongle, saida, hw string) (string, err
 	}
 	bin := filepath.Join(dir, "secnvs.bin")
 	run := func(args ...string) error {
-		c := exec.CommandContext(ctx, "python", append([]string{"-m", "esp_idf_nvs_partition_gen"}, args...)...)
+		c := exec.CommandContext(ctx, "python", append([]string{"-m", "esp_idf_nvs_partition_gen"}, args...)...) //nolint:gosec // args são caminhos internos e literais, sem entrada externa
 		if out, err := c.CombinedOutput(); err != nil {
 			return fmt.Errorf("esp_idf_nvs_partition_gen %v: %w: %s", args[0], err, out)
 		}
@@ -90,7 +90,7 @@ func GerarMaterial(ctx context.Context, d Dongle, saida, hw string) (string, err
 	}
 	info, _ := json.MarshalIndent(map[string]any{"dev_id": hx, "perfil": d.Perfil, "criado_em": time.Now().UTC().Format(time.RFC3339),
 		"kms": map[string]string{"auth": "transit-auth/" + hx, "rec": "transit-rec/" + hx}}, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, "dongle.json"), info, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "dongle.json"), info, 0o600); err != nil {
 		return "", err
 	}
 	return dir, nil

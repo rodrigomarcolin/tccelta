@@ -73,7 +73,7 @@ func cmdServir(ctx context.Context) error {
 		}
 	case <-ctx.Done():
 	}
-	sctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
 	defer cancel()
 	err = srv.Shutdown(sctx)
 	_ = msrv.Shutdown(sctx)

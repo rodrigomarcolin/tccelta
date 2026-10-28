@@ -54,7 +54,7 @@ func aesKWP(kek, chave []byte) ([]byte, error) {
 	copy(p, chave)
 	aiv := make([]byte, 8)
 	copy(aiv, aivPrefixo)
-	binary.BigEndian.PutUint32(aiv[4:], uint32(n))
+	binary.BigEndian.PutUint32(aiv[4:], uint32(n)) //nolint:gosec // n é o tamanho de uma chave, muito abaixo de 2^32
 	if len(p) == 8 {
 		b := make([]byte, 16)
 		copy(b, aiv)
@@ -76,7 +76,7 @@ func aesKWP(kek, chave []byte) ([]byte, error) {
 			copy(buf, a)
 			copy(buf[8:], r[i])
 			blk.Encrypt(buf, buf)
-			t := uint64(nn*j + i + 1)
+			t := uint64(nn*j + i + 1) //nolint:gosec // índices pequenos e não negativos
 			copy(a, buf[:8])
 			var tb [8]byte
 			binary.BigEndian.PutUint64(tb[:], t)
@@ -115,7 +115,7 @@ func aesKWPDesembrulhar(kek, c []byte) ([]byte, error) {
 		buf := make([]byte, 16)
 		for j := 5; j >= 0; j-- {
 			for i := nn - 1; i >= 0; i-- {
-				t := uint64(nn*j + i + 1)
+				t := uint64(nn*j + i + 1) //nolint:gosec // índices pequenos e não negativos
 				var tb [8]byte
 				binary.BigEndian.PutUint64(tb[:], t)
 				copy(buf, a)

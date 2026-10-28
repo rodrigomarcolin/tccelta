@@ -57,7 +57,7 @@ func (r Registro) Gravar(saida string) (string, error) {
 		return "", err
 	}
 	p := filepath.Join(dir, "registro.json")
-	return p, os.WriteFile(p, append(b, '\n'), 0o644)
+	return p, os.WriteFile(p, append(b, '\n'), 0o600)
 }
 
 // Provisionador importa K_auth/K_rec no Vault.
