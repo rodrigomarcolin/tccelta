@@ -9,9 +9,13 @@ import (
 	"os"
 	"strings"
 
+	"tccelta/backend/internal/adapter/postgres"
 	"tccelta/backend/internal/config"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/dongle"
 	"tccelta/backend/internal/tools/provisioning"
 	"tccelta/backend/internal/tools/simulator"
+	provisioningUC "tccelta/backend/internal/usecase/provisioning"
 )
 
 // cmdProvision cadastra no banco os dongles que o serviço KMS provisionou (`tccelta-kms provisionar`).
@@ -40,23 +44,28 @@ func cmdProvision(ctx context.Context, args []string) error {
 	if len(files) == 0 {
 		return fmt.Errorf("nenhum record.json em %s", *file)
 	}
-	regs := make([]provisioning.Record, 0, len(files))
+	regs := make([]dongle.Registration, 0, len(files))
 	for _, a := range files { // valida tudo antes de tocar no banco
 		r, err := provisioning.ReadRecord(a)
 		if err != nil {
 			return err
 		}
-		regs = append(regs, r)
+		g, err := r.Registration()
+		if err != nil {
+			return fmt.Errorf("%s: %w", a, err)
+		}
+		regs = append(regs, g)
 	}
 	pool, err := poolFromEnv(ctx, "", log)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
+	registrar := provisioningUC.New(postgres.Repositories(dbgen.New(pool)), postgres.NewTransactor(pool), log)
 	for _, r := range regs {
-		created, err := provisioning.Register(ctx, pool, r, log)
+		created, err := registrar.Register(ctx, r)
 		if err != nil {
-			return fmt.Errorf("dongle %s: %w", r.DevID, err)
+			return fmt.Errorf("dongle %s: %w", r.DevID.Hex(), err)
 		}
 		if created {
 			fmt.Printf("dongle %s cadastrado\n", r.DevID)

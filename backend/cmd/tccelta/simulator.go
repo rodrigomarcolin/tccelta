@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"tccelta/backend/internal/adapter/postgres"
 	"tccelta/backend/internal/config"
+	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/tools/simulator"
 )
 
@@ -38,6 +40,7 @@ func cmdSimulator(ctx context.Context, args []string) error {
 		return err
 	}
 	defer pool.Close()
+	q := dbgen.New(pool)
 
 	if *keys == "" {
 		return fmt.Errorf("informe --keys (CSV gerado por `tccelta-kms provisionar`)")
@@ -48,7 +51,7 @@ func cmdSimulator(ctx context.Context, args []string) error {
 	}
 	params := map[string]any{"api": *api, "dongles": *dongles, "duration": duration.String(), "tlat": tlat.String(), "speedup": *speedup}
 	r := simulator.NewReport(*scenario, params)
-	err = simulator.Run(ctx, *scenario, simulator.Options{API: *api, Pool: pool, Keys: ks, Report: r, Log: log, Dongles: *dongles,
+	err = simulator.Run(ctx, *scenario, simulator.Options{API: *api, Inspect: postgres.Inspector(q), Repos: postgres.Repositories(q), Tx: postgres.NewTransactor(pool), Keys: ks, Report: r, Log: log, Dongles: *dongles,
 		Duration: *duration, TLat: *tlat, Accumulated: *accumulated, Ramp: *ramp, Speedup: *speedup, Drift: *drift})
 	if e := r.Write(*rel); e != nil && err == nil {
 		err = e

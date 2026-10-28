@@ -84,3 +84,26 @@ func TestRecordFiles(t *testing.T) {
 		t.Fatal("caminho inexistente")
 	}
 }
+
+func TestRegistration(t *testing.T) {
+	r, err := ReadRecord(write(t, t.TempDir(), "record.json", goldenRecord))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := r.Registration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.DevID.Hex() != "0011223344556677" || g.Profile != "hmac" || g.AuthKey != "0011223344556677" || g.RecKey != "0011223344556677" ||
+		g.Description != "dongle de teste" || g.PublicKey != nil {
+		t.Fatalf("%+v", g)
+	}
+	r.PublicKey, r.Profile = "04"+strings.Repeat("ab", 64), "asym"
+	if g, err := r.Registration(); err != nil || len(g.PublicKey) != 65 || g.PublicKey[0] != 4 {
+		t.Fatalf("%+v %v", g, err)
+	}
+	r.Profile = "rsa"
+	if _, err := r.Registration(); err == nil {
+		t.Fatal("record inválido não vira cadastro")
+	}
+}
