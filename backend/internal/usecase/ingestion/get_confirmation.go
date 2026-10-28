@@ -5,7 +5,7 @@ import (
 
 	ding "tccelta/backend/internal/domain/ingestion"
 	"tccelta/backend/internal/domain/protocol"
-	"tccelta/backend/internal/repository"
+	"tccelta/backend/internal/port"
 )
 
 // GetConfirmationInput identifica o dongle (já autenticado) que pede o último ACK.
@@ -13,12 +13,12 @@ type GetConfirmationInput struct{ DevID protocol.DevID }
 
 // GetConfirmation devolve o último ACK gravado, sem chamar o KMS (GET /v1/dongles/{id}/confirmacao).
 type GetConfirmation struct {
-	repos     repository.Repositories
+	repos     port.Repositories
 	allowNone bool
 }
 
 // NewGetConfirmation liga o caso de uso ao repositório.
-func NewGetConfirmation(repos repository.Repositories, allowNone bool) *GetConfirmation {
+func NewGetConfirmation(repos port.Repositories, allowNone bool) *GetConfirmation {
 	return &GetConfirmation{repos: repos, allowNone: allowNone}
 }
 

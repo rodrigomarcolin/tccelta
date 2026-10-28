@@ -10,24 +10,24 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"tccelta/backend/internal/adapter/cache"
+	"tccelta/backend/internal/adapter/jwt"
+	"tccelta/backend/internal/adapter/kmsclient"
+	"tccelta/backend/internal/adapter/postgres"
+	metrics "tccelta/backend/internal/adapter/prometheus"
+	"tccelta/backend/internal/api"
+	"tccelta/backend/internal/api/ratelimit"
 	"tccelta/backend/internal/config"
 	"tccelta/backend/internal/database"
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/pid"
-	"tccelta/backend/internal/httpapi"
-	"tccelta/backend/internal/limits"
-	"tccelta/backend/internal/observability/metrics"
-	"tccelta/backend/internal/remotekms"
-	"tccelta/backend/internal/repository/cache"
-	"tccelta/backend/internal/repository/postgres"
-	"tccelta/backend/internal/token"
 	"tccelta/backend/internal/usecase/catalog"
 	hsUC "tccelta/backend/internal/usecase/handshake"
 	ingUC "tccelta/backend/internal/usecase/ingestion"
 	"tccelta/backend/internal/usecase/session"
 )
 
-// cmdAPI é a raiz de composição da API: liga os adaptadores (postgres, remotekms, métricas, token)
+// cmdAPI é a raiz de composição da API: liga os adaptadores (postgres, kmsclient, prometheus, jwt)
 // às portas dos casos de uso e os casos de uso ao transporte HTTP.
 func cmdAPI(ctx context.Context) error {
 	cfg, err := config.Load()
@@ -43,7 +43,7 @@ func cmdAPI(ctx context.Context) error {
 	defer pool.Close()
 	met.RegisterPool(pool)
 
-	kms, err := remotekms.New(remotekms.Options{URL: cfg.KMS.URL, CACert: cfg.KMS.CACert, ClientCert: cfg.KMS.ClientCert,
+	kms, err := kmsclient.New(kmsclient.Options{URL: cfg.KMS.URL, CACert: cfg.KMS.CACert, ClientCert: cfg.KMS.ClientCert,
 		ClientKey: cfg.KMS.ClientKey, Timeout: cfg.KMS.Timeout, MaxConcurrency: cfg.KMS.MaxConcurrency}, met.KMSPort())
 	if err != nil {
 		return err
@@ -62,9 +62,9 @@ func cmdAPI(ctx context.Context) error {
 	go sinc.Track(ctx, database.Listen(ctx, pool, "pid_changed", log, nil))
 
 	// o KMS pode demorar a subir: tenta carregar as chaves públicas do JWT por até ~1 min
-	var val *token.Validator
+	var val *jwt.Validator
 	for attempt := 0; ; attempt++ {
-		val, err = token.NewValidator(ctx, kms, cfg.JWT.Issuer, cfg.JWT.Audience, cfg.JWT.Leeway)
+		val, err = jwt.NewValidator(ctx, kms, cfg.JWT.Issuer, cfg.JWT.Audience, cfg.JWT.Leeway)
 		if err == nil {
 			break
 		}
@@ -79,13 +79,13 @@ func cmdAPI(ctx context.Context) error {
 		}
 	}
 	go val.UpdatePeriodically(ctx, 10*time.Minute)
-	issuer := token.NewIssuer(kms, cfg.JWT.Issuer, cfg.JWT.Audience, cfg.JWT.Validity)
+	issuer := jwt.NewIssuer(kms, cfg.JWT.Issuer, cfg.JWT.Audience, cfg.JWT.Validity)
 
-	lim := &limits.LimiterWithFallback{Local: limits.NewLocal(), OnFailure: func() { met.RedisFailures.Inc() }}
+	lim := &ratelimit.LimiterWithFallback{Local: ratelimit.NewLocal(), OnFailure: func() { met.RedisFailures.Inc() }}
 	if cfg.Limits.RedisAddress != "" {
 		rc := redis.NewClient(&redis.Options{Addr: cfg.Limits.RedisAddress, Password: cfg.Limits.RedisPassword,
 			DialTimeout: cfg.Limits.RedisTimeout, ReadTimeout: cfg.Limits.RedisTimeout, WriteTimeout: cfg.Limits.RedisTimeout, MaxRetries: -1})
-		lim.Redis = limits.NewRedis(rc, cfg.Limits.RedisTimeout)
+		lim.Redis = ratelimit.NewRedis(rc, cfg.Limits.RedisTimeout)
 	}
 
 	now := func() time.Time { return time.Now() }
@@ -95,7 +95,7 @@ func cmdAPI(ctx context.Context) error {
 		VerifyParallel: cfg.KMS.VerifyParallel, AllowNoneProfile: cfg.AllowNoneProfile}
 
 	var closing atomic.Bool
-	deps := &httpapi.Deps{
+	deps := &api.Deps{
 		Cfg: cfg, Log: log, Met: met.HTTPPort(),
 		RequestChallenge: hsUC.NewIssueChallenge(repos, kms, met.HandshakePort(), now, log, paramsHS),
 		RespondChallenge: hsUC.NewRespondChallenge(repos, tx, kms, issuer, met.HandshakePort(), now, log, paramsHS),
@@ -103,7 +103,7 @@ func cmdAPI(ctx context.Context) error {
 		GetConfirmation:  ingUC.NewGetConfirmation(repos, cfg.AllowNoneProfile),
 		Authenticate:     session.NewAuthenticate(val, repos.Dongles, cfg.AllowNoneProfile),
 		Limiter:          lim,
-		Semaphore:        limits.NewConcurrency(cfg.Limits.MaxConcurrentIngestions, cfg.Limits.IngestionSlotWait),
+		Semaphore:        ratelimit.NewConcurrency(cfg.Limits.MaxConcurrentIngestions, cfg.Limits.IngestionSlotWait),
 		NotReady:         &closing,
 		Readiness: func() bool {
 			c, cancel := context.WithTimeout(ctx, time.Second)

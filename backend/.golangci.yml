@@ -10,37 +10,55 @@ linters-settings:
       - G115
   depguard:
     rules:
-      # Direção: domain <- repository + usecase/port <- usecase/* <- httpapi <- cmd.
-      # Os adaptadores (repository/postgres, remotekms, observability/metrics, token) só são
-      # ligados em cmd/tccelta/api.go.
+      # Direção: domain <- port <- usecase <- api <- cmd, com os adaptadores (adapter/*) implementando port.
+      # Os adaptadores só são ligados em cmd/tccelta (composition root).
+      # Excecao conhecida (melhoria futura: esconder atras de portas): worker, worker/reprocess, tools/provisioning
+      # e tools/simulator usam database/dbgen e adapter/postgres direto.
       domain:
         files: ["**/internal/domain/**"]
         deny:
           - { pkg: github.com/jackc/pgx, desc: "o dominio e puro: sem banco" }
-          - { pkg: tccelta/backend/internal/database, desc: "o dominio e puro: sem banco" }
           - { pkg: github.com/prometheus, desc: "o dominio e puro: sem metricas" }
           - { pkg: net/http, desc: "o dominio e puro: sem transporte" }
-          - { pkg: tccelta/backend/internal/repository, desc: "o dominio nao conhece os repositorios" }
+          - { pkg: tccelta/backend/internal/database, desc: "o dominio e puro: sem banco" }
+          - { pkg: tccelta/backend/internal/port, desc: "o dominio nao conhece as portas" }
           - { pkg: tccelta/backend/internal/usecase, desc: "o dominio nao conhece os casos de uso" }
-      usecase:
-        files: ["**/internal/usecase/**"]
+          - { pkg: tccelta/backend/internal/adapter, desc: "o dominio nao conhece os adaptadores" }
+          - { pkg: tccelta/backend/internal/api, desc: "o dominio nao conhece o transporte" }
+      port:
+        files: ["**/internal/port/**", "!**/internal/port/porttest/**"]
         deny:
-          - { pkg: github.com/jackc/pgx, desc: "casos de uso acessam o banco so por internal/repository" }
-          - { pkg: tccelta/backend/internal/database, desc: "casos de uso acessam o banco so por internal/repository" }
-          - { pkg: github.com/prometheus, desc: "metricas so pelas portas de usecase/port" }
+          - { pkg: github.com/jackc/pgx, desc: "as portas sao interfaces: sem banco" }
+          - { pkg: github.com/prometheus, desc: "as portas sao interfaces: sem metricas concretas" }
+          - { pkg: net/http, desc: "as portas nao conhecem o transporte" }
+          - { pkg: tccelta/backend/internal/database, desc: "as portas nao conhecem a infraestrutura" }
+          - { pkg: tccelta/backend/internal/usecase, desc: "as portas nao conhecem os casos de uso" }
+          - { pkg: tccelta/backend/internal/adapter, desc: "as portas nao conhecem os adaptadores" }
+          - { pkg: tccelta/backend/internal/api, desc: "as portas nao conhecem o transporte" }
+      usecase:
+        # os testes podem usar o adaptador em memoria
+        files: ["**/internal/usecase/**", "!$test"]
+        deny:
+          - { pkg: github.com/jackc/pgx, desc: "casos de uso acessam o banco so pelas portas de internal/port" }
+          - { pkg: github.com/prometheus, desc: "metricas so pelas portas de internal/port" }
           - { pkg: net/http, desc: "casos de uso nao conhecem o transporte" }
-          - { pkg: tccelta/backend/internal/remotekms, desc: "o KMS entra pela porta port.Authenticator" }
-          - { pkg: tccelta/backend/internal/observability/metrics, desc: "metricas so pelas portas de usecase/port" }
-          - { pkg: tccelta/backend/internal/repository/postgres, desc: "use as interfaces de internal/repository" }
-      httpapi:
-        files: ["**/internal/httpapi/**"]
+          - { pkg: tccelta/backend/internal/database, desc: "casos de uso acessam o banco so pelas portas de internal/port" }
+          - { pkg: tccelta/backend/internal/adapter, desc: "casos de uso dependem das portas, nunca dos adaptadores" }
+          - { pkg: tccelta/backend/internal/api, desc: "casos de uso nao conhecem o transporte" }
+      api:
+        files: ["**/internal/api/**", "!$test"]
         deny:
           - { pkg: github.com/jackc/pgx, desc: "o HTTP e so transporte" }
           - { pkg: tccelta/backend/internal/database, desc: "o HTTP e so transporte" }
-          - { pkg: tccelta/backend/internal/repository, desc: "o HTTP chama casos de uso, nunca repositorios" }
-          - { pkg: tccelta/backend/internal/remotekms, desc: "o HTTP chama casos de uso, nunca o KMS" }
-      # O KMS e o unico cliente do Vault e outro processo: so enxerga a biblioteca padrao e dependencias externas,
-      # nunca os demais pacotes de tccelta/backend (pacote -> regra: lista branca via allow).
+          - { pkg: tccelta/backend/internal/adapter, desc: "o HTTP chama casos de uso e portas, nunca adaptadores" }
+      adapter:
+        files: ["**/internal/adapter/**"]
+        deny:
+          - { pkg: tccelta/backend/internal/usecase, desc: "adaptadores implementam portas, nao conhecem os casos de uso" }
+          - { pkg: tccelta/backend/internal/api, desc: "adaptadores nao conhecem o transporte" }
+      # O KMS e o unico cliente do Vault e outro processo: so enxerga a biblioteca padrao, o Prometheus e o
+      # disjuntor compartilhado (platform/breaker, sem dependencias do projeto); nunca os demais pacotes de
+      # tccelta/backend. Pacote -> regra: lista branca (strict) via allow.
       kms-isolamento:
         list-mode: strict
         files: ["**/internal/kms/**", "**/cmd/tccelta-kms/**"]
@@ -48,10 +66,12 @@ linters-settings:
           - $gostd
           - github.com/prometheus
           - tccelta/backend/internal/kms
-      # O backend nao importa o KMS (so por HTTP, contrato em docs/kms-http-contract.md).
+          - tccelta/backend/internal/platform/breaker
+      # Nada fora do KMS importa internal/kms (a API fala com ele so por HTTP, contrato em
+      # docs/kms-http-contract.md).
       sem-kms:
         files: ["!**/internal/kms/**", "!**/cmd/tccelta-kms/**"]
         deny:
-          - { pkg: tccelta/backend/internal/kms, desc: "o backend fala com o KMS so por HTTP (internal/remotekms)" }
+          - { pkg: tccelta/backend/internal/kms, desc: "o backend fala com o KMS so por HTTP (internal/adapter/kmsclient)" }
 issues:
   exclude-dirs: [internal/database/dbgen]

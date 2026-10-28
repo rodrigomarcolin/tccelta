@@ -17,8 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"tccelta/backend/internal/kms/breaker"
 	"tccelta/backend/internal/kms/config"
+	"tccelta/backend/internal/platform/breaker"
 )
 
 // VaultError é uma resposta de erro do Vault (status != 2xx).

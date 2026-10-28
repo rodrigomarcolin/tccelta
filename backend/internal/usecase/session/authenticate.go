@@ -6,8 +6,7 @@ import (
 	"errors"
 
 	"tccelta/backend/internal/domain/dongle"
-	"tccelta/backend/internal/repository"
-	"tccelta/backend/internal/usecase/port"
+	"tccelta/backend/internal/port"
 )
 
 // Authenticated é a sessão validada e o dongle dono dela.
@@ -19,12 +18,12 @@ type Authenticated struct {
 // Authenticate valida o token, resolve o dongle e aplica a regra de acesso.
 type Authenticate struct {
 	validator port.TokenValidator
-	dongles   repository.Dongles
+	dongles   port.Dongles
 	allowNone bool
 }
 
 // NewAuthenticate liga o caso de uso às suas portas.
-func NewAuthenticate(validator port.TokenValidator, dongles repository.Dongles, allowNone bool) *Authenticate {
+func NewAuthenticate(validator port.TokenValidator, dongles port.Dongles, allowNone bool) *Authenticate {
 	return &Authenticate{validator: validator, dongles: dongles, allowNone: allowNone}
 }
 

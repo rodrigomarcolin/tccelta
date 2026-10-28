@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"tccelta/backend/internal/adapter/memory"
 	"tccelta/backend/internal/domain/pid"
-	"tccelta/backend/internal/repository/memory"
 )
 
 func TestReloadAndTrack(t *testing.T) {

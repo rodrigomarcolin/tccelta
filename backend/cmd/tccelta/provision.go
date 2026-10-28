@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/provisioning"
-	"tccelta/backend/internal/simulator"
+	"tccelta/backend/internal/tools/provisioning"
+	"tccelta/backend/internal/tools/simulator"
 )
 
 // cmdProvision cadastra no banco os dongles que o serviço KMS provisionou (`tccelta-kms provisionar`).

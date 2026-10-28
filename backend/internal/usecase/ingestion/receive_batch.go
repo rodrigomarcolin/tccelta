@@ -19,9 +19,7 @@ import (
 	"tccelta/backend/internal/domain/pid"
 	"tccelta/backend/internal/domain/protocol"
 	"tccelta/backend/internal/domain/timeline"
-	"tccelta/backend/internal/observability"
-	"tccelta/backend/internal/repository"
-	"tccelta/backend/internal/usecase/port"
+	"tccelta/backend/internal/port"
 )
 
 // Params são os ajustes da ingestão.
@@ -52,8 +50,8 @@ type BatchResult struct {
 
 // ReceiveBatch implementa o algoritmo da spec 05 (POST /v1/dongles/blocos).
 type ReceiveBatch struct {
-	repos repository.Repositories
-	tx    repository.Transactor
+	repos port.Repositories
+	tx    port.Transactor
 	kms   port.Authenticator
 	pids  pid.Query
 	met   port.MetricsIngestion
@@ -63,7 +61,7 @@ type ReceiveBatch struct {
 }
 
 // NewReceiveBatch liga o caso de uso às suas portas.
-func NewReceiveBatch(repos repository.Repositories, tx repository.Transactor, kms port.Authenticator, pids pid.Query,
+func NewReceiveBatch(repos port.Repositories, tx port.Transactor, kms port.Authenticator, pids pid.Query,
 	met port.MetricsIngestion, now port.Clock, log *slog.Logger, p Params) *ReceiveBatch {
 	return &ReceiveBatch{repos: repos, tx: tx, kms: kms, pids: pids, met: met, now: now, log: log, p: p}
 }
@@ -133,7 +131,7 @@ func (c *ReceiveBatch) Run(ctx context.Context, e ReceiveBatchInput) (BatchResul
 	var tagPre []byte
 	var ackPre protocol.Ack
 	presigned := false
-	g, gctx := errgroup.WithContext(observability.WithKMSPhase(ctx, observability.PhasePre))
+	g, gctx := errgroup.WithContext(port.WithKMSPhase(ctx, port.PhasePre))
 	if len(idx) > 0 {
 		batch := c.p.VerifyBatch
 		if batch <= 0 {
@@ -200,7 +198,7 @@ func (c *ReceiveBatch) Run(ctx context.Context, e ReceiveBatchInput) (BatchResul
 	// 4. transação
 	var out BatchResult
 	t0tx := time.Now()
-	err = c.tx.InTransaction(ctx, func(ctx context.Context, rp repository.Repositories) error {
+	err = c.tx.InTransaction(ctx, func(ctx context.Context, rp port.Repositories) error {
 		out = BatchResult{}
 		if err := rp.Dongles.Lock(ctx, d.ID); err != nil {
 			return err
@@ -241,7 +239,7 @@ func (c *ReceiveBatch) Run(ctx context.Context, e ReceiveBatchInput) (BatchResul
 		} else if presigned && ackPre == ack {
 			ackTLV = ack.Build(tagPre)
 		} else {
-			macs, err := c.kms.HMACAuth(observability.WithKMSPhase(ctx, observability.PhaseTx), d.AuthKey,
+			macs, err := c.kms.HMACAuth(port.WithKMSPhase(ctx, port.PhaseTx), d.AuthKey,
 				[][]byte{protocol.TagInput(protocol.AckType, d.DevID, ack.Payload())})
 			if err != nil {
 				return err
@@ -291,7 +289,7 @@ func (c *ReceiveBatch) count(r ding.ApplyResult) {
 	}
 }
 
-func (c *ReceiveBatch) reject(ctx context.Context, rp repository.Repositories, d dongle.Dongle, session port.Session,
+func (c *ReceiveBatch) reject(ctx context.Context, rp port.Repositories, d dongle.Dongle, session port.Session,
 	rej ding.Rejection, now time.Time) error {
 	h := sha256.Sum256(append(append([]byte{}, rej.B.Data...), rej.B.Tag...))
 	return rp.Blocks.RegisterRejected(ctx, ding.Rejected{DongleID: d.ID, Seq: int64(rej.B.Hdr.Seq), BootID: int32(rej.B.Hdr.BootID),
@@ -307,7 +305,7 @@ type aggBoot struct {
 }
 
 // store persiste os blocos aceitos e tudo que deriva deles.
-func (c *ReceiveBatch) store(ctx context.Context, rp repository.Repositories, d dongle.Dongle, session port.Session,
+func (c *ReceiveBatch) store(ctx context.Context, rp port.Repositories, d dongle.Dongle, session port.Session,
 	est dongle.State, r ding.ApplyResult, now time.Time) error {
 	// referências de t_ms por boot (gerações G e G+1)
 	var ids []int32

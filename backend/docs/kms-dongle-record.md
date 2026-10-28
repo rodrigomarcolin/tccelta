@@ -48,6 +48,6 @@ diretório, valida todos os registros primeiro).
 
 ## Testes do contrato
 
-- `backend/internal/kms/provisionamento` confere que o KMS grava exatamente o texto acima.
-- `backend/internal/provisioning` confere que o backend aceita exatamente esse texto e recusa as variações
+- `backend/internal/kms/provisioning` confere que o KMS grava exatamente o texto acima.
+- `backend/internal/tools/provisioning` confere que o backend aceita exatamente esse texto e recusa as variações
   inválidas.
