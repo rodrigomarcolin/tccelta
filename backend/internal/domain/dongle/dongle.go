@@ -4,42 +4,42 @@ package dongle
 import (
 	"errors"
 
-	"tccelta/backend/internal/dominio/protocolo"
+	"tccelta/backend/internal/domain/protocol"
 )
 
 // Erros de acesso.
 var (
-	ErrDesconhecido       = errors.New("dongle_desconhecido")
-	ErrInativo            = errors.New("dongle_inativo")
-	ErrPerfilNaoPermitido = errors.New("perfil_nao_permitido")
+	ErrUnknown           = errors.New("dongle_desconhecido")
+	ErrInactive          = errors.New("dongle_inativo")
+	ErrProfileNotAllowed = errors.New("perfil_nao_permitido")
 )
 
 // Dongle é a linha de cadastro usada pelo caminho quente.
 type Dongle struct {
-	ID           int32
-	DevID        protocolo.DevID
-	Perfil       protocolo.Perfil
-	ChaveAuth    string
-	ChaveRec     string
-	ChavePublica []byte
-	Ativo        bool
+	ID        int32
+	DevID     protocol.DevID
+	Profile   protocol.Profile
+	AuthKey   string
+	RecKey    string
+	PublicKey []byte
+	Active    bool
 }
 
-// VerificarAcesso: dongle precisa estar ativo; o perfil "none" só passa com permitirNone.
-func (d Dongle) VerificarAcesso(permitirNone bool) error {
-	if !d.Ativo {
-		return ErrInativo
+// VerifyAccess: dongle precisa estar ativo; o perfil "none" só passa com allowNone.
+func (d Dongle) VerifyAccess(allowNone bool) error {
+	if !d.Active {
+		return ErrInactive
 	}
-	if d.Perfil.Nome == "none" && !permitirNone {
-		return ErrPerfilNaoPermitido
+	if d.Profile.Name == "none" && !allowNone {
+		return ErrProfileNotAllowed
 	}
 	return nil
 }
 
-// Estado é o recorte de dongle_estado usado pelo handshake e pela ingestão.
-type Estado struct {
-	SeqContiguo, MaiorSeqVisto, HeadSeq, CConf int64
-	GeracaoBoot, UltimoBootID                  int32
-	// UltimoAck só é preenchido por LerSnapshot.
-	UltimoAck []byte
+// State é o recorte de dongle_state usado pelo handshake e pela ingestão.
+type State struct {
+	ContiguousSeq, MaxSeenSeq, HeadSeq, CConf int64
+	BootGeneration, LastBootID                int32
+	// LastAck só é preenchido por ReadSnapshot.
+	LastAck []byte
 }

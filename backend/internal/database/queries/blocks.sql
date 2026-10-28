@@ -1,64 +1,64 @@
--- name: LerSnapshotEstado :one
-SELECT seq_contiguo, c_conf, ultimo_ack FROM dongle_estado WHERE dongle_id = @dongle_id;
+-- name: ReadStateSnapshot :one
+SELECT contiguous_seq, c_conf, last_ack FROM dongle_state WHERE dongle_id = @dongle_id;
 
--- name: LerTMsUltimoBoots :many
+-- name: ReadLastBootTMs :many
 -- Devolve as linhas candidatas nas geracoes G e G+1; o chamador escolhe a certa (atribuirGeracao).
-SELECT geracao_boot, boot_id, t_ms_ultimo FROM boot
+SELECT boot_generation, boot_id, last_t_ms FROM boot
 WHERE dongle_id = @dongle_id AND boot_id = ANY(@boot_ids::int[])
-  AND geracao_boot IN (@geracao_a, @geracao_b);
+  AND boot_generation IN (@generation_a, @generation_b);
 
--- name: CopiarLeituras :copyfrom
-INSERT INTO leitura (dongle_id, geracao_boot, boot_id, t_ms, pid, valor_bruto, valor, seq_bloco, recebido_em)
-VALUES (@dongle_id, @geracao_boot, @boot_id, @t_ms, @pid, @valor_bruto, @valor, @seq_bloco, @recebido_em);
+-- name: CopyReadings :copyfrom
+INSERT INTO reading (dongle_id, boot_generation, boot_id, t_ms, pid, raw_value, value, block_seq, received_at)
+VALUES (@dongle_id, @boot_generation, @boot_id, @t_ms, @pid, @raw_value, @value, @block_seq, @received_at);
 
--- name: CopiarPosicoes :copyfrom
-INSERT INTO posicao (dongle_id, geracao_boot, boot_id, t_ms, geom, origem, seq_bloco, recebido_em)
-VALUES (@dongle_id, @geracao_boot, @boot_id, @t_ms, @geom, @origem, @seq_bloco, @recebido_em);
+-- name: CopyPositions :copyfrom
+INSERT INTO position (dongle_id, boot_generation, boot_id, t_ms, geom, source, block_seq, received_at)
+VALUES (@dongle_id, @boot_generation, @boot_id, @t_ms, @geom, @source, @block_seq, @received_at);
 
--- name: RegistrarRejeitado :exec
-INSERT INTO bloco_rejeitado (dongle_id, seq, boot_id, t0_ms, payload, assinatura, motivo, detalhe,
-                             hash_conteudo, token_jti, recebido_em)
-VALUES (@dongle_id, @seq, @boot_id, @t0_ms, @payload, @assinatura, @motivo, @detalhe,
-        @hash_conteudo, @token_jti, @recebido_em)
-ON CONFLICT (dongle_id, hash_conteudo) DO UPDATE
-   SET ocorrencias = bloco_rejeitado.ocorrencias + 1, recebido_em = EXCLUDED.recebido_em;
+-- name: RegisterRejected :exec
+INSERT INTO rejected_block (dongle_id, seq, boot_id, t0_ms, payload, signature, reason, detail,
+                             content_hash, token_jti, received_at)
+VALUES (@dongle_id, @seq, @boot_id, @t0_ms, @payload, @signature, @reason, @detail,
+        @content_hash, @token_jti, @received_at)
+ON CONFLICT (dongle_id, content_hash) DO UPDATE
+   SET occurrences = rejected_block.occurrences + 1, received_at = EXCLUDED.received_at;
 
--- name: AtualizarEstadoIngestao :exec
-UPDATE dongle_estado SET
-  seq_contiguo    = @seq_contiguo,
-  maior_seq_visto = GREATEST(maior_seq_visto, @maior_visto, @seq_contiguo),
-  head_seq        = GREATEST(head_seq, @maior_visto, @seq_contiguo),
-  ultimo_ack      = @ultimo_ack,
-  ultimo_ack_em   = @agora,
-  geracao_boot    = @geracao_boot,
-  ultimo_boot_id  = @ultimo_boot_id
+-- name: UpdateIngestionState :exec
+UPDATE dongle_state SET
+  contiguous_seq    = @contiguous_seq,
+  max_seen_seq = GREATEST(max_seen_seq, @max_seen, @contiguous_seq),
+  head_seq        = GREATEST(head_seq, @max_seen, @contiguous_seq),
+  last_ack      = @last_ack,
+  last_ack_at   = @now,
+  boot_generation    = @boot_generation,
+  last_boot_id  = @last_boot_id
 WHERE dongle_id = @dongle_id;
 
--- name: InserirBlocosBrutos :many
-INSERT INTO bloco_bruto (dongle_id, seq, boot_id, geracao_boot, t0_ms, marcador, epoca, payload, assinatura, recebido_em)
-SELECT @dongle_id::int, u.seq::bigint, u.boot_id::int, u.geracao_boot::int, u.t0_ms::bigint, NULLIF(u.marcador::text, ''),
-       @epoca::bigint, u.payload::bytea, u.assinatura::bytea, @recebido_em::timestamptz
-FROM ROWS FROM (unnest(@seqs::bigint[]), unnest(@boot_ids::int[]), unnest(@geracoes::int[]), unnest(@t0s::bigint[]),
-                unnest(@marcadores::text[]), unnest(@payloads::bytea[]), unnest(@assinaturas::bytea[]))
-     AS u(seq, boot_id, geracao_boot, t0_ms, marcador, payload, assinatura)
+-- name: InsertRawBlocks :many
+INSERT INTO raw_block (dongle_id, seq, boot_id, boot_generation, t0_ms, marker, epoch, payload, signature, received_at)
+SELECT @dongle_id::int, u.seq::bigint, u.boot_id::int, u.boot_generation::int, u.t0_ms::bigint, NULLIF(u.marker::text, ''),
+       @epoch::bigint, u.payload::bytea, u.signature::bytea, @received_at::timestamptz
+FROM ROWS FROM (unnest(@seqs::bigint[]), unnest(@boot_ids::int[]), unnest(@generations::int[]), unnest(@t0s::bigint[]),
+                unnest(@markers::text[]), unnest(@payloads::bytea[]), unnest(@signatures::bytea[]))
+     AS u(seq, boot_id, boot_generation, t0_ms, marker, payload, signature)
 ON CONFLICT (dongle_id, seq) DO NOTHING
 RETURNING seq;
 
--- name: AtualizarBootsIngestao :exec
-INSERT INTO boot (dongle_id, geracao_boot, boot_id, seq_primeiro, seq_ultimo, t_ms_primeiro, t_ms_ultimo,
-                  deslocamento_max_ms, pendente_tempo, pendente_gold, pendente_desde)
-SELECT @dongle_id::int, u.geracao_boot::int, u.boot_id::int, u.seq_ini::bigint, u.seq_fim::bigint, u.t_ini::bigint,
-       u.t_fim::bigint, u.desl_max::float8, true, true, @agora::timestamptz
-FROM ROWS FROM (unnest(@geracoes::int[]), unnest(@boot_ids::int[]), unnest(@seq_inis::bigint[]), unnest(@seq_fims::bigint[]),
-                unnest(@t_inis::bigint[]), unnest(@t_fims::bigint[]), unnest(@desl_maxs::float8[]))
-     AS u(geracao_boot, boot_id, seq_ini, seq_fim, t_ini, t_fim, desl_max)
-ORDER BY u.geracao_boot, u.boot_id
-ON CONFLICT (dongle_id, geracao_boot, boot_id) DO UPDATE SET
-  seq_primeiro        = LEAST(boot.seq_primeiro, EXCLUDED.seq_primeiro),
-  seq_ultimo          = GREATEST(boot.seq_ultimo, EXCLUDED.seq_ultimo),
-  t_ms_primeiro       = LEAST(boot.t_ms_primeiro, EXCLUDED.t_ms_primeiro),
-  t_ms_ultimo         = GREATEST(boot.t_ms_ultimo, EXCLUDED.t_ms_ultimo),
-  deslocamento_max_ms = LEAST(boot.deslocamento_max_ms, EXCLUDED.deslocamento_max_ms),
-  pendente_gold       = true,
-  pendente_tempo      = boot.pendente_tempo OR boot.origem_tempo IS DISTINCT FROM 'ancoras',
-  pendente_desde      = CASE WHEN boot.pendente_tempo THEN boot.pendente_desde ELSE EXCLUDED.pendente_desde END;
+-- name: UpdateIngestionBoots :exec
+INSERT INTO boot (dongle_id, boot_generation, boot_id, first_seq, last_seq, first_t_ms, last_t_ms,
+                  max_offset_ms, time_pending, gold_pending, pending_since)
+SELECT @dongle_id::int, u.boot_generation::int, u.boot_id::int, u.from_seq::bigint, u.to_seq::bigint, u.t_start::bigint,
+       u.t_end::bigint, u.max_offset::float8, true, true, @now::timestamptz
+FROM ROWS FROM (unnest(@generations::int[]), unnest(@boot_ids::int[]), unnest(@from_seqs::bigint[]), unnest(@to_seqs::bigint[]),
+                unnest(@t_starts::bigint[]), unnest(@t_ends::bigint[]), unnest(@max_offsets::float8[]))
+     AS u(boot_generation, boot_id, from_seq, to_seq, t_start, t_end, max_offset)
+ORDER BY u.boot_generation, u.boot_id
+ON CONFLICT (dongle_id, boot_generation, boot_id) DO UPDATE SET
+  first_seq        = LEAST(boot.first_seq, EXCLUDED.first_seq),
+  last_seq          = GREATEST(boot.last_seq, EXCLUDED.last_seq),
+  first_t_ms       = LEAST(boot.first_t_ms, EXCLUDED.first_t_ms),
+  last_t_ms         = GREATEST(boot.last_t_ms, EXCLUDED.last_t_ms),
+  max_offset_ms = LEAST(boot.max_offset_ms, EXCLUDED.max_offset_ms),
+  gold_pending       = true,
+  time_pending      = boot.time_pending OR boot.time_source IS DISTINCT FROM 'anchors',
+  pending_since      = CASE WHEN boot.time_pending THEN boot.pending_since ELSE EXCLUDED.pending_since END;

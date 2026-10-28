@@ -3,18 +3,18 @@ package postgres
 import (
 	"context"
 
-	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/dominio/ocorrencia"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/occurrence"
 )
 
-type ocorrencias struct{ q consultas.Querier }
+type occurrences struct{ q dbgen.Querier }
 
-func (r *ocorrencias) InserirLacuna(ctx context.Context, l ocorrencia.Lacuna) error {
-	return r.q.InserirLacuna(ctx, consultas.InserirLacunaParams{DongleID: l.DongleID, FromSeq: l.From, ToSeq: l.To,
-		Causa: l.Causa, RegistradoEm: l.RegistradoEm, CS: l.CS, SeqBloco: l.SeqBloco})
+func (r *occurrences) InsertGap(ctx context.Context, l occurrence.Gap) error {
+	return r.q.InsertGap(ctx, dbgen.InsertGapParams{DongleID: l.DongleID, FromSeq: l.From, ToSeq: l.To,
+		Cause: l.Cause, RegisteredAt: l.RegisteredAt, CS: l.CS, BlockSeq: l.BlockSeq})
 }
 
-func (r *ocorrencias) InserirAlerta(ctx context.Context, a ocorrencia.Alerta) error {
-	return r.q.InserirAlerta(ctx, consultas.InserirAlertaParams{DongleID: a.DongleID, GeracaoBoot: a.GeracaoBoot, BootID: a.BootID,
-		Tipo: a.Tipo, Detalhe: a.Detalhe})
+func (r *occurrences) InsertAlert(ctx context.Context, a occurrence.Alert) error {
+	return r.q.InsertAlert(ctx, dbgen.InsertAlertParams{DongleID: a.DongleID, BootGeneration: a.BootGeneration, BootID: a.BootID,
+		Type: a.Type, Detail: a.Detail})
 }

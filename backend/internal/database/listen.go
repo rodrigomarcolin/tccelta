@@ -1,4 +1,4 @@
-package banco
+package database
 
 import (
 	"context"
@@ -9,51 +9,51 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Escutar mantém uma conexão dedicada com LISTEN <canal> e entrega as cargas no canal devolvido.
+// Listen mantém uma conexão dedicada com LISTEN <canal> e entrega as cargas no canal devolvido.
 // Ao reconectar emite uma carga vazia sintética (notificações podem ter sido perdidas).
 // reconexoes (opcional) é chamada a cada reconexão.
-func Escutar(ctx context.Context, pool *pgxpool.Pool, canal string, log *slog.Logger, reconexoes func()) <-chan string {
+func Listen(ctx context.Context, pool *pgxpool.Pool, channel string, log *slog.Logger, reconnections func()) <-chan string {
 	out := make(chan string, 64)
 	go func() {
 		defer close(out)
-		espera := time.Second
-		primeira := true
+		wait := time.Second
+		first := true
 		for ctx.Err() == nil {
-			err := escutarUmaVez(ctx, pool, canal, out, &primeira, reconexoes)
+			err := listenOnce(ctx, pool, channel, out, &first, reconnections)
 			if ctx.Err() != nil {
 				return
 			}
-			log.Warn("banco.escuta_caiu", "canal", canal, "erro", err)
+			log.Warn("banco.escuta_caiu", "canal", channel, "erro", err)
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(espera):
+			case <-time.After(wait):
 			}
-			if espera < 30*time.Second {
-				espera *= 2
+			if wait < 30*time.Second {
+				wait *= 2
 			}
 		}
 	}()
 	return out
 }
 
-func escutarUmaVez(ctx context.Context, pool *pgxpool.Pool, canal string, out chan<- string, primeira *bool, reconexoes func()) error {
+func listenOnce(ctx context.Context, pool *pgxpool.Pool, channel string, out chan<- string, first *bool, reconnections func()) error {
 	c, err := pool.Acquire(ctx)
 	if err != nil {
 		return err
 	}
 	defer c.Release()
 	conn := c.Conn()
-	if _, err := conn.Exec(ctx, "LISTEN "+pgx.Identifier{canal}.Sanitize()); err != nil {
+	if _, err := conn.Exec(ctx, "LISTEN "+pgx.Identifier{channel}.Sanitize()); err != nil {
 		return err
 	}
-	if !*primeira {
-		if reconexoes != nil {
-			reconexoes()
+	if !*first {
+		if reconnections != nil {
+			reconnections()
 		}
-		enviar(out, "")
+		send(out, "")
 	}
-	*primeira = false
+	*first = false
 	for {
 		n, err := conn.WaitForNotification(ctx)
 		if err != nil {
@@ -61,11 +61,11 @@ func escutarUmaVez(ctx context.Context, pool *pgxpool.Pool, canal string, out ch
 			_ = conn.Close(context.WithoutCancel(ctx))
 			return err
 		}
-		enviar(out, n.Payload)
+		send(out, n.Payload)
 	}
 }
 
-func enviar(out chan<- string, p string) {
+func send(out chan<- string, p string) {
 	select {
 	case out <- p:
 	default: // canal cheio: o consumidor coalesce de qualquer forma

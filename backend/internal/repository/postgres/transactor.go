@@ -9,40 +9,40 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"tccelta/backend/internal/banco"
-	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/repositorio"
+	"tccelta/backend/internal/database"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/repository"
 )
 
-// Repositorios monta os repositórios sobre q (pool ou transação).
-func Repositorios(q consultas.Querier) repositorio.Repositorios {
-	return repositorio.Repositorios{
+// Repositories monta os repositórios sobre q (pool ou transação).
+func Repositories(q dbgen.Querier) repository.Repositories {
+	return repository.Repositories{
 		Dongles:     &dongles{q},
-		Desafios:    &desafios{q},
-		Estados:     &estados{q},
+		Challenges:  &challenges{q},
+		States:      &states{q},
 		Boots:       &boots{q},
-		Blocos:      &blocos{q},
-		Ocorrencias: &ocorrencias{q},
+		Blocks:      &blocks{q},
+		Occurrences: &occurrences{q},
 		Pids:        &pids{q},
 	}
 }
 
-// Transacionador abre transações no pool com banco.EmTransacao (timeouts, retry de deadlock).
-type Transacionador struct {
+// Transactor abre transações no pool com banco.InTransaction (timeouts, retry de deadlock).
+type Transactor struct {
 	pool *pgxpool.Pool
-	ops  banco.OpcoesTx
+	ops  database.TxOptions
 }
 
-// NovoTransacionador usa banco.OpcoesPadrao.
-func NovoTransacionador(pool *pgxpool.Pool) *Transacionador {
-	return &Transacionador{pool: pool, ops: banco.OpcoesPadrao}
+// NewTransactor usa banco.DefaultOptions.
+func NewTransactor(pool *pgxpool.Pool) *Transactor {
+	return &Transactor{pool: pool, ops: database.DefaultOptions}
 }
 
-// EmTransacao implementa repositorio.Transacionador.
-func (t *Transacionador) EmTransacao(ctx context.Context, fn func(ctx context.Context, r repositorio.Repositorios) error) error {
-	return banco.EmTransacao(ctx, t.pool, t.ops, func(ctx context.Context, q *consultas.Queries, _ pgx.Tx) error {
-		return fn(ctx, Repositorios(q))
+// InTransaction implementa repository.Transactor.
+func (t *Transactor) InTransaction(ctx context.Context, fn func(ctx context.Context, r repository.Repositories) error) error {
+	return database.InTransaction(ctx, t.pool, t.ops, func(ctx context.Context, q *dbgen.Queries, _ pgx.Tx) error {
+		return fn(ctx, Repositories(q))
 	})
 }
 
-var _ repositorio.Transacionador = (*Transacionador)(nil)
+var _ repository.Transactor = (*Transactor)(nil)

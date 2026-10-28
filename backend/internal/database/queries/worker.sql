@@ -1,78 +1,78 @@
--- name: PegarBootPendente :one
-SELECT dongle_id, geracao_boot, boot_id, seq_primeiro, t_ms_primeiro, t_ms_ultimo, deslocamento_max_ms,
-       a_ms, b, origem_tempo
+-- name: TakePendingBoot :one
+SELECT dongle_id, boot_generation, boot_id, first_seq, first_t_ms, last_t_ms, max_offset_ms,
+       a_ms, b, time_source
 FROM boot
-WHERE pendente_tempo
-ORDER BY pendente_desde
+WHERE time_pending
+ORDER BY pending_since
 LIMIT 1
 FOR UPDATE SKIP LOCKED;
 
--- name: ListarAncorasDoBoot :many
-SELECT t_ms, s1, s2 FROM ancora_tempo
-WHERE dongle_id = @dongle_id AND geracao_boot = @geracao_boot AND boot_id = @boot_id
+-- name: ListBootAnchors :many
+SELECT t_ms, s1, s2 FROM time_anchor
+WHERE dongle_id = @dongle_id AND boot_generation = @boot_generation AND boot_id = @boot_id
 ORDER BY t_ms;
 
--- name: BootAncoradoAnterior :one
-SELECT geracao_boot, boot_id, a_ms, b, incerteza_base_ms, t_ms_primeiro, t_ms_ultimo
+-- name: PreviousAnchoredBoot :one
+SELECT boot_generation, boot_id, a_ms, b, base_uncertainty_ms, first_t_ms, last_t_ms
 FROM boot
-WHERE dongle_id = @dongle_id AND origem_tempo = 'ancoras' AND seq_primeiro < @seq_primeiro
-ORDER BY seq_primeiro DESC
+WHERE dongle_id = @dongle_id AND time_source = 'anchors' AND first_seq < @first_seq
+ORDER BY first_seq DESC
 LIMIT 1;
 
--- name: BootAncoradoSeguinte :one
-SELECT geracao_boot, boot_id, a_ms, b, incerteza_base_ms, t_ms_primeiro, t_ms_ultimo
+-- name: NextAnchoredBoot :one
+SELECT boot_generation, boot_id, a_ms, b, base_uncertainty_ms, first_t_ms, last_t_ms
 FROM boot
-WHERE dongle_id = @dongle_id AND origem_tempo = 'ancoras' AND seq_primeiro > @seq_primeiro
-ORDER BY seq_primeiro ASC
+WHERE dongle_id = @dongle_id AND time_source = 'anchors' AND first_seq > @first_seq
+ORDER BY first_seq ASC
 LIMIT 1;
 
--- name: AtualizarTempoBoot :exec
+-- name: UpdateBootTime :exec
 UPDATE boot SET
-  a_ms = @a_ms, b = @b, incerteza_base_ms = @incerteza_base_ms, origem_tempo = @origem_tempo,
-  tempo_atualizado_em = @agora, pendente_tempo = false
-WHERE dongle_id = @dongle_id AND geracao_boot = @geracao_boot AND boot_id = @boot_id;
+  a_ms = @a_ms, b = @b, base_uncertainty_ms = @base_uncertainty_ms, time_source = @time_source,
+  time_updated_at = @now, time_pending = false
+WHERE dongle_id = @dongle_id AND boot_generation = @boot_generation AND boot_id = @boot_id;
 
--- name: ApagarGruposAncora :exec
-DELETE FROM grupo_ancora
-WHERE dongle_id = @dongle_id AND geracao_boot = @geracao_boot AND boot_id = @boot_id;
+-- name: DeleteAnchorGroups :exec
+DELETE FROM anchor_group
+WHERE dongle_id = @dongle_id AND boot_generation = @boot_generation AND boot_id = @boot_id;
 
--- name: CopiarGruposAncora :copyfrom
-INSERT INTO grupo_ancora (dongle_id, geracao_boot, boot_id, ordem, t_primeiro_ms, t_ultimo_ms,
-                          t_centro_ms, lo_ms, hi_ms, n_ancoras, calculado_em)
-VALUES (@dongle_id, @geracao_boot, @boot_id, @ordem, @t_primeiro_ms, @t_ultimo_ms,
-        @t_centro_ms, @lo_ms, @hi_ms, @n_ancoras, @calculado_em);
+-- name: CopyAnchorGroups :copyfrom
+INSERT INTO anchor_group (dongle_id, boot_generation, boot_id, ordinal, first_t_ms, last_t_ms,
+                          t_center_ms, lo_ms, hi_ms, n_anchors, computed_at)
+VALUES (@dongle_id, @boot_generation, @boot_id, @ordinal, @first_t_ms, @last_t_ms,
+        @t_center_ms, @lo_ms, @hi_ms, @n_anchors, @computed_at);
 
--- name: ListarGruposDoBoot :many
-SELECT ordem, t_primeiro_ms, t_ultimo_ms, t_centro_ms, lo_ms, hi_ms, n_ancoras
-FROM grupo_ancora
-WHERE dongle_id = @dongle_id AND geracao_boot = @geracao_boot AND boot_id = @boot_id
-ORDER BY ordem;
+-- name: ListBootAnchorGroups :many
+SELECT ordinal, first_t_ms, last_t_ms, t_center_ms, lo_ms, hi_ms, n_anchors
+FROM anchor_group
+WHERE dongle_id = @dongle_id AND boot_generation = @boot_generation AND boot_id = @boot_id
+ORDER BY ordinal;
 
--- name: MarcarVizinhosSemAncora :execrows
+-- name: MarkAnchorlessNeighbors :execrows
 -- Todos os boots sem âncora entre o boot ancorado anterior e o seguinte (por seq).
-UPDATE boot SET pendente_tempo = true, pendente_desde = @agora
+UPDATE boot SET time_pending = true, pending_since = @now
 WHERE boot.dongle_id = @dongle_id
-  AND NOT pendente_tempo
-  AND origem_tempo IS DISTINCT FROM 'ancoras'
-  AND seq_primeiro IS NOT NULL
-  AND seq_primeiro > COALESCE((SELECT max(x.seq_primeiro) FROM boot x
-                               WHERE x.dongle_id = @dongle_id AND x.origem_tempo = 'ancoras'
-                                 AND x.seq_primeiro < @seq_primeiro), 0)
-  AND seq_primeiro < COALESCE((SELECT min(x.seq_primeiro) FROM boot x
-                               WHERE x.dongle_id = @dongle_id AND x.origem_tempo = 'ancoras'
-                                 AND x.seq_primeiro > @seq_primeiro), 9223372036854775807);
+  AND NOT time_pending
+  AND time_source IS DISTINCT FROM 'anchors'
+  AND first_seq IS NOT NULL
+  AND first_seq > COALESCE((SELECT max(x.first_seq) FROM boot x
+                               WHERE x.dongle_id = @dongle_id AND x.time_source = 'anchors'
+                                 AND x.first_seq < @first_seq), 0)
+  AND first_seq < COALESCE((SELECT min(x.first_seq) FROM boot x
+                               WHERE x.dongle_id = @dongle_id AND x.time_source = 'anchors'
+                                 AND x.first_seq > @first_seq), 9223372036854775807);
 
--- name: InserirAlertaSeNovo :exec
+-- name: InsertAlertIfNew :exec
 -- Evita repetir o mesmo alerta a cada recalculo (janela de 24 h por boot e tipo).
 WITH p AS (
-  SELECT @dongle_id::int AS dongle_id, @geracao_boot::int AS geracao_boot, @boot_id::int AS boot_id,
-         @tipo::text AS tipo, @detalhe::jsonb AS detalhe, @agora::timestamptz AS agora
+  SELECT @dongle_id::int AS dongle_id, @boot_generation::int AS boot_generation, @boot_id::int AS boot_id,
+         @type::text AS type, @detail::jsonb AS detail, @now::timestamptz AS now
 )
-INSERT INTO alerta (dongle_id, geracao_boot, boot_id, tipo, detalhe)
-SELECT p.dongle_id, p.geracao_boot, p.boot_id, p.tipo, p.detalhe FROM p
-WHERE NOT EXISTS (SELECT 1 FROM alerta a
-                  WHERE a.dongle_id = p.dongle_id AND a.geracao_boot = p.geracao_boot AND a.boot_id = p.boot_id
-                    AND a.tipo = p.tipo AND a.criado_em > p.agora - INTERVAL '24 hours');
+INSERT INTO alert (dongle_id, boot_generation, boot_id, type, detail)
+SELECT p.dongle_id, p.boot_generation, p.boot_id, p.type, p.detail FROM p
+WHERE NOT EXISTS (SELECT 1 FROM alert a
+                  WHERE a.dongle_id = p.dongle_id AND a.boot_generation = p.boot_generation AND a.boot_id = p.boot_id
+                    AND a.type = p.type AND a.created_at > p.now - INTERVAL '24 hours');
 
--- name: ContarBootsPendentes :one
-SELECT count(*) FROM boot WHERE pendente_tempo;
+-- name: CountPendingBoots :one
+SELECT count(*) FROM boot WHERE time_pending;

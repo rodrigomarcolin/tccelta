@@ -1,4 +1,4 @@
-package limites
+package limits
 
 import (
 	"context"
@@ -10,70 +10,70 @@ import (
 )
 
 func TestLocal(t *testing.T) {
-	agora := time.Unix(600, 0)
-	l := NovoLocal()
-	l.Agora = func() time.Time { return agora }
+	now := time.Unix(600, 0)
+	l := NewLocal()
+	l.Now = func() time.Time { return now }
 	for i := 0; i < 3; i++ {
-		if ok, _ := l.Permitir(context.Background(), "e", "k", 3); !ok {
+		if ok, _ := l.Allow(context.Background(), "e", "k", 3); !ok {
 			t.Fatal("deveria permitir")
 		}
 	}
-	ok, ra := l.Permitir(context.Background(), "e", "k", 3)
+	ok, ra := l.Allow(context.Background(), "e", "k", 3)
 	if ok || ra < time.Second {
 		t.Fatal("deveria bloquear", ra)
 	}
-	agora = agora.Add(time.Minute)
-	if ok, _ := l.Permitir(context.Background(), "e", "k", 3); !ok {
+	now = now.Add(time.Minute)
+	if ok, _ := l.Allow(context.Background(), "e", "k", 3); !ok {
 		t.Fatal("janela nova")
 	}
 }
 
-func TestRedisCompartilhado(t *testing.T) {
+func TestSharedRedis(t *testing.T) {
 	mr := miniredis.RunT(t)
 	c1 := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	c2 := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	a, b := NovoRedis(c1, time.Second), NovoRedis(c2, time.Second)
+	a, b := NewRedis(c1, time.Second), NewRedis(c2, time.Second)
 	ctx := context.Background()
 	for i := 0; i < 2; i++ {
-		if ok, _ := a.Permitir(ctx, "e", "k", 4); !ok {
+		if ok, _ := a.Allow(ctx, "e", "k", 4); !ok {
 			t.Fatal()
 		}
-		if ok, _ := b.Permitir(ctx, "e", "k", 4); !ok {
+		if ok, _ := b.Allow(ctx, "e", "k", 4); !ok {
 			t.Fatal()
 		}
 	}
-	if ok, ra := a.Permitir(ctx, "e", "k", 4); ok || ra < time.Second {
+	if ok, ra := a.Allow(ctx, "e", "k", 4); ok || ra < time.Second {
 		t.Fatal("as duas réplicas somam no mesmo limite")
 	}
 }
 
-func TestFallbackAbreDisjuntor(t *testing.T) {
+func TestFallbackOpensBreaker(t *testing.T) {
 	mr := miniredis.RunT(t)
 	c := redis.NewClient(&redis.Options{Addr: mr.Addr(), MaxRetries: -1, DialTimeout: 100 * time.Millisecond})
-	falhas := 0
-	l := &LimitadorComFallback{Local: NovoLocal(), Redis: NovoRedis(c, 100*time.Millisecond), OnFalha: func() { falhas++ }}
+	failures := 0
+	l := &LimiterWithFallback{Local: NewLocal(), Redis: NewRedis(c, 100*time.Millisecond), OnFailure: func() { failures++ }}
 	mr.Close()
 	for i := 0; i < 8; i++ {
-		if ok, _ := l.Permitir(context.Background(), "e", "k"+string(rune('a'+i)), 10); !ok {
+		if ok, _ := l.Allow(context.Background(), "e", "k"+string(rune('a'+i)), 10); !ok {
 			t.Fatal("redis fora nunca bloqueia")
 		}
 	}
-	if falhas != 5 {
-		t.Fatalf("falhas = %d, o disjuntor deveria abrir após 5", falhas)
+	if failures != 5 {
+		t.Fatalf("falhas = %d, o disjuntor deveria abrir após 5", failures)
 	}
 }
 
-func TestConcorrencia(t *testing.T) {
-	c := NovaConcorrencia(1, 20*time.Millisecond)
-	lib, ok := c.Adquirir()
+func TestConcurrency(t *testing.T) {
+	c := NewConcurrency(1, 20*time.Millisecond)
+	lib, ok := c.Acquire()
 	if !ok {
 		t.Fatal()
 	}
-	if _, ok := c.Adquirir(); ok {
+	if _, ok := c.Acquire(); ok {
 		t.Fatal("cheio")
 	}
 	lib()
-	if _, ok := c.Adquirir(); !ok {
+	if _, ok := c.Acquire(); !ok {
 		t.Fatal("liberou")
 	}
 }

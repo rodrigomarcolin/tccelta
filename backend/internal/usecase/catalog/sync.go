@@ -1,46 +1,46 @@
-// Package catalogo mantém o catálogo de PIDs em memória em dia com a tabela pid.
-package catalogo
+// Package catalog mantém o catálogo de PIDs em memória em dia com a tabela pid.
+package catalog
 
 import (
 	"context"
 	"log/slog"
 	"time"
 
-	"tccelta/backend/internal/dominio/pid"
-	"tccelta/backend/internal/repositorio"
+	"tccelta/backend/internal/domain/pid"
+	"tccelta/backend/internal/repository"
 )
 
-// Sincronizar recarrega o catálogo a cada sinal de LISTEN pid_alterado e a cada 5 min.
-type Sincronizar struct {
-	pids repositorio.Pids
-	cat  *pid.Catalogo
+// Sync recarrega o catálogo a cada sinal de LISTEN pid_changed e a cada 5 min.
+type Sync struct {
+	pids repository.Pids
+	cat  *pid.Catalog
 	log  *slog.Logger
 }
 
-// NovoSincronizar liga o caso de uso ao repositório e ao catálogo.
-func NovoSincronizar(pids repositorio.Pids, cat *pid.Catalogo, log *slog.Logger) *Sincronizar {
-	return &Sincronizar{pids: pids, cat: cat, log: log}
+// NewSync liga o caso de uso ao repositório e ao catálogo.
+func NewSync(pids repository.Pids, cat *pid.Catalog, log *slog.Logger) *Sync {
+	return &Sync{pids: pids, cat: cat, log: log}
 }
 
-// Recarregar lê a tabela pid e troca o catálogo.
-func (c *Sincronizar) Recarregar(ctx context.Context) error {
-	defs, err := c.pids.Listar(ctx)
+// Reload lê a tabela pid e troca o catálogo.
+func (c *Sync) Reload(ctx context.Context) error {
+	defs, err := c.pids.List(ctx)
 	if err != nil {
 		return err
 	}
-	c.cat.Definir(defs)
+	c.cat.Set(defs)
 	if c.log != nil {
 		c.log.Info("pids.recarregado", "n", len(defs))
 	}
 	return nil
 }
 
-// Acompanhar recarrega a cada sinal do canal e a cada 5 min, até o contexto terminar.
-func (c *Sincronizar) Acompanhar(ctx context.Context, sinais <-chan string) {
+// Track recarrega a cada sinal do canal e a cada 5 min, até o contexto terminar.
+func (c *Sync) Track(ctx context.Context, signals <-chan string) {
 	t := time.NewTicker(5 * time.Minute)
 	defer t.Stop()
-	recarregar := func() {
-		if err := c.Recarregar(ctx); err != nil && c.log != nil {
+	reload := func() {
+		if err := c.Reload(ctx); err != nil && c.log != nil {
 			c.log.Error("pids.recarga_falhou", "erro", err)
 		}
 	}
@@ -48,13 +48,13 @@ func (c *Sincronizar) Acompanhar(ctx context.Context, sinais <-chan string) {
 		select {
 		case <-ctx.Done():
 			return
-		case _, ok := <-sinais:
+		case _, ok := <-signals:
 			if !ok {
 				return
 			}
-			recarregar()
+			reload()
 		case <-t.C:
-			recarregar()
+			reload()
 		}
 	}
 }

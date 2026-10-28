@@ -12,17 +12,17 @@ import (
 
 	"github.com/google/uuid"
 
-	"tccelta/backend/internal/casodeuso/porta"
-	"tccelta/backend/internal/casodeuso/porta/portateste"
-	"tccelta/backend/internal/dominio/dongle"
-	dhs "tccelta/backend/internal/dominio/handshake"
-	"tccelta/backend/internal/dominio/ocorrencia"
-	"tccelta/backend/internal/dominio/protocolo"
-	"tccelta/backend/internal/repositorio/memoria"
+	"tccelta/backend/internal/domain/dongle"
+	dhs "tccelta/backend/internal/domain/handshake"
+	"tccelta/backend/internal/domain/occurrence"
+	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/repository/memory"
+	"tccelta/backend/internal/usecase/port"
+	"tccelta/backend/internal/usecase/port/porttest"
 )
 
 var (
-	dev   = protocolo.DevID{0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77}
+	dev   = protocol.DevID{0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77}
 	kAuth = []byte("0123456789abcdef0123456789abcdef")
 	kRec  = []byte("fedcba9876543210fedcba9876543210")
 	t0    = time.Unix(1_800_000_000, 0)
@@ -30,226 +30,226 @@ var (
 
 type fakeToken struct{}
 
-func (fakeToken) Emitir(_ context.Context, _ protocolo.DevID, cs uint32) (porta.TokenEmitido, error) {
-	return porta.TokenEmitido{Token: "tk", JTI: uuid.New(), ExpiraEm: t0.Add(time.Hour)}, nil
+func (fakeToken) Issue(_ context.Context, _ protocol.DevID, cs uint32) (port.IssuedToken, error) {
+	return port.IssuedToken{Token: "tk", JTI: uuid.New(), ExpiresAt: t0.Add(time.Hour)}, nil
 }
-func (fakeToken) Validade() time.Duration { return time.Hour }
+func (fakeToken) Validity() time.Duration { return time.Hour }
 
-type amb struct {
-	bd        *memoria.Banco
-	kms       *portateste.Memoria
-	relogio   *portateste.RelogioAjustavel
-	emitir    *EmitirDesafio
-	responder *ResponderDesafio
-	params    Parametros
+type testEnv struct {
+	db      *memory.Database
+	kms     *porttest.Memory
+	clock   *porttest.AdjustableClock
+	issue   *IssueChallenge
+	respond *RespondChallenge
+	params  Params
 }
 
-func novo(t *testing.T) *amb {
+func newTest(t *testing.T) *testEnv {
 	t.Helper()
-	bd := memoria.Novo()
-	bd.AdicionarDongle(dongle.Dongle{ID: 7, DevID: dev, Perfil: protocolo.PerfilHMAC, ChaveAuth: "ka", ChaveRec: "kr", Ativo: true})
-	k := portateste.Nova()
-	k.AdicionarDongle("ka", "kr", kAuth, kRec)
-	rel := &portateste.RelogioAjustavel{T: t0}
-	p := Parametros{DesafioValidade: 60 * time.Second, MaxPendentes: 2, AncoraRTTMax: 2 * time.Second, TLatSugerido: time.Minute}
+	db := memory.New()
+	db.AddDongle(dongle.Dongle{ID: 7, DevID: dev, Profile: protocol.ProfileHMAC, AuthKey: "ka", RecKey: "kr", Active: true})
+	k := porttest.New()
+	k.AddDongle("ka", "kr", kAuth, kRec)
+	rel := &porttest.AdjustableClock{T: t0}
+	p := Params{ChallengeValidity: 60 * time.Second, MaxPending: 2, AnchorRTTMax: 2 * time.Second, SuggestedTLat: time.Minute}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	repos := bd.Repositorios()
-	return &amb{bd: bd, kms: k, relogio: rel, params: p,
-		emitir:    NovoEmitirDesafio(repos, k, portateste.Nop{}, rel.Agora, log, p),
-		responder: NovoResponderDesafio(repos, bd, k, fakeToken{}, portateste.Nop{}, rel.Agora, log, p)}
+	repos := db.Repositories()
+	return &testEnv{db: db, kms: k, clock: rel, params: p,
+		issue:   NewIssueChallenge(repos, k, porttest.Nop{}, rel.Now, log, p),
+		respond: NewRespondChallenge(repos, db, k, fakeToken{}, porttest.Nop{}, rel.Now, log, p)}
 }
 
-func macTag(chave []byte, tipo protocolo.Tipo, payload []byte) []byte {
-	m := hmac.New(sha256.New, chave)
-	m.Write(protocolo.EntradaTag(tipo, dev, payload))
-	return m.Sum(nil)[:protocolo.TamTagAuth]
+func macTag(key []byte, typ protocol.Type, payload []byte) []byte {
+	m := hmac.New(sha256.New, key)
+	m.Write(protocol.TagInput(typ, dev, payload))
+	return m.Sum(nil)[:protocol.AuthTagSize]
 }
 
 // responder monta a resposta do dongle ao desafio emitido.
-func (a *amb) resposta(t *testing.T, d DesafioEmitido, tail, head uint32, ruim bool) []byte {
+func (a *testEnv) response(t *testing.T, d IssuedChallenge, tail, head uint32, bad bool) []byte {
 	t.Helper()
-	tl, _, err := protocolo.LerTLV(d.TLV)
+	tl, _, err := protocol.ReadTLV(d.TLV)
 	if err != nil {
 		t.Fatal(err)
 	}
-	des, _, err := protocolo.DecodificarDesafio(tl.V)
+	ch, _, err := protocol.DecodeChallenge(tl.V)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := protocolo.Resposta{CS: des.CS, NS: des.NS, TailSeq: tail, HeadSeq: head, BootID: 1, TMs: 5000}
-	tag := macTag(kAuth, protocolo.TipoResposta, r.Payload())
-	if ruim {
+	r := protocol.Response{CS: ch.CS, NS: ch.NS, TailSeq: tail, HeadSeq: head, BootID: 1, TMs: 5000}
+	tag := macTag(kAuth, protocol.ResponseType, r.Payload())
+	if bad {
 		tag[0] ^= 1
 	}
-	return r.Montar(tag)
+	return r.Build(tag)
 }
 
-func (a *amb) pedir(t *testing.T) DesafioEmitido {
+func (a *testEnv) request(t *testing.T) IssuedChallenge {
 	t.Helper()
-	d, err := a.emitir.Executar(context.Background(), EmitirDesafioEntrada{DevID: dev})
+	d, err := a.issue.Run(context.Background(), IssueChallengeInput{DevID: dev})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
 }
 
-func (a *amb) responderCom(tlv []byte) (ResultadoHandshake, error) {
-	return a.responder.Executar(context.Background(), ResponderDesafioEntrada{DevID: dev, S2: a.relogio.Agora(), TLV: tlv})
+func (a *testEnv) respondWith(tlv []byte) (HandshakeResult, error) {
+	return a.respond.Run(context.Background(), RespondChallengeInput{DevID: dev, S2: a.clock.Now(), TLV: tlv})
 }
 
-func TestFluxoFeliz(t *testing.T) {
-	a := novo(t)
-	d := a.pedir(t)
+func TestHappyFlow(t *testing.T) {
+	a := newTest(t)
+	d := a.request(t)
 	// o desafio é assinado com K_auth
-	tl, _, _ := protocolo.LerTLV(d.TLV)
-	des, tag, _ := protocolo.DecodificarDesafio(tl.V)
-	if !protocolo.CompararTag(macTag(kAuth, protocolo.TipoDesafio, des.Payload()), tag) {
+	tl, _, _ := protocol.ReadTLV(d.TLV)
+	ch, tag, _ := protocol.DecodeChallenge(tl.V)
+	if !protocol.CompareTag(macTag(kAuth, protocol.ChallengeType, ch.Payload()), tag) {
 		t.Fatal("tag do desafio não confere")
 	}
-	a.relogio.Avancar(300 * time.Millisecond)
-	res, err := a.responderCom(a.resposta(t, d, 1, 0, false))
+	a.clock.Advance(300 * time.Millisecond)
+	res, err := a.respondWith(a.response(t, d, 1, 0, false))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Token != "tk" || !res.ComAncora || res.AckSeq != 0 || res.ValidadeS != 3600 || res.TLatSugerido != time.Minute {
+	if res.Token != "tk" || !res.WithAnchor || res.AckSeq != 0 || res.ValidityS != 3600 || res.SuggestedTLat != time.Minute {
 		t.Fatalf("%+v", res)
 	}
-	est := a.bd.Estado(7)
-	if est.CConf != int64(des.CS) || len(est.UltimoAck) == 0 {
+	est := a.db.State(7)
+	if est.CConf != int64(ch.CS) || len(est.LastAck) == 0 {
 		t.Fatalf("%+v", est)
 	}
-	g, _ := a.bd.Desafio(7, int64(des.CS))
-	if g.Resultado != dhs.ResultadoAceito || len(a.bd.Ancoras) != 1 || len(a.bd.Notificacoes) != 1 {
-		t.Fatalf("%+v ancoras=%d", g, len(a.bd.Ancoras))
+	g, _ := a.db.Challenge(7, int64(ch.CS))
+	if g.Result != dhs.ResultAccepted || len(a.db.Anchors) != 1 || len(a.db.Notifications) != 1 {
+		t.Fatalf("%+v ancoras=%d", g, len(a.db.Anchors))
 	}
 }
 
-func TestDesafiosPendentesComRetryAfter(t *testing.T) {
-	a := novo(t)
-	a.pedir(t)
-	a.pedir(t)
-	d, err := a.emitir.Executar(context.Background(), EmitirDesafioEntrada{DevID: dev})
-	if !errors.Is(err, dhs.ErrDesafiosPendentes) || d.RetryAfter != 20*time.Second {
+func TestPendingChallengesWithRetryAfter(t *testing.T) {
+	a := newTest(t)
+	a.request(t)
+	a.request(t)
+	d, err := a.issue.Run(context.Background(), IssueChallengeInput{DevID: dev})
+	if !errors.Is(err, dhs.ErrPendingChallenges) || d.RetryAfter != 20*time.Second {
 		t.Fatalf("%v %v", err, d.RetryAfter)
 	}
 }
 
-func TestTagInvalidaMarcaODesafio(t *testing.T) {
-	a := novo(t)
-	d := a.pedir(t)
-	_, err := a.responderCom(a.resposta(t, d, 1, 0, true))
-	if !errors.Is(err, dhs.ErrTagInvalida) {
+func TestInvalidTagMarksChallenge(t *testing.T) {
+	a := newTest(t)
+	d := a.request(t)
+	_, err := a.respondWith(a.response(t, d, 1, 0, true))
+	if !errors.Is(err, dhs.ErrInvalidTag) {
 		t.Fatal(err)
 	}
-	if g, _ := a.bd.Desafio(7, 1); g.Resultado != "tag_invalida" {
+	if g, _ := a.db.Challenge(7, 1); g.Result != "invalid_tag" {
 		t.Fatalf("%+v", g)
 	}
-	if a.bd.Estado(7).CConf != 0 {
+	if a.db.State(7).CConf != 0 {
 		t.Fatal("estado não pode mudar")
 	}
 }
 
-func TestCSAntigo(t *testing.T) {
-	a := novo(t)
-	a.bd.DefinirEstado(7, dongle.Estado{CConf: 100})
-	d := a.pedir(t) // c_S = 1 <= c_conf
-	if _, err := a.responderCom(a.resposta(t, d, 1, 0, false)); !errors.Is(err, dhs.ErrCSAntigo) {
+func TestStaleCS(t *testing.T) {
+	a := newTest(t)
+	a.db.SetState(7, dongle.State{CConf: 100})
+	d := a.request(t) // c_S = 1 <= c_conf
+	if _, err := a.respondWith(a.response(t, d, 1, 0, false)); !errors.Is(err, dhs.ErrStaleCS) {
 		t.Fatal(err)
 	}
 }
 
-func TestDesafioUsadoUmaVez(t *testing.T) {
-	a := novo(t)
-	d := a.pedir(t)
-	r := a.resposta(t, d, 1, 0, false)
-	if _, err := a.responderCom(r); err != nil {
+func TestChallengeUsedOnce(t *testing.T) {
+	a := newTest(t)
+	d := a.request(t)
+	r := a.response(t, d, 1, 0, false)
+	if _, err := a.respondWith(r); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.responderCom(r); !errors.Is(err, dhs.ErrDesafioInvalido) {
-		t.Fatal(err)
-	}
-}
-
-func TestDesafioVencido(t *testing.T) {
-	a := novo(t)
-	d := a.pedir(t)
-	a.relogio.Avancar(2 * time.Minute)
-	if _, err := a.responderCom(a.resposta(t, d, 1, 0, false)); !errors.Is(err, dhs.ErrDesafioInvalido) {
+	if _, err := a.respondWith(r); !errors.Is(err, dhs.ErrInvalidChallenge) {
 		t.Fatal(err)
 	}
 }
 
-func TestTailInconsistenteFinalizaSemMudarEstado(t *testing.T) {
-	a := novo(t)
-	d := a.pedir(t)
-	_, err := a.responderCom(a.resposta(t, d, 10, 3, false)) // tail > head+1
-	if !errors.Is(err, dhs.ErrRespostaInconsist) {
+func TestExpiredChallenge(t *testing.T) {
+	a := newTest(t)
+	d := a.request(t)
+	a.clock.Advance(2 * time.Minute)
+	if _, err := a.respondWith(a.response(t, d, 1, 0, false)); !errors.Is(err, dhs.ErrInvalidChallenge) {
 		t.Fatal(err)
-	}
-	g, _ := a.bd.Desafio(7, 1)
-	if g.Resultado != dhs.ResultadoInconsistente || a.bd.Estado(7).CConf != 0 {
-		t.Fatalf("%+v %+v", g, a.bd.Estado(7))
 	}
 }
 
-func TestOverflowRegistraLacuna(t *testing.T) {
-	a := novo(t)
-	a.bd.DefinirEstado(7, dongle.Estado{SeqContiguo: 5, HeadSeq: 5})
-	d := a.pedir(t)
-	res, err := a.responderCom(a.resposta(t, d, 20, 30, false))
+func TestInconsistentTailFinalizesWithoutChangingState(t *testing.T) {
+	a := newTest(t)
+	d := a.request(t)
+	_, err := a.respondWith(a.response(t, d, 10, 3, false)) // tail > head+1
+	if !errors.Is(err, dhs.ErrInconsistentResponse) {
+		t.Fatal(err)
+	}
+	g, _ := a.db.Challenge(7, 1)
+	if g.Result != dhs.ResultInconsistent || a.db.State(7).CConf != 0 {
+		t.Fatalf("%+v %+v", g, a.db.State(7))
+	}
+}
+
+func TestOverflowRecordsGap(t *testing.T) {
+	a := newTest(t)
+	a.db.SetState(7, dongle.State{ContiguousSeq: 5, HeadSeq: 5})
+	d := a.request(t)
+	res, err := a.respondWith(a.response(t, d, 20, 30, false))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.AckSeq != 19 || len(a.bd.Lacunas) != 1 {
-		t.Fatalf("%+v %+v", res, a.bd.Lacunas)
+	if res.AckSeq != 19 || len(a.db.Gaps) != 1 {
+		t.Fatalf("%+v %+v", res, a.db.Gaps)
 	}
-	l := a.bd.Lacunas[0]
-	if l.Causa != ocorrencia.CausaOverflow || l.From != 6 || l.To != 19 || l.CS == nil || *l.CS != 1 {
+	l := a.db.Gaps[0]
+	if l.Cause != occurrence.CauseOverflow || l.From != 6 || l.To != 19 || l.CS == nil || *l.CS != 1 {
 		t.Fatalf("%+v", l)
 	}
 }
 
-func TestAncoraRTTAlto(t *testing.T) {
-	a := novo(t)
-	d := a.pedir(t)
-	a.relogio.Avancar(5 * time.Second) // acima de AncoraRTTMax
-	res, err := a.responderCom(a.resposta(t, d, 1, 0, false))
+func TestAnchorHighRTT(t *testing.T) {
+	a := newTest(t)
+	d := a.request(t)
+	a.clock.Advance(5 * time.Second) // acima de AnchorRTTMax
+	res, err := a.respondWith(a.response(t, d, 1, 0, false))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.ComAncora || len(a.bd.Ancoras) != 0 {
+	if res.WithAnchor || len(a.db.Anchors) != 0 {
 		t.Fatalf("%+v", res)
 	}
-	tl, _, _ := protocolo.LerTLV(res.AckTLV)
-	ack, _, _ := protocolo.DecodificarAck(tl.V)
-	if ack.Flags&protocolo.FlagAckAncoraFalhou == 0 {
+	tl, _, _ := protocol.ReadTLV(res.AckTLV)
+	ack, _, _ := protocol.DecodeAck(tl.V)
+	if ack.Flags&protocol.FlagAckAnchorFailed == 0 {
 		t.Fatal("ACK deveria sinalizar âncora falhou")
 	}
-	if g, _ := a.bd.Desafio(7, 1); g.Resultado != dhs.ResultadoAceitoSemAncora {
+	if g, _ := a.db.Challenge(7, 1); g.Result != dhs.ResultAcceptedNoAnchor {
 		t.Fatalf("%+v", g)
 	}
 }
 
-func TestAcesso(t *testing.T) {
-	a := novo(t)
-	if _, err := a.emitir.Executar(context.Background(), EmitirDesafioEntrada{DevID: protocolo.DevID{9}}); !errors.Is(err, dongle.ErrDesconhecido) {
+func TestAccess(t *testing.T) {
+	a := newTest(t)
+	if _, err := a.issue.Run(context.Background(), IssueChallengeInput{DevID: protocol.DevID{9}}); !errors.Is(err, dongle.ErrUnknown) {
 		t.Fatal(err)
 	}
-	a.bd.AdicionarDongle(dongle.Dongle{ID: 8, DevID: protocolo.DevID{8}, Perfil: protocolo.PerfilNone, Ativo: true})
-	if _, err := a.emitir.Executar(context.Background(), EmitirDesafioEntrada{DevID: protocolo.DevID{8}}); !errors.Is(err, dongle.ErrPerfilNaoPermitido) {
+	a.db.AddDongle(dongle.Dongle{ID: 8, DevID: protocol.DevID{8}, Profile: protocol.ProfileNone, Active: true})
+	if _, err := a.issue.Run(context.Background(), IssueChallengeInput{DevID: protocol.DevID{8}}); !errors.Is(err, dongle.ErrProfileNotAllowed) {
 		t.Fatal(err)
 	}
-	a.bd.AdicionarDongle(dongle.Dongle{ID: 9, DevID: protocolo.DevID{9}, Perfil: protocolo.PerfilHMAC, Ativo: false})
-	if _, err := a.emitir.Executar(context.Background(), EmitirDesafioEntrada{DevID: protocolo.DevID{9}}); !errors.Is(err, dongle.ErrInativo) {
+	a.db.AddDongle(dongle.Dongle{ID: 9, DevID: protocol.DevID{9}, Profile: protocol.ProfileHMAC, Active: false})
+	if _, err := a.issue.Run(context.Background(), IssueChallengeInput{DevID: protocol.DevID{9}}); !errors.Is(err, dongle.ErrInactive) {
 		t.Fatal(err)
 	}
 }
 
-func TestKMSIndisponivel(t *testing.T) {
-	a := novo(t)
-	var f error = porta.ErrKMSIndisponivel
-	a.kms.Falha.Store(&f)
-	if _, err := a.emitir.Executar(context.Background(), EmitirDesafioEntrada{DevID: dev}); !errors.Is(err, porta.ErrKMSIndisponivel) {
+func TestKMSUnavailable(t *testing.T) {
+	a := newTest(t)
+	var f error = port.ErrKMSUnavailable
+	a.kms.Failure.Store(&f)
+	if _, err := a.issue.Run(context.Background(), IssueChallengeInput{DevID: dev}); !errors.Is(err, port.ErrKMSUnavailable) {
 		t.Fatal(err)
 	}
 }

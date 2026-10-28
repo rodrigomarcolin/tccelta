@@ -1,42 +1,42 @@
-// Package portateste tem dublês das portas compartilhadas, para testes e para o simulador.
-package portateste
+// Package porttest tem dublês das portas compartilhadas, para testes e para o simulador.
+package porttest
 
 import (
 	"time"
 
-	"tccelta/backend/internal/casodeuso/porta"
+	"tccelta/backend/internal/usecase/port"
 )
 
 // Nop descarta todas as métricas; implementa todas as portas de métricas.
 type Nop struct{}
 
-func (Nop) Handshake(string)                                 {}
-func (Nop) Lacuna(string)                                    {}
-func (Nop) AncoraRTT(time.Duration)                          {}
-func (Nop) Blocos(string, int)                               {}
-func (Nop) Lote(string)                                      {}
-func (Nop) DuracaoTxIngestao(time.Duration)                  {}
-func (Nop) Linhas(string, int)                               {}
-func (Nop) Requisicao(string, int, time.Duration)            {}
-func (Nop) Rejeicao(string)                                  {}
-func (Nop) ChamadaKMS(string, string, string, time.Duration) {}
-func (Nop) DisjuntorKMS(bool)                                {}
+func (Nop) Handshake(string)                              {}
+func (Nop) Gap(string)                                    {}
+func (Nop) AnchorRTT(time.Duration)                       {}
+func (Nop) Blocks(string, int)                            {}
+func (Nop) Batch(string)                                  {}
+func (Nop) IngestionTxDuration(time.Duration)             {}
+func (Nop) Rows(string, int)                              {}
+func (Nop) Request(string, int, time.Duration)            {}
+func (Nop) Rejection(string)                              {}
+func (Nop) KMSCall(string, string, string, time.Duration) {}
+func (Nop) KMSBreaker(bool)                               {}
 
 var (
-	_ porta.MetricasHandshake = Nop{}
-	_ porta.MetricasIngestao  = Nop{}
-	_ porta.MetricasHTTP      = Nop{}
-	_ porta.MetricasKMS       = Nop{}
+	_ port.MetricsHandshake = Nop{}
+	_ port.MetricsIngestion = Nop{}
+	_ port.MetricsHTTP      = Nop{}
+	_ port.MetricsKMS       = Nop{}
 )
 
-// RelogioFixo devolve um relógio que sempre responde t. Para avançar, use RelogioAjustavel.
-func RelogioFixo(t time.Time) porta.Relogio { return func() time.Time { return t } }
+// FixedClock devolve um relógio que sempre responde t. Para avançar, use AdjustableClock.
+func FixedClock(t time.Time) port.Clock { return func() time.Time { return t } }
 
-// RelogioAjustavel é um relógio controlado pelo teste.
-type RelogioAjustavel struct{ T time.Time }
+// AdjustableClock é um relógio controlado pelo teste.
+type AdjustableClock struct{ T time.Time }
 
-// Agora implementa porta.Relogio via método (use r.Agora como valor).
-func (r *RelogioAjustavel) Agora() time.Time { return r.T }
+// Now implementa port.Clock via método (use r.Now como valor).
+func (r *AdjustableClock) Now() time.Time { return r.T }
 
-// Avancar soma d ao relógio.
-func (r *RelogioAjustavel) Avancar(d time.Duration) { r.T = r.T.Add(d) }
+// Advance soma d ao relógio.
+func (r *AdjustableClock) Advance(d time.Duration) { r.T = r.T.Add(d) }

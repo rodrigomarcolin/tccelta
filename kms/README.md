@@ -28,7 +28,7 @@ tccelta-kms saude --url http://127.0.0.1:9300/saude/pronta
 ```
 
 `provisionar` grava `<saida>/<devid>/registro.json` ([`docs/registro-dongle.md`](docs/registro-dongle.md));
-o cadastro no banco é `tccelta provisionar registrar --arquivo …` no backend.
+o cadastro no banco é `tccelta provision register --file …` no backend.
 
 ## Configuração (variáveis de ambiente)
 

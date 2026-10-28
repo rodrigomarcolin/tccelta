@@ -1,22 +1,22 @@
--- name: ListarBlocosDados :many
-SELECT seq, geracao_boot, boot_id, t0_ms, payload, recebido_em FROM bloco_bruto
-WHERE dongle_id = @dongle_id AND marcador IS NULL AND seq >= @seq_ini AND seq <= @seq_fim
+-- name: ListDataBlocks :many
+SELECT seq, boot_generation, boot_id, t0_ms, payload, received_at FROM raw_block
+WHERE dongle_id = @dongle_id AND marker IS NULL AND seq >= @from_seq AND seq <= @to_seq
 ORDER BY seq
-LIMIT @limite;
+LIMIT @row_limit;
 
--- name: ApagarLeiturasDoBloco :execrows
-DELETE FROM leitura
-WHERE dongle_id = @dongle_id AND seq_bloco >= @seq_ini AND seq_bloco <= @seq_fim
-  AND recebido_em >= @recebido_min AND recebido_em <= @recebido_max;
+-- name: DeleteBlockReadings :execrows
+DELETE FROM reading
+WHERE dongle_id = @dongle_id AND block_seq >= @from_seq AND block_seq <= @to_seq
+  AND received_at >= @received_min AND received_at <= @received_max;
 
--- name: ApagarPosicoesDoBloco :execrows
-DELETE FROM posicao
-WHERE dongle_id = @dongle_id AND seq_bloco >= @seq_ini AND seq_bloco <= @seq_fim
-  AND recebido_em >= @recebido_min AND recebido_em <= @recebido_max;
+-- name: DeleteBlockPositions :execrows
+DELETE FROM position
+WHERE dongle_id = @dongle_id AND block_seq >= @from_seq AND block_seq <= @to_seq
+  AND received_at >= @received_min AND received_at <= @received_max;
 
--- name: MarcarBootsGold :exec
-UPDATE boot SET pendente_gold = true
-WHERE dongle_id = @dongle_id AND seq_primeiro <= @seq_fim AND seq_ultimo >= @seq_ini;
+-- name: MarkGoldBoots :exec
+UPDATE boot SET gold_pending = true
+WHERE dongle_id = @dongle_id AND first_seq <= @to_seq AND last_seq >= @from_seq;
 
--- name: ContarLeituras :one
-SELECT count(*) FROM leitura WHERE dongle_id = @dongle_id AND seq_bloco >= @seq_ini AND seq_bloco <= @seq_fim;
+-- name: CountReadings :one
+SELECT count(*) FROM reading WHERE dongle_id = @dongle_id AND block_seq >= @from_seq AND block_seq <= @to_seq;

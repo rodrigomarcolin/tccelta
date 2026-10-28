@@ -5,35 +5,35 @@ package httpapi
 import (
 	"context"
 
-	"tccelta/backend/internal/casodeuso/handshake"
-	"tccelta/backend/internal/casodeuso/ingestao"
-	"tccelta/backend/internal/casodeuso/sessao"
+	"tccelta/backend/internal/usecase/handshake"
+	"tccelta/backend/internal/usecase/ingestion"
+	"tccelta/backend/internal/usecase/session"
 )
 
-// As interfaces ficam aqui, e não em casodeuso/porta, porque dependem dos tipos de entrada e saída dos
+// As interfaces ficam aqui, e não em usecase/port, porque dependem dos tipos de entrada e saída dos
 // casos de uso (porta não pode importá-los sem criar ciclo). Os testes usam fakes delas.
 
-// PedirDesafio é o caso de uso de POST /v1/dongles/{id}/desafio.
-type PedirDesafio interface {
-	Executar(ctx context.Context, e handshake.EmitirDesafioEntrada) (handshake.DesafioEmitido, error)
+// RequestChallenge é o caso de uso de POST /v1/dongles/{id}/desafio.
+type RequestChallenge interface {
+	Run(ctx context.Context, e handshake.IssueChallengeInput) (handshake.IssuedChallenge, error)
 }
 
-// ResponderDesafio é o caso de uso de POST /v1/dongles/{id}/desafio/resposta.
-type ResponderDesafio interface {
-	Executar(ctx context.Context, e handshake.ResponderDesafioEntrada) (handshake.ResultadoHandshake, error)
+// RespondChallenge é o caso de uso de POST /v1/dongles/{id}/desafio/resposta.
+type RespondChallenge interface {
+	Run(ctx context.Context, e handshake.RespondChallengeInput) (handshake.HandshakeResult, error)
 }
 
-// ReceberLote é o caso de uso de POST /v1/dongles/blocos.
-type ReceberLote interface {
-	Executar(ctx context.Context, e ingestao.ReceberLoteEntrada) (ingestao.ResultadoLote, error)
+// ReceiveBatch é o caso de uso de POST /v1/dongles/blocos.
+type ReceiveBatch interface {
+	Run(ctx context.Context, e ingestion.ReceiveBatchInput) (ingestion.BatchResult, error)
 }
 
-// ObterConfirmacao é o caso de uso de GET /v1/dongles/{id}/confirmacao.
-type ObterConfirmacao interface {
-	Executar(ctx context.Context, e ingestao.ObterConfirmacaoEntrada) ([]byte, error)
+// GetConfirmation é o caso de uso de GET /v1/dongles/{id}/confirmacao.
+type GetConfirmation interface {
+	Run(ctx context.Context, e ingestion.GetConfirmationInput) ([]byte, error)
 }
 
-// Autenticar é o caso de uso do middleware Bearer.
-type Autenticar interface {
-	Executar(ctx context.Context, bruto string) (sessao.Autenticada, error)
+// Authenticate é o caso de uso do middleware Bearer.
+type Authenticate interface {
+	Run(ctx context.Context, raw string) (session.Authenticated, error)
 }

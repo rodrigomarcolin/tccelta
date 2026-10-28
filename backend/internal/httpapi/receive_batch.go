@@ -7,44 +7,44 @@ import (
 	"strconv"
 	"strings"
 
-	"tccelta/backend/internal/casodeuso/ingestao"
-	"tccelta/backend/internal/casodeuso/porta"
+	"tccelta/backend/internal/usecase/ingestion"
+	"tccelta/backend/internal/usecase/port"
 )
 
-// receberLote: POST /v1/dongles/blocos.
-func (d *Deps) receberLote(w http.ResponseWriter, r *http.Request) {
+// receiveBatch: POST /v1/dongles/blocos.
+func (d *Deps) receiveBatch(w http.ResponseWriter, r *http.Request) {
 	if ct := r.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/octet-stream") {
-		problema(w, 415, "tipo_conteudo", "esperado application/octet-stream", 0)
+		problem(w, 415, "tipo_conteudo", "esperado application/octet-stream", 0)
 		return
 	}
-	corpo, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		var mb *http.MaxBytesError
 		if errors.As(err, &mb) {
-			problema(w, 413, "corpo_grande", "lote acima do limite", 0)
+			problem(w, 413, "corpo_grande", "lote acima do limite", 0)
 			return
 		}
-		problema(w, 400, "lote_malformado", "falha ao ler o corpo", 0)
+		problem(w, 400, "lote_malformado", "falha ao ler o corpo", 0)
 		return
 	}
-	s := r.Context().Value(ctxSessao).(porta.Sessao)
-	res, err := d.ReceberLote.Executar(r.Context(), ingestao.ReceberLoteEntrada{Sessao: s, Corpo: corpo})
+	s := r.Context().Value(ctxSession).(port.Session)
+	res, err := d.ReceiveBatch.Run(r.Context(), ingestion.ReceiveBatchInput{Session: s, Body: body})
 	if err != nil {
-		d.erro(w, err)
+		d.err(w, err)
 		return
 	}
 	h := w.Header()
 	h.Set("Content-Type", "application/octet-stream")
-	if res.Interrompido {
+	if res.Interrupted {
 		h.Set("X-Lote-Status", "interrompido")
-		h.Set("X-Lote-Motivo", string(res.Motivo))
+		h.Set("X-Lote-Motivo", wireReason(res.Reason))
 	} else {
 		h.Set("X-Lote-Status", "completo")
 	}
-	h.Set("X-Lote-Acao", string(res.Acao))
-	h.Set("X-Lote-Aceitos", strconv.Itoa(res.Aceitos))
-	h.Set("X-Lote-Duplicados", strconv.Itoa(res.Duplicados))
-	if res.SemProgresso {
+	h.Set("X-Lote-Acao", string(res.Action))
+	h.Set("X-Lote-Aceitos", strconv.Itoa(res.Accepted))
+	h.Set("X-Lote-Duplicados", strconv.Itoa(res.Duplicates))
+	if res.NoProgress {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 	}
 	_, _ = w.Write(res.AckTLV)

@@ -1,38 +1,38 @@
-package catalogo
+package catalog
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"tccelta/backend/internal/dominio/pid"
-	"tccelta/backend/internal/repositorio/memoria"
+	"tccelta/backend/internal/domain/pid"
+	"tccelta/backend/internal/repository/memory"
 )
 
-func TestRecarregarEAcompanhar(t *testing.T) {
-	bd := memoria.Novo()
-	cat := pid.Novo()
-	s := NovoSincronizar(bd.Repositorios().Pids, cat, nil)
-	if cat.Carregado() {
+func TestReloadAndTrack(t *testing.T) {
+	db := memory.New()
+	cat := pid.New()
+	s := NewSync(db.Repositories().Pids, cat, nil)
+	if cat.Loaded() {
 		t.Fatal("começa vazio")
 	}
-	bd.Defs = []pid.Def{{PID: 12, NBytes: 2, Fator: 0.25}}
-	if err := s.Recarregar(context.Background()); err != nil {
+	db.Defs = []pid.Def{{PID: 12, NBytes: 2, Factor: 0.25}}
+	if err := s.Reload(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if d, ok := cat.Obter(12); !ok || d.NBytes != 2 || !cat.Carregado() {
+	if d, ok := cat.Get(12); !ok || d.NBytes != 2 || !cat.Loaded() {
 		t.Fatalf("%+v %v", d, ok)
 	}
 
-	// um sinal de LISTEN pid_alterado dispara a recarga
+	// um sinal de LISTEN pid_changed dispara a recarga
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	sinais := make(chan string)
-	go s.Acompanhar(ctx, sinais)
-	bd.Defs = []pid.Def{{PID: 12, NBytes: 2, Fator: 0.25}, {PID: 5, NBytes: 1, Fator: 1}}
-	sinais <- "pid_alterado"
+	signals := make(chan string)
+	go s.Track(ctx, signals)
+	db.Defs = []pid.Def{{PID: 12, NBytes: 2, Factor: 0.25}, {PID: 5, NBytes: 1, Factor: 1}}
+	signals <- "pid_changed"
 	for i := 0; i < 100; i++ {
-		if _, ok := cat.Obter(5); ok {
+		if _, ok := cat.Get(5); ok {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)

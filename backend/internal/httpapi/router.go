@@ -5,49 +5,49 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"tccelta/backend/internal/casodeuso/porta"
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/limites"
+	"tccelta/backend/internal/limits"
+	"tccelta/backend/internal/usecase/port"
 )
 
 // Deps são as dependências do roteador: os casos de uso, a porta de métricas e os limites.
 type Deps struct {
 	Cfg              config.Config
 	Log              *slog.Logger
-	Met              porta.MetricasHTTP
-	PedirDesafio     PedirDesafio
-	ResponderDesafio ResponderDesafio
-	ReceberLote      ReceberLote
-	ObterConfirmacao ObterConfirmacao
-	Autenticar       Autenticar
-	Limitador        limites.Limitador
-	Semaforo         *limites.Concorrencia
-	Prontidao        func() bool // banco, KMS, PIDs, chave pública
-	NaoPronto        *atomic.Bool
+	Met              port.MetricsHTTP
+	RequestChallenge RequestChallenge
+	RespondChallenge RespondChallenge
+	ReceiveBatch     ReceiveBatch
+	GetConfirmation  GetConfirmation
+	Authenticate     Authenticate
+	Limiter          limits.Limiter
+	Semaphore        *limits.Concurrency
+	Readiness        func() bool // banco, KMS, PIDs, chave pública
+	NotReady         *atomic.Bool
 }
 
-// Roteador monta as rotas e a cadeia de middlewares.
-func (d *Deps) Roteador() http.Handler {
+// Router monta as rotas e a cadeia de middlewares.
+func (d *Deps) Router() http.Handler {
 	mux := http.NewServeMux()
-	cadeia := func(h http.Handler, ms ...mw) http.Handler {
+	chain := func(h http.Handler, ms ...mw) http.Handler {
 		for i := len(ms) - 1; i >= 0; i-- {
 			h = ms[i](h)
 		}
 		return h
 	}
-	maxLote := int64(d.Cfg.Protocolo.LoteMaxBlocos*1059 + 64)
-	base := func(rota string, h http.HandlerFunc, ms ...mw) http.Handler {
-		return cadeia(h, append([]mw{recuperar(d.Log), d.instrumentar(rota)}, ms...)...)
+	maxBatch := int64(d.Cfg.Protocol.MaxBatchBlocks*1059 + 64)
+	base := func(route string, h http.HandlerFunc, ms ...mw) http.Handler {
+		return chain(h, append([]mw{recoverPanics(d.Log), d.instrument(route)}, ms...)...)
 	}
-	mux.Handle("POST /v1/dongles/{id}/desafio", base("desafio", d.pedirDesafio,
-		d.limitarIP, d.limitarDevID("desafio", d.Cfg.Limites.DesafioMin)))
-	mux.Handle("POST /v1/dongles/{id}/desafio/resposta", base("resposta", d.responderDesafio,
-		anotarS2, d.limitarIP, d.limitarDevID("resposta", d.Cfg.Limites.RespostaMin)))
-	mux.Handle("POST /v1/dongles/blocos", base("blocos", d.receberLote,
-		d.limitarIP, d.autenticarJWT(false), d.limitarDevID("blocos", d.Cfg.Limites.BlocosMin), d.limitarConcorrencia, limitarCorpo(maxLote)))
-	mux.Handle("GET /v1/dongles/{id}/confirmacao", base("confirmacao", d.obterConfirmacao,
-		d.limitarIP, d.autenticarJWT(true), d.limitarDevID("confirmacao", 60)))
-	mux.HandleFunc("GET /saude/viva", d.viva)
-	mux.HandleFunc("GET /saude/pronta", d.pronta)
+	mux.Handle("POST /v1/dongles/{id}/desafio", base("challenge", d.requestChallenge,
+		d.limitIP, d.limitDevID("challenge", d.Cfg.Limits.ChallengeMin)))
+	mux.Handle("POST /v1/dongles/{id}/desafio/resposta", base("response", d.respondChallenge,
+		annotateS2, d.limitIP, d.limitDevID("response", d.Cfg.Limits.ResponseMin)))
+	mux.Handle("POST /v1/dongles/blocos", base("blocks", d.receiveBatch,
+		d.limitIP, d.authenticateJWT(false), d.limitDevID("blocks", d.Cfg.Limits.BlocksMin), d.limitConcurrency, limitBody(maxBatch)))
+	mux.Handle("GET /v1/dongles/{id}/confirmacao", base("confirmation", d.getConfirmation,
+		d.limitIP, d.authenticateJWT(true), d.limitDevID("confirmation", 60)))
+	mux.HandleFunc("GET /saude/viva", d.live)
+	mux.HandleFunc("GET /saude/pronta", d.ready)
 	return mux
 }

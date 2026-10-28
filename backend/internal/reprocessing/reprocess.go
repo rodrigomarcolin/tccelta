@@ -1,4 +1,4 @@
-package reprocessamento
+package reprocessing
 
 import (
 	"context"
@@ -10,145 +10,145 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"tccelta/backend/internal/banco"
-	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/dominio/pid"
-	"tccelta/backend/internal/dominio/protocolo"
-	"tccelta/backend/internal/observabilidade/metricas"
+	"tccelta/backend/internal/database"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/pid"
+	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/observability/metrics"
 )
 
-// OpcoesReprocesso são os parâmetros de `tccelta worker reprocessar`.
-type OpcoesReprocesso struct {
+// ReprocessOptions são os parâmetros de `tccelta worker reprocess`.
+type ReprocessOptions struct {
 	DongleID int32
-	DesdeSeq int64
-	AteSeq   int64
-	Lote     int32
-	Aplicar  bool
-	Operador string
+	FromSeq  int64
+	ToSeq    int64
+	Batch    int32
+	Apply    bool
+	Operator string
 }
 
-// ResumoReprocesso é o resultado do reprocessamento (ou do ensaio).
-type ResumoReprocesso struct {
-	Blocos, LinhasRemovidas, LinhasInseridas, ValoresMudariam int64
-	UltimoSeq                                                 int64
+// ReprocessSummary é o resultado do reprocessamento (ou do ensaio).
+type ReprocessSummary struct {
+	Blocks, RemovedRows, InsertedRows, ValuesWouldChange int64
+	LastSeq                                              int64
 }
 
-// Reprocessar refaz leitura/posicao a partir de bloco_bruto. Sem Aplicar, é só um ensaio.
-// Deve rodar com o papel dono (DELETE em leitura/posicao); não usa o Vault.
-func Reprocessar(ctx context.Context, pool *pgxpool.Pool, cat pid.Consulta, o OpcoesReprocesso, log *slog.Logger, met *metricas.M) (ResumoReprocesso, error) {
-	var res ResumoReprocesso
-	if o.Lote <= 0 {
-		o.Lote = 200
+// Reprocess refaz reading/position a partir de raw_block. Sem Apply, é só um ensaio.
+// Deve rodar com o papel tccelta_owner (DELETE em reading/position); não usa o Vault.
+func Reprocess(ctx context.Context, pool *pgxpool.Pool, cat pid.Query, o ReprocessOptions, log *slog.Logger, met *metrics.M) (ReprocessSummary, error) {
+	var res ReprocessSummary
+	if o.Batch <= 0 {
+		o.Batch = 200
 	}
-	if o.AteSeq <= 0 {
-		o.AteSeq = 4294967295
+	if o.ToSeq <= 0 {
+		o.ToSeq = 4294967295
 	}
-	if o.DesdeSeq <= 0 {
-		o.DesdeSeq = 1
+	if o.FromSeq <= 0 {
+		o.FromSeq = 1
 	}
-	ini := o.DesdeSeq
-	q0 := consultas.New(pool)
-	for ini <= o.AteSeq {
-		blocos, err := q0.ListarBlocosDados(ctx, o.DongleID, ini, o.AteSeq, o.Lote)
+	start := o.FromSeq
+	q0 := dbgen.New(pool)
+	for start <= o.ToSeq {
+		blocks, err := q0.ListDataBlocks(ctx, o.DongleID, start, o.ToSeq, o.Batch)
 		if err != nil {
 			return res, err
 		}
-		if len(blocos) == 0 {
+		if len(blocks) == 0 {
 			break
 		}
-		a, b := blocos[0].Seq, blocos[len(blocos)-1].Seq
-		minR, maxR := blocos[0].RecebidoEm, blocos[0].RecebidoEm
-		for _, x := range blocos {
-			if x.RecebidoEm.Before(minR) {
-				minR = x.RecebidoEm
+		a, b := blocks[0].Seq, blocks[len(blocks)-1].Seq
+		minR, maxR := blocks[0].ReceivedAt, blocks[0].ReceivedAt
+		for _, x := range blocks {
+			if x.ReceivedAt.Before(minR) {
+				minR = x.ReceivedAt
 			}
-			if x.RecebidoEm.After(maxR) {
-				maxR = x.RecebidoEm
+			if x.ReceivedAt.After(maxR) {
+				maxR = x.ReceivedAt
 			}
 		}
-		var ls []consultas.CopiarLeiturasParams
-		var ps []consultas.CopiarPosicoesParams
-		for _, x := range blocos {
-			blk, err := protocolo.DecodificarBloco(append(append([]byte{}, x.Payload...), make([]byte, 0)...), protocolo.Perfil{Nome: "raw"})
+		var ls []dbgen.CopyReadingsParams
+		var ps []dbgen.CopyPositionsParams
+		for _, x := range blocks {
+			blk, err := protocol.DecodeBlock(append(append([]byte{}, x.Payload...), make([]byte, 0)...), protocol.Profile{Name: "raw"})
 			if err != nil {
 				return res, fmt.Errorf("seq %d: %w", x.Seq, err)
 			}
-			c, err := protocolo.LerRegistros(blk.Dados)
+			c, err := protocol.ReadRecords(blk.Data)
 			if err != nil {
 				return res, fmt.Errorf("seq %d: %w", x.Seq, err)
 			}
-			l, p, err := pid.Decodificar(uint16(x.GeracaoBoot), blk.Cab, c, x.T0Ms, cat)
+			l, p, err := pid.Decode(uint16(x.BootGeneration), blk.Hdr, c, x.T0Ms, cat)
 			if err != nil {
 				return res, fmt.Errorf("seq %d: %w (nada foi alterado nesta janela)", x.Seq, err)
 			}
 			for _, y := range l {
-				ls = append(ls, consultas.CopiarLeiturasParams{DongleID: o.DongleID, GeracaoBoot: y.Geracao, BootID: y.BootID, TMs: y.TMs,
-					Pid: y.PID, ValorBruto: y.ValorBruto, Valor: y.Valor, SeqBloco: y.SeqBloco, RecebidoEm: x.RecebidoEm})
+				ls = append(ls, dbgen.CopyReadingsParams{DongleID: o.DongleID, BootGeneration: y.Generation, BootID: y.BootID, TMs: y.TMs,
+					Pid: y.PID, RawValue: y.RawValue, Value: y.Value, BlockSeq: y.BlockSeq, ReceivedAt: x.ReceivedAt})
 			}
 			for _, y := range p {
-				ps = append(ps, consultas.CopiarPosicoesParams{DongleID: o.DongleID, GeracaoBoot: y.Geracao, BootID: y.BootID, TMs: y.TMs,
-					Geom: y.Geom.EWKB(), Origem: "app", SeqBloco: y.SeqBloco, RecebidoEm: x.RecebidoEm})
+				ps = append(ps, dbgen.CopyPositionsParams{DongleID: o.DongleID, BootGeneration: y.Generation, BootID: y.BootID, TMs: y.TMs,
+					Geom: y.Geom.EWKB(), Source: "app", BlockSeq: y.BlockSeq, ReceivedAt: x.ReceivedAt})
 			}
 		}
-		res.Blocos += int64(len(blocos))
-		res.UltimoSeq = b
-		if !o.Aplicar {
-			n, err := q0.ContarLeituras(ctx, o.DongleID, a, b)
+		res.Blocks += int64(len(blocks))
+		res.LastSeq = b
+		if !o.Apply {
+			n, err := q0.CountReadings(ctx, o.DongleID, a, b)
 			if err != nil {
 				return res, err
 			}
-			res.LinhasRemovidas += n
-			res.LinhasInseridas += int64(len(ls))
+			res.RemovedRows += n
+			res.InsertedRows += int64(len(ls))
 		} else {
 			var rem int64
 			err = nil
-			for tent := 0; tent < 5; tent++ {
-				err = banco.EmTransacao(ctx, pool, banco.OpcoesPadrao, func(ctx context.Context, q *consultas.Queries, tx pgx.Tx) error {
-					if err := q.TravarDongle(ctx, o.DongleID); err != nil {
+			for attempt := 0; attempt < 5; attempt++ {
+				err = database.InTransaction(ctx, pool, database.DefaultOptions, func(ctx context.Context, q *dbgen.Queries, tx pgx.Tx) error {
+					if err := q.LockDongle(ctx, o.DongleID); err != nil {
 						return err
 					}
-					n1, err := q.ApagarLeiturasDoBloco(ctx, consultas.ApagarLeiturasDoBlocoParams{DongleID: o.DongleID, SeqIni: a, SeqFim: b, RecebidoMin: minR, RecebidoMax: maxR})
+					n1, err := q.DeleteBlockReadings(ctx, dbgen.DeleteBlockReadingsParams{DongleID: o.DongleID, FromSeq: a, ToSeq: b, ReceivedMin: minR, ReceivedMax: maxR})
 					if err != nil {
 						return err
 					}
-					if _, err := q.ApagarPosicoesDoBloco(ctx, consultas.ApagarPosicoesDoBlocoParams{DongleID: o.DongleID, SeqIni: a, SeqFim: b, RecebidoMin: minR, RecebidoMax: maxR}); err != nil {
+					if _, err := q.DeleteBlockPositions(ctx, dbgen.DeleteBlockPositionsParams{DongleID: o.DongleID, FromSeq: a, ToSeq: b, ReceivedMin: minR, ReceivedMax: maxR}); err != nil {
 						return err
 					}
 					if len(ls) > 0 {
-						if _, err := q.CopiarLeituras(ctx, ls); err != nil {
+						if _, err := q.CopyReadings(ctx, ls); err != nil {
 							return err
 						}
 					}
 					if len(ps) > 0 {
-						if _, err := q.CopiarPosicoes(ctx, ps); err != nil {
+						if _, err := q.CopyPositions(ctx, ps); err != nil {
 							return err
 						}
 					}
 					rem = n1
-					return q.MarcarBootsGold(ctx, o.DongleID, &b, &a)
+					return q.MarkGoldBoots(ctx, o.DongleID, &b, &a)
 				})
-				if !errors.Is(err, banco.ErrBancoOcupado) {
+				if !errors.Is(err, database.ErrDatabaseBusy) {
 					break
 				}
 			}
 			if err != nil {
 				return res, err
 			}
-			res.LinhasRemovidas += rem
-			res.LinhasInseridas += int64(len(ls))
+			res.RemovedRows += rem
+			res.InsertedRows += int64(len(ls))
 			if met != nil {
-				met.Reprocessadas.Add(float64(len(ls)))
+				met.Reprocessed.Add(float64(len(ls)))
 			}
 		}
-		ini = b + 1
+		start = b + 1
 	}
-	if o.Aplicar {
-		det, _ := json.Marshal(map[string]any{"desde_seq": o.DesdeSeq, "ate_seq": o.AteSeq, "blocos": res.Blocos,
-			"linhas_removidas": res.LinhasRemovidas, "linhas_inseridas": res.LinhasInseridas, "aplicado": true, "operador": o.Operador})
-		if err := q0.InserirAlerta(ctx, consultas.InserirAlertaParams{DongleID: o.DongleID, Tipo: "reprocessamento", Detalhe: det}); err != nil {
+	if o.Apply {
+		det, _ := json.Marshal(map[string]any{"from_seq": o.FromSeq, "to_seq": o.ToSeq, "blocks": res.Blocks,
+			"removed_rows": res.RemovedRows, "inserted_rows": res.InsertedRows, "applied": true, "operator": o.Operator})
+		if err := q0.InsertAlert(ctx, dbgen.InsertAlertParams{DongleID: o.DongleID, Type: "reprocessing", Detail: det}); err != nil {
 			return res, err
 		}
-		log.Info("ingestao.reprocessado", "dongle_id", o.DongleID, "blocos", res.Blocos, "inseridas", res.LinhasInseridas)
+		log.Info("ingestao.reprocessado", "dongle_id", o.DongleID, "blocos", res.Blocks, "inseridas", res.InsertedRows)
 	}
 	return res, nil
 }

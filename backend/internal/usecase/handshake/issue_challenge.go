@@ -9,92 +9,92 @@ import (
 	"log/slog"
 	"time"
 
-	"tccelta/backend/internal/casodeuso/porta"
-	dhs "tccelta/backend/internal/dominio/handshake"
-	"tccelta/backend/internal/dominio/protocolo"
-	"tccelta/backend/internal/observabilidade"
-	"tccelta/backend/internal/repositorio"
+	dhs "tccelta/backend/internal/domain/handshake"
+	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/observability"
+	"tccelta/backend/internal/repository"
+	"tccelta/backend/internal/usecase/port"
 )
 
-// Parametros são os ajustes do handshake.
-type Parametros struct {
-	DesafioValidade    time.Duration
-	MaxPendentes       int
-	AncoraRTTMax       time.Duration
-	TLatSugerido       time.Duration
-	PermitirPerfilNone bool
+// Params são os ajustes do handshake.
+type Params struct {
+	ChallengeValidity time.Duration
+	MaxPending        int
+	AnchorRTTMax      time.Duration
+	SuggestedTLat     time.Duration
+	AllowNoneProfile  bool
 }
 
-// EmitirDesafioEntrada identifica o dongle que pede o desafio.
-type EmitirDesafioEntrada struct{ DevID protocolo.DevID }
+// IssueChallengeInput identifica o dongle que pede o desafio.
+type IssueChallengeInput struct{ DevID protocol.DevID }
 
-// DesafioEmitido é a saída de EmitirDesafio.
-type DesafioEmitido struct {
-	TLV      []byte
-	ExpiraEm time.Time
-	// RetryAfter é preenchido junto com dhs.ErrDesafiosPendentes.
+// IssuedChallenge é a saída de IssueChallenge.
+type IssuedChallenge struct {
+	TLV       []byte
+	ExpiresAt time.Time
+	// RetryAfter é preenchido junto com dhs.ErrPendingChallenges.
 	RetryAfter time.Duration
 }
 
-// EmitirDesafio gera o Desafio 0x01 assinado com K_auth (POST /v1/dongles/{id}/desafio).
-type EmitirDesafio struct {
-	repos repositorio.Repositorios
-	kms   porta.Autenticador
-	met   porta.MetricasHandshake
-	agora porta.Relogio
+// IssueChallenge gera o Desafio 0x01 assinado com K_auth (POST /v1/dongles/{id}/desafio).
+type IssueChallenge struct {
+	repos repository.Repositories
+	kms   port.Authenticator
+	met   port.MetricsHandshake
+	now   port.Clock
 	rand  io.Reader
 	log   *slog.Logger
-	p     Parametros
+	p     Params
 }
 
-// NovoEmitirDesafio liga o caso de uso às suas portas.
-func NovoEmitirDesafio(repos repositorio.Repositorios, kms porta.Autenticador, met porta.MetricasHandshake,
-	agora porta.Relogio, log *slog.Logger, p Parametros) *EmitirDesafio {
-	return &EmitirDesafio{repos: repos, kms: kms, met: met, agora: agora, rand: rand.Reader, log: log, p: p}
+// NewIssueChallenge liga o caso de uso às suas portas.
+func NewIssueChallenge(repos repository.Repositories, kms port.Authenticator, met port.MetricsHandshake,
+	now port.Clock, log *slog.Logger, p Params) *IssueChallenge {
+	return &IssueChallenge{repos: repos, kms: kms, met: met, now: now, rand: rand.Reader, log: log, p: p}
 }
 
-func tag16(mac []byte) []byte { return mac[:protocolo.TamTagAuth] }
+func tag16(mac []byte) []byte { return mac[:protocol.AuthTagSize] }
 
-// Executar emite o desafio.
-func (c *EmitirDesafio) Executar(ctx context.Context, e EmitirDesafioEntrada) (DesafioEmitido, error) {
-	d, err := c.repos.Dongles.BuscarPorDevID(ctx, e.DevID)
+// Run emite o desafio.
+func (c *IssueChallenge) Run(ctx context.Context, e IssueChallengeInput) (IssuedChallenge, error) {
+	d, err := c.repos.Dongles.FindByDevID(ctx, e.DevID)
 	if err != nil {
-		return DesafioEmitido{}, err
+		return IssuedChallenge{}, err
 	}
-	if err := d.VerificarAcesso(c.p.PermitirPerfilNone); err != nil {
-		return DesafioEmitido{}, err
+	if err := d.VerifyAccess(c.p.AllowNoneProfile); err != nil {
+		return IssuedChallenge{}, err
 	}
 	var ns [16]byte
 	if _, err := io.ReadFull(c.rand, ns[:]); err != nil {
-		return DesafioEmitido{}, err
+		return IssuedChallenge{}, err
 	}
-	s1 := dhs.TruncarMicro(c.agora())
-	expira := s1.Add(c.p.DesafioValidade)
-	des, err := c.repos.Desafios.Emitir(ctx, dhs.Emissao{DongleID: d.ID, S1: s1, ExpiraEm: expira, Nonce: ns[:],
-		MaxPendentes: c.p.MaxPendentes})
+	s1 := dhs.TruncateMicro(c.now())
+	expires := s1.Add(c.p.ChallengeValidity)
+	ch, err := c.repos.Challenges.Issue(ctx, dhs.Issuance{DongleID: d.ID, S1: s1, ExpiresAt: expires, Nonce: ns[:],
+		MaxPending: c.p.MaxPending})
 	if err != nil {
-		if errors.Is(err, dhs.ErrDesafiosPendentes) {
-			return DesafioEmitido{RetryAfter: c.pendenteMaisAntigo()}, err
+		if errors.Is(err, dhs.ErrPendingChallenges) {
+			return IssuedChallenge{RetryAfter: c.oldestPending()}, err
 		}
-		return DesafioEmitido{}, err
+		return IssuedChallenge{}, err
 	}
-	msg := protocolo.Desafio{CS: uint32(des.CS), NS: ns, AckSeq: uint32(des.SeqContiguo), CConf: uint32(des.CConf)}
-	macs, err := c.kms.HMACAuth(observabilidade.ComFaseKMS(ctx, observabilidade.FasePre), d.ChaveAuth,
-		[][]byte{protocolo.EntradaTag(protocolo.TipoDesafio, d.DevID, msg.Payload())})
+	msg := protocol.Challenge{CS: uint32(ch.CS), NS: ns, AckSeq: uint32(ch.ContiguousSeq), CConf: uint32(ch.CConf)}
+	macs, err := c.kms.HMACAuth(observability.WithKMSPhase(ctx, observability.PhasePre), d.AuthKey,
+		[][]byte{protocol.TagInput(protocol.ChallengeType, d.DevID, msg.Payload())})
 	if err != nil {
-		return DesafioEmitido{}, err
+		return IssuedChallenge{}, err
 	}
-	tlv, err := msg.Montar(tag16(macs[0]))
+	tlv, err := msg.Build(tag16(macs[0]))
 	if err != nil {
-		return DesafioEmitido{}, err
+		return IssuedChallenge{}, err
 	}
 	c.log.Info("handshake.desafio_emitido", "dongle", d.DevID.Hex(), "c_s", msg.CS, "ack_seq", msg.AckSeq)
-	c.met.Handshake("desafio_emitido")
-	return DesafioEmitido{TLV: tlv, ExpiraEm: expira}, nil
+	c.met.Handshake("challenge_issued")
+	return IssuedChallenge{TLV: tlv, ExpiresAt: expires}, nil
 }
 
-// pendenteMaisAntigo: sem consulta dedicada, usa um terço da validade do desafio como teto conservador
+// oldestPending: sem consulta dedicada, usa um terço da validade do desafio como teto conservador
 // (mínimo 1 s) para o Retry-After.
-func (c *EmitirDesafio) pendenteMaisAntigo() time.Duration {
-	return time.Second * time.Duration(max(1, int(c.p.DesafioValidade.Seconds())/3))
+func (c *IssueChallenge) oldestPending() time.Duration {
+	return time.Second * time.Duration(max(1, int(c.p.ChallengeValidity.Seconds())/3))
 }

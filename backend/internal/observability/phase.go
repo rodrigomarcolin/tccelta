@@ -1,27 +1,27 @@
-// Package observabilidade guarda o que atravessa camadas só para telemetria.
-package observabilidade
+// Package observability guarda o que atravessa camadas só para telemetria.
+package observability
 
 import "context"
 
-// Fase indica de onde vem a chamada ao KMS (rótulo de métrica): fora (pre) ou dentro (tx) da transação.
-type Fase string
+// Phase indica de onde vem a chamada ao KMS (rótulo de métrica): fora (pre) ou dentro (tx) da transação.
+type Phase string
 
 const (
-	FasePre Fase = "pre"
-	FaseTx  Fase = "tx"
+	PhasePre Phase = "pre"
+	PhaseTx  Phase = "tx"
 )
 
-type chaveFase struct{}
+type phaseKey struct{}
 
-// ComFaseKMS marca o contexto com a fase da chamada (para a métrica tccelta_kms_chamadas_total).
-func ComFaseKMS(ctx context.Context, f Fase) context.Context {
-	return context.WithValue(ctx, chaveFase{}, f)
+// WithKMSPhase marca o contexto com a fase da chamada (para a métrica tccelta_kms_chamadas_total).
+func WithKMSPhase(ctx context.Context, f Phase) context.Context {
+	return context.WithValue(ctx, phaseKey{}, f)
 }
 
-// FaseKMSDe lê a fase do contexto (padrão: pre).
-func FaseKMSDe(ctx context.Context) Fase {
-	if f, ok := ctx.Value(chaveFase{}).(Fase); ok {
+// KMSPhaseFrom lê a fase do contexto (padrão: pre).
+func KMSPhaseFrom(ctx context.Context) Phase {
+	if f, ok := ctx.Value(phaseKey{}).(Phase); ok {
 		return f
 	}
-	return FasePre
+	return PhasePre
 }

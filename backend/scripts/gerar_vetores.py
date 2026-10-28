@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Implementacao independente (so stdlib) do protocolo, para gerar vetores de teste.
 
-Escrita a partir da spec 03, sem olhar o codigo Go. Saida: internal/dominio/protocolo/testdata/vetores.json
+Escrita a partir da spec 03, sem olhar o codigo Go. Saida: internal/domain/protocol/testdata/vetores.json
 """
 import hashlib, hmac, json, os, struct
 
@@ -85,7 +85,7 @@ regs = [pid(4, i, i & 0xFF, 0) for i in range(202)]
 casos.append(bloco("bloco_1022", 300, 5, 1000, regs, {"seq": 300, "boot_id": 5, "t0_ms": 1000, "n_pids": 202}))
 
 saida = {"versao": 1, "dev_id": DEV.hex(), "k_auth": K_AUTH.hex(), "k_rec": K_REC.hex(), "casos": casos}
-dest = os.path.join(os.path.dirname(__file__), "..", "internal", "dominio", "protocolo", "testdata", "vetores.json")
+dest = os.path.join(os.path.dirname(__file__), "..", "internal", "domain", "protocol", "testdata", "vetores.json")
 with open(dest, "w", newline="\n") as f:
     json.dump(saida, f, indent=1)
     f.write("\n")

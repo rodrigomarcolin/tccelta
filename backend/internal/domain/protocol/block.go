@@ -1,87 +1,87 @@
-package protocolo
+package protocol
 
 import "encoding/binary"
 
-// CabecalhoBloco são os 12 bytes iniciais da área de dados.
-type CabecalhoBloco struct {
-	Seq     uint32
-	BootID  uint16
-	T0Ms    uint32
-	Tamanho uint16
+// BlockHeader são os 12 bytes iniciais da área de dados.
+type BlockHeader struct {
+	Seq    uint32
+	BootID uint16
+	T0Ms   uint32
+	Size   uint16
 }
 
-// Bloco é a mensagem 0x03 decodificada (sem copiar).
-type Bloco struct {
-	Cab   CabecalhoBloco
-	Dados []byte // V[0:Tamanho]: entra no HMAC e em bloco_bruto.payload
-	Tag   []byte // V[Tamanho:]
+// Block é a mensagem 0x03 decodificada (sem copiar).
+type Block struct {
+	Hdr  BlockHeader
+	Data []byte // V[0:Size]: entra no HMAC e em raw_block.payload
+	Tag  []byte // V[Size:]
 }
 
-// DecodificarBloco valida L == Tamanho + TamTagBloco.
-func DecodificarBloco(v []byte, p Perfil) (Bloco, error) {
-	var b Bloco
-	if len(v) < TamCabBloco {
-		return b, ErrTamanhoInvalido
+// DecodeBlock valida L == Size + BlockTagSize.
+func DecodeBlock(v []byte, p Profile) (Block, error) {
+	var b Block
+	if len(v) < BlockHeaderSize {
+		return b, ErrInvalidSize
 	}
-	b.Cab = CabecalhoBloco{
-		Seq:     binary.LittleEndian.Uint32(v[0:4]),
-		BootID:  binary.LittleEndian.Uint16(v[4:6]),
-		T0Ms:    binary.LittleEndian.Uint32(v[6:10]),
-		Tamanho: binary.LittleEndian.Uint16(v[10:12]),
+	b.Hdr = BlockHeader{
+		Seq:    binary.LittleEndian.Uint32(v[0:4]),
+		BootID: binary.LittleEndian.Uint16(v[4:6]),
+		T0Ms:   binary.LittleEndian.Uint32(v[6:10]),
+		Size:   binary.LittleEndian.Uint16(v[10:12]),
 	}
-	t := int(b.Cab.Tamanho)
-	if t < TamMinDados || t > TamMaxDados || len(v) != t+p.TamTagBloco {
-		return b, ErrTamanhoInvalido
+	t := int(b.Hdr.Size)
+	if t < MinDataSize || t > MaxDataSize || len(v) != t+p.BlockTagSize {
+		return b, ErrInvalidSize
 	}
-	b.Dados = v[:t:t]
+	b.Data = v[:t:t]
 	b.Tag = v[t:]
 	return b, nil
 }
 
-// TipoRegistro identifica registros reservados.
-type TipoRegistro uint8
+// RecordType identifica registros reservados.
+type RecordType uint8
 
 const (
-	RegLoss TipoRegistro = 0xFD
-	RegBoot TipoRegistro = 0xFE
-	RegGPS  TipoRegistro = 0xFF
+	RegLoss RecordType = 0xFD
+	RegBoot RecordType = 0xFE
+	RegGPS  RecordType = 0xFF
 )
 
-type RegistroPID struct {
+type PIDRecord struct {
 	PID  uint8
 	Dt   uint16
 	A, B uint8
 }
 
-type RegistroGPS struct {
+type GPSRecord struct {
 	Dt                  uint16
 	LatE7, LonE7, AltMm int32
 }
 
-type RegistroMarcador struct {
-	Tipo           TipoRegistro
+type MarkerRecord struct {
+	Type           RecordType
 	Dt             uint16
 	FromSeq, ToSeq uint32
 }
 
-// Conteudo classifica o bloco depois de percorrer os registros.
-type Conteudo struct {
-	Marcador *RegistroMarcador
-	PIDs     []RegistroPID
-	GPS      []RegistroGPS
-	DtMax    uint16
-	DtMin    uint16
+// Content classifica o bloco depois de percorrer os registros.
+type Content struct {
+	Marker *MarkerRecord
+	PIDs   []PIDRecord
+	GPS    []GPSRecord
+	DtMax  uint16
+	DtMin  uint16
 }
 
-// LerRegistros percorre dados[12:tamanho] (dados = área de dados inteira).
-func LerRegistros(dados []byte) (Conteudo, error) {
-	var c Conteudo
-	if len(dados) < TamMinDados {
-		return c, ErrRegistroMalformado
+// ReadRecords percorre dados[12:tamanho] (dados = área de dados inteira).
+func ReadRecords(data []byte) (Content, error) {
+	var c Content
+	if len(data) < MinDataSize {
+		return c, ErrMalformedRecord
 	}
-	r := dados[TamCabBloco:]
+	r := data[BlockHeaderSize:]
 	est := len(r) / 5
-	c.PIDs = make([]RegistroPID, 0, est)
+	c.PIDs = make([]PIDRecord, 0, est)
 	first := true
 	touch := func(dt uint16) {
 		if first || dt > c.DtMax {
@@ -93,28 +93,28 @@ func LerRegistros(dados []byte) (Conteudo, error) {
 		first = false
 	}
 	for len(r) > 0 {
-		switch TipoRegistro(r[0]) {
+		switch RecordType(r[0]) {
 		case RegBoot, RegLoss:
 			if len(r) < 11 {
-				return c, ErrRegistroMalformado
+				return c, ErrMalformedRecord
 			}
-			m := RegistroMarcador{
-				Tipo:    TipoRegistro(r[0]),
+			m := MarkerRecord{
+				Type:    RecordType(r[0]),
 				Dt:      binary.LittleEndian.Uint16(r[1:3]),
 				FromSeq: binary.LittleEndian.Uint32(r[3:7]),
 				ToSeq:   binary.LittleEndian.Uint32(r[7:11]),
 			}
-			if len(dados) != TamBlocoMarcador || len(r) != 11 || len(c.PIDs) > 0 || len(c.GPS) > 0 {
-				return c, ErrMarcadorComOutros
+			if len(data) != MarkerBlockSize || len(r) != 11 || len(c.PIDs) > 0 || len(c.GPS) > 0 {
+				return c, ErrMarkerWithOthers
 			}
-			c.Marcador = &m
+			c.Marker = &m
 			touch(m.Dt)
 			return c, nil
 		case RegGPS:
 			if len(r) < 15 {
-				return c, ErrRegistroMalformado
+				return c, ErrMalformedRecord
 			}
-			g := RegistroGPS{
+			g := GPSRecord{
 				Dt:    binary.LittleEndian.Uint16(r[1:3]),
 				LatE7: int32(binary.LittleEndian.Uint32(r[3:7])),
 				LonE7: int32(binary.LittleEndian.Uint32(r[7:11])),
@@ -125,9 +125,9 @@ func LerRegistros(dados []byte) (Conteudo, error) {
 			r = r[15:]
 		default:
 			if len(r) < 5 {
-				return c, ErrRegistroMalformado
+				return c, ErrMalformedRecord
 			}
-			p := RegistroPID{PID: r[0], Dt: binary.LittleEndian.Uint16(r[1:3]), A: r[3], B: r[4]}
+			p := PIDRecord{PID: r[0], Dt: binary.LittleEndian.Uint16(r[1:3]), A: r[3], B: r[4]}
 			c.PIDs = append(c.PIDs, p)
 			touch(p.Dt)
 			r = r[5:]
@@ -136,23 +136,23 @@ func LerRegistros(dados []byte) (Conteudo, error) {
 	return c, nil
 }
 
-// MontadorBloco monta a área de dados (simulador e testes).
-type MontadorBloco struct {
+// BlockBuilder monta a área de dados (simulador e testes).
+type BlockBuilder struct {
 	buf []byte
 }
 
-// NovoMontadorBloco inicia um bloco com o cabeçalho (tamanho preenchido em Dados).
-func NovoMontadorBloco(seq uint32, bootID uint16, t0Ms uint32) *MontadorBloco {
-	b := make([]byte, TamCabBloco, TamMaxDados)
+// NewBlockBuilder inicia um bloco com o cabeçalho (tamanho preenchido em Data).
+func NewBlockBuilder(seq uint32, bootID uint16, t0Ms uint32) *BlockBuilder {
+	b := make([]byte, BlockHeaderSize, MaxDataSize)
 	binary.LittleEndian.PutUint32(b[0:], seq)
 	binary.LittleEndian.PutUint16(b[4:], bootID)
 	binary.LittleEndian.PutUint32(b[6:], t0Ms)
-	return &MontadorBloco{buf: b}
+	return &BlockBuilder{buf: b}
 }
 
 // PID acrescenta um registro de PID; false se não couber.
-func (m *MontadorBloco) PID(pid uint8, dt uint16, a, b uint8) bool {
-	if len(m.buf)+5 > TamMaxDados {
+func (m *BlockBuilder) PID(pid uint8, dt uint16, a, b uint8) bool {
+	if len(m.buf)+5 > MaxDataSize {
 		return false
 	}
 	m.buf = append(m.buf, pid, byte(dt), byte(dt>>8), a, b)
@@ -160,8 +160,8 @@ func (m *MontadorBloco) PID(pid uint8, dt uint16, a, b uint8) bool {
 }
 
 // GPS acrescenta um registro de GPS; false se não couber.
-func (m *MontadorBloco) GPS(dt uint16, lat, lon, alt int32) bool {
-	if len(m.buf)+15 > TamMaxDados {
+func (m *BlockBuilder) GPS(dt uint16, lat, lon, alt int32) bool {
+	if len(m.buf)+15 > MaxDataSize {
 		return false
 	}
 	m.buf = append(m.buf, byte(RegGPS), byte(dt), byte(dt>>8))
@@ -171,25 +171,25 @@ func (m *MontadorBloco) GPS(dt uint16, lat, lon, alt int32) bool {
 	return true
 }
 
-// Dados fecha o bloco, escrevendo o tamanho no cabeçalho.
-func (m *MontadorBloco) Dados() []byte {
+// Data fecha o bloco, escrevendo o tamanho no cabeçalho.
+func (m *BlockBuilder) Data() []byte {
 	binary.LittleEndian.PutUint16(m.buf[10:], uint16(len(m.buf)))
 	return m.buf
 }
 
-// MontarMarcador monta a área de dados de um bloco BOOT/LOSS (23 B).
-func MontarMarcador(seq uint32, bootID uint16, t0 uint32, tipo TipoRegistro, from, to uint32) []byte {
-	m := NovoMontadorBloco(seq, bootID, t0)
-	m.buf = append(m.buf, byte(tipo), 0, 0)
+// BuildMarker monta a área de dados de um bloco BOOT/LOSS (23 B).
+func BuildMarker(seq uint32, bootID uint16, t0 uint32, typ RecordType, from, to uint32) []byte {
+	m := NewBlockBuilder(seq, bootID, t0)
+	m.buf = append(m.buf, byte(typ), 0, 0)
 	m.buf = binary.LittleEndian.AppendUint32(m.buf, from)
 	m.buf = binary.LittleEndian.AppendUint32(m.buf, to)
-	return m.Dados()
+	return m.Data()
 }
 
-// MontarBlocoTLV devolve o TLV 0x03 com dados + tag.
-func MontarBlocoTLV(dados, tag []byte) []byte {
-	v := make([]byte, 0, len(dados)+len(tag))
-	v = append(v, dados...)
+// BuildBlockTLV devolve o TLV 0x03 com dados + tag.
+func BuildBlockTLV(data, tag []byte) []byte {
+	v := make([]byte, 0, len(data)+len(tag))
+	v = append(v, data...)
 	v = append(v, tag...)
-	return AnexarTLV(nil, TipoBloco, v)
+	return AppendTLV(nil, BlockType, v)
 }

@@ -1,70 +1,70 @@
-package metricas
+package metrics
 
 import (
 	"net/http"
 	"strconv"
 	"time"
 
-	"tccelta/backend/internal/casodeuso/porta"
+	"tccelta/backend/internal/usecase/port"
 )
 
 // Os métodos de M que têm o nome de uma série ficam em adaptadores, um por porta.
 
-type portaHandshake struct{ m *M }
+type handshakePort struct{ m *M }
 
-func (p portaHandshake) Handshake(r string)        { p.m.Handshakes.WithLabelValues(r).Inc() }
-func (p portaHandshake) Lacuna(c string)           { p.m.Lacunas.WithLabelValues(c).Inc() }
-func (p portaHandshake) AncoraRTT(d time.Duration) { p.m.AncoraRTT.Observe(d.Seconds()) }
+func (p handshakePort) Handshake(r string)        { p.m.Handshakes.WithLabelValues(r).Inc() }
+func (p handshakePort) Gap(c string)              { p.m.Gaps.WithLabelValues(c).Inc() }
+func (p handshakePort) AnchorRTT(d time.Duration) { p.m.AnchorRTT.Observe(d.Seconds()) }
 
-type portaIngestao struct{ m *M }
+type ingestionPort struct{ m *M }
 
-func (p portaIngestao) Blocos(r string, n int) {
+func (p ingestionPort) Blocks(r string, n int) {
 	if n > 0 {
-		p.m.Blocos.WithLabelValues(r).Add(float64(n))
+		p.m.Blocks.WithLabelValues(r).Add(float64(n))
 	}
 }
-func (p portaIngestao) Lote(s string)                     { p.m.Lotes.WithLabelValues(s).Inc() }
-func (p portaIngestao) DuracaoTxIngestao(d time.Duration) { p.m.IngestaoTx.Observe(d.Seconds()) }
-func (p portaIngestao) Linhas(t string, n int)            { p.m.Linhas.WithLabelValues(t).Add(float64(n)) }
-func (p portaIngestao) Lacuna(c string)                   { p.m.Lacunas.WithLabelValues(c).Inc() }
+func (p ingestionPort) Batch(s string)                      { p.m.Batches.WithLabelValues(s).Inc() }
+func (p ingestionPort) IngestionTxDuration(d time.Duration) { p.m.IngestionTx.Observe(d.Seconds()) }
+func (p ingestionPort) Rows(t string, n int)                { p.m.Rows.WithLabelValues(t).Add(float64(n)) }
+func (p ingestionPort) Gap(c string)                        { p.m.Gaps.WithLabelValues(c).Inc() }
 
-type portaHTTP struct{ m *M }
+type httpPort struct{ m *M }
 
-func (p portaHTTP) Requisicao(rota string, status int, d time.Duration) {
-	p.m.HTTPReq.WithLabelValues(rota, strconv.Itoa(status)).Inc()
-	p.m.HTTPDur.WithLabelValues(rota).Observe(d.Seconds())
+func (p httpPort) Request(route string, status int, d time.Duration) {
+	p.m.HTTPReq.WithLabelValues(route, strconv.Itoa(status)).Inc()
+	p.m.HTTPDur.WithLabelValues(route).Observe(d.Seconds())
 }
-func (p portaHTTP) Rejeicao(motivo string) { p.m.Rejeicoes.WithLabelValues(motivo).Inc() }
+func (p httpPort) Rejection(reason string) { p.m.Rejections.WithLabelValues(reason).Inc() }
 
-type portaKMS struct{ m *M }
+type kmsPort struct{ m *M }
 
-func (p portaKMS) ChamadaKMS(op, res, fase string, d time.Duration) {
-	p.m.KMSChamadas.WithLabelValues(op, res, fase).Inc()
+func (p kmsPort) KMSCall(op, res, phase string, d time.Duration) {
+	p.m.KMSCalls.WithLabelValues(op, res, phase).Inc()
 	p.m.KMSDur.WithLabelValues(op).Observe(d.Seconds())
 }
-func (p portaKMS) DisjuntorKMS(aberto bool) {
-	if aberto {
-		p.m.KMSDisjuntor.Set(1)
+func (p kmsPort) KMSBreaker(open bool) {
+	if open {
+		p.m.KMSBreaker.Set(1)
 	} else {
-		p.m.KMSDisjuntor.Set(0)
+		p.m.KMSBreaker.Set(0)
 	}
 }
 
-// PortaHandshake devolve o adaptador da porta de métricas do handshake.
-func (m *M) PortaHandshake() porta.MetricasHandshake { return portaHandshake{m} }
+// HandshakePort devolve o adaptador da porta de métricas do handshake.
+func (m *M) HandshakePort() port.MetricsHandshake { return handshakePort{m} }
 
-// PortaIngestao devolve o adaptador da porta de métricas da ingestão.
-func (m *M) PortaIngestao() porta.MetricasIngestao { return portaIngestao{m} }
+// IngestionPort devolve o adaptador da porta de métricas da ingestão.
+func (m *M) IngestionPort() port.MetricsIngestion { return ingestionPort{m} }
 
-// PortaHTTP devolve o adaptador da porta de métricas HTTP.
-func (m *M) PortaHTTP() porta.MetricasHTTP { return portaHTTP{m} }
+// HTTPPort devolve o adaptador da porta de métricas HTTP.
+func (m *M) HTTPPort() port.MetricsHTTP { return httpPort{m} }
 
-// PortaKMS devolve o adaptador da porta de métricas do KMS.
-func (m *M) PortaKMS() porta.MetricasKMS { return portaKMS{m} }
+// KMSPort devolve o adaptador da porta de métricas do KMS.
+func (m *M) KMSPort() port.MetricsKMS { return kmsPort{m} }
 
-// Servidor monta o servidor de /metricas no endereço dado (o chamador inicia e encerra).
-func (m *M) Servidor(endereco string) *http.Server {
+// Server monta o servidor de /metricas no endereço dado (o chamador inicia e encerra).
+func (m *M) Server(address string) *http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /metricas", m.Handler())
-	return &http.Server{Addr: endereco, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	return &http.Server{Addr: address, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 }

@@ -1,96 +1,96 @@
-// Package repositorio é a porta do banco: interfaces por agregado, só com tipos de domínio.
-// Os adaptadores ficam em repositorio/postgres; o decorator de cache em repositorio/cache.
-package repositorio
+// Package repository é a porta do banco: interfaces por agregado, só com tipos de domínio.
+// Os adaptadores ficam em repository/postgres; o decorator de cache em repository/cache.
+package repository
 
 import (
 	"context"
 	"time"
 
-	"tccelta/backend/internal/casodeuso/porta"
-	"tccelta/backend/internal/dominio/dongle"
-	"tccelta/backend/internal/dominio/handshake"
-	"tccelta/backend/internal/dominio/ingestao"
-	"tccelta/backend/internal/dominio/ocorrencia"
-	"tccelta/backend/internal/dominio/pid"
-	"tccelta/backend/internal/dominio/protocolo"
-	"tccelta/backend/internal/dominio/tempo"
+	"tccelta/backend/internal/domain/dongle"
+	"tccelta/backend/internal/domain/handshake"
+	"tccelta/backend/internal/domain/ingestion"
+	"tccelta/backend/internal/domain/occurrence"
+	"tccelta/backend/internal/domain/pid"
+	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/domain/timeline"
+	"tccelta/backend/internal/usecase/port"
 )
 
-// ErrBancoOcupado: lock_timeout, deadlock ou falha de serialização persistente (-> 503).
-var ErrBancoOcupado = porta.ErrBancoOcupado
+// ErrDatabaseBusy: lock_timeout, deadlock ou falha de serialização persistente (-> 503).
+var ErrDatabaseBusy = port.ErrDatabaseBusy
 
-// Dongles é o cadastro. BuscarPorDevID devolve dongle.ErrDesconhecido quando não há cadastro.
+// Dongles é o cadastro. FindByDevID devolve dongle.ErrUnknown quando não há cadastro.
 type Dongles interface {
-	BuscarPorDevID(ctx context.Context, dev protocolo.DevID) (dongle.Dongle, error)
-	// Travar toma o lock de aconselhamento do dongle até o fim da transação.
-	Travar(ctx context.Context, dongleID int32) error
+	FindByDevID(ctx context.Context, dev protocol.DevID) (dongle.Dongle, error)
+	// Lock toma o lock de aconselhamento do dongle até o fim da transação.
+	Lock(ctx context.Context, dongleID int32) error
 }
 
-// Desafios guarda o ciclo de vida dos desafios do handshake.
-type Desafios interface {
-	// Emitir devolve handshake.ErrDesafiosPendentes quando o dongle já tem pendentes demais.
-	Emitir(ctx context.Context, e handshake.Emissao) (handshake.Desafio, error)
-	// Buscar devolve handshake.ErrDesafioInvalido quando o desafio não existe.
-	Buscar(ctx context.Context, dongleID int32, cs int64) (handshake.DesafioGravado, error)
-	// Consumir devolve S1 do desafio; handshake.ErrDesafioInvalido se não estiver pendente e no prazo.
-	Consumir(ctx context.Context, c handshake.Consumo) (s1 time.Time, err error)
-	Finalizar(ctx context.Context, f handshake.Finalizacao) error
-	MarcarTagInvalida(ctx context.Context, dongleID int32, cs int64, nonce []byte) error
+// Challenges guarda o ciclo de vida dos desafios do handshake.
+type Challenges interface {
+	// Issue devolve handshake.ErrPendingChallenges quando o dongle já tem pendentes demais.
+	Issue(ctx context.Context, e handshake.Issuance) (handshake.Challenge, error)
+	// Find devolve handshake.ErrInvalidChallenge quando o desafio não existe.
+	Find(ctx context.Context, dongleID int32, cs int64) (handshake.StoredChallenge, error)
+	// Consume devolve S1 do desafio; handshake.ErrInvalidChallenge se não estiver pendente e no prazo.
+	Consume(ctx context.Context, c handshake.Consumption) (s1 time.Time, err error)
+	Finalize(ctx context.Context, f handshake.Finalization) error
+	MarkInvalidTag(ctx context.Context, dongleID int32, cs int64, nonce []byte) error
 }
 
-// Estados é dongle_estado.
-type Estados interface {
-	Ler(ctx context.Context, dongleID int32) (dongle.Estado, error)
-	// LerSnapshot lê SeqContiguo, CConf e UltimoAck.
-	LerSnapshot(ctx context.Context, dongleID int32) (dongle.Estado, error)
-	LerUltimoAck(ctx context.Context, dongleID int32) ([]byte, error)
-	AtualizarHandshake(ctx context.Context, a handshake.Atualizacao) error
-	AtualizarIngestao(ctx context.Context, a ingestao.AtualizacaoEstado) error
+// States é dongle_state.
+type States interface {
+	Read(ctx context.Context, dongleID int32) (dongle.State, error)
+	// ReadSnapshot lê ContiguousSeq, CConf e LastAck.
+	ReadSnapshot(ctx context.Context, dongleID int32) (dongle.State, error)
+	ReadLastAck(ctx context.Context, dongleID int32) ([]byte, error)
+	UpdateHandshake(ctx context.Context, a handshake.Update) error
+	UpdateIngestion(ctx context.Context, a ingestion.StateUpdate) error
 }
 
 // Boots é a tabela de boots (tempo por boot_id e âncoras).
 type Boots interface {
-	// TMsUltimo devolve as referências candidatas nas gerações gMin e gMax para os boot_ids dados.
-	TMsUltimo(ctx context.Context, dongleID int32, bootIDs []int32, gMin, gMax int32) ([]tempo.RefBoot, error)
-	GarantirPendente(ctx context.Context, dongleID, geracao, bootID int32, agora time.Time) error
-	AtualizarIngestao(ctx context.Context, dongleID int32, agora time.Time, agregados []ingestao.AgregadoBoot) error
-	InserirAncora(ctx context.Context, a handshake.Ancora) error
-	NotificarPendente(ctx context.Context, chave string) error
+	// LastTMs devolve as referências candidatas nas gerações gMin e gMax para os boot_ids dados.
+	LastTMs(ctx context.Context, dongleID int32, bootIDs []int32, gMin, gMax int32) ([]timeline.RefBoot, error)
+	EnsurePending(ctx context.Context, dongleID, generation, bootID int32, now time.Time) error
+	UpdateIngestion(ctx context.Context, dongleID int32, now time.Time, aggregates []ingestion.BootAggregate) error
+	InsertAnchor(ctx context.Context, a handshake.Anchor) error
+	NotifyPending(ctx context.Context, key string) error
 }
 
-// Blocos é bronze.bloco_bruto, os rejeitados e as linhas derivadas (silver).
-type Blocos interface {
-	// InserirBrutos devolve quantos blocos foram gravados (os repetidos não contam).
-	InserirBrutos(ctx context.Context, dongleID int32, epoca int64, recebidoEm time.Time, blocos []ingestao.BlocoBruto) (int, error)
-	RegistrarRejeitado(ctx context.Context, r ingestao.Rejeitado) error
-	CopiarLeituras(ctx context.Context, dongleID int32, recebidoEm time.Time, ls []pid.Leitura) error
-	CopiarPosicoes(ctx context.Context, dongleID int32, recebidoEm time.Time, ps []pid.Posicao) error
+// Blocks é bronze.raw_block, os rejeitados e as linhas derivadas (silver).
+type Blocks interface {
+	// InsertRawBlocks devolve quantos blocos foram gravados (os repetidos não contam).
+	InsertRawBlocks(ctx context.Context, dongleID int32, epoch int64, receivedAt time.Time, blocks []ingestion.RawBlock) (int, error)
+	RegisterRejected(ctx context.Context, r ingestion.Rejected) error
+	CopyReadings(ctx context.Context, dongleID int32, receivedAt time.Time, ls []pid.Reading) error
+	CopyPositions(ctx context.Context, dongleID int32, receivedAt time.Time, ps []pid.Position) error
 }
 
-// Ocorrencias são lacunas e alertas.
-type Ocorrencias interface {
-	InserirLacuna(ctx context.Context, l ocorrencia.Lacuna) error
-	InserirAlerta(ctx context.Context, a ocorrencia.Alerta) error
+// Occurrences são lacunas e alertas.
+type Occurrences interface {
+	InsertGap(ctx context.Context, l occurrence.Gap) error
+	InsertAlert(ctx context.Context, a occurrence.Alert) error
 }
 
 // Pids é o catálogo de PIDs.
 type Pids interface {
-	Listar(ctx context.Context) ([]pid.Def, error)
+	List(ctx context.Context) ([]pid.Def, error)
 }
 
-// Repositorios agrupa os repositórios; numa transação, todos enxergam a mesma tx.
-type Repositorios struct {
+// Repositories agrupa os repositórios; numa transação, todos enxergam a mesma tx.
+type Repositories struct {
 	Dongles     Dongles
-	Desafios    Desafios
-	Estados     Estados
+	Challenges  Challenges
+	States      States
 	Boots       Boots
-	Blocos      Blocos
-	Ocorrencias Ocorrencias
+	Blocks      Blocks
+	Occurrences Occurrences
 	Pids        Pids
 }
 
-// Transacionador executa fn numa transação READ COMMITTED com timeouts locais. Deadlock e falha de
-// serialização repetem fn uma vez; o que sobrar vira ErrBancoOcupado. Erro de fn desfaz a transação.
-type Transacionador interface {
-	EmTransacao(ctx context.Context, fn func(ctx context.Context, r Repositorios) error) error
+// Transactor executa fn numa transação READ COMMITTED com timeouts locais. Deadlock e falha de
+// serialização repetem fn uma vez; o que sobrar vira ErrDatabaseBusy. Erro de fn desfaz a transação.
+type Transactor interface {
+	InTransaction(ctx context.Context, fn func(ctx context.Context, r Repositories) error) error
 }

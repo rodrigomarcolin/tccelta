@@ -14,150 +14,150 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"tccelta/backend/internal/banco"
-	"tccelta/backend/internal/banco/consultas"
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/observabilidade/metricas"
-	"tccelta/backend/internal/dominio/tempo"
+	"tccelta/backend/internal/database"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/timeline"
+	"tccelta/backend/internal/observability/metrics"
 )
 
 // Worker processa a fila de boots pendentes.
 type Worker struct {
-	Pool  *pgxpool.Pool
-	Cfg   config.WorkerConfig
-	Log   *slog.Logger
-	Met   *metricas.M
-	Agora func() time.Time
+	Pool *pgxpool.Pool
+	Cfg  config.WorkerConfig
+	Log  *slog.Logger
+	Met  *metrics.M
+	Now  func() time.Time
 }
 
-func (w *Worker) agora() time.Time {
-	if w.Agora != nil {
-		return w.Agora()
+func (w *Worker) now() time.Time {
+	if w.Now != nil {
+		return w.Now()
 	}
 	return time.Now()
 }
 
-func (w *Worker) tcfg() tempo.Config {
-	return tempo.Config{JanelaGrupoMs: float64(w.Cfg.JanelaGrupo.Milliseconds()), DerivaMaxPPM: w.Cfg.DerivaMaxPPM,
-		MeiaLarguraMinMs: w.Cfg.MeiaLarguraMinMs, SpanMinMs: float64(w.Cfg.SpanMin.Milliseconds())}
+func (w *Worker) tcfg() timeline.Config {
+	return timeline.Config{GroupWindowMs: float64(w.Cfg.GroupWindow.Milliseconds()), MaxDriftPPM: w.Cfg.MaxDriftPPM,
+		MinHalfWidthMs: w.Cfg.MinHalfWidthMs, SpanMinMs: float64(w.Cfg.SpanMin.Milliseconds())}
 }
 
 func ms(t time.Time) float64 { return float64(t.UnixMicro()) / 1000 }
 
-// ProcessarUmBoot pega um boot pendente e recalcula. Devolve false se a fila estava vazia.
-func (w *Worker) ProcessarUmBoot(ctx context.Context) (bool, error) {
+// ProcessOneBoot pega um boot pendente e recalcula. Devolve false se a fila estava vazia.
+func (w *Worker) ProcessOneBoot(ctx context.Context) (bool, error) {
 	t0 := time.Now()
-	var processou, mudouAncoras bool
+	var processed, anchorsChanged bool
 	var dongleID int32
-	var seqPrimeiro *int64
-	err := banco.EmTransacao(ctx, w.Pool, banco.OpcoesTx{StatementTimeout: 10 * time.Second},
-		func(ctx context.Context, q *consultas.Queries, tx pgx.Tx) error {
-			processou, mudouAncoras = false, false
-			b, err := q.PegarBootPendente(ctx)
+	var seqFirst *int64
+	err := database.InTransaction(ctx, w.Pool, database.TxOptions{StatementTimeout: 10 * time.Second},
+		func(ctx context.Context, q *dbgen.Queries, tx pgx.Tx) error {
+			processed, anchorsChanged = false, false
+			b, err := q.TakePendingBoot(ctx)
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					return nil
 				}
 				return err
 			}
-			processou = true
-			dongleID, seqPrimeiro = b.DongleID, b.SeqPrimeiro
+			processed = true
+			dongleID, seqFirst = b.DongleID, b.FirstSeq
 			cfg := w.tcfg()
-			ancs, err := q.ListarAncorasDoBoot(ctx, b.DongleID, b.GeracaoBoot, b.BootID)
+			anchs, err := q.ListBootAnchors(ctx, b.DongleID, b.BootGeneration, b.BootID)
 			if err != nil {
 				return err
 			}
-			var est tempo.Estimativa
+			var est timeline.Estimate
 			switch {
-			case len(ancs) > 0:
-				as := make([]tempo.Ancora, len(ancs))
-				for i, a := range ancs {
-					as[i] = tempo.Ancora{TMs: a.TMs, S1Ms: ms(a.S1), S2Ms: ms(a.S2)}
+			case len(anchs) > 0:
+				as := make([]timeline.Anchor, len(anchs))
+				for i, a := range anchs {
+					as[i] = timeline.Anchor{TMs: a.TMs, S1Ms: ms(a.S1), S2Ms: ms(a.S2)}
 				}
-				est = tempo.EstimarPorAncoras(as, cfg)
-			case b.SeqPrimeiro != nil && b.TMsPrimeiro != nil && b.TMsUltimo != nil:
-				var ant, prox *tempo.ReferenciaVizinho
-				if r, err := q.BootAncoradoAnterior(ctx, b.DongleID, b.SeqPrimeiro); err == nil {
-					ant = refDe(r.AMs, r.B, r.IncertezaBaseMs, r.TMsPrimeiro, r.TMsUltimo)
+				est = timeline.EstimateFromAnchors(as, cfg)
+			case b.FirstSeq != nil && b.FirstTMs != nil && b.LastTMs != nil:
+				var prev, next *timeline.NeighborReference
+				if r, err := q.PreviousAnchoredBoot(ctx, b.DongleID, b.FirstSeq); err == nil {
+					prev = refFrom(r.AMs, r.B, r.BaseUncertaintyMs, r.FirstTMs, r.LastTMs)
 				} else if !errors.Is(err, pgx.ErrNoRows) {
 					return err
 				}
-				if r, err := q.BootAncoradoSeguinte(ctx, b.DongleID, b.SeqPrimeiro); err == nil {
-					prox = refDe(r.AMs, r.B, r.IncertezaBaseMs, r.TMsPrimeiro, r.TMsUltimo)
+				if r, err := q.NextAnchoredBoot(ctx, b.DongleID, b.FirstSeq); err == nil {
+					next = refFrom(r.AMs, r.B, r.BaseUncertaintyMs, r.FirstTMs, r.LastTMs)
 				} else if !errors.Is(err, pgx.ErrNoRows) {
 					return err
 				}
-				est = tempo.EstimarPorVizinhos(ant, prox, tempo.FaixaBoot{TMsPrimeiro: *b.TMsPrimeiro, TMsUltimo: *b.TMsUltimo}, b.DeslocamentoMaxMs, cfg)
+				est = timeline.EstimateFromNeighbors(prev, next, timeline.BootRange{FirstTMs: *b.FirstTMs, LastTMs: *b.LastTMs}, b.MaxOffsetMs, cfg)
 			}
-			agora := w.agora()
-			if est.Origem != "" {
+			now := w.now()
+			if est.Source != "" {
 				ia, ib := est.AMs, est.B
-				inc := int32(est.IncertezaBaseMs)
-				o := est.Origem
-				err = q.AtualizarTempoBoot(ctx, consultas.AtualizarTempoBootParams{AMs: &ia, B: &ib, IncertezaBaseMs: &inc,
-					OrigemTempo: &o, Agora: &agora, DongleID: b.DongleID, GeracaoBoot: b.GeracaoBoot, BootID: b.BootID})
+				inc := int32(est.BaseUncertaintyMs)
+				o := est.Source
+				err = q.UpdateBootTime(ctx, dbgen.UpdateBootTimeParams{AMs: &ia, B: &ib, BaseUncertaintyMs: &inc,
+					TimeSource: &o, Now: &now, DongleID: b.DongleID, BootGeneration: b.BootGeneration, BootID: b.BootID})
 			} else {
-				err = q.AtualizarTempoBoot(ctx, consultas.AtualizarTempoBootParams{Agora: &agora, DongleID: b.DongleID, GeracaoBoot: b.GeracaoBoot, BootID: b.BootID})
+				err = q.UpdateBootTime(ctx, dbgen.UpdateBootTimeParams{Now: &now, DongleID: b.DongleID, BootGeneration: b.BootGeneration, BootID: b.BootID})
 			}
 			if err != nil {
 				return err
 			}
-			if err := q.ApagarGruposAncora(ctx, b.DongleID, b.GeracaoBoot, b.BootID); err != nil {
+			if err := q.DeleteAnchorGroups(ctx, b.DongleID, b.BootGeneration, b.BootID); err != nil {
 				return err
 			}
-			if est.Origem == "ancoras" {
-				linhas := make([]consultas.CopiarGruposAncoraParams, len(est.Grupos))
-				for i, g := range est.Grupos {
-					linhas[i] = consultas.CopiarGruposAncoraParams{DongleID: b.DongleID, GeracaoBoot: b.GeracaoBoot, BootID: b.BootID,
-						Ordem: int32(i + 1), TPrimeiroMs: g.TPrimeiro, TUltimoMs: g.TUltimo, TCentroMs: g.TCentro, LoMs: g.Lo, HiMs: g.Hi,
-						NAncoras: int32(g.N), CalculadoEm: agora}
+			if est.Source == "anchors" {
+				rows := make([]dbgen.CopyAnchorGroupsParams, len(est.Groups))
+				for i, g := range est.Groups {
+					rows[i] = dbgen.CopyAnchorGroupsParams{DongleID: b.DongleID, BootGeneration: b.BootGeneration, BootID: b.BootID,
+						Ordinal: int32(i + 1), FirstTMs: g.FirstT, LastTMs: g.LastT, TCenterMs: g.TCenter, LoMs: g.Lo, HiMs: g.Hi,
+						NAnchors: int32(g.N), ComputedAt: now}
 				}
-				if _, err := q.CopiarGruposAncora(ctx, linhas); err != nil {
+				if _, err := q.CopyAnchorGroups(ctx, rows); err != nil {
 					return err
 				}
 				if w.Met != nil {
-					w.Met.WorkerGrupos.Add(float64(len(linhas)))
+					w.Met.WorkerGroups.Add(float64(len(rows)))
 				}
-				mudouAncoras = b.AMs == nil || b.OrigemTempo == nil || *b.OrigemTempo != "ancoras" || *b.AMs != est.AMs || *b.B != est.B
+				anchorsChanged = b.AMs == nil || b.TimeSource == nil || *b.TimeSource != "anchors" || *b.AMs != est.AMs || *b.B != est.B
 			}
-			for _, a := range est.Alertas {
-				det, _ := json.Marshal(a.Detalhe)
-				if err := q.InserirAlertaSeNovo(ctx, consultas.InserirAlertaSeNovoParams{DongleID: b.DongleID, GeracaoBoot: b.GeracaoBoot,
-					BootID: b.BootID, Tipo: a.Tipo, Detalhe: det, Agora: agora}); err != nil {
+			for _, a := range est.Alerts {
+				det, _ := json.Marshal(a.Detail)
+				if err := q.InsertAlertIfNew(ctx, dbgen.InsertAlertIfNewParams{DongleID: b.DongleID, BootGeneration: b.BootGeneration,
+					BootID: b.BootID, Type: a.Type, Detail: det, Now: now}); err != nil {
 					return err
 				}
 				if w.Met != nil {
-					w.Met.WorkerAlertas.WithLabelValues(a.Tipo).Inc()
+					w.Met.WorkerAlerts.WithLabelValues(a.Type).Inc()
 				}
 			}
-			origem := est.Origem
-			if origem == "" {
-				origem = "sem_estimativa"
+			source := est.Source
+			if source == "" {
+				source = "no_estimate"
 			}
 			if w.Met != nil {
-				w.Met.WorkerBoots.WithLabelValues(origem).Inc()
+				w.Met.WorkerBoots.WithLabelValues(source).Inc()
 			}
-			w.Log.Info("worker.boot_recalculado", "dongle_id", b.DongleID, "geracao_boot", b.GeracaoBoot, "boot_id", b.BootID,
-				"origem", origem, "a_ms", est.AMs, "b_ppm", est.B*1e6, "incerteza_ms", est.IncertezaBaseMs, "grupos", len(est.Grupos), "ancoras", len(ancs))
+			w.Log.Info("worker.boot_recalculado", "dongle_id", b.DongleID, "geracao_boot", b.BootGeneration, "boot_id", b.BootID,
+				"origem", source, "a_ms", est.AMs, "b_ppm", est.B*1e6, "incerteza_ms", est.BaseUncertaintyMs, "grupos", len(est.Groups), "anchors", len(anchs))
 			return nil
 		})
 	if err != nil {
 		return false, err
 	}
-	if !processou {
+	if !processed {
 		return false, nil
 	}
 	if w.Met != nil {
 		w.Met.WorkerDur.Observe(time.Since(t0).Seconds())
 	}
-	if mudouAncoras && seqPrimeiro != nil {
+	if anchorsChanged && seqFirst != nil {
 		// TX2: vizinhos sem âncora, sob o advisory lock do dongle
-		err := banco.EmTransacao(ctx, w.Pool, banco.OpcoesTx{LockTimeout: 3 * time.Second, StatementTimeout: 10 * time.Second},
-			func(ctx context.Context, q *consultas.Queries, tx pgx.Tx) error {
-				if err := q.TravarDongle(ctx, dongleID); err != nil {
+		err := database.InTransaction(ctx, w.Pool, database.TxOptions{LockTimeout: 3 * time.Second, StatementTimeout: 10 * time.Second},
+			func(ctx context.Context, q *dbgen.Queries, tx pgx.Tx) error {
+				if err := q.LockDongle(ctx, dongleID); err != nil {
 					return err
 				}
-				_, err := q.MarcarVizinhosSemAncora(ctx, w.agora(), dongleID, seqPrimeiro)
+				_, err := q.MarkAnchorlessNeighbors(ctx, w.now(), dongleID, seqFirst)
 				return err
 			})
 		if err != nil {
@@ -167,17 +167,17 @@ func (w *Worker) ProcessarUmBoot(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func refDe(a, b *float64, inc *int32, tp, tu *int64) *tempo.ReferenciaVizinho {
+func refFrom(a, b *float64, inc *int32, tp, tu *int64) *timeline.NeighborReference {
 	if a == nil || b == nil || inc == nil || tp == nil || tu == nil {
 		return nil
 	}
-	return &tempo.ReferenciaVizinho{AMs: *a, B: *b, IncertezaBaseMs: int(*inc), TMsPrimeiro: *tp, TMsUltimo: *tu}
+	return &timeline.NeighborReference{AMs: *a, B: *b, BaseUncertaintyMs: int(*inc), FirstTMs: *tp, LastTMs: *tu}
 }
 
-// Drenar processa boots até a fila esvaziar.
-func (w *Worker) Drenar(ctx context.Context) {
+// Drain processa boots até a fila esvaziar.
+func (w *Worker) Drain(ctx context.Context) {
 	for ctx.Err() == nil {
-		ok, err := w.ProcessarUmBoot(ctx)
+		ok, err := w.ProcessOneBoot(ctx)
 		if err != nil {
 			w.Log.Error("worker.erro", "erro", err)
 			return
@@ -188,23 +188,23 @@ func (w *Worker) Drenar(ctx context.Context) {
 	}
 }
 
-// ExpirarDesafios marca como expirados os desafios vencidos.
-func (w *Worker) ExpirarDesafios(ctx context.Context) (int64, error) {
-	n, err := consultas.New(w.Pool).ExpirarDesafios(ctx, w.agora())
+// ExpireChallenges marca como expirados os desafios vencidos.
+func (w *Worker) ExpireChallenges(ctx context.Context) (int64, error) {
+	n, err := dbgen.New(w.Pool).ExpireChallenges(ctx, w.now())
 	if err == nil && w.Met != nil {
-		w.Met.WorkerExpirados.Add(float64(n))
+		w.Met.WorkerExpired.Add(float64(n))
 	}
 	return n, err
 }
 
-// Executar roda o worker até o contexto terminar.
-func (w *Worker) Executar(ctx context.Context, saudeAddr string) error {
-	var reconex func()
+// Run roda o worker até o contexto terminar.
+func (w *Worker) Run(ctx context.Context, healthAddr string) error {
+	var reconnect func()
 	if w.Met != nil {
-		reconex = func() { w.Met.WorkerReconex.Inc() }
+		reconnect = func() { w.Met.WorkerReconnect.Inc() }
 	}
-	sinais := banco.Escutar(ctx, w.Pool, "boot_pendente", w.Log, reconex)
-	acordar := make(chan struct{}, 1)
+	signals := database.Listen(ctx, w.Pool, "boot_pending", w.Log, reconnect)
+	wake := make(chan struct{}, 1)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -213,28 +213,28 @@ func (w *Worker) Executar(ctx context.Context, saudeAddr string) error {
 			select {
 			case <-ctx.Done():
 				return
-			case _, ok := <-sinais:
+			case _, ok := <-signals:
 				if !ok {
 					return
 				}
 				select {
-				case acordar <- struct{}{}:
+				case wake <- struct{}{}:
 				default:
 				}
 			}
 		}
 	}()
-	n := max(1, w.Cfg.Concorrencia)
-	canais := make([]chan struct{}, n)
-	for i := range canais {
-		canais[i] = make(chan struct{}, 1)
+	n := max(1, w.Cfg.Concurrency)
+	channels := make([]chan struct{}, n)
+	for i := range channels {
+		channels[i] = make(chan struct{}, 1)
 		wg.Add(1)
 		go func(c chan struct{}) {
 			defer wg.Done()
-			t := time.NewTicker(w.Cfg.IntervaloPoll)
+			t := time.NewTicker(w.Cfg.PollInterval)
 			defer t.Stop()
 			for {
-				w.Drenar(ctx)
+				w.Drain(ctx)
 				select {
 				case <-ctx.Done():
 					return
@@ -242,7 +242,7 @@ func (w *Worker) Executar(ctx context.Context, saudeAddr string) error {
 				case <-t.C:
 				}
 			}
-		}(canais[i])
+		}(channels[i])
 	}
 	wg.Add(1)
 	go func() { // distribui o sinal coalescido
@@ -251,8 +251,8 @@ func (w *Worker) Executar(ctx context.Context, saudeAddr string) error {
 			select {
 			case <-ctx.Done():
 				return
-			case <-acordar:
-				for _, c := range canais {
+			case <-wake:
+				for _, c := range channels {
 					select {
 					case c <- struct{}{}:
 					default:
@@ -264,7 +264,7 @@ func (w *Worker) Executar(ctx context.Context, saudeAddr string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		t := time.NewTicker(w.Cfg.IntervaloExpiracao)
+		t := time.NewTicker(w.Cfg.ExpirationInterval)
 		f := time.NewTicker(15 * time.Second)
 		defer t.Stop()
 		defer f.Stop()
@@ -273,21 +273,21 @@ func (w *Worker) Executar(ctx context.Context, saudeAddr string) error {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				if _, err := w.ExpirarDesafios(ctx); err != nil {
+				if _, err := w.ExpireChallenges(ctx); err != nil {
 					w.Log.Error("worker.expiracao_falhou", "erro", err)
 				}
 			case <-f.C:
-				if c, err := consultas.New(w.Pool).ContarBootsPendentes(ctx); err == nil && w.Met != nil {
-					w.Met.WorkerFila.Set(float64(c))
+				if c, err := dbgen.New(w.Pool).CountPendingBoots(ctx); err == nil && w.Met != nil {
+					w.Met.WorkerQueue.Set(float64(c))
 				}
 			}
 		}
 	}()
 	var srv *http.Server
-	if saudeAddr != "" {
+	if healthAddr != "" {
 		mux := http.NewServeMux()
 		mux.HandleFunc("GET /saude/viva", func(rw http.ResponseWriter, r *http.Request) { rw.WriteHeader(http.StatusOK) })
-		srv = &http.Server{Addr: saudeAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+		srv = &http.Server{Addr: healthAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 		go func() {
 			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				w.Log.Error("worker.saude", "erro", fmt.Sprint(err))

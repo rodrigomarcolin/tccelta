@@ -1,6 +1,6 @@
 // Package provisionamento é a parte Vault do provisionamento de dongles: importa K_auth/K_rec no
 // Transit (BYOK), roda o teste dourado, gera o material NVS e grava o registro.json que
-// `tccelta provisionar registrar` (backend) usa para cadastrar o dongle no banco.
+// `tccelta provision register` (backend) usa para cadastrar o dongle no banco.
 //
 // Ordem das garantias: o KMS vem primeiro e o banco depois. No pior caso sobra uma chave órfã no
 // Vault (inofensiva, sem uso); nunca um dongle no banco sem chave. Tudo é idempotente: chave que já

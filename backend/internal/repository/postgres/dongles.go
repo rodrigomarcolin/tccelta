@@ -6,29 +6,29 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"tccelta/backend/internal/banco/consultas"
-	"tccelta/backend/internal/dominio/dongle"
-	"tccelta/backend/internal/dominio/protocolo"
+	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/dongle"
+	"tccelta/backend/internal/domain/protocol"
 )
 
-type dongles struct{ q consultas.Querier }
+type dongles struct{ q dbgen.Querier }
 
-func (r *dongles) BuscarPorDevID(ctx context.Context, dev protocolo.DevID) (dongle.Dongle, error) {
-	row, err := r.q.BuscarDonglePorDevId(ctx, dev[:])
+func (r *dongles) FindByDevID(ctx context.Context, dev protocol.DevID) (dongle.Dongle, error) {
+	row, err := r.q.FindDongleByDevID(ctx, dev[:])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return dongle.Dongle{}, dongle.ErrDesconhecido
+			return dongle.Dongle{}, dongle.ErrUnknown
 		}
 		return dongle.Dongle{}, err
 	}
-	p, err := protocolo.PerfilPorNome(row.PerfilSeguranca)
+	p, err := protocol.ProfileByName(row.SecurityProfile)
 	if err != nil {
 		return dongle.Dongle{}, err
 	}
-	return dongle.Dongle{ID: row.DongleID, DevID: dev, Perfil: p, ChaveAuth: row.KmsChaveAuth, ChaveRec: row.KmsChaveRec,
-		ChavePublica: row.ChavePublica, Ativo: row.Ativo}, nil
+	return dongle.Dongle{ID: row.DongleID, DevID: dev, Profile: p, AuthKey: row.KmsAuthKey, RecKey: row.KmsRecKey,
+		PublicKey: row.PublicKey, Active: row.Active}, nil
 }
 
-func (r *dongles) Travar(ctx context.Context, dongleID int32) error {
-	return r.q.TravarDongle(ctx, dongleID)
+func (r *dongles) Lock(ctx context.Context, dongleID int32) error {
+	return r.q.LockDongle(ctx, dongleID)
 }

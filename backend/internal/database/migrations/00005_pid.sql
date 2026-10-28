@@ -1,19 +1,19 @@
 -- +goose Up
 -- Fonte da verdade dos PIDs: o que cada um mede e como decodificar.
--- valor = (bruto * fator) + deslocamento, com bruto = A (1 byte) ou 256*A + B (2 bytes).
+-- value = (raw * factor) + value_offset, com raw = A (1 byte) ou 256*A + B (2 bytes).
 -- 0xFD (LOSS), 0xFE (BOOT) e 0xFF (GPS) são tipos de registro reservados.
 CREATE TABLE pid (
-  pid           smallint PRIMARY KEY CHECK (pid BETWEEN 0 AND 252),
-  nome          text NOT NULL,
-  unidade       text NOT NULL,
-  n_bytes       smallint NOT NULL CHECK (n_bytes IN (1, 2)),
-  fator         double precision NOT NULL,
-  deslocamento  double precision NOT NULL DEFAULT 0,
-  valor_min     double precision NULL,   -- faixa válida: fora dela, leitura.valor = NULL
-  valor_max     double precision NULL
+  pid          smallint PRIMARY KEY CHECK (pid BETWEEN 0 AND 252),
+  name         text NOT NULL,
+  unit         text NOT NULL,
+  n_bytes      smallint NOT NULL CHECK (n_bytes IN (1, 2)),
+  factor       double precision NOT NULL,
+  value_offset double precision NOT NULL DEFAULT 0,
+  min_value    double precision NULL,   -- faixa válida: fora dela, reading.value = NULL
+  max_value    double precision NULL
 );
 
-INSERT INTO pid (pid, nome, unidade, n_bytes, fator, deslocamento, valor_min, valor_max) VALUES
+INSERT INTO pid (pid, name, unit, n_bytes, factor, value_offset, min_value, max_value) VALUES
   (4,  'Carga do motor',         '%',    1, 100.0/255, 0,   0,   100),        -- 0x04
   (5,  'Temperatura do líquido', '°C',   1, 1,         -40, -40, 215),        -- 0x05
   (12, 'Rotação',                'RPM',  2, 0.25,      0,   0,   16383.75),   -- 0x0C
@@ -24,16 +24,17 @@ INSERT INTO pid (pid, nome, unidade, n_bytes, fator, deslocamento, valor_min, va
 
 -- Avisa a API para recarregar o cache de PIDs (spec 05) sem novo deploy.
 -- +goose StatementBegin
-CREATE FUNCTION notificar_pid_alterado() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION notify_pid_changed() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  PERFORM pg_notify('pid_alterado', '');
+  PERFORM pg_notify('pid_changed', '');
   RETURN NULL;
 END $$;
 -- +goose StatementEnd
-CREATE TRIGGER pid_alterado AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON pid
-  FOR EACH STATEMENT EXECUTE FUNCTION notificar_pid_alterado();
+CREATE TRIGGER pid_changed AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON pid
+  FOR EACH STATEMENT EXECUTE FUNCTION notify_pid_changed();
 
 -- +goose Down
-DROP TRIGGER pid_alterado ON pid;
-DROP FUNCTION notificar_pid_alterado();
+DROP TRIGGER pid_changed ON pid;
+DROP FUNCTION notify_pid_changed();
 DROP TABLE pid;
+

@@ -5,8 +5,8 @@ o `registro.json`; o backend lê o arquivo e cadastra o dongle no banco. Nada de
 
 ```
 tccelta-kms provisionar <novo|importar|importar-registro> --saida DIR   # grava DIR/<devid>/registro.json
-tccelta provisionar registrar --arquivo DIR/<devid>/registro.json        # insere dongle + dongle_estado
-tccelta provisionar registrar --arquivo DIR                              # todos os DIR/*/registro.json
+tccelta provision register --file DIR/<devid>/registro.json        # insere dongle + dongle_state
+tccelta provision register --file DIR                              # todos os DIR/*/registro.json
 ```
 
 ## Ordem e garantias
@@ -49,5 +49,5 @@ diretório, valida todos os registros primeiro).
 ## Testes do contrato
 
 - `kms/internal/provisionamento` confere que o KMS grava exatamente o texto acima.
-- `backend/internal/provisionamento` confere que o backend aceita exatamente esse texto e recusa as variações
+- `backend/internal/provisioning` confere que o backend aceita exatamente esse texto e recusa as variações
   inválidas.

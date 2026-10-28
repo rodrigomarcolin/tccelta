@@ -7,50 +7,50 @@ import (
 	"time"
 
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/simulador"
+	"tccelta/backend/internal/simulator"
 )
 
-func cmdSimulador(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("simulador", flag.ContinueOnError)
-	cenario := fs.String("cenario", "e2e", "e2e|protocolo-negativo|tempo|geracao|carga|reconexao|joelho")
+func cmdSimulator(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("simulator", flag.ContinueOnError)
+	scenario := fs.String("scenario", "e2e", "e2e|negative-protocol|time|generation|load|reconnection|knee")
 	api := fs.String("api", "http://api:8080", "URL base da API")
-	chaves := fs.String("chaves", "", "CSV de dongles de teste")
+	keys := fs.String("keys", "", "CSV de dongles de teste")
 	dongles := fs.Int("dongles", 0, "número de dongles virtuais")
-	duracao := fs.Duration("duracao", 2*time.Minute, "duração da carga")
-	acelerar := fs.Float64("acelerar", 1, "fator de aceleração do T_lat")
+	duration := fs.Duration("duration", 2*time.Minute, "duração da carga")
+	speedup := fs.Float64("speedup", 1, "fator de aceleração do T_lat")
 	tlat := fs.Duration("tlat", 60*time.Second, "T_lat")
-	acumulado := fs.Int("acumulado", 500, "blocos acumulados offline")
-	rampa := fs.Duration("rampa", 30*time.Second, "rampa de conexão")
-	bancoEnv := fs.String("banco-url-env", "SIM_BANCO_URL", "variável com a URL do banco (SELECT)")
-	rel := fs.String("relatorio", "", "arquivo do relatório JSON")
-	deriva := fs.Float64("deriva", 0, "deriva do cristal (ppm)")
+	accumulated := fs.Int("accumulated", 500, "blocos acumulados offline")
+	ramp := fs.Duration("ramp", 30*time.Second, "rampa de conexão")
+	dbEnv := fs.String("db-url-env", "SIM_BANCO_URL", "variável com a URL do banco (SELECT)")
+	rel := fs.String("report", "", "arquivo do relatório JSON")
+	drift := fs.Float64("drift", 0, "deriva do cristal (ppm)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cfg, _ := config.Carregar()
-	log := novoLog(cfg)
-	prefixo := ""
-	if *bancoEnv == "SIM_BANCO_URL" {
-		prefixo = "SIM_"
+	cfg, _ := config.Load()
+	log := newLogger(cfg)
+	prefix := ""
+	if *dbEnv == "SIM_BANCO_URL" {
+		prefix = "SIM_"
 	}
-	pool, err := poolDeEnv(ctx, prefixo, log)
+	pool, err := poolFromEnv(ctx, prefix, log)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	if *chaves == "" {
-		return fmt.Errorf("informe --chaves (CSV gerado por `tccelta-kms provisionar`)")
+	if *keys == "" {
+		return fmt.Errorf("informe --keys (CSV gerado por `tccelta-kms provisionar`)")
 	}
-	ks, err := lerCSVChaves(*chaves)
+	ks, err := readKeysCSV(*keys)
 	if err != nil {
 		return err
 	}
-	params := map[string]any{"api": *api, "dongles": *dongles, "duracao": duracao.String(), "tlat": tlat.String(), "acelerar": *acelerar}
-	r := simulador.NovoRelatorio(*cenario, params)
-	err = simulador.Executar(ctx, *cenario, simulador.Opcoes{API: *api, Pool: pool, Chaves: ks, Rel: r, Log: log, Dongles: *dongles,
-		Duracao: *duracao, TLat: *tlat, Acumulado: *acumulado, Rampa: *rampa, Acelerar: *acelerar, Deriva: *deriva})
-	if e := r.Escrever(*rel); e != nil && err == nil {
+	params := map[string]any{"api": *api, "dongles": *dongles, "duration": duration.String(), "tlat": tlat.String(), "speedup": *speedup}
+	r := simulator.NewReport(*scenario, params)
+	err = simulator.Run(ctx, *scenario, simulator.Options{API: *api, Pool: pool, Keys: ks, Report: r, Log: log, Dongles: *dongles,
+		Duration: *duration, TLat: *tlat, Accumulated: *accumulated, Ramp: *ramp, Speedup: *speedup, Drift: *drift})
+	if e := r.Write(*rel); e != nil && err == nil {
 		err = e
 	}
 	return err

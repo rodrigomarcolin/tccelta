@@ -14,8 +14,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"tccelta/backend/internal/casodeuso/porta"
-	"tccelta/backend/internal/dominio/protocolo"
+	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/usecase/port"
 )
 
 type claims struct {
@@ -23,140 +23,140 @@ type claims struct {
 	CS json.Number `json:"cs"`
 }
 
-// Validador valida os tokens localmente com as chaves públicas em memória.
-type Validador struct {
-	chaves             atomic.Pointer[map[string]ed25519.PublicKey]
-	fonte              porta.AssinadorJWT
-	emissor, audiencia string
-	folga              time.Duration
-	agora              func() time.Time
-	mu                 sync.Mutex
-	ultimaRecarga      time.Time
+// Validator valida os tokens localmente com as chaves públicas em memória.
+type Validator struct {
+	keys             atomic.Pointer[map[string]ed25519.PublicKey]
+	source           port.JWTSigner
+	issuer, audience string
+	leeway           time.Duration
+	now              func() time.Time
+	mu               sync.Mutex
+	lastReload       time.Time
 }
 
-// NovoValidador carrega as chaves; falha se o Vault não responder no boot.
-func NovoValidador(ctx context.Context, fonte porta.AssinadorJWT, emissor, audiencia string, folga time.Duration) (*Validador, error) {
-	v := &Validador{fonte: fonte, emissor: emissor, audiencia: audiencia, folga: folga, agora: time.Now}
-	if err := v.recarregar(ctx); err != nil {
+// NewValidator carrega as chaves; falha se o Vault não responder no boot.
+func NewValidator(ctx context.Context, source port.JWTSigner, issuer, audience string, leeway time.Duration) (*Validator, error) {
+	v := &Validator{source: source, issuer: issuer, audience: audience, leeway: leeway, now: time.Now}
+	if err := v.reload(ctx); err != nil {
 		return nil, err
 	}
 	return v, nil
 }
 
-// DefinirRelogio troca o relógio (testes).
-func (v *Validador) DefinirRelogio(f func() time.Time) { v.agora = f }
+// SetClock troca o relógio (testes).
+func (v *Validator) SetClock(f func() time.Time) { v.now = f }
 
-// Pronto: há chaves carregadas.
-func (v *Validador) Pronto() bool { m := v.chaves.Load(); return m != nil && len(*m) > 0 }
+// Ready: há chaves carregadas.
+func (v *Validator) Ready() bool { m := v.keys.Load(); return m != nil && len(*m) > 0 }
 
-func (v *Validador) recarregar(ctx context.Context) error {
-	ks, err := v.fonte.ChavesPublicas(ctx)
+func (v *Validator) reload(ctx context.Context) error {
+	ks, err := v.source.PublicKeys(ctx)
 	if err != nil {
 		return err
 	}
 	m := make(map[string]ed25519.PublicKey, len(ks))
-	for ver, k := range ks {
-		m["jwt-v"+strconv.Itoa(ver)] = k
+	for verify, k := range ks {
+		m["jwt-v"+strconv.Itoa(verify)] = k
 	}
-	v.chaves.Store(&m)
+	v.keys.Store(&m)
 	v.mu.Lock()
-	v.ultimaRecarga = v.agora()
+	v.lastReload = v.now()
 	v.mu.Unlock()
 	return nil
 }
 
-// recarregarPorKid recarrega no máximo 1 vez a cada 30 s.
-func (v *Validador) recarregarPorKid(ctx context.Context) {
+// reloadByKid recarrega no máximo 1 vez a cada 30 s.
+func (v *Validator) reloadByKid(ctx context.Context) {
 	v.mu.Lock()
-	ok := v.agora().Sub(v.ultimaRecarga) >= 30*time.Second
+	ok := v.now().Sub(v.lastReload) >= 30*time.Second
 	if ok {
-		v.ultimaRecarga = v.agora()
+		v.lastReload = v.now()
 	}
 	v.mu.Unlock()
 	if ok {
-		_ = v.recarregar(ctx)
+		_ = v.reload(ctx)
 	}
 }
 
-// AtualizarPeriodicamente recarrega as públicas a cada intervalo (padrão 10 min).
-func (v *Validador) AtualizarPeriodicamente(ctx context.Context, cada time.Duration) {
-	if cada <= 0 {
-		cada = 10 * time.Minute
+// UpdatePeriodically recarrega as públicas a cada intervalo (padrão 10 min).
+func (v *Validator) UpdatePeriodically(ctx context.Context, each time.Duration) {
+	if each <= 0 {
+		each = 10 * time.Minute
 	}
-	t := time.NewTicker(cada)
+	t := time.NewTicker(each)
 	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			_ = v.recarregar(ctx)
+			_ = v.reload(ctx)
 		}
 	}
 }
 
-// Validar valida o JWT bruto.
-func (v *Validador) Validar(ctx context.Context, bruto string) (porta.Sessao, error) {
+// Validate valida o JWT bruto.
+func (v *Validator) Validate(ctx context.Context, raw string) (port.Session, error) {
 	var cl claims
-	tentouRecarregar := false
+	triedReload := false
 	keyfunc := func(t *jwt.Token) (any, error) {
 		kid, ok := t.Header["kid"].(string)
 		if !ok || kid == "" {
-			return nil, ErrTokenInvalido
+			return nil, ErrInvalidToken
 		}
-		m := v.chaves.Load()
+		m := v.keys.Load()
 		if m != nil {
 			if k, ok := (*m)[kid]; ok {
 				return k, nil
 			}
 		}
-		if !tentouRecarregar {
-			tentouRecarregar = true
-			v.recarregarPorKid(ctx)
-			if m = v.chaves.Load(); m != nil {
+		if !triedReload {
+			triedReload = true
+			v.reloadByKid(ctx)
+			if m = v.keys.Load(); m != nil {
 				if k, ok := (*m)[kid]; ok {
 					return k, nil
 				}
 			}
 		}
-		return nil, ErrTokenInvalido
+		return nil, ErrInvalidToken
 	}
 	p := jwt.NewParser(
 		jwt.WithValidMethods([]string{"EdDSA"}),
-		jwt.WithIssuer(v.emissor),
-		jwt.WithAudience(v.audiencia),
+		jwt.WithIssuer(v.issuer),
+		jwt.WithAudience(v.audience),
 		jwt.WithExpirationRequired(),
-		jwt.WithLeeway(v.folga),
+		jwt.WithLeeway(v.leeway),
 		jwt.WithJSONNumber(),
-		jwt.WithTimeFunc(v.agora),
+		jwt.WithTimeFunc(v.now),
 	)
-	t, err := p.ParseWithClaims(bruto, &cl, keyfunc)
+	t, err := p.ParseWithClaims(raw, &cl, keyfunc)
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) && !errors.Is(err, jwt.ErrTokenSignatureInvalid) {
-			return porta.Sessao{}, ErrTokenExpirado
+			return port.Session{}, ErrTokenExpired
 		}
-		return porta.Sessao{}, ErrTokenInvalido
+		return port.Session{}, ErrInvalidToken
 	}
 	if !t.Valid || cl.ExpiresAt == nil {
-		return porta.Sessao{}, ErrTokenInvalido
+		return port.Session{}, ErrInvalidToken
 	}
 	if len(cl.Subject) != 16 {
-		return porta.Sessao{}, ErrTokenInvalido
+		return port.Session{}, ErrInvalidToken
 	}
-	dev, err := protocolo.DevIDDeHex(strings.ToLower(cl.Subject))
+	dev, err := protocol.DevIDFromHex(strings.ToLower(cl.Subject))
 	if err != nil {
-		return porta.Sessao{}, ErrTokenInvalido
+		return port.Session{}, ErrInvalidToken
 	}
 	cs, err := strconv.ParseUint(cl.CS.String(), 10, 32)
 	if err != nil || cs < 1 {
-		return porta.Sessao{}, ErrTokenInvalido
+		return port.Session{}, ErrInvalidToken
 	}
 	jti, err := uuid.Parse(cl.ID)
 	if err != nil {
-		return porta.Sessao{}, ErrTokenInvalido
+		return port.Session{}, ErrInvalidToken
 	}
-	return porta.Sessao{Dev: dev, CS: uint32(cs), JTI: jti, ExpiraEm: cl.ExpiresAt.Time}, nil
+	return port.Session{Dev: dev, CS: uint32(cs), JTI: jti, ExpiresAt: cl.ExpiresAt.Time}, nil
 }
 
-var _ porta.EmissorToken = (*Emissor)(nil)
-var _ porta.ValidadorToken = (*Validador)(nil)
+var _ port.TokenIssuer = (*Issuer)(nil)
+var _ port.TokenValidator = (*Validator)(nil)

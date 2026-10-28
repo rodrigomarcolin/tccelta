@@ -1,98 +1,98 @@
-// Package ingestao reúne as regras puras do lote de blocos (spec 05).
-package ingestao
+// Package ingestion reúne as regras puras do lote de blocos (spec 05).
+package ingestion
 
 import (
-	"tccelta/backend/internal/dominio/pid"
-	"tccelta/backend/internal/dominio/protocolo"
+	"tccelta/backend/internal/domain/pid"
+	"tccelta/backend/internal/domain/protocol"
 )
 
-// Motivo da interrupção de um lote.
-type Motivo string
+// Reason da interrupção de um lote.
+type Reason string
 
 const (
-	MotivoNenhum             Motivo = ""
-	MotivoTagInvalida        Motivo = "tag_invalida"
-	MotivoSalto              Motivo = "salto"
-	MotivoMarcadorInvalido   Motivo = "marcador_invalido"
-	MotivoPIDDesconhecido    Motivo = "pid_desconhecido"
-	MotivoRegistroMalformado Motivo = "registro_malformado"
+	ReasonNone            Reason = ""
+	ReasonInvalidTag      Reason = "invalid_tag"
+	ReasonJump            Reason = "jump"
+	ReasonInvalidMarker   Reason = "invalid_marker"
+	ReasonUnknownPID      Reason = "unknown_pid"
+	ReasonMalformedRecord Reason = "malformed_record"
 )
 
-// Acao orienta o buffer do app.
-type Acao string
+// Action orienta o buffer do app. Os valores são contrato de fio (cabeçalho X-Lote-Acao), por isso em português.
+type Action string
 
 const (
-	AcaoNenhuma  Acao = "nenhuma"
-	AcaoReler    Acao = "reler"
-	AcaoAguardar Acao = "aguardar"
+	ActionNone   Action = "nenhuma"
+	ActionReread Action = "reler"
+	ActionWait   Action = "aguardar"
 )
 
-// AcaoDe mapeia o motivo para a ação.
-func AcaoDe(m Motivo) Acao {
+// ActionOf mapeia o motivo para a ação.
+func ActionOf(m Reason) Action {
 	switch m {
-	case MotivoNenhum:
-		return AcaoNenhuma
-	case MotivoPIDDesconhecido, MotivoRegistroMalformado:
-		return AcaoAguardar
+	case ReasonNone:
+		return ActionNone
+	case ReasonUnknownPID, ReasonMalformedRecord:
+		return ActionWait
 	}
-	return AcaoReler
+	return ActionReread
 }
 
-// BlocoIn é um bloco do lote com o resultado da verificação.
-type BlocoIn struct {
-	B      protocolo.Bloco
-	Valido bool // tag conferida (só significativo se Verificado)
-	// Verificado: seq acima do snapshot (passou pelo KMS).
-	Verificado bool
+// BlockIn é um bloco do lote com o resultado da verificação.
+type BlockIn struct {
+	B     protocol.Block
+	Valid bool // tag conferida (só significativo se Verified)
+	// Verified: seq acima do snapshot (passou pelo KMS).
+	Verified bool
 }
 
 // Seq do bloco.
-func (b BlocoIn) Seq() uint32 { return b.B.Cab.Seq }
+func (b BlockIn) Seq() uint32 { return b.B.Hdr.Seq }
 
-// EstadoIn é o estado de partida da aplicação.
-type EstadoIn struct {
-	SeqContiguo uint32
-	G, U        uint16
+// StateIn é o estado de partida da aplicação.
+type StateIn struct {
+	ContiguousSeq uint32
+	G, U          uint16
 }
 
-// Aceito é um bloco que entra em bloco_bruto.
-type Aceito struct {
-	B        protocolo.Bloco
-	Cont     protocolo.Conteudo
-	Geracao  uint16
-	Marcador string // "", "BOOT", "LOSS"
+// Accepted é um bloco que entra em raw_block.
+type Accepted struct {
+	B          protocol.Block
+	Content    protocol.Content
+	Generation uint16
+	Marker     string // "", "BOOT", "LOSS"
 }
 
-// LacunaOut é uma lacuna BOOT/LOSS a registrar.
-type LacunaOut struct {
-	From, To, SeqBloco uint32
-	Causa              string
+// GapOut é uma lacuna BOOT/LOSS a registrar.
+type GapOut struct {
+	From, To, BlockSeq uint32
+	Cause              string
 }
 
-// Rejeicao é um bloco recusado.
-type Rejeicao struct {
-	B       protocolo.Bloco
-	Motivo  Motivo
-	Detalhe string
+// Rejection é um bloco recusado.
+type Rejection struct {
+	B      protocol.Block
+	Reason Reason
+	Detail string
 	// PIDDesconhecido carrega o PID para o alerta.
 	PID int
 }
 
-// ResultadoAplicacao é a saída pura de aplicar.
-type ResultadoAplicacao struct {
-	Aceitos        []Aceito
-	Lacunas        []LacunaOut
-	Rejeitados     []Rejeicao
-	Motivo         Motivo
-	NovoAck        uint32
-	MaiorVisto     uint32
-	G, U           uint16
-	Duplicados     int
-	GeracaoAvancou bool
+// ApplyResult é a saída pura de aplicar.
+type ApplyResult struct {
+	Accepted           []Accepted
+	Gaps               []GapOut
+	Rejected           []Rejection
+	Reason             Reason
+	NewAck             uint32
+	MaxSeen            uint32
+	G, U               uint16
+	Duplicates         int
+	GenerationAdvanced bool
 }
 
-// atribuirGeracao: boot_id 0 não participa; um boot_id menor que U é a volta do u16.
-func atribuirGeracao(g, u, bootID uint16) (ger, novoU uint16, avancou bool) {
+// assignGeneration: boot_id 0 não participa; um boot_id menor que U é a volta do u16.
+func assignGeneration(g, u, bootID uint16) (gen, newU uint16, advanced bool) {
 	if bootID == 0 {
 		return g, u, false
 	}
@@ -102,91 +102,91 @@ func atribuirGeracao(g, u, bootID uint16) (ger, novoU uint16, avancou bool) {
 	return g, bootID, false
 }
 
-// Aplicar executa as regras do lote (Go-Back-N estrito, BOOT/LOSS). Pura.
-func Aplicar(blocos []BlocoIn, e EstadoIn, cat pid.Consulta) ResultadoAplicacao {
-	r := ResultadoAplicacao{G: e.G, U: e.U}
-	exp := e.SeqContiguo + 1
-	for _, b := range blocos {
-		if b.Verificado && b.Valido && b.Seq() > r.MaiorVisto {
-			r.MaiorVisto = b.Seq()
+// Apply executa as regras do lote (Go-Back-N estrito, BOOT/LOSS). Pura.
+func Apply(blocks []BlockIn, e StateIn, cat pid.Query) ApplyResult {
+	r := ApplyResult{G: e.G, U: e.U}
+	exp := e.ContiguousSeq + 1
+	for _, b := range blocks {
+		if b.Verified && b.Valid && b.Seq() > r.MaxSeen {
+			r.MaxSeen = b.Seq()
 		}
 	}
 	// todo bloco verificado com tag inválida vai para rejeitados
-	for _, b := range blocos {
-		if b.Verificado && !b.Valido && b.Seq() >= exp {
-			r.Rejeitados = append(r.Rejeitados, Rejeicao{B: b.B, Motivo: MotivoTagInvalida})
+	for _, b := range blocks {
+		if b.Verified && !b.Valid && b.Seq() >= exp {
+			r.Rejected = append(r.Rejected, Rejection{B: b.B, Reason: ReasonInvalidTag})
 		}
 	}
-laco:
-	for _, b := range blocos {
+loop:
+	for _, b := range blocks {
 		seq := b.Seq()
 		if seq < exp {
-			r.Duplicados++
+			r.Duplicates++
 			continue
 		}
-		if !b.Valido {
-			r.Motivo = MotivoTagInvalida
+		if !b.Valid {
+			r.Reason = ReasonInvalidTag
 			break
 		}
-		c, err := protocolo.LerRegistros(b.B.Dados)
+		c, err := protocol.ReadRecords(b.B.Data)
 		if err != nil {
-			r.Rejeitados = append(r.Rejeitados, Rejeicao{B: b.B, Motivo: MotivoRegistroMalformado, Detalhe: err.Error()})
-			r.Motivo = MotivoRegistroMalformado
+			r.Rejected = append(r.Rejected, Rejection{B: b.B, Reason: ReasonMalformedRecord, Detail: err.Error()})
+			r.Reason = ReasonMalformedRecord
 			break
 		}
-		a := Aceito{B: b.B, Cont: c}
+		a := Accepted{B: b.B, Content: c}
 		switch {
-		case c.Marcador != nil && c.Marcador.Tipo == protocolo.RegBoot:
-			m := c.Marcador
+		case c.Marker != nil && c.Marker.Type == protocol.RegBoot:
+			m := c.Marker
 			if !(m.ToSeq == seq-1 && m.FromSeq <= exp && seq >= exp) {
-				r.Rejeitados = append(r.Rejeitados, Rejeicao{B: b.B, Motivo: MotivoMarcadorInvalido, Detalhe: "BOOT fora da regra"})
-				r.Motivo = MotivoMarcadorInvalido
-				break laco
+				r.Rejected = append(r.Rejected, Rejection{B: b.B, Reason: ReasonInvalidMarker, Detail: "BOOT fora da regra"})
+				r.Reason = ReasonInvalidMarker
+				break loop
 			}
 			if exp <= m.ToSeq {
-				r.Lacunas = append(r.Lacunas, LacunaOut{From: exp, To: m.ToSeq, SeqBloco: seq, Causa: "BOOT"})
+				r.Gaps = append(r.Gaps, GapOut{From: exp, To: m.ToSeq, BlockSeq: seq, Cause: "BOOT"})
 			}
 			exp = seq + 1
-			a.Marcador = "BOOT"
-			a.Geracao, r.U, _ = r.atribuir(b.B.Cab.BootID)
-		case c.Marcador != nil:
-			m := c.Marcador
+			a.Marker = "BOOT"
+			a.Generation, r.U, _ = r.assign(b.B.Hdr.BootID)
+		case c.Marker != nil:
+			m := c.Marker
 			if !(m.FromSeq == exp && m.FromSeq <= seq && seq <= m.ToSeq) {
-				r.Rejeitados = append(r.Rejeitados, Rejeicao{B: b.B, Motivo: MotivoMarcadorInvalido, Detalhe: "LOSS fora da regra"})
-				r.Motivo = MotivoMarcadorInvalido
-				break laco
+				r.Rejected = append(r.Rejected, Rejection{B: b.B, Reason: ReasonInvalidMarker, Detail: "LOSS fora da regra"})
+				r.Reason = ReasonInvalidMarker
+				break loop
 			}
-			r.Lacunas = append(r.Lacunas, LacunaOut{From: m.FromSeq, To: m.ToSeq, SeqBloco: seq, Causa: "LOSS"})
+			r.Gaps = append(r.Gaps, GapOut{From: m.FromSeq, To: m.ToSeq, BlockSeq: seq, Cause: "LOSS"})
 			exp = m.ToSeq + 1
-			a.Marcador = "LOSS"
-			a.Geracao = r.G
+			a.Marker = "LOSS"
+			a.Generation = r.G
 		default:
 			if seq != exp {
-				r.Motivo = MotivoSalto
-				break laco
+				r.Reason = ReasonJump
+				break loop
 			}
 			for _, p := range c.PIDs {
-				if _, ok := cat.Obter(p.PID); !ok {
-					r.Rejeitados = append(r.Rejeitados, Rejeicao{B: b.B, Motivo: MotivoPIDDesconhecido, PID: int(p.PID)})
-					r.Motivo = MotivoPIDDesconhecido
-					break laco
+				if _, ok := cat.Get(p.PID); !ok {
+					r.Rejected = append(r.Rejected, Rejection{B: b.B, Reason: ReasonUnknownPID, PID: int(p.PID)})
+					r.Reason = ReasonUnknownPID
+					break loop
 				}
 			}
-			a.Geracao, r.U, _ = r.atribuir(b.B.Cab.BootID)
+			a.Generation, r.U, _ = r.assign(b.B.Hdr.BootID)
 			exp = seq + 1
 		}
-		r.Aceitos = append(r.Aceitos, a)
+		r.Accepted = append(r.Accepted, a)
 	}
-	r.NovoAck = exp - 1
+	r.NewAck = exp - 1
 	return r
 }
 
-// atribuir aplica atribuirGeracao ao estado (G, U) do resultado.
-func (r *ResultadoAplicacao) atribuir(bootID uint16) (uint16, uint16, bool) {
-	ger, u, av := atribuirGeracao(r.G, r.U, bootID)
+// assign aplica assignGeneration ao estado (G, U) do resultado.
+func (r *ApplyResult) assign(bootID uint16) (uint16, uint16, bool) {
+	gen, u, av := assignGeneration(r.G, r.U, bootID)
 	if av {
-		r.GeracaoAvancou = true
+		r.GenerationAdvanced = true
 	}
-	r.G = ger
-	return ger, u, av
+	r.G = gen
+	return gen, u, av
 }

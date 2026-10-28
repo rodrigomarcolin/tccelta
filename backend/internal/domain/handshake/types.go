@@ -6,36 +6,36 @@ import (
 	"github.com/google/uuid"
 )
 
-// Resultados gravados em desafio.resultado.
+// Resultados gravados em challenge.result.
 const (
-	ResultadoAceito          = "aceito"
-	ResultadoAceitoSemAncora = "aceito_sem_ancora"
-	ResultadoInconsistente   = "inconsistente"
+	ResultAccepted         = "accepted"
+	ResultAcceptedNoAnchor = "accepted_no_anchor"
+	ResultInconsistent     = "inconsistent"
 )
 
-// Emissao pede um novo desafio para o dongle.
-type Emissao struct {
-	DongleID     int32
-	S1           time.Time
-	ExpiraEm     time.Time
-	Nonce        []byte
-	MaxPendentes int
+// Issuance pede um novo desafio para o dongle.
+type Issuance struct {
+	DongleID   int32
+	S1         time.Time
+	ExpiresAt  time.Time
+	Nonce      []byte
+	MaxPending int
 }
 
-// Desafio é o desafio recém-emitido: c_S novo e a posição confirmada do dongle.
-type Desafio struct {
-	CS, SeqContiguo, CConf int64
+// Challenge é o desafio recém-emitido: c_S novo e a posição confirmada do dongle.
+type Challenge struct {
+	CS, ContiguousSeq, CConf int64
 }
 
-// DesafioGravado é o desafio lido para a pré-checagem da resposta.
-type DesafioGravado struct {
-	Nonce        []byte
-	S1, ExpiraEm time.Time
-	RespondidoEm *time.Time
+// StoredChallenge é o desafio lido para a pré-checagem da resposta.
+type StoredChallenge struct {
+	Nonce         []byte
+	S1, ExpiresAt time.Time
+	AnsweredAt    *time.Time
 }
 
-// Consumo marca o desafio como respondido e guarda o que o dongle relatou.
-type Consumo struct {
+// Consumption marca o desafio como respondido e guarda o que o dongle relatou.
+type Consumption struct {
 	DongleID              int32
 	CS                    int64
 	Nonce                 []byte
@@ -44,35 +44,35 @@ type Consumo struct {
 	TMs, HeadSeq, TailSeq int64
 }
 
-// Finalizacao fecha o desafio com o resultado do handshake.
-type Finalizacao struct {
-	DongleID         int32
-	CS               int64
-	Resultado        string
-	AckSeq           *int64
-	PerdaIni         *int64
-	PerdaFim         *int64
-	TokenJTI         *uuid.UUID
-	TMsDesembrulhado *int64
-	GeracaoBoot      *int32
+// Finalization fecha o desafio com o resultado do handshake.
+type Finalization struct {
+	DongleID       int32
+	CS             int64
+	Result         string
+	AckSeq         *int64
+	LossStart      *int64
+	LossEnd        *int64
+	TokenJTI       *uuid.UUID
+	UnwrappedTMs   *int64
+	BootGeneration *int32
 }
 
-// Ancora liga o t_ms do dongle ao relógio do servidor.
-type Ancora struct {
-	DongleID    int32
-	GeracaoBoot int32
-	BootID      int32
-	TMs         int64
-	Nonce       []byte
-	S1, S2      time.Time
+// Anchor liga o t_ms do dongle ao relógio do servidor.
+type Anchor struct {
+	DongleID       int32
+	BootGeneration int32
+	BootID         int32
+	TMs            int64
+	Nonce          []byte
+	S1, S2         time.Time
 }
 
-// Atualizacao é o novo estado do dongle depois de um handshake aceito.
-type Atualizacao struct {
-	DongleID             int32
-	SeqContiguo, HeadSeq int64
-	TailSeq              int64
-	S2, Agora            time.Time
-	CConf                int64
-	UltimoAck            []byte
+// Update é o novo estado do dongle depois de um handshake aceito.
+type Update struct {
+	DongleID               int32
+	ContiguousSeq, HeadSeq int64
+	TailSeq                int64
+	S2, Now                time.Time
+	CConf                  int64
+	LastAck                []byte
 }

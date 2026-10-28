@@ -1,4 +1,4 @@
-// Comando tccelta: binário único com os subcomandos api, worker, migrar, provisionar (registrar), simulador e saude.
+// Comando tccelta: binário único com os subcomandos api, worker, migrate, provision (register), simulator e health.
 package main
 
 import (
@@ -14,24 +14,24 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"tccelta/backend/internal/banco"
 	"tccelta/backend/internal/config"
-	"tccelta/backend/internal/versao"
+	"tccelta/backend/internal/database"
+	"tccelta/backend/internal/version"
 )
 
-const ajuda = `tccelta ` + "%s" + `
+const help = `tccelta ` + "%s" + `
 uso: tccelta <subcomando> [opções]
   api                          servidor HTTP
-  worker                       worker de tempo; "worker reprocessar" refaz leitura/posicao
-  migrar [up|down-to N|status] migrations
-  provisionar registrar --arquivo registro.json  cadastra no banco um dongle provisionado pelo KMS
-  simulador                    dongles virtuais e cenários
-  saude --url <url>            healthcheck (sai 0/1)
+  worker                       worker de tempo; "worker reprocess" refaz reading/position
+  migrate [up|down-to N|status] migrations
+  provision register --file registro.json  cadastra no banco um dongle provisionado pelo KMS
+  simulator                    dongles virtuais e cenários
+  health --url <url>           healthcheck (sai 0/1)
 `
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Printf(ajuda, versao.Versao)
+		fmt.Printf(help, version.Version)
 		os.Exit(2)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -43,16 +43,16 @@ func main() {
 		err = cmdAPI(ctx)
 	case "worker":
 		err = cmdWorker(ctx, args)
-	case "migrar":
-		err = cmdMigrar(ctx, args)
-	case "provisionar":
-		err = cmdProvisionar(ctx, args)
-	case "simulador":
-		err = cmdSimulador(ctx, args)
-	case "saude":
-		err = cmdSaude(args)
-	case "ajuda", "-h", "--help":
-		fmt.Printf(ajuda, versao.Versao)
+	case "migrate":
+		err = cmdMigrate(ctx, args)
+	case "provision":
+		err = cmdProvision(ctx, args)
+	case "simulator":
+		err = cmdSimulator(ctx, args)
+	case "health":
+		err = cmdHealth(args)
+	case "help", "-h", "--help":
+		fmt.Printf(help, version.Version)
 		return
 	default:
 		fmt.Fprintf(os.Stderr, "subcomando desconhecido %q\n", os.Args[1])
@@ -64,34 +64,34 @@ func main() {
 	}
 }
 
-func novoLog(c config.Config) *slog.Logger {
-	var nivel slog.Level
-	_ = nivel.UnmarshalText([]byte(c.LogNivel))
-	op := &slog.HandlerOptions{Level: nivel}
-	if c.LogFormato == "texto" {
+func newLogger(c config.Config) *slog.Logger {
+	var level slog.Level
+	_ = level.UnmarshalText([]byte(c.LogLevel))
+	op := &slog.HandlerOptions{Level: level}
+	if c.LogFormat == "texto" {
 		return slog.New(slog.NewTextHandler(os.Stderr, op))
 	}
 	return slog.New(slog.NewJSONHandler(os.Stderr, op))
 }
 
-// poolDeEnv abre um pool a partir de <PREFIXO>BANCO_URL / <PREFIXO>BANCO_SENHA_ARQUIVO.
-func poolDeEnv(ctx context.Context, prefixo string, log *slog.Logger) (*pgxpool.Pool, error) {
-	url := os.Getenv(prefixo + "BANCO_URL")
+// poolFromEnv abre um pool a partir de <PREFIXO>BANCO_URL / <PREFIXO>BANCO_SENHA_ARQUIVO.
+func poolFromEnv(ctx context.Context, prefix string, log *slog.Logger) (*pgxpool.Pool, error) {
+	url := os.Getenv(prefix + "BANCO_URL")
 	if url == "" {
-		return nil, fmt.Errorf("%sBANCO_URL não definida", prefixo)
+		return nil, fmt.Errorf("%sBANCO_URL não definida", prefix)
 	}
-	senha := ""
-	if arq := os.Getenv(prefixo + "BANCO_SENHA_ARQUIVO"); arq != "" {
-		b, err := os.ReadFile(arq)
+	password := ""
+	if file := os.Getenv(prefix + "BANCO_SENHA_ARQUIVO"); file != "" {
+		b, err := os.ReadFile(file)
 		if err != nil {
 			return nil, err
 		}
-		senha = strings.TrimSpace(string(b))
+		password = strings.TrimSpace(string(b))
 	}
-	return banco.NovoPool(ctx, config.BancoConfig{URL: url, Senha: senha, PoolMax: 10, PoolMin: 1}, log)
+	return database.NewPool(ctx, config.DatabaseConfig{URL: url, Password: password, PoolMax: 10, PoolMin: 1}, log)
 }
 
-func cmdSaude(args []string) error {
+func cmdHealth(args []string) error {
 	url := "http://127.0.0.1:8080/saude/pronta"
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == "--url" {

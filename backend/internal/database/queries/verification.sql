@@ -1,30 +1,30 @@
--- name: VerEstadoDongle :one
-SELECT d.dongle_id, e.seq_contiguo, e.head_seq, e.c_conf, e.geracao_boot, e.ultimo_boot_id
-FROM dongle d JOIN dongle_estado e USING (dongle_id) WHERE d.dev_id = @dev_id;
+-- name: VerifyDongleState :one
+SELECT d.dongle_id, e.contiguous_seq, e.head_seq, e.c_conf, e.boot_generation, e.last_boot_id
+FROM dongle d JOIN dongle_state e USING (dongle_id) WHERE d.dev_id = @dev_id;
 
--- name: VerListarLacunas :many
-SELECT from_seq, to_seq, causa FROM lacuna WHERE dongle_id = @dongle_id ORDER BY from_seq;
+-- name: VerifyListGaps :many
+SELECT from_seq, to_seq, cause FROM gap WHERE dongle_id = @dongle_id ORDER BY from_seq;
 
--- name: VerContarLeituras :one
-SELECT count(*) FROM leitura WHERE dongle_id = @dongle_id;
+-- name: VerifyCountReadings :one
+SELECT count(*) FROM reading WHERE dongle_id = @dongle_id;
 
--- name: VerContarPosicoes :one
-SELECT count(*) FROM posicao WHERE dongle_id = @dongle_id;
+-- name: VerifyCountPositions :one
+SELECT count(*) FROM position WHERE dongle_id = @dongle_id;
 
--- name: VerContarRejeitados :one
-SELECT count(*) FROM bloco_rejeitado WHERE dongle_id = @dongle_id;
+-- name: VerifyCountRejected :one
+SELECT count(*) FROM rejected_block WHERE dongle_id = @dongle_id;
 
--- name: VerContarAncoras :one
-SELECT count(*) FROM ancora_tempo WHERE dongle_id = @dongle_id;
+-- name: VerifyCountAnchors :one
+SELECT count(*) FROM time_anchor WHERE dongle_id = @dongle_id;
 
--- name: VerListarBoots :many
-SELECT geracao_boot, boot_id, origem_tempo, a_ms, b, incerteza_base_ms, pendente_tempo
-FROM boot WHERE dongle_id = @dongle_id ORDER BY geracao_boot, boot_id;
+-- name: VerifyListBoots :many
+SELECT boot_generation, boot_id, time_source, a_ms, b, base_uncertainty_ms, time_pending
+FROM boot WHERE dongle_id = @dongle_id ORDER BY boot_generation, boot_id;
 
--- name: VerContarAlertas :one
-SELECT count(*) FROM alerta WHERE dongle_id = @dongle_id AND tipo = @tipo;
+-- name: VerifyCountAlerts :one
+SELECT count(*) FROM alert WHERE dongle_id = @dongle_id AND type = @type;
 
--- name: VerHoraDaLeitura :one
-SELECT (bo.a_ms + (1 + bo.b) * l.t_ms)::float8 AS hora_ms
-FROM leitura l JOIN boot bo USING (dongle_id, geracao_boot, boot_id)
-WHERE l.dongle_id = @dongle_id AND bo.a_ms IS NOT NULL ORDER BY l.recebido_em DESC, l.t_ms DESC LIMIT 1;
+-- name: VerifyReadingTime :one
+SELECT (bo.a_ms + (1 + bo.b) * l.t_ms)::float8 AS time_ms
+FROM reading l JOIN boot bo USING (dongle_id, boot_generation, boot_id)
+WHERE l.dongle_id = @dongle_id AND bo.a_ms IS NOT NULL ORDER BY l.received_at DESC, l.t_ms DESC LIMIT 1;

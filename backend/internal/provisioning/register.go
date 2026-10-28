@@ -1,7 +1,7 @@
-// Package provisionamento cadastra no banco os dongles que o serviço KMS já provisionou. O contrato
+// Package provisioning cadastra no banco os dongles que o serviço KMS já provisionou. O contrato
 // entre os dois lados é o arquivo registro.json (kms/docs/registro-dongle.md): a API e o KMS não
 // compartilham código.
-package provisionamento
+package provisioning
 
 import (
 	"context"
@@ -18,59 +18,59 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"tccelta/backend/internal/banco/consultas"
+	"tccelta/backend/internal/database/dbgen"
 )
 
-// SchemaRegistro é o schema do registro.json.
-const SchemaRegistro = "tccelta.dongle.registro.v1"
+// RecordSchema é o schema do registro.json.
+const RecordSchema = "tccelta.dongle.registro.v1"
 
-// Registro é o conteúdo de registro.json.
-type Registro struct {
-	Schema       string `json:"schema"`
-	DevID        string `json:"dev_id"` // 16 dígitos hexadecimais
-	Perfil       string `json:"perfil"` // hmac | asym | none
-	KMSChaveAuth string `json:"kms_chave_auth"`
-	KMSChaveRec  string `json:"kms_chave_rec"`
-	ChavePublica string `json:"chave_publica,omitempty"` // hex, 65 B não comprimidos (só perfil asym)
-	Descricao    string `json:"descricao,omitempty"`
+// Record é o conteúdo de registro.json.
+type Record struct {
+	Schema      string `json:"schema"`
+	DevID       string `json:"dev_id"` // 16 dígitos hexadecimais
+	Profile     string `json:"perfil"` // hmac | asym | none
+	KMSAuthKey  string `json:"kms_chave_auth"`
+	KMSRecKey   string `json:"kms_chave_rec"`
+	PublicKey   string `json:"chave_publica,omitempty"` // hex, 65 B não comprimidos (só perfil asym)
+	Description string `json:"descricao,omitempty"`
 }
 
-// LerRegistro lê e valida um registro.json.
-func LerRegistro(arquivo string) (Registro, error) {
-	b, err := os.ReadFile(arquivo)
+// ReadRecord lê e valida um registro.json.
+func ReadRecord(file string) (Record, error) {
+	b, err := os.ReadFile(file)
 	if err != nil {
-		return Registro{}, err
+		return Record{}, err
 	}
-	var r Registro
+	var r Record
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&r); err != nil {
-		return Registro{}, fmt.Errorf("%s: %w", arquivo, err)
+		return Record{}, fmt.Errorf("%s: %w", file, err)
 	}
-	if err := r.Validar(); err != nil {
-		return Registro{}, fmt.Errorf("%s: %w", arquivo, err)
+	if err := r.Validate(); err != nil {
+		return Record{}, fmt.Errorf("%s: %w", file, err)
 	}
 	return r, nil
 }
 
-// Validar confere o schema e os campos.
-func (r Registro) Validar() error {
-	if r.Schema != SchemaRegistro {
+// Validate confere o schema e os campos.
+func (r Record) Validate() error {
+	if r.Schema != RecordSchema {
 		return fmt.Errorf("schema desconhecido %q", r.Schema)
 	}
 	if d, err := hex.DecodeString(r.DevID); err != nil || len(d) != 8 {
 		return errors.New("dev_id inválido (esperado 16 dígitos hexadecimais)")
 	}
-	switch r.Perfil {
+	switch r.Profile {
 	case "hmac", "asym", "none":
 	default:
-		return fmt.Errorf("perfil %q", r.Perfil)
+		return fmt.Errorf("perfil %q", r.Profile)
 	}
-	if r.KMSChaveAuth == "" || r.KMSChaveRec == "" {
+	if r.KMSAuthKey == "" || r.KMSRecKey == "" {
 		return errors.New("kms_chave_auth e kms_chave_rec são obrigatórias")
 	}
-	if r.Perfil == "asym" {
-		p, err := hex.DecodeString(r.ChavePublica)
+	if r.Profile == "asym" {
+		p, err := hex.DecodeString(r.PublicKey)
 		if err != nil || len(p) != 65 || p[0] != 4 {
 			return errors.New("chave_publica inválida (perfil asym exige 65 B não comprimidos)")
 		}
@@ -78,26 +78,26 @@ func (r Registro) Validar() error {
 	return nil
 }
 
-// Registrar insere dongle e dongle_estado numa transação. Idempotente: DevId já cadastrado é pulado
+// Register insere dongle e dongle_state numa transação. Idempotente: DevId já cadastrado é pulado
 // (criado = false).
-func Registrar(ctx context.Context, pool *pgxpool.Pool, r Registro, log *slog.Logger) (criado bool, err error) {
-	if err := r.Validar(); err != nil {
+func Register(ctx context.Context, pool *pgxpool.Pool, r Record, log *slog.Logger) (created bool, err error) {
+	if err := r.Validate(); err != nil {
 		return false, err
 	}
 	dev, _ := hex.DecodeString(r.DevID)
-	if _, err := consultas.New(pool).BuscarDonglePorDevId(ctx, dev); err == nil {
+	if _, err := dbgen.New(pool).FindDongleByDevID(ctx, dev); err == nil {
 		log.Info("provisionamento.ja_cadastrado", "dev_id", r.DevID)
 		return false, nil
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return false, err
 	}
 	var pub []byte
-	if r.ChavePublica != "" {
-		pub, _ = hex.DecodeString(r.ChavePublica)
+	if r.PublicKey != "" {
+		pub, _ = hex.DecodeString(r.PublicKey)
 	}
 	var desc *string
-	if r.Descricao != "" {
-		d := r.Descricao
+	if r.Description != "" {
+		d := r.Description
 		desc = &d
 	}
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
@@ -105,33 +105,33 @@ func Registrar(ctx context.Context, pool *pgxpool.Pool, r Registro, log *slog.Lo
 		return false, err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	q := consultas.New(tx)
-	id, err := q.InserirDongle(ctx, consultas.InserirDongleParams{DevID: dev, PerfilSeguranca: r.Perfil,
-		KmsChaveAuth: r.KMSChaveAuth, KmsChaveRec: r.KMSChaveRec, ChavePublica: pub, Descricao: desc})
+	q := dbgen.New(tx)
+	id, err := q.InsertDongle(ctx, dbgen.InsertDongleParams{DevID: dev, SecurityProfile: r.Profile,
+		KmsAuthKey: r.KMSAuthKey, KmsRecKey: r.KMSRecKey, PublicKey: pub, Description: desc})
 	if err != nil {
 		return false, fmt.Errorf("cadastro: %w", err)
 	}
-	if err := q.InserirDongleEstado(ctx, id); err != nil {
+	if err := q.InsertDongleState(ctx, id); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, err
 	}
-	log.Info("provisionamento.cadastrado", "dev_id", r.DevID, "perfil", r.Perfil)
+	log.Info("provisionamento.cadastrado", "dev_id", r.DevID, "perfil", r.Profile)
 	return true, nil
 }
 
-// ArquivosRegistro lista os registro.json de um arquivo ou, se for diretório, de seus subdiretórios.
-func ArquivosRegistro(caminho string) ([]string, error) {
-	st, err := os.Stat(caminho)
+// RecordFiles lista os registro.json de um arquivo ou, se for diretório, de seus subdiretórios.
+func RecordFiles(path string) ([]string, error) {
+	st, err := os.Stat(path)
 	if err != nil {
 		return nil, err
 	}
 	if !st.IsDir() {
-		return []string{caminho}, nil
+		return []string{path}, nil
 	}
 	var out []string
-	err = filepath.WalkDir(caminho, func(p string, d os.DirEntry, err error) error {
+	err = filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && d.Name() == "registro.json" {
 			out = append(out, p)
 		}

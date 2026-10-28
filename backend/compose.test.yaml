@@ -27,7 +27,7 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/pg_senha_superusuario
     secrets: [pg_senha_superusuario, pg_senha_dono, pg_senha_api, pg_senha_worker, pg_senha_provisionador]
     volumes:
-      - ./deploy/postgres/init/00-papeis.sh:/docker-entrypoint-initdb.d/900-papeis.sh:ro
+      - ./deploy/postgres/init/00-roles.sh:/docker-entrypoint-initdb.d/900-roles.sh:ro
     command: ["postgres", "-c", "shared_preload_libraries=timescaledb", "-c", "max_connections=200", "-c", "timescaledb.telemetry_level=off"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d tccelta -h 127.0.0.1"]
@@ -87,9 +87,9 @@ services:
     networks: [dados]
   migrar:
     <<: *backend
-    command: ["migrar"]
+    command: ["migrate"]
     environment:
-      BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
+      BANCO_URL: postgres://tccelta_owner@banco:5432/tccelta?sslmode=disable
       BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
     secrets: [pg_senha_dono]
     depends_on: { banco: { condition: service_healthy } }
@@ -112,7 +112,7 @@ services:
       kms: { condition: service_healthy }
       redis: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "/tccelta", "saude", "--url", "http://127.0.0.1:8080/saude/pronta"]
+      test: ["CMD", "/tccelta", "health", "--url", "http://127.0.0.1:8080/saude/pronta"]
       interval: 5s
       retries: 20
     networks: [dados, kms]
@@ -133,11 +133,11 @@ services:
     entrypoint: ["/tccelta"]
     read_only: false
     environment:
-      BANCO_URL: postgres://tccelta_provisionador@banco:5432/tccelta?sslmode=disable
+      BANCO_URL: postgres://tccelta_provisioner@banco:5432/tccelta?sslmode=disable
       BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_provisionador
-      SIM_BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
+      SIM_BANCO_URL: postgres://tccelta_owner@banco:5432/tccelta?sslmode=disable
       SIM_BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
-      ADMIN_BANCO_URL: postgres://tccelta_dono@banco:5432/tccelta?sslmode=disable
+      ADMIN_BANCO_URL: postgres://tccelta_owner@banco:5432/tccelta?sslmode=disable
       ADMIN_BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_dono
     secrets: [pg_senha_provisionador, pg_senha_dono]
     volumes:

@@ -1,9 +1,9 @@
-// Package protocolo codifica e decodifica, byte a byte, as mensagens 0x01-0x04,
+// Package protocol codifica e decodifica, byte a byte, as mensagens 0x01-0x04,
 // os registros do bloco e a entrada do HMAC. Só usa a stdlib.
 //
 // Todos os inteiros são little-endian, exceto os 2 bytes de valor do registro
 // de PID (A, B crus da resposta OBD-II).
-package protocolo
+package protocol
 
 import (
 	"crypto/subtle"
@@ -14,47 +14,47 @@ import (
 	"strings"
 )
 
-// Rotulo é o prefixo da entrada do HMAC.
-const Rotulo = "MALCONG"
+// Label é o prefixo da entrada do HMAC.
+const Label = "MALCONG"
 
-// Tipo é o byte T do envelope TLV.
-type Tipo uint8
+// Type é o byte T do envelope TLV.
+type Type uint8
 
 const (
-	TipoDesafio  Tipo = 0x01
-	TipoResposta Tipo = 0x02
-	TipoBloco    Tipo = 0x03
-	TipoAck      Tipo = 0x04
+	ChallengeType Type = 0x01
+	ResponseType  Type = 0x02
+	BlockType     Type = 0x03
+	AckType       Type = 0x04
 )
 
 // Tamanhos fixos.
 const (
-	TamTagAuth       = 16
-	TamTagRec        = 32
-	TamNonce         = 16
-	TamCabBloco      = 12
-	TamMinDados      = 17 // 12 de cabeçalho + 1 registro de PID (5)
-	TamMaxDados      = 1024
-	TamMarcador      = 11
-	TamBlocoMarcador = TamCabBloco + TamMarcador
-	LDesafio         = 45
-	LDesafioDiag     = 47
-	LResposta        = 50
-	LAck             = 25
+	AuthTagSize     = 16
+	RecTagSize      = 32
+	NonceSize       = 16
+	BlockHeaderSize = 12
+	MinDataSize     = 17 // 12 de cabeçalho + 1 registro de PID (5)
+	MaxDataSize     = 1024
+	MarkerSize      = 11
+	MarkerBlockSize = BlockHeaderSize + MarkerSize
+	LChallenge      = 45
+	LChallengeDiag  = 47
+	LResponse       = 50
+	LAck            = 25
 )
 
 // DevID é o identificador de 8 bytes do dongle.
 type DevID [8]byte
 
-// DevIDDeHex converte exatamente 16 dígitos hexadecimais.
-func DevIDDeHex(s string) (DevID, error) {
+// DevIDFromHex converte exatamente 16 dígitos hexadecimais.
+func DevIDFromHex(s string) (DevID, error) {
 	var d DevID
 	if len(s) != 16 {
-		return d, ErrDevIDInvalido
+		return d, ErrInvalidDevID
 	}
 	b, err := hex.DecodeString(s)
 	if err != nil {
-		return d, ErrDevIDInvalido
+		return d, ErrInvalidDevID
 	}
 	copy(d[:], b)
 	return d, nil
@@ -65,100 +65,100 @@ func (d DevID) Hex() string { return hex.EncodeToString(d[:]) }
 
 // TLV é um envelope T | L(u16 LE) | V. V aponta para o buffer original.
 type TLV struct {
-	T Tipo
+	T Type
 	V []byte
 }
 
-// LerTLV lê um TLV do início de b e devolve os bytes consumidos.
-func LerTLV(b []byte) (TLV, int, error) {
+// ReadTLV lê um TLV do início de b e devolve os bytes consumidos.
+func ReadTLV(b []byte) (TLV, int, error) {
 	if len(b) < 3 {
-		return TLV{}, 0, ErrTLVCurto
+		return TLV{}, 0, ErrTLVShort
 	}
 	l := int(binary.LittleEndian.Uint16(b[1:3]))
 	if len(b) < 3+l {
-		return TLV{}, 0, ErrTLVComprimento
+		return TLV{}, 0, ErrTLVLength
 	}
-	return TLV{T: Tipo(b[0]), V: b[3 : 3+l : 3+l]}, 3 + l, nil
+	return TLV{T: Type(b[0]), V: b[3 : 3+l : 3+l]}, 3 + l, nil
 }
 
-// LerLote lê a concatenação de TLVs; ErrLoteGrande se houver mais de max.
-func LerLote(corpo []byte, max int) ([]TLV, error) {
-	if len(corpo) == 0 {
-		return nil, ErrLoteVazio
+// ReadBatch lê a concatenação de TLVs; ErrBatchTooLarge se houver mais de max.
+func ReadBatch(body []byte, max int) ([]TLV, error) {
+	if len(body) == 0 {
+		return nil, ErrEmptyBatch
 	}
 	var out []TLV
-	for len(corpo) > 0 {
-		t, n, err := LerTLV(corpo)
+	for len(body) > 0 {
+		t, n, err := ReadTLV(body)
 		if err != nil {
 			return nil, err
 		}
 		if len(out) >= max {
-			return nil, ErrLoteGrande
+			return nil, ErrBatchTooLarge
 		}
 		out = append(out, t)
-		corpo = corpo[n:]
+		body = body[n:]
 	}
 	return out, nil
 }
 
-// AnexarTLV acrescenta um TLV a dst.
-func AnexarTLV(dst []byte, t Tipo, v []byte) []byte {
+// AppendTLV acrescenta um TLV a dst.
+func AppendTLV(dst []byte, t Type, v []byte) []byte {
 	dst = append(dst, byte(t), byte(len(v)), byte(len(v)>>8))
 	return append(dst, v...)
 }
 
-// EntradaTag monta "MALCONG" || tipo || DevId || payload.
-func EntradaTag(t Tipo, dev DevID, payload []byte) []byte {
-	e := make([]byte, 0, len(Rotulo)+1+8+len(payload))
-	e = append(e, Rotulo...)
+// TagInput monta "MALCONG" || tipo || DevId || payload.
+func TagInput(t Type, dev DevID, payload []byte) []byte {
+	e := make([]byte, 0, len(Label)+1+8+len(payload))
+	e = append(e, Label...)
 	e = append(e, byte(t))
 	e = append(e, dev[:]...)
 	return append(e, payload...)
 }
 
-// CompararTag compara em tempo constante; tamanhos diferentes = false.
-func CompararTag(calculada, recebida []byte) bool {
-	if len(calculada) != len(recebida) {
+// CompareTag compara em tempo constante; tamanhos diferentes = false.
+func CompareTag(computed, received []byte) bool {
+	if len(computed) != len(received) {
 		return false
 	}
-	return subtle.ConstantTimeCompare(calculada, recebida) == 1
+	return subtle.ConstantTimeCompare(computed, received) == 1
 }
 
-// Perfil define só o tamanho da tag do BLOCO; a do handshake é sempre 16 B.
-type Perfil struct {
-	Nome        string
-	TamTagBloco int
+// Profile define só o tamanho da tag do BLOCO; a do handshake é sempre 16 B.
+type Profile struct {
+	Name         string
+	BlockTagSize int
 }
 
 var (
-	PerfilHMAC = Perfil{"hmac", 32}
-	PerfilAsym = Perfil{"asym", 64}
-	PerfilNone = Perfil{"none", 0}
+	ProfileHMAC = Profile{"hmac", 32}
+	ProfileAsym = Profile{"asym", 64}
+	ProfileNone = Profile{"none", 0}
 )
 
-// PerfilPorNome devolve o perfil pelo nome do cadastro.
-func PerfilPorNome(n string) (Perfil, error) {
+// ProfileByName devolve o perfil pelo nome do cadastro.
+func ProfileByName(n string) (Profile, error) {
 	switch strings.ToLower(n) {
 	case "hmac":
-		return PerfilHMAC, nil
+		return ProfileHMAC, nil
 	case "asym":
-		return PerfilAsym, nil
+		return ProfileAsym, nil
 	case "none":
-		return PerfilNone, nil
+		return ProfileNone, nil
 	}
-	return Perfil{}, fmt.Errorf("perfil desconhecido %q", n)
+	return Profile{}, fmt.Errorf("perfil desconhecido %q", n)
 }
 
 // Erros exportados.
 var (
-	ErrTLVCurto           = errors.New("protocolo: TLV curto")
-	ErrTLVComprimento     = errors.New("protocolo: comprimento do TLV inconsistente")
-	ErrTipoInesperado     = errors.New("protocolo: tipo inesperado")
-	ErrLoteVazio          = errors.New("protocolo: lote vazio")
-	ErrLoteGrande         = errors.New("protocolo: lote com TLVs demais")
-	ErrTamanhoInvalido    = errors.New("protocolo: tamanho inválido")
-	ErrRegistroMalformado = errors.New("protocolo: registro malformado")
-	ErrMarcadorComOutros  = errors.New("protocolo: marcador junto com outros registros")
-	ErrFlagsReservadas    = errors.New("protocolo: flags reservadas")
-	ErrDevIDInvalido      = errors.New("protocolo: DevId inválido")
+	ErrTLVShort         = errors.New("protocolo: TLV curto")
+	ErrTLVLength        = errors.New("protocolo: comprimento do TLV inconsistente")
+	ErrUnexpectedType   = errors.New("protocolo: tipo inesperado")
+	ErrEmptyBatch       = errors.New("protocolo: lote vazio")
+	ErrBatchTooLarge    = errors.New("protocolo: lote com TLVs demais")
+	ErrInvalidSize      = errors.New("protocolo: tamanho inválido")
+	ErrMalformedRecord  = errors.New("protocolo: registro malformado")
+	ErrMarkerWithOthers = errors.New("protocolo: marcador junto com outros registros")
+	ErrReservedFlags    = errors.New("protocolo: flags reservadas")
+	ErrInvalidDevID     = errors.New("protocolo: DevId inválido")
 )

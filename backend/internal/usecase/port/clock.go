@@ -1,9 +1,9 @@
-package porta
+package port
 
 import "time"
 
-// Relogio devolve o instante atual.
-type Relogio func() time.Time
+// Clock devolve o instante atual.
+type Clock func() time.Time
 
-// RelogioReal é o relógio do sistema.
-func RelogioReal() time.Time { return time.Now() }
+// RealClock é o relógio do sistema.
+func RealClock() time.Time { return time.Now() }

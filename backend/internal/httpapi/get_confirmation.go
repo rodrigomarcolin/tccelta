@@ -3,16 +3,16 @@ package httpapi
 import (
 	"net/http"
 
-	"tccelta/backend/internal/casodeuso/ingestao"
-	"tccelta/backend/internal/casodeuso/porta"
+	"tccelta/backend/internal/usecase/ingestion"
+	"tccelta/backend/internal/usecase/port"
 )
 
-// obterConfirmacao: GET /v1/dongles/{id}/confirmacao.
-func (d *Deps) obterConfirmacao(w http.ResponseWriter, r *http.Request) {
-	s := r.Context().Value(ctxSessao).(porta.Sessao)
-	ack, err := d.ObterConfirmacao.Executar(r.Context(), ingestao.ObterConfirmacaoEntrada{DevID: s.Dev})
+// getConfirmation: GET /v1/dongles/{id}/confirmacao.
+func (d *Deps) getConfirmation(w http.ResponseWriter, r *http.Request) {
+	s := r.Context().Value(ctxSession).(port.Session)
+	ack, err := d.GetConfirmation.Run(r.Context(), ingestion.GetConfirmationInput{DevID: s.Dev})
 	if err != nil {
-		d.erro(w, err)
+		d.err(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
