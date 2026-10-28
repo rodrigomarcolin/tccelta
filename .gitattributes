@@ -1,0 +1,3 @@
+# Scripts executados em conteineres Linux precisam de LF mesmo com core.autocrlf=true no Windows
+*.sh text eol=lf
+*.hcl text eol=lf
