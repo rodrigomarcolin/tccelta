@@ -13,7 +13,8 @@ contrato. Os dois lados têm testes que usam os exemplos abaixo, palavra por pal
   `{"type","title","status","codigo","detail"}`. O campo `codigo` é o que o cliente deve ler.
 - `X-Request-Id` é opcional na requisição e sempre devolvido.
 - **Segurança**: fora de `AMBIENTE=dev` o serviço só aceita TLS com **certificado de cliente** assinado pela CA
-  configurada em `KMS_TLS_CLIENT_CA` (mTLS). O KMS escuta apenas na rede privada/VPN.
+  configurada em `KMS_TLS_CLIENT_CA` (mTLS) **e** com o CN igual a `KMS_TLS_CLIENTE_CN` (padrão `tccelta-api`);
+  certificado válido de outro CN recebe `403 cliente_nao_autorizado`. O KMS escuta apenas na rede privada/VPN.
 - `chave` é o **nome da chave** no Vault (`Dongle.ChaveAuth` / `Dongle.ChaveRec` do cadastro), com o
   alfabeto `[A-Za-z0-9_-]` e até 64 caracteres (o nome entra no caminho do Vault, por isso é restrito).
 - Listas (`entradas`, `tags`): de 1 a 256 itens; cada item decodificado tem de 1 a 4096 bytes.

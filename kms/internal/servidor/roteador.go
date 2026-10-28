@@ -44,6 +44,9 @@ type Servidor struct {
 	// ExigirCertCliente recusa requisições sem certificado de cliente verificado (defesa em
 	// profundidade além do tls.Config; ligado fora do ambiente dev).
 	ExigirCertCliente bool
+	// ClienteCN é o CN exigido no certificado folha do cliente (com ExigirCertCliente). Impede que
+	// outro certificado emitido pela mesma CA use o KMS.
+	ClienteCN string
 }
 
 type mw = func(http.Handler) http.Handler

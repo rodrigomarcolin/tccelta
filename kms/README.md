@@ -39,6 +39,7 @@ o cadastro no banco é `tccelta provisionar registrar --arquivo …` no backend.
 | `KMS_METRICAS_ENDERECO` | `:9300` | `/metricas` e `/saude/*` em HTTP simples |
 | `KMS_TLS_CERT`, `KMS_TLS_KEY` | – | certificado e chave do servidor |
 | `KMS_TLS_CLIENT_CA` | – | CA que assina o certificado de cliente da API |
+| `KMS_TLS_CLIENTE_CN` | `tccelta-api` | CN exigido no certificado de cliente (outro CN da mesma CA recebe 403) |
 | `VAULT_ADDR`, `VAULT_CACERT`, `VAULT_CLIENT_CERT`, `VAULT_CLIENT_KEY` | – | conexão com o Vault |
 | `VAULT_APPROLE_ROLE_ID_ARQUIVO`, `VAULT_APPROLE_SECRET_ID_ARQUIVO` | – | login AppRole (`tccelta-kms`) |
 | `VAULT_TOKEN_ARQUIVO` | – | token estático (provisionamento) |

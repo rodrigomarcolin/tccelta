@@ -41,6 +41,14 @@ func (s *Servidor) exigirCliente(next http.Handler) http.Handler {
 			problema(w, 401, "cliente_nao_autenticado", "certificado de cliente (mTLS) obrigatório", 0)
 			return
 		}
+		// a CA pode ter emitido outros certificados de cliente: só o da API (CN configurado) passa
+		if r.TLS.VerifiedChains[0][0].Subject.CommonName != s.ClienteCN {
+			if s.Met != nil {
+				s.Met.Rejeicao("cliente_nao_autorizado")
+			}
+			problema(w, 403, "cliente_nao_autorizado", "certificado de cliente não autorizado", 0)
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }
