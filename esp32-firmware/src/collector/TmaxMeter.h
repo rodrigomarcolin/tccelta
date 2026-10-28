@@ -5,7 +5,7 @@
 
 namespace collector {
 
-constexpr size_t kTmaxSamplesPerPid = 100;
+constexpr size_t kTmaxSamplesPerPid = 15;
 constexpr double kTmaxMargin        = 1.3;
 
 /** Resultado de uma medição, para o AT#TMAX?. */
