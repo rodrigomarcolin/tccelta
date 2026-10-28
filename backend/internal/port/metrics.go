@@ -29,3 +29,19 @@ type MetricsKMS interface {
 	KMSCall(operation, result, phase string, d time.Duration)
 	KMSBreaker(open bool)
 }
+
+// MetricsWorker são os eventos do worker de tempo e da expiração de desafios.
+type MetricsWorker interface {
+	Boot(source string)
+	Alert(alertType string)
+	Groups(n int)
+	BootDuration(d time.Duration)
+	Expired(n int64)
+	Queue(n int64)
+	Reconnection()
+}
+
+// MetricsReprocess são os eventos do reprocessamento.
+type MetricsReprocess interface {
+	Reprocessed(rows int)
+}

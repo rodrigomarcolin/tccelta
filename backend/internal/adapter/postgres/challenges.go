@@ -61,3 +61,7 @@ func (r *challenges) Finalize(ctx context.Context, f handshake.Finalization) err
 func (r *challenges) MarkInvalidTag(ctx context.Context, dongleID int32, cs int64, nonce []byte) error {
 	return r.q.MarkInvalidTag(ctx, dongleID, cs, nonce)
 }
+
+func (r *challenges) Expire(ctx context.Context, now time.Time) (int64, error) {
+	return r.q.ExpireChallenges(ctx, now)
+}

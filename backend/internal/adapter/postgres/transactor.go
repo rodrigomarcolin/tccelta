@@ -1,6 +1,6 @@
-// Package postgres implementa os repositórios (port.Repositories) sobre o sqlc. Junto com database concentra pgx e as
-// consultas (o worker e as ferramentas acessam database/dbgen direto, exceção registrada no depguard): a tradução de pgx.ErrNoRows para erros de domínio e das structs do sqlc
-// para tipos de domínio acontece aqui.
+// Package postgres implementa os repositórios (port.Repositories), o transactor, a escuta de notificações e o Inspector sobre
+// o sqlc. Junto com database concentra pgx e as consultas: a tradução de pgx.ErrNoRows para erros de domínio e das structs do
+// sqlc para tipos de domínio acontece aqui.
 package postgres
 
 import (
@@ -17,13 +17,14 @@ import (
 // Repositories monta os repositórios sobre q (pool ou transação).
 func Repositories(q dbgen.Querier) port.Repositories {
 	return port.Repositories{
-		Dongles:     &dongles{q},
-		Challenges:  &challenges{q},
-		States:      &states{q},
-		Boots:       &boots{q},
-		Blocks:      &blocks{q},
-		Occurrences: &occurrences{q},
-		Pids:        &pids{q},
+		Dongles:      &dongles{q},
+		Challenges:   &challenges{q},
+		States:       &states{q},
+		Boots:        &boots{q},
+		Blocks:       &blocks{q},
+		Occurrences:  &occurrences{q},
+		AnchorGroups: &anchorGroups{q},
+		Pids:         &pids{q},
 	}
 }
 
@@ -33,9 +34,14 @@ type Transactor struct {
 	ops  database.TxOptions
 }
 
-// NewTransactor usa banco.DefaultOptions.
+// NewTransactor usa database.DefaultOptions (lock_timeout 3 s, statement_timeout 10 s).
 func NewTransactor(pool *pgxpool.Pool) *Transactor {
-	return &Transactor{pool: pool, ops: database.DefaultOptions}
+	return NewTransactorWith(pool, database.DefaultOptions)
+}
+
+// NewTransactorWith abre as transações com timeouts próprios, para os fluxos que não usam o padrão.
+func NewTransactorWith(pool *pgxpool.Pool, ops database.TxOptions) *Transactor {
+	return &Transactor{pool: pool, ops: ops}
 }
 
 // InTransaction implementa port.Transactor.
