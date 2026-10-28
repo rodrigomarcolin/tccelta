@@ -13,18 +13,18 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 # O KMS e outro binario, outra imagem e outro processo (unico cliente do Vault); so compartilha o modulo Go.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -trimpath \
-      -ldflags "-s -w -X main.versao=${VERSAO}" \
+      -ldflags "-s -w -X main.version=${VERSAO}" \
       -o /out/tccelta-kms ./cmd/tccelta-kms
 
 # Alvo `ferramentas`: o binario da API, para `provision register`, simulator e reprocess.
-# (A parte Vault do provisionamento e o gerador de imagem NVS ficam no alvo `kms-ferramentas`.)
+# (A parte Vault do provisionamento e o gerador de imagem NVS ficam no alvo `kms-tools`.)
 FROM gcr.io/distroless/static-debian12:nonroot AS ferramentas
 COPY --from=build /out/tccelta /tccelta
 USER nonroot:nonroot
 ENTRYPOINT ["/tccelta"]
 
-# Alvo `kms-ferramentas`: Python + gerador de imagem NVS (usado por `provisionar novo`) + o binario do KMS.
-FROM python:3.12-slim AS kms-ferramentas
+# Alvo `kms-tools`: Python + gerador de imagem NVS (usado por `provision new`) + o binario do KMS.
+FROM python:3.12-slim AS kms-tools
 RUN pip install --no-cache-dir esp-idf-nvs-partition-gen cryptography
 COPY --from=build /out/tccelta-kms /tccelta-kms
 USER 65532:65532

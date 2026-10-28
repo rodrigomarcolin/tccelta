@@ -15,13 +15,13 @@ import (
 )
 
 // cmdProvision cadastra no banco os dongles que o serviço KMS provisionou (`tccelta-kms provisionar`).
-// A parte do Vault não existe mais aqui: o contrato entre as duas pontas é o arquivo registro.json.
+// A parte do Vault não existe mais aqui: o contrato entre as duas pontas é o arquivo record.json.
 func cmdProvision(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] != "register" {
-		return fmt.Errorf("uso: provision register --file registro.json|diretório")
+		return fmt.Errorf("uso: provision register --file record.json|diretório")
 	}
 	fs := flag.NewFlagSet("register", flag.ContinueOnError)
-	file := fs.String("file", "", "registro.json, ou diretório com subpastas <devid>/registro.json")
+	file := fs.String("file", "", "record.json, ou diretório com subpastas <devid>/record.json")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func cmdProvision(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(files) == 0 {
-		return fmt.Errorf("nenhum registro.json em %s", *file)
+		return fmt.Errorf("nenhum record.json em %s", *file)
 	}
 	regs := make([]provisioning.Record, 0, len(files))
 	for _, a := range files { // valida tudo antes de tocar no banco

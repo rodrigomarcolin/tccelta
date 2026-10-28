@@ -1,5 +1,5 @@
-// Comando tccelta-kms: o serviço KMS (servir), a rotação da chave do JWT (jwt), o provisionamento de
-// dongles no Vault (provisionar) e o healthcheck (saude).
+// Comando tccelta-kms: o serviço KMS (serve), a rotação da chave do JWT (jwt), o provisionamento de
+// dongles no Vault (provision) e o healthcheck (health).
 package main
 
 import (
@@ -15,21 +15,21 @@ import (
 	"tccelta/backend/internal/kms/config"
 )
 
-// versao é preenchida no build (-ldflags "-X main.versao=...").
-var versao = "dev"
+// version é preenchida no build (-ldflags "-X main.version=...").
+var version = "dev"
 
-const ajuda = `tccelta-kms %s
+const usage = `tccelta-kms %s
 uso: tccelta-kms <subcomando> [opções]
-  servir                                   serviço KMS (HTTP, contrato em docs/contrato-http.md)
-  jwt <rotacionar [--agora]|agendar>       rotação da chave do JWT
-  provisionar <novo|importar|importar-registro|exportar-wrapping|verificar>
-                                           importa K_auth/K_rec no Vault e grava registro.json
-  saude --url <url>                        healthcheck (sai 0/1)
+  serve                                    serviço KMS (HTTP, contrato em docs/kms-http-contract.md)
+  jwt <rotate [--now]|schedule>            rotação da chave do JWT
+  provision <new|import|import-record|export-wrapping|verify>
+                                           importa K_auth/K_rec no Vault e grava record.json
+  health --url <url>                       healthcheck (sai 0/1)
 `
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Printf(ajuda, versao)
+		fmt.Printf(usage, version)
 		os.Exit(2)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -37,16 +37,16 @@ func main() {
 	args := os.Args[2:]
 	var err error
 	switch os.Args[1] {
-	case "servir":
-		err = cmdServir(ctx)
+	case "serve":
+		err = cmdServe(ctx)
 	case "jwt":
 		err = cmdJWT(ctx, args)
-	case "provisionar":
-		err = cmdProvisionar(ctx, args)
-	case "saude":
-		err = cmdSaude(args)
-	case "ajuda", "-h", "--help":
-		fmt.Printf(ajuda, versao)
+	case "provision":
+		err = cmdProvision(ctx, args)
+	case "health":
+		err = cmdHealth(args)
+	case "help", "-h", "--help":
+		fmt.Printf(usage, version)
 		return
 	default:
 		fmt.Fprintf(os.Stderr, "subcomando desconhecido %q\n", os.Args[1])
@@ -58,17 +58,17 @@ func main() {
 	}
 }
 
-func novoLog(c config.Config) *slog.Logger {
-	var nivel slog.Level
-	_ = nivel.UnmarshalText([]byte(c.LogNivel))
-	op := &slog.HandlerOptions{Level: nivel}
-	if c.LogFormato == "texto" {
+func newLog(c config.Config) *slog.Logger {
+	var level slog.Level
+	_ = level.UnmarshalText([]byte(c.LogLevel))
+	op := &slog.HandlerOptions{Level: level}
+	if c.LogFormat == "texto" {
 		return slog.New(slog.NewTextHandler(os.Stderr, op))
 	}
 	return slog.New(slog.NewJSONHandler(os.Stderr, op))
 }
 
-func cmdSaude(args []string) error {
+func cmdHealth(args []string) error {
 	url := "http://127.0.0.1:8300/saude/pronta"
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == "--url" {

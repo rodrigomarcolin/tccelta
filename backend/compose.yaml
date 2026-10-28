@@ -74,7 +74,7 @@ services:
     secrets: [vault_dev_root_token]
     volumes:
       - ./deploy/kms/vault/scripts:/vault/scripts:ro
-      - ./deploy/kms/vault/politicas:/vault/politicas:ro
+      - ./deploy/kms/vault/policies:/vault/policies:ro
       - vault_approle_kms:/approle/kms
       - vault_approle_ferramentas:/approle/ferramentas
       - vault_approle_rotacao:/approle/rotacao
@@ -125,7 +125,7 @@ services:
   # (deploy/kms/compose.yaml); a API so precisa de KMS_URL e, no prodlike, dos certificados mTLS.
   kms:
     <<: *kms
-    command: ["servir"]
+    command: ["serve"]
     environment:
       AMBIENTE: dev
       VAULT_ADDR: http://vault:8200
@@ -137,7 +137,7 @@ services:
     depends_on:
       vault-bootstrap: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD", "/tccelta-kms", "saude", "--url", "http://127.0.0.1:9300/saude/pronta"]
+      test: ["CMD", "/tccelta-kms", "health", "--url", "http://127.0.0.1:9300/saude/pronta"]
       interval: 10s
       timeout: 3s
       retries: 6
@@ -204,7 +204,7 @@ services:
 
   jwt-rotacao:
     <<: *kms
-    command: ["jwt", "agendar"]
+    command: ["jwt", "schedule"]
     environment:
       AMBIENTE: dev
       VAULT_ADDR: http://vault:8200
@@ -217,7 +217,7 @@ services:
     volumes: [vault_approle_rotacao:/run/approle:ro]
     depends_on: { vault-bootstrap: { condition: service_completed_successfully } }
     healthcheck:
-      test: ["CMD", "/tccelta-kms", "saude", "--url", "http://127.0.0.1:8092/saude/viva"]
+      test: ["CMD", "/tccelta-kms", "health", "--url", "http://127.0.0.1:8092/saude/viva"]
       interval: 30s
       timeout: 3s
       retries: 4
@@ -244,12 +244,12 @@ services:
       - ./saida:/saida
     networks: [borda, dados]
 
-  # Provisionamento do lado do Vault (`tccelta-kms provisionar ...`): grava os registro.json em ./saida,
+  # Provisionamento do lado do Vault (`tccelta-kms provision ...`): grava os record.json em ./saida,
   # que `ferramentas` (tccelta provision register) cadastra no banco.
   kms-ferramentas:
     <<: *kms
     image: tccelta-kms-ferramentas:local
-    build: { context: ., dockerfile: Dockerfile, target: kms-ferramentas }
+    build: { context: ., dockerfile: Dockerfile, target: kms-tools }
     profiles: [ferramentas]
     entrypoint: ["/tccelta-kms"]
     command: ["ajuda"]

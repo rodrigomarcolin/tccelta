@@ -35,7 +35,7 @@ services:
     secrets: !reset []
     volumes:
       - ./deploy/kms/vault/scripts:/vault/scripts:ro
-      - ./deploy/kms/vault/politicas:/vault/politicas:ro
+      - ./deploy/kms/vault/policies:/vault/policies:ro
       - ./deploy/kms/certs/ca.pem:/vault/certs/ca.pem:ro
       - vault_init:/vault/init:ro
       - vault_approle_kms:/approle/kms

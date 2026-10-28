@@ -24,7 +24,7 @@ uso: tccelta <subcomando> [opções]
   api                          servidor HTTP
   worker                       worker de tempo; "worker reprocess" refaz reading/position
   migrate [up|down-to N|status] migrations
-  provision register --file registro.json  cadastra no banco um dongle provisionado pelo KMS
+  provision register --file record.json  cadastra no banco um dongle provisionado pelo KMS
   simulator                    dongles virtuais e cenários
   health --url <url>           healthcheck (sai 0/1)
 `

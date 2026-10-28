@@ -16,47 +16,47 @@ import (
 
 // Vault faz as operações do KMS sobre o Transit: HMAC de K_auth, verify de K_rec e assinatura do JWT.
 type Vault struct {
-	c   *Cliente
-	t   Transporte
+	c   *Client
+	t   Transport
 	cfg config.VaultConfig
 	log *slog.Logger
-	m   Observador
+	m   Observer
 }
 
-// NovoVault faz o login e devolve o KMS pronto.
-func NovoVault(ctx context.Context, cfg config.VaultConfig, log *slog.Logger, m Observador) (*Vault, error) {
-	c, err := NovoCliente(ctx, cfg, log)
+// NewVault faz o login e devolve o KMS pronto.
+func NewVault(ctx context.Context, cfg config.VaultConfig, log *slog.Logger, m Observer) (*Vault, error) {
+	c, err := NewClient(ctx, cfg, log)
 	if err != nil {
 		return nil, err
 	}
 	return &Vault{c: c, t: c, cfg: cfg, log: log, m: m}, nil
 }
 
-// SobreTransporte monta um Vault sobre um transporte qualquer (testes).
-func SobreTransporte(t Transporte, cfg config.VaultConfig) *Vault {
+// OnTransport monta um Vault sobre um transporte qualquer (testes).
+func OnTransport(t Transport, cfg config.VaultConfig) *Vault {
 	return &Vault{t: t, cfg: cfg, log: slog.Default()}
 }
 
-// Cliente devolve o cliente de baixo nível (provisionamento, rotação).
-func (v *Vault) Cliente() *Cliente { return v.c }
+// Client devolve o cliente de baixo nível (provisionamento, rotação).
+func (v *Vault) Client() *Client { return v.c }
 
-// Pronto: token válido e disjuntor fechado.
-func (v *Vault) Pronto() bool { return v.c != nil && v.c.Pronto() }
+// Ready: token válido e disjuntor fechado.
+func (v *Vault) Ready() bool { return v.c != nil && v.c.Ready() }
 
-// Fechar para a renovação do token.
-func (v *Vault) Fechar() {
+// Close para a renovação do token.
+func (v *Vault) Close() {
 	if v.c != nil {
-		v.c.Fechar()
+		v.c.Close()
 	}
 }
 
-// Observador recebe as métricas das chamadas ao Vault (implementado por internal/metricas).
-type Observador interface {
-	ChamadaVault(operacao, resultado string, d time.Duration)
-	Disjuntor(aberto bool)
+// Observer recebe as métricas das chamadas ao Vault (implementado por internal/metricas).
+type Observer interface {
+	VaultCall(operation, result string, d time.Duration)
+	Breaker(open bool)
 }
 
-func (v *Vault) observar(op string, t0 time.Time, err error) {
+func (v *Vault) observe(op string, t0 time.Time, err error) {
 	if v.m == nil {
 		return
 	}
@@ -64,128 +64,128 @@ func (v *Vault) observar(op string, t0 time.Time, err error) {
 	if err != nil {
 		res = "erro"
 	}
-	v.m.ChamadaVault(op, res, time.Since(t0))
+	v.m.VaultCall(op, res, time.Since(t0))
 	if v.c != nil {
-		v.m.Disjuntor(v.c.DisjuntorAberto())
+		v.m.Breaker(v.c.BreakerOpen())
 	}
 }
 
 func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
 
 // extrai o MAC de "vault:v1:<b64>".
-func macDe(s string) ([]byte, error) {
+func parseMAC(s string) ([]byte, error) {
 	p := strings.SplitN(s, ":", 3)
 	if len(p) != 3 || p[1] != "v1" {
-		return nil, fmt.Errorf("%w: versão/formato inesperado em hmac", ErrIndisponivel)
+		return nil, fmt.Errorf("%w: versão/formato inesperado em hmac", ErrUnavailable)
 	}
 	return base64.StdEncoding.DecodeString(p[2])
 }
 
-func resultados(r map[string]any) ([]any, error) {
+func results(r map[string]any) ([]any, error) {
 	d, _ := r["data"].(map[string]any)
 	br, _ := d["batch_results"].([]any)
 	if br == nil {
-		return nil, fmt.Errorf("%w: resposta sem batch_results", ErrIndisponivel)
+		return nil, fmt.Errorf("%w: resposta sem batch_results", ErrUnavailable)
 	}
 	return br, nil
 }
 
 // HMACAuth: HMAC-SHA256 completo com K_auth, em batch.
-func (v *Vault) HMACAuth(ctx context.Context, chave string, entradas [][]byte) (out [][]byte, err error) {
+func (v *Vault) HMACAuth(ctx context.Context, key string, inputs [][]byte) (out [][]byte, err error) {
 	t0 := time.Now()
-	defer func() { v.observar("hmac_auth", t0, err) }()
-	itens := make([]any, len(entradas))
-	for i, e := range entradas {
-		itens[i] = map[string]any{"input": b64(e)}
+	defer func() { v.observe("hmac_auth", t0, err) }()
+	items := make([]any, len(inputs))
+	for i, e := range inputs {
+		items[i] = map[string]any{"input": b64(e)}
 	}
-	r, err := v.t.Escrever(ctx, fmt.Sprintf("%s/hmac/%s/sha2-256", v.cfg.MountAuth, chave), map[string]any{"batch_input": itens})
+	r, err := v.t.Write(ctx, fmt.Sprintf("%s/hmac/%s/sha2-256", v.cfg.MountAuth, key), map[string]any{"batch_input": items})
 	if err != nil {
-		return nil, traduzir(err)
+		return nil, translate(err)
 	}
-	br, err := resultados(r)
+	br, err := results(r)
 	if err != nil {
 		return nil, err
 	}
-	if len(br) != len(entradas) {
-		return nil, fmt.Errorf("%w: batch_results com tamanho errado", ErrIndisponivel)
+	if len(br) != len(inputs) {
+		return nil, fmt.Errorf("%w: batch_results com tamanho errado", ErrUnavailable)
 	}
 	out = make([][]byte, len(br))
 	for i, x := range br {
 		m, _ := x.(map[string]any)
 		if e, _ := m["error"].(string); e != "" {
-			return nil, fmt.Errorf("%w: erro no item %d", ErrIndisponivel, i)
+			return nil, fmt.Errorf("%w: erro no item %d", ErrUnavailable, i)
 		}
 		s, _ := m["hmac"].(string)
-		if out[i], err = macDe(s); err != nil {
+		if out[i], err = parseMAC(s); err != nil {
 			return nil, err
 		}
 	}
 	return out, nil
 }
 
-// VerificarBlocos: verify com K_rec, em batch. Erro por item vira falha do KMS, não tag inválida.
-func (v *Vault) VerificarBlocos(ctx context.Context, chave string, entradas, tags [][]byte) (out []bool, err error) {
+// VerifyBlocks: verify com K_rec, em batch. Erro por item vira falha do KMS, não tag inválida.
+func (v *Vault) VerifyBlocks(ctx context.Context, key string, inputs, tags [][]byte) (out []bool, err error) {
 	t0 := time.Now()
-	defer func() { v.observar("verify_rec", t0, err) }()
-	if len(entradas) != len(tags) {
+	defer func() { v.observe("verify_rec", t0, err) }()
+	if len(inputs) != len(tags) {
 		return nil, errors.New("kms: entradas e tags com tamanhos diferentes")
 	}
-	itens := make([]any, len(entradas))
-	for i := range entradas {
-		itens[i] = map[string]any{"input": b64(entradas[i]), "hmac": "vault:v1:" + b64(tags[i])}
+	items := make([]any, len(inputs))
+	for i := range inputs {
+		items[i] = map[string]any{"input": b64(inputs[i]), "hmac": "vault:v1:" + b64(tags[i])}
 	}
-	r, err := v.t.Escrever(ctx, fmt.Sprintf("%s/verify/%s/sha2-256", v.cfg.MountRec, chave), map[string]any{"batch_input": itens})
+	r, err := v.t.Write(ctx, fmt.Sprintf("%s/verify/%s/sha2-256", v.cfg.MountRec, key), map[string]any{"batch_input": items})
 	if err != nil {
-		return nil, traduzir(err)
+		return nil, translate(err)
 	}
-	br, err := resultados(r)
+	br, err := results(r)
 	if err != nil {
 		return nil, err
 	}
-	if len(br) != len(entradas) {
-		return nil, fmt.Errorf("%w: batch_results com tamanho errado", ErrIndisponivel)
+	if len(br) != len(inputs) {
+		return nil, fmt.Errorf("%w: batch_results com tamanho errado", ErrUnavailable)
 	}
 	out = make([]bool, len(br))
 	for i, x := range br {
 		m, _ := x.(map[string]any)
 		if e, _ := m["error"].(string); e != "" {
-			return nil, fmt.Errorf("%w: erro no item %d", ErrIndisponivel, i)
+			return nil, fmt.Errorf("%w: erro no item %d", ErrUnavailable, i)
 		}
 		out[i], _ = m["valid"].(bool)
 	}
 	return out, nil
 }
 
-// Assinar assina a signing string do JWT com a chave Ed25519.
-func (v *Vault) Assinar(ctx context.Context, entrada []byte) (sig []byte, versao int, err error) {
+// Sign assina a signing string do JWT com a chave Ed25519.
+func (v *Vault) Sign(ctx context.Context, input []byte) (sig []byte, version int, err error) {
 	t0 := time.Now()
-	defer func() { v.observar("sign_jwt", t0, err) }()
-	r, err := v.t.Escrever(ctx, fmt.Sprintf("%s/sign/%s", v.cfg.MountJWT, v.cfg.ChaveJWT), map[string]any{"input": b64(entrada)})
+	defer func() { v.observe("sign_jwt", t0, err) }()
+	r, err := v.t.Write(ctx, fmt.Sprintf("%s/sign/%s", v.cfg.MountJWT, v.cfg.JWTKey), map[string]any{"input": b64(input)})
 	if err != nil {
-		return nil, 0, traduzir(err)
+		return nil, 0, translate(err)
 	}
 	d, _ := r["data"].(map[string]any)
 	s, _ := d["signature"].(string)
 	p := strings.SplitN(s, ":", 3)
 	if len(p) != 3 || !strings.HasPrefix(p[1], "v") {
-		return nil, 0, fmt.Errorf("%w: assinatura em formato inesperado", ErrIndisponivel)
+		return nil, 0, fmt.Errorf("%w: assinatura em formato inesperado", ErrUnavailable)
 	}
-	versao, err = strconv.Atoi(p[1][1:])
+	version, err = strconv.Atoi(p[1][1:])
 	if err != nil {
-		return nil, 0, fmt.Errorf("%w: versão da assinatura", ErrIndisponivel)
+		return nil, 0, fmt.Errorf("%w: versão da assinatura", ErrUnavailable)
 	}
 	sig, err = base64.StdEncoding.DecodeString(p[2])
 	if err != nil || len(sig) != ed25519.SignatureSize {
-		return nil, 0, fmt.Errorf("%w: assinatura inválida", ErrIndisponivel)
+		return nil, 0, fmt.Errorf("%w: assinatura inválida", ErrUnavailable)
 	}
-	return sig, versao, nil
+	return sig, version, nil
 }
 
-// ChavesPublicas lê as públicas da chave JWT (só versões >= min_decryption_version).
-func (v *Vault) ChavesPublicas(ctx context.Context) (map[int]ed25519.PublicKey, error) {
-	r, err := v.t.Ler(ctx, fmt.Sprintf("%s/keys/%s", v.cfg.MountJWT, v.cfg.ChaveJWT))
+// PublicKeys lê as públicas da chave JWT (só versões >= min_decryption_version).
+func (v *Vault) PublicKeys(ctx context.Context) (map[int]ed25519.PublicKey, error) {
+	r, err := v.t.Read(ctx, fmt.Sprintf("%s/keys/%s", v.cfg.MountJWT, v.cfg.JWTKey))
 	if err != nil {
-		return nil, traduzir(err)
+		return nil, translate(err)
 	}
 	d, _ := r["data"].(map[string]any)
 	minV := 1
@@ -203,24 +203,24 @@ func (v *Vault) ChavesPublicas(ctx context.Context) (map[int]ed25519.PublicKey, 
 		pk, _ := m["public_key"].(string)
 		raw, err := base64.StdEncoding.DecodeString(pk)
 		if err != nil || len(raw) != ed25519.PublicKeySize {
-			return nil, fmt.Errorf("%w: chave pública v%s inválida", ErrIndisponivel, k)
+			return nil, fmt.Errorf("%w: chave pública v%s inválida", ErrUnavailable, k)
 		}
 		out[n] = ed25519.PublicKey(raw)
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("%w: nenhuma chave pública", ErrIndisponivel)
+		return nil, fmt.Errorf("%w: nenhuma chave pública", ErrUnavailable)
 	}
 	return out, nil
 }
 
-// traduzir mantém ErrIndisponivel e deixa os demais erros do Vault (ex.: 403) visíveis.
-func traduzir(err error) error {
-	if errors.Is(err, ErrIndisponivel) {
+// translate mantém ErrUnavailable e deixa os demais erros do Vault (ex.: 403) visíveis.
+func translate(err error) error {
+	if errors.Is(err, ErrUnavailable) {
 		return err
 	}
-	var ev *ErroVault
+	var ev *VaultError
 	if errors.As(err, &ev) {
-		return fmt.Errorf("%w: %v", ErrIndisponivel, err)
+		return fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
-	return fmt.Errorf("%w: %v", ErrIndisponivel, err)
+	return fmt.Errorf("%w: %v", ErrUnavailable, err)
 }

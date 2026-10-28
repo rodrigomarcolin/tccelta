@@ -4,8 +4,8 @@ package remotekms
 // não importa nada do módulo kms, a única ligação entre os dois é este contrato.
 
 type reqHMAC struct {
-	Key    string   `json:"chave"`
-	Inputs []string `json:"entradas"` // base64 padrão
+	Key    string   `json:"key"`
+	Inputs []string `json:"inputs"` // base64 padrão
 }
 
 type respHMAC struct {
@@ -13,22 +13,22 @@ type respHMAC struct {
 }
 
 type reqVerify struct {
-	Key    string   `json:"chave"`
-	Inputs []string `json:"entradas"`
+	Key    string   `json:"key"`
+	Inputs []string `json:"inputs"`
 	Tags   []string `json:"tags"`
 }
 
 type respVerify struct {
-	Valid []bool `json:"validos"`
+	Valid []bool `json:"valid"`
 }
 
 type reqSign struct {
-	Input string `json:"entrada"` // base64 padrão
+	Input string `json:"input"` // base64 padrão
 }
 
 type respSign struct {
-	Signature string `json:"assinatura"` // base64 padrão, 64 B
-	Version   int    `json:"versao"`
+	Signature string `json:"signature"` // base64 padrão, 64 B
+	Version   int    `json:"version"`
 }
 
 // respKeys: versão da chave -> chave pública Ed25519 em base64 padrão.

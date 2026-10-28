@@ -3,7 +3,7 @@
 O `backend/` é a API Go (`tccelta`), o worker e as ferramentas de linha de comando, e também o serviço KMS
 (`tccelta-kms`), que guarda as chaves dos dongles e fala com o Vault. É um único módulo Go, mas o KMS é outro
 binário, outra imagem e outro processo ([`docs/kms.md`](docs/kms.md)). A API só conversa com o KMS por HTTP
-(contrato em [`docs/kms-contrato-http.md`](docs/kms-contrato-http.md)).
+(contrato em [`docs/kms-http-contract.md`](docs/kms-http-contract.md)).
 
 O que cada cenário do simulador e cada verificação do `make e2e` fazem está em
 [`docs/cenarios-simulador.md`](docs/cenarios-simulador.md).
@@ -113,17 +113,17 @@ esse comportamento.
 ### Dongles (provisionamento em dois passos)
 
 O provisionamento acontece sempre em **duas etapas**, nesta ordem: primeiro o KMS (importa K_auth e K_rec
-no Vault e grava um `registro.json`), depois o banco (`tccelta provision register` cadastra o dongle). Os
-dois passos são idempotentes. O formato do `registro.json` está em
-[`docs/kms-registro-dongle.md`](docs/kms-registro-dongle.md). Os arquivos ficam em `backend/saida/`
+no Vault e grava um `record.json`), depois o banco (`tccelta provision register` cadastra o dongle). Os
+dois passos são idempotentes. O formato do `record.json` está em
+[`docs/kms-dongle-record.md`](docs/kms-dongle-record.md). Os arquivos ficam em `backend/saida/`
 (ignorada pelo git).
 
 | Alvo | O que faz | Resultado |
 |---|---|---|
 | `seed-dev` | Importa o `testdata/test-dongles.csv` e cadastra os dongles | 3 dongles de teste (`0011223344556677`, `…78`, `…79`, perfil `hmac`). **Chaves públicas e fixas**: nunca use em dongle real |
-| `provisionar [N=] [HW=]` | `tccelta-kms provisionar novo` e depois `provision register` | Dongles novos com chaves aleatórias, em `saida/<devid>/`, incluindo o material para gravar no firmware |
-| `kms-wrapping` | `provisionar exportar-wrapping` | Exporta as chaves públicas de embrulho para `saida/kms_wrapping.json`. É o que o `provision.py --kms-wrapping` do firmware usa no perfil `prod` |
-| `kms-importar ARQ=…` | `provisionar importar-registro` e depois `provision register` | Importa o `kms_record.json` gerado pelo `provision.py` do firmware |
+| `provisionar [N=] [HW=]` | `tccelta-kms provision new` e depois `provision register` | Dongles novos com chaves aleatórias, em `saida/<devid>/`, incluindo o material para gravar no firmware |
+| `kms-wrapping` | `provision export-wrapping` | Exporta as chaves públicas de embrulho para `saida/kms_wrapping.json`. É o que o `provision.py --kms-wrapping` do firmware usa no perfil `prod` |
+| `kms-importar ARQ=…` | `provision import-record` e depois `provision register` | Importa o `kms_record.json` gerado pelo `provision.py` do firmware |
 | `saida-dir` | Cria `saida/` com permissão aberta | Dependência dos alvos acima. O contêiner roda com usuário sem privilégio e precisa escrever lá |
 
 O dongle de bancada do firmware (DevId `544343454C544101`) **não** está no `test-dongles.csv`. Para
@@ -254,14 +254,14 @@ Cenários do simulador (`--scenario`): `e2e`, `negative-protocol`, `time`, `gene
 **`tccelta-kms`** (serviços `kms`, `jwt-rotacao`, `kms-ferramentas`):
 
 ```
-servir                               serviço KMS
-jwt <rotacionar [--agora]|agendar>   rotação da chave do JWT
-provisionar <novo|importar|importar-registro|exportar-wrapping|verificar>
-saude --url <url>                    healthcheck (sai 0/1)
+serve                                serviço KMS
+jwt <rotate [--now]|schedule>        rotação da chave do JWT
+provision <new|import|import-record|export-wrapping|verify>
+health --url <url>                   healthcheck (sai 0/1)
 ```
 
-`provisionar novo` aceita `--quantidade`, `--perfil hmac|asym|none`, `--hw dev|devsec`, `--sem-material` e
-`--csv-saida`. A API só tem `provision register`; os subcomandos antigos de importação e de JWT saíram do
+`provision new` aceita `--count`, `--profile hmac|asym|none`, `--hw dev|devsec`, `--no-material` e
+`--csv-out`. A API só tem `provision register`; os subcomandos antigos de importação e de JWT saíram do
 binário `tccelta`.
 
 ## Problemas comuns

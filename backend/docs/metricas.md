@@ -152,10 +152,10 @@ Aparece no processo que roda o reprocessamento (a CLI `tccelta`), não na API em
 ## Métricas do KMS (`tccelta_kmssvc_*`)
 
 O serviço KMS tem as suas próprias séries, em `kms:9300/metricas`, separadas das da API. Os nomes encontrados no
-código são: `tccelta_kmssvc_http_requisicoes_total`, `tccelta_kmssvc_http_duracao_segundos`,
-`tccelta_kmssvc_vault_chamadas_total`, `tccelta_kmssvc_vault_duracao_segundos`,
-`tccelta_kmssvc_vault_disjuntor_aberto`, `tccelta_kmssvc_rejeicoes_total`, `tccelta_kmssvc_jwt_rotacoes_total` e
-`tccelta_kmssvc_jwt_ultima_verificacao_ok`. Os rótulos e a semântica delas ficam para o `docs/kms.md`; não os revisei
+código são: `tccelta_kmssvc_http_requests_total`, `tccelta_kmssvc_http_duration_seconds`,
+`tccelta_kmssvc_vault_calls_total`, `tccelta_kmssvc_vault_duration_seconds`,
+`tccelta_kmssvc_vault_breaker_open`, `tccelta_kmssvc_rejections_total`, `tccelta_kmssvc_jwt_rotations_total` e
+`tccelta_kmssvc_jwt_last_check_ok`. Os rótulos e a semântica delas ficam para o `docs/kms.md`; não os revisei
 aqui.
 
 ## Consultas úteis
