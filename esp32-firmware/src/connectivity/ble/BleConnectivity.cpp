@@ -28,6 +28,20 @@ const char* addrTypeName(uint8_t type) {
     return (type == BLE_ADDR_PUBLIC || type == BLE_ADDR_PUBLIC_ID) ? "pub" : "rnd";
 }
 
+/**
+ * Monta anúncio e scan response do zero. O NimBLE anexa um novo campo de dados de fabricante em vez de
+ * substituir o anterior; como o pacote de anúncio já está em 27 de 31 B, o campo novo iria para o scan
+ * response e o do anúncio ficaria desatualizado. Por isso o dado é sempre reconstruído.
+ */
+void fillAdvertisingData(NimBLEAdvertising* adv, const char* name, bool windowOpen, bool hasBond) {
+    adv->clearData();
+    adv->setName(name);
+    adv->addServiceUUID(BLE_SERVICE_UUID);
+    uint8_t manufacturer[4];
+    ble_security::BleSecurity::manufacturerData(windowOpen, hasBond, manufacturer);
+    adv->setManufacturerData(manufacturer, sizeof(manufacturer));
+}
+
 }  // namespace
 
 BleConnectivity::BleConnectivity(const char* deviceName)
@@ -67,11 +81,7 @@ bool BleConnectivity::begin() {
     // flags + UUID do NUS + dados de fabricante (27 de 31 B).
     NimBLEAdvertising* pAdv = NimBLEDevice::getAdvertising();
     pAdv->enableScanResponse(true);
-    pAdv->setName(_deviceName);
-    pAdv->addServiceUUID(BLE_SERVICE_UUID);
-    uint8_t manufacturer[4];
-    ble_security::BleSecurity::manufacturerData(false, false, manufacturer);
-    pAdv->setManufacturerData(manufacturer, sizeof(manufacturer));
+    fillAdvertisingData(pAdv, _deviceName, false, false);
 
     Serial.printf("[BLE] NimBLE %s, LESC Just Works, bonds=%d, MAX_BONDS=%d\n", NimBLEDevice::getVersion(),
                   NimBLEDevice::getNumBonds(), MYNEWT_VAL(BLE_STORE_MAX_BONDS));
@@ -243,9 +253,7 @@ void BleConnectivity::applyAdvertising(pairing::AdvMode mode, bool windowOpen, b
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
     // A biblioteca pode religar o anúncio sozinha (CONNECT falho); dados e intervalos ficam sempre coerentes.
     adv->stop();
-    uint8_t manufacturer[4];
-    ble_security::BleSecurity::manufacturerData(windowOpen, hasBond, manufacturer);
-    adv->setManufacturerData(manufacturer, sizeof(manufacturer));
+    fillAdvertisingData(adv, _deviceName, windowOpen, hasBond);
     const uint16_t interval = mode == pairing::AdvMode::Pairing ? ble_security::kAdvItvlPairing
                                                                 : ble_security::kAdvItvlNormal;
     adv->setMinInterval(interval);
