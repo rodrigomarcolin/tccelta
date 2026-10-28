@@ -8,7 +8,7 @@ confere, a partir do código (`scenarios.go`, `dongle.go`, `app.go`, `report.go`
 Como rodar:
 
 ```
-make cenario C=<nome> [N=3] [ARGS='…']   # stack de desenvolvimento, com dongles novos
+make scenario C=<nome> [N=3] [ARGS='…']   # stack de desenvolvimento, com dongles novos
 make e2e                                 # stack isolada, quatro cenários em sequência
 ```
 
@@ -36,7 +36,7 @@ e `knee` não verificam dados; produzem um relatório.
   desconhecido dá `404 dongle_desconhecido` já no primeiro desafio.
 - **Dongles novos a cada execução.** O dongle virtual sempre começa do seq 1, e o servidor guarda o estado por
   DevId. Reusar um DevId que um cenário anterior avançou dá `422 resposta_inconsistente` no handshake. Por isso
-  o `make cenario` e o `make e2e` criam dongles novos.
+  o `make scenario` e o `make e2e` criam dongles novos.
 - O simulador lê o banco (papel `tccelta_owner`, em dev e teste) para conferir o que foi gravado.
 
 ## O que o simulador simula
@@ -169,7 +169,7 @@ Limites a ter em mente:
 - Todos os dongles saem do mesmo IP. O limite padrão da API é de 120 requisições por minuto por IP
   (`LIMITE_IP_MIN`), e acima disso vêm `429`, o que reduz a carga em vez de medir o servidor.
 - Se `--dongles` for maior que o CSV, as identidades **se repetem** (ciclam), e dois dongles virtuais com o
-  mesmo DevId se atrapalham. Mantenha o CSV com pelo menos `N` dongles (o `make carga` já cria `N`).
+  mesmo DevId se atrapalham. Mantenha o CSV com pelo menos `N` dongles (o `make load-test` já cria `N`).
 
 ## `knee`
 
@@ -187,12 +187,12 @@ dongles recém-criados (KMS, depois banco). Se um falhar, os seguintes não roda
 derruba a stack com `down -v` e devolve o código de saída do cenário que falhou. Não cobre `reconnection`, `load`
 nem `knee`.
 
-Diferença para o `make cenario`: o `cenario` roda **um** cenário na stack de desenvolvimento, que continua no ar
+Diferença para o `make scenario`: o `scenario` roda **um** cenário na stack de desenvolvimento, que continua no ar
 com os dados; o `e2e` usa um banco e um Vault próprios, que desaparecem.
 
 ## Relatório
 
-Cada execução imprime um JSON e, com `--relatorio arquivo`, o grava (o `make carga` usa
+Cada execução imprime um JSON e, com `--report arquivo`, o grava (o `make load-test` usa
 `saida/relatorio.json`):
 
 | Campo | Conteúdo |

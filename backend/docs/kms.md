@@ -51,7 +51,7 @@ o cadastro no banco é `tccelta provision register --file …` no backend.
 ## Desenvolvimento
 
 ```
-make teste     # go test -race ./... (em contêiner; todo o módulo)
+make test      # go test -race ./... (em contêiner; todo o módulo)
 make lint      # golangci-lint
 make certs     # PKI de laboratório em deploy/kms/certs (CA, Vault, KMS, cliente da API)
 make docker-kms # imagem tccelta-kms:local

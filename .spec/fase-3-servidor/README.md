@@ -80,7 +80,7 @@ Ver a tabela de contratos cruzados em [`../README.md`](../README.md): TLV e entr
 cd backend
 make up && make seed-dev       # stack dev + 3 dongles de teste
 make e2e                       # stack isolada, 4 cenários do simulador
-make teste                     # go test -race ./... em contêiner
+make test                      # go test -race ./... em contêiner
 ```
 
 Estado de verificação (do próprio `backend/README.md`): os alvos foram lidos, mas não reexecutados por completo depois dos refactors; `make lint`, `reconnection`, `load` e `knee` não foram rodados depois da reorganização, e a carga (metas M1–M6) nunca foi medida.

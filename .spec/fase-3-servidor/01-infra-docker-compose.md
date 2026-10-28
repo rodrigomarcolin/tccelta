@@ -69,7 +69,7 @@ Contêineres do backend/KMS: `read_only`, `tmpfs /tmp`, usuário `65532`, `cap_d
 
 ### Segredos e volumes
 
-Segredos Compose em `backend/deploy/segredos/` (gerados por `make segredos`, fora do git): `pg_senha_superusuario`, `pg_senha_dono`, `pg_senha_api`, `pg_senha_worker`, `pg_senha_provisionador`, `vault_dev_root_token`, `redis_senha`, `cloudflared_token`.
+Segredos Compose em `backend/deploy/segredos/` (gerados por `make secrets`, fora do git): `pg_senha_superusuario`, `pg_senha_dono`, `pg_senha_api`, `pg_senha_worker`, `pg_senha_provisionador`, `vault_dev_root_token`, `redis_senha`, `cloudflared_token`.
 
 Volumes: `banco_dados`, `vault_dados`, `vault_init`, `vault_approle_kms`, `vault_approle_ferramentas`, `vault_approle_rotacao`, `vault_auditoria`, `caddy_dados`, `prometheus_dados`, `grafana_dados`. As credenciais do Vault ficam em volumes separados por consumidor (KMS, ferramentas, rotação).
 
@@ -83,7 +83,7 @@ Volumes: `banco_dados`, `vault_dados`, `vault_init`, `vault_approle_kms`, `vault
 |---|---|---|
 | dev | `make up` | tudo em HTTP; Vault dev; portas em `127.0.0.1` |
 | dev + TLS | `make up-tls` | `caddy` na porta 8443 (`CADDY_TLS=internal`, CA local do Caddy) |
-| dev + túnel | `make up-tunel` | `caddy` (HTTP `:8081` interno) + `cloudflared`; IP real em `Cf-Connecting-Ip` |
+| dev + túnel | `make up-tunnel` | `caddy` (HTTP `:8081` interno) + `cloudflared`; IP real em `Cf-Connecting-Ip` |
 | prodlike | `make up-prodlike` | Vault em modo servidor (raft, TLS, auditoria, `vault-unseal` automático de laboratório); `banco`/`vault`/`api` sem portas; redes `dados`, `kms`, `cofre` `internal: true`; `AMBIENTE=prodlike`; KMS com mTLS (certificados de `make certs`); API com `KMS_URL=https://kms:8300`, `KMS_CACERT`, `KMS_CLIENT_CERT`, `KMS_CLIENT_KEY` |
 | prod | `AMBIENTE=producao` | proíbe dongles de teste, `alg none` e perfil `none`; só há `deploy/kms/compose.yaml` (Vault + KMS num host atrás de VPN, `KMS_BIND_IP:8300`) |
 | teste | `compose.test.yaml` (projeto `tccelta-teste`) | `banco`, `vault`, `vault-bootstrap`, `kms`, `redis`, `migrar`, `api`, `worker`, `ferramentas`, `kms-ferramentas`; sem Caddy; usado por `make e2e` |
@@ -100,13 +100,13 @@ Estágio `build` (`golang:${GO_VERSAO}-bookworm`) compila os dois binários. Alv
 
 | Grupo | Alvos |
 |---|---|
-| subir/derrubar | `env`, `segredos`, `certs`, `build`, `up`, `up-tls`, `up-tunel`, `up-prodlike`, `down`, `limpar`, `down-tudo`, `limpar-tudo`, `ps`, `logs S=` |
-| banco | `migrar`, `migracao-nova NOME=`, `sqlc`, `sqlc-verificar`, `psql` |
+| subir/derrubar | `env`, `secrets`, `certs`, `build`, `up`, `up-tls`, `up-tunnel`, `up-prodlike`, `down`, `clean`, `down-all`, `clean-all`, `ps`, `logs S=` |
+| banco | `migrate`, `new-migration NAME=`, `sqlc`, `sqlc-check`, `psql` |
 | Vault | `vault-bootstrap`, `vault-unseal`, `vault-unseal-manual` |
-| dongles | `seed-dev`, `provisionar [N= HW=]`, `kms-wrapping`, `kms-importar ARQ=`, `saida-dir` |
-| dados | `reprocessar DONGLE= [DESDE= APLICAR=1]`, `ca-exportar` |
-| qualidade | `teste`, `teste-integracao`, `vetores`, `lint`, `build-ferramentas`, `build-kms`, `docker-kms` |
-| simulação | `cenario C= [N= ARGS=]`, `e2e`, `carga [N=]` |
+| dongles | `seed-dev`, `provision [N= HW=]`, `kms-wrapping`, `kms-import FILE=`, `output-dir` |
+| dados | `reprocess DONGLE= [FROM= APPLY=1]`, `ca-export` |
+| qualidade | `test`, `test-integration`, `vectors`, `lint`, `build-tools`, `build-kms`, `docker-kms` |
+| simulação | `scenario C= [N= ARGS=]`, `e2e`, `load-test [N=]` |
 
 Ferramentas em contêiner descartável com versões fixas (Go 1.24, sqlc 1.27.0, golangci-lint v1.64.8, goose v3.22.1, Python 3.12); nada é instalado no host. O `Makefile` exporta `MSYS_NO_PATHCONV=1` (Git Bash no Windows).
 

@@ -100,7 +100,7 @@ Síncrona, dentro da transação do lote.
 
 ## Reprocessamento (`tccelta worker reprocess`)
 
-Opções: `--dongle` (16 hex), `--from-seq` (1), `--to-seq` (0 = até o fim), `--batch` (200), `--apply` (sem isto é só ensaio). Roda como `tccelta_owner` (no compose, serviço `ferramentas`): relê blocos de dados de `raw_block` em janelas, apaga `reading`/`position` do intervalo (por `block_seq` e `received_at`, inclusive em chunks comprimidos), redecodifica com o catálogo atual e reinsere; marca `gold_pending` nos boots afetados. Make: `make reprocessar DONGLE=… [DESDE=] [APLICAR=1]`. Métrica `tccelta_reprocessing_rows_total`; alerta `reprocessing`.
+Opções: `--dongle` (16 hex), `--from-seq` (1), `--to-seq` (0 = até o fim), `--batch` (200), `--apply` (sem isto é só ensaio). Roda como `tccelta_owner` (no compose, serviço `ferramentas`): relê blocos de dados de `raw_block` em janelas, apaga `reading`/`position` do intervalo (por `block_seq` e `received_at`, inclusive em chunks comprimidos), redecodifica com o catálogo atual e reinsere; marca `gold_pending` nos boots afetados. Make: `make reprocess DONGLE=… [FROM=] [APPLY=1]`. Métrica `tccelta_reprocessing_rows_total`; alerta `reprocessing`.
 
 ## Métricas
 
