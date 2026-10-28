@@ -239,3 +239,16 @@ type RefBoot struct {
 	Generation, BootID int32
 	LastTMs            int64
 }
+
+// BootKey identifica um boot de um dongle.
+type BootKey struct{ DongleID, Generation, BootID int32 }
+
+// PendingBoot é um boot retirado da fila de recálculo do tempo, com o que o cálculo precisa saber dele.
+type PendingBoot struct {
+	BootKey
+	FirstSeq          *int64
+	FirstTMs, LastTMs *int64
+	MaxOffsetMs       *float64
+	AMs, B            *float64
+	TimeSource        *string
+}

@@ -1,4 +1,4 @@
-// Package porttest tem dublês das portas compartilhadas, para testes e para o simulador.
+// Package porttest tem dublês das portas compartilhadas, para testes, para o simulador e para comandos sem métricas.
 package porttest
 
 import (
@@ -21,12 +21,22 @@ func (Nop) Request(string, int, time.Duration)            {}
 func (Nop) Rejection(string)                              {}
 func (Nop) KMSCall(string, string, string, time.Duration) {}
 func (Nop) KMSBreaker(bool)                               {}
+func (Nop) Boot(string)                                   {}
+func (Nop) Alert(string)                                  {}
+func (Nop) Groups(int)                                    {}
+func (Nop) BootDuration(time.Duration)                    {}
+func (Nop) Expired(int64)                                 {}
+func (Nop) Queue(int64)                                   {}
+func (Nop) Reconnection()                                 {}
+func (Nop) Reprocessed(int)                               {}
 
 var (
 	_ port.MetricsHandshake = Nop{}
 	_ port.MetricsIngestion = Nop{}
 	_ port.MetricsHTTP      = Nop{}
 	_ port.MetricsKMS       = Nop{}
+	_ port.MetricsWorker    = Nop{}
+	_ port.MetricsReprocess = Nop{}
 )
 
 // FixedClock devolve um relógio que sempre responde t. Para avançar, use AdjustableClock.

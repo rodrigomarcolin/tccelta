@@ -15,8 +15,9 @@ import (
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/pid"
 	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/port/porttest"
 	"tccelta/backend/internal/usecase/catalog"
-	"tccelta/backend/internal/worker/reprocess"
+	"tccelta/backend/internal/usecase/reprocess"
 )
 
 // Options configuram a execução de um cenário.
@@ -393,12 +394,13 @@ func generation(ctx context.Context, o Options) error {
 	if err := catalog.NewSync(postgres.Repositories(q).Pids, cat, o.Log).Reload(ctx); err != nil {
 		return err
 	}
-	op := reprocess.ReprocessOptions{DongleID: est.DongleID, Apply: false}
-	if _, err := reprocess.Reprocess(ctx, o.Pool, cat, op, o.Log, nil); err != nil {
+	uc := reprocess.New(postgres.Repositories(q), postgres.NewTransactor(o.Pool), cat, porttest.Nop{}, o.Log)
+	op := reprocess.Options{DongleID: est.DongleID, Apply: false}
+	if _, err := uc.Run(ctx, op); err != nil {
 		return err
 	}
 	op.Apply, op.Operator = true, "simulator"
-	if _, err := reprocess.Reprocess(ctx, o.Pool, cat, op, o.Log, nil); err != nil {
+	if _, err := uc.Run(ctx, op); err != nil {
 		v.ok(false, "reprocess --apply: %v", err)
 	}
 	after, _ := q.VerifyCountReadings(ctx, est.DongleID)

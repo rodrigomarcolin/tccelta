@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 
@@ -31,4 +32,21 @@ func (r *dongles) FindByDevID(ctx context.Context, dev protocol.DevID) (dongle.D
 
 func (r *dongles) Lock(ctx context.Context, dongleID int32) error {
 	return r.q.LockDongle(ctx, dongleID)
+}
+
+func (r *dongles) Register(ctx context.Context, g dongle.Registration) (int32, error) {
+	var desc *string
+	if g.Description != "" {
+		d := g.Description
+		desc = &d
+	}
+	id, err := r.q.InsertDongle(ctx, dbgen.InsertDongleParams{DevID: g.DevID[:], SecurityProfile: g.Profile,
+		KmsAuthKey: g.AuthKey, KmsRecKey: g.RecKey, PublicKey: g.PublicKey, Description: desc})
+	if err != nil {
+		return 0, fmt.Errorf("cadastro: %w", err)
+	}
+	if err := r.q.InsertDongleState(ctx, id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }

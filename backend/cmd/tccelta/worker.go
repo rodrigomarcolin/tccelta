@@ -20,9 +20,13 @@ import (
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/pid"
 	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/domain/timeline"
+	"tccelta/backend/internal/port"
+	"tccelta/backend/internal/port/porttest"
+	"tccelta/backend/internal/usecase/boottime"
 	"tccelta/backend/internal/usecase/catalog"
+	"tccelta/backend/internal/usecase/reprocess"
 	"tccelta/backend/internal/worker"
-	"tccelta/backend/internal/worker/reprocess"
 )
 
 func cmdWorker(ctx context.Context, args []string) error {
@@ -50,7 +54,13 @@ func cmdWorker(ctx context.Context, args []string) error {
 		mux.Handle("GET /metricas", met.Handler())
 		_ = (&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe()
 	}()
-	w := &worker.Worker{Pool: pool, Cfg: cfg.Worker, Log: log, Met: met}
+	// o recálculo do boot roda só com statement_timeout; a marcação dos vizinhos (2ª transação) usa o padrão, com lock_timeout
+	repos := postgres.Repositories(dbgen.New(pool))
+	tcfg := timeline.Config{GroupWindowMs: float64(cfg.Worker.GroupWindow.Milliseconds()), MaxDriftPPM: cfg.Worker.MaxDriftPPM,
+		MinHalfWidthMs: cfg.Worker.MinHalfWidthMs, SpanMinMs: float64(cfg.Worker.SpanMin.Milliseconds())}
+	boots := boottime.New(repos, postgres.NewTransactorWith(pool, database.TxOptions{StatementTimeout: 10 * time.Second}),
+		postgres.NewTransactor(pool), met.WorkerPort(), port.RealClock, log, boottime.Params{Timeline: tcfg})
+	w := &worker.Worker{Boots: boots, Signals: postgres.NewNotifications(pool, log), Cfg: cfg.Worker, Log: log, Met: met.WorkerPort()}
 	log.Info("worker.iniciado")
 	return w.Run(ctx, cfg.HTTP.WorkerHealth)
 }
@@ -76,17 +86,18 @@ func cmdReprocess(ctx context.Context, args []string) error {
 		return err
 	}
 	defer pool.Close()
-	q := dbgen.New(pool)
-	d, err := q.FindDongleByDevID(ctx, dev[:])
+	repos := postgres.Repositories(dbgen.New(pool))
+	d, err := repos.Dongles.FindByDevID(ctx, dev)
 	if err != nil {
 		return fmt.Errorf("dongle não cadastrado: %w", err)
 	}
 	cat := pid.New()
-	if err := catalog.NewSync(postgres.Repositories(q).Pids, cat, log).Reload(ctx); err != nil {
+	if err := catalog.NewSync(repos.Pids, cat, log).Reload(ctx); err != nil {
 		return err
 	}
-	r, err := reprocess.Reprocess(ctx, pool, cat, reprocess.ReprocessOptions{DongleID: d.DongleID, FromSeq: *since, ToSeq: *until,
-		Batch: int32(*batch), Apply: *apply, Operator: os.Getenv("USER")}, log, nil)
+	uc := reprocess.New(repos, postgres.NewTransactor(pool), cat, porttest.Nop{}, log)
+	r, err := uc.Run(ctx, reprocess.Options{DongleID: d.ID, FromSeq: *since, ToSeq: *until,
+		Batch: int32(*batch), Apply: *apply, Operator: os.Getenv("USER")})
 	mode := "ENSAIO (nada foi escrito; use --apply)"
 	if *apply {
 		mode = "APLICADO"

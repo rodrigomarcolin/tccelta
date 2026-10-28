@@ -68,3 +68,23 @@ func (m *M) Server(address string) *http.Server {
 	mux.Handle("GET /metricas", m.Handler())
 	return &http.Server{Addr: address, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 }
+
+type workerPort struct{ m *M }
+
+func (p workerPort) Boot(source string)           { p.m.WorkerBoots.WithLabelValues(source).Inc() }
+func (p workerPort) Alert(t string)               { p.m.WorkerAlerts.WithLabelValues(t).Inc() }
+func (p workerPort) Groups(n int)                 { p.m.WorkerGroups.Add(float64(n)) }
+func (p workerPort) BootDuration(d time.Duration) { p.m.WorkerDur.Observe(d.Seconds()) }
+func (p workerPort) Expired(n int64)              { p.m.WorkerExpired.Add(float64(n)) }
+func (p workerPort) Queue(n int64)                { p.m.WorkerQueue.Set(float64(n)) }
+func (p workerPort) Reconnection()                { p.m.WorkerReconnect.Inc() }
+
+type reprocessPort struct{ m *M }
+
+func (p reprocessPort) Reprocessed(rows int) { p.m.Reprocessed.Add(float64(rows)) }
+
+// WorkerPort devolve o adaptador da porta de métricas do worker.
+func (m *M) WorkerPort() port.MetricsWorker { return workerPort{m} }
+
+// ReprocessPort devolve o adaptador da porta de métricas do reprocessamento.
+func (m *M) ReprocessPort() port.MetricsReprocess { return reprocessPort{m} }

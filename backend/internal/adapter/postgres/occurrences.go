@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/occurrence"
@@ -17,4 +19,12 @@ func (r *occurrences) InsertGap(ctx context.Context, l occurrence.Gap) error {
 func (r *occurrences) InsertAlert(ctx context.Context, a occurrence.Alert) error {
 	return r.q.InsertAlert(ctx, dbgen.InsertAlertParams{DongleID: a.DongleID, BootGeneration: a.BootGeneration, BootID: a.BootID,
 		Type: a.Type, Detail: a.Detail})
+}
+
+func (r *occurrences) InsertAlertIfNew(ctx context.Context, a occurrence.Alert, now time.Time) error {
+	if a.BootGeneration == nil || a.BootID == nil {
+		return errors.New("alerta sem boot: geração e boot_id são obrigatórios")
+	}
+	return r.q.InsertAlertIfNew(ctx, dbgen.InsertAlertIfNewParams{DongleID: a.DongleID, BootGeneration: *a.BootGeneration,
+		BootID: *a.BootID, Type: a.Type, Detail: a.Detail, Now: now})
 }

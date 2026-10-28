@@ -53,12 +53,17 @@ type Database struct {
 	Alerts        []occurrence.Alert
 	Anchors       []handshake.Anchor
 	Notifications []string
+	// BootRows é a tabela boot (worker); Groups, os grupos de âncoras por boot; DataBlocks, os blocos de dados por dongle.
+	BootRows   []*Boot
+	Groups     map[timeline.BootKey][]timeline.Group
+	DataBlocks map[int32][]ingestion.StoredBlock
 }
 
 // New cria o banco vazio.
 func New() *Database {
 	return &Database{dongles: map[protocol.DevID]dongle.Dongle{}, states: map[int32]dongle.State{}, lastCS: map[int32]int64{},
-		challenges: map[challengeKey]Challenge{}, tmsBoot: map[bootKey]int64{}, seen: map[[2]int64]bool{}}
+		challenges: map[challengeKey]Challenge{}, tmsBoot: map[bootKey]int64{}, seen: map[[2]int64]bool{},
+		Groups: map[timeline.BootKey][]timeline.Group{}, DataBlocks: map[int32][]ingestion.StoredBlock{}}
 }
 
 // AddDongle cadastra um dongle (e seu estado zerado).
@@ -82,7 +87,7 @@ func (b *Database) Challenge(id int32, cs int64) (Challenge, bool) {
 // Repositories devolve os repositórios sobre o banco.
 func (b *Database) Repositories() port.Repositories {
 	return port.Repositories{Dongles: (*dongles)(b), Challenges: (*challenges)(b), States: (*states)(b),
-		Boots: (*boots)(b), Blocks: (*blocks)(b), Occurrences: (*occurrences)(b), Pids: (*pids)(b)}
+		Boots: (*boots)(b), Blocks: (*blocks)(b), Occurrences: (*occurrences)(b), Pids: (*pids)(b), AnchorGroups: (*anchorGroups)(b)}
 }
 
 // InTransaction implementa port.Transactor.
@@ -121,6 +126,10 @@ func (b *Database) clone() *Database {
 		b.Readings[:len(b.Readings):len(b.Readings)], b.Positions[:len(b.Positions):len(b.Positions)]
 	c.Gaps, c.Alerts = b.Gaps[:len(b.Gaps):len(b.Gaps)], b.Alerts[:len(b.Alerts):len(b.Alerts)]
 	c.Anchors, c.Notifications = b.Anchors[:len(b.Anchors):len(b.Anchors)], b.Notifications[:len(b.Notifications):len(b.Notifications)]
+	c.BootRows, c.DataBlocks = b.cloneBootRows(), b.DataBlocks
+	for k, v := range b.Groups {
+		c.Groups[k] = v[:len(v):len(v)]
+	}
 	return c
 }
 
@@ -128,6 +137,7 @@ func (b *Database) restore(c *Database) {
 	b.dongles, b.states, b.lastCS, b.challenges, b.tmsBoot, b.seen = c.dongles, c.states, c.lastCS, c.challenges, c.tmsBoot, c.seen
 	b.RawBlocks, b.Rejected, b.Readings, b.Positions = c.RawBlocks, c.Rejected, c.Readings, c.Positions
 	b.Gaps, b.Alerts, b.Anchors, b.Notifications = c.Gaps, c.Alerts, c.Anchors, c.Notifications
+	b.BootRows, b.Groups, b.DataBlocks = c.BootRows, c.Groups, c.DataBlocks
 }
 
 type dongles Database

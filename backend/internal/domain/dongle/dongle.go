@@ -43,3 +43,13 @@ type State struct {
 	// LastAck só é preenchido por ReadSnapshot.
 	LastAck []byte
 }
+
+// Registration é o cadastro de um dongle provisionado. Profile é hmac, asym ou none; PublicKey só existe no asym.
+type Registration struct {
+	DevID       protocol.DevID
+	Profile     string
+	AuthKey     string
+	RecKey      string
+	PublicKey   []byte
+	Description string
+}

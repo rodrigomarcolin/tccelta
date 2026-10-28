@@ -56,3 +56,13 @@ type StateUpdate struct {
 	Now                        time.Time
 	BootGeneration, LastBootID int32
 }
+
+// StoredBlock é um bloco de dados já gravado em bronze.raw_block, lido para o reprocessamento.
+type StoredBlock struct {
+	Seq        int64
+	Generation int32
+	BootID     int32
+	T0Ms       int64
+	Payload    []byte
+	ReceivedAt time.Time
+}
