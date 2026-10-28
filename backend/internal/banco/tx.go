@@ -57,7 +57,7 @@ func umaTransacao(ctx context.Context, pool *pgxpool.Pool, o OpcoesTx,
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	if o.LockTimeout > 0 {
 		if _, err := tx.Exec(ctx, fmt.Sprintf("SET LOCAL lock_timeout = '%dms'", o.LockTimeout.Milliseconds())); err != nil {
 			return err

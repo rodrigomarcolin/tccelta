@@ -4,20 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net/http"
 	"time"
 
 	"tccelta/backend/internal/config"
 	"tccelta/backend/internal/simulador"
 )
-
-func servirSaude(ctx context.Context, addr string) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /saude/viva", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-	go func() { <-ctx.Done(); _ = srv.Close() }()
-	_ = srv.ListenAndServe()
-}
 
 func cmdSimulador(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("simulador", flag.ContinueOnError)

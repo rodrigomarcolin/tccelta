@@ -73,7 +73,7 @@ func (r *Relatorio) Escrever(arq string) error {
 	if arq == "" {
 		return nil
 	}
-	return os.WriteFile(arq, b, 0o644)
+	return os.WriteFile(arq, b, 0o600)
 }
 
 // Cinco_xx conta respostas 5xx.

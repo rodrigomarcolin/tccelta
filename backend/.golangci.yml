@@ -3,6 +3,11 @@ run:
 linters:
   enable: [errcheck, gosec, bodyclose, sqlclosecheck, contextcheck, depguard]
 linters-settings:
+  gosec:
+    excludes:
+      # G115 (overflow em conversao de inteiros): o protocolo binario e as colunas int2/int4 do banco
+      # exigem conversoes entre larguras; os valores sao limitados pelo formato (validado na borda).
+      - G115
   depguard:
     rules:
       # Direção: dominio <- repositorio + casodeuso/porta <- casodeuso/* <- httpapi <- cmd.

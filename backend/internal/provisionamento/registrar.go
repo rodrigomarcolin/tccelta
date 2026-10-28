@@ -104,7 +104,7 @@ func Registrar(ctx context.Context, pool *pgxpool.Pool, r Registro, log *slog.Lo
 	if err != nil {
 		return false, err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	q := consultas.New(tx)
 	id, err := q.InserirDongle(ctx, consultas.InserirDongleParams{DevID: dev, PerfilSeguranca: r.Perfil,
 		KmsChaveAuth: r.KMSChaveAuth, KmsChaveRec: r.KMSChaveRec, ChavePublica: pub, Descricao: desc})

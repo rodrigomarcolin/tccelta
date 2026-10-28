@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -47,7 +48,7 @@ func cmdWorker(ctx context.Context, args []string) error {
 		}
 		mux := http.NewServeMux()
 		mux.Handle("GET /metricas", met.Handler())
-		_ = (&http.Server{Addr: addr, Handler: mux}).ListenAndServe()
+		_ = (&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe()
 	}()
 	w := &worker.Worker{Pool: pool, Cfg: cfg.Worker, Log: log, Met: met}
 	log.Info("worker.iniciado")

@@ -25,7 +25,7 @@ func escrever(t *testing.T, dir, nome, conteudo string) string {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte(conteudo), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte(conteudo), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return p

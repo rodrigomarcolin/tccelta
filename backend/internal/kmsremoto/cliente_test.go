@@ -164,7 +164,7 @@ func TestConexaoRecusada(t *testing.T) {
 	if _, err := c.HMACAuth(context.Background(), "k", [][]byte{[]byte("a")}); !errors.Is(err, porta.ErrKMSIndisponivel) {
 		t.Fatal(err)
 	}
-	if c.Pronto() {
+	if c.Pronto(context.Background()) {
 		t.Fatal("sem servidor não pode estar pronto")
 	}
 }
@@ -202,7 +202,7 @@ func TestDisjuntorAbre(t *testing.T) {
 	if !errors.Is(err, porta.ErrKMSIndisponivel) || n.Load() != antes {
 		t.Fatalf("com o disjuntor aberto a chamada nem chega ao servidor: %v (%d → %d)", err, antes, n.Load())
 	}
-	if c.Pronto() {
+	if c.Pronto(context.Background()) {
 		t.Fatal("disjuntor aberto => não pronto")
 	}
 }
@@ -220,14 +220,14 @@ func TestPronto(t *testing.T) {
 		}
 		w.WriteHeader(503)
 	})
-	if !c.Pronto() {
+	if !c.Pronto(context.Background()) {
 		t.Fatal("deveria estar pronto")
 	}
 	ok.Store(false)
 	c.mu.Lock()
 	c.sondaEm = time.Time{} // expira o cache de 2 s
 	c.mu.Unlock()
-	if c.Pronto() {
+	if c.Pronto(context.Background()) {
 		t.Fatal("KMS 503 => não pronto")
 	}
 }

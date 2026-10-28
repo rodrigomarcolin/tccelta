@@ -37,7 +37,7 @@ func TestIntersecaoVazia(t *testing.T) {
 }
 
 func sintetica(ppm float64, horas int, ruido float64, seed int64) []Ancora {
-	r := rand.New(rand.NewSource(seed))
+	r := rand.New(rand.NewSource(seed)) //nolint:gosec // G404: semente fixa de teste
 	var out []Ancora
 	for t := int64(0); t <= int64(horas)*3600000; t += 1800000 {
 		o := 1.7e12 + ppm*1e-6*float64(t)
