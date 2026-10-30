@@ -128,9 +128,6 @@ linters:
         # argumentos das CLIs (cmd/*), nao de entrada de usuario da API.
         - G703
         - G704
-    staticcheck:
-      # paridade com o v1: so as checagens SA (as QF/ST, de estilo, entraram no v2).
-      checks: ["SA*"]
   exclusions:
     generated: lax
     presets:
