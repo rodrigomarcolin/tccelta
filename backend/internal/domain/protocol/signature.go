@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/sha256"
@@ -23,14 +22,11 @@ func ParsePublicKey(raw []byte) (*ecdsa.PublicKey, error) {
 	if len(raw) != PublicKeySize || raw[0] != 0x04 {
 		return nil, ErrInvalidPublicKey
 	}
-	if _, err := ecdh.P256().NewPublicKey(raw); err != nil {
+	pub, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), raw) // recusa ponto fora da curva
+	if err != nil {
 		return nil, ErrInvalidPublicKey
 	}
-	return &ecdsa.PublicKey{
-		Curve: elliptic.P256(),
-		X:     new(big.Int).SetBytes(raw[1:33]),
-		Y:     new(big.Int).SetBytes(raw[33:]),
-	}, nil
+	return pub, nil
 }
 
 // VerifyBlockSignature confere a tag ECDSA P-256 (r‖s) sobre SHA-256(input).

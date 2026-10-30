@@ -1,13 +1,11 @@
 package simulator
 
 import (
-	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"encoding/csv"
 	"encoding/hex"
 	"fmt"
-	"math/big"
 	"os"
 	"strings"
 
@@ -66,13 +64,9 @@ func parseKSig(h string) (*ecdsa.PrivateKey, error) {
 	if err != nil || len(raw) != 32 {
 		return nil, fmt.Errorf("k_sig_hex inválida")
 	}
-	k, err := ecdh.P256().NewPrivateKey(raw)
+	k, err := ecdsa.ParseRawPrivateKey(elliptic.P256(), raw)
 	if err != nil {
 		return nil, fmt.Errorf("k_sig_hex inválida: %w", err)
 	}
-	pub := k.PublicKey().Bytes() // 04 ‖ X ‖ Y
-	return &ecdsa.PrivateKey{
-		PublicKey: ecdsa.PublicKey{Curve: elliptic.P256(), X: new(big.Int).SetBytes(pub[1:33]), Y: new(big.Int).SetBytes(pub[33:])},
-		D:         new(big.Int).SetBytes(raw),
-	}, nil
+	return k, nil
 }
