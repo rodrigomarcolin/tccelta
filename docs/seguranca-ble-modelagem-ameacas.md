@@ -392,3 +392,12 @@ uma sessão de diagnóstico.
   Operation: GCM and GMAC*. 2007.
 - KRAWCZYK, H.; ERONEN, P. *RFC 5869: HMAC-based Extract-and-Expand Key
   Derivation Function (HKDF)*. 2010.
+
+## Atualização (Fase 2): LESC Just Works no firmware
+
+- O modo "SC-only" da NimBLE (`sm_sc_only`) exige enlace autenticado (MITM) no ATT e não serve a Just Works; o firmware
+  usa `sm_sc=1` e verifica no bond (`sc == 1`, chave de 16 B) que o pareamento foi LESC, apagando bond legado.
+- Pareamento só na janela de 45 s aberta pelo botão BOOT (5 s); um bond por vez; fora da janela todo Pairing Request é
+  recusado (`BLE_STORE_EVENT_FULL`) e nada é gravado. NUS e SYNC exigem enlace cifrado e sessão autorizada.
+- A §4 (camada `connectivity/secure/`) é **histórica**: foi removida do firmware. O cenário C1 da §7 passa a ser o padrão.
+- Risco residual aceito: no perfil `dev` a NVS fica em claro, então os bonds são legíveis na flash.

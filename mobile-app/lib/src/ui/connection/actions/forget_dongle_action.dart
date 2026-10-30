@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tccelta_mobile/src/application/connection/forget_dongle_use_case.dart';
 import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
@@ -9,9 +10,9 @@ import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 /// ([forgetDongleUseCaseProvider]). Sem diálogo/navegação — cada ponto de
 /// entrada (Configurações, faixa de status, conexão perdida) decide isso
 /// conforme seu próprio contexto.
-Future<void> forgetDongle(WidgetRef ref) async {
+Future<ForgetDongleResult> forgetDongle(WidgetRef ref) async {
   ref.read(selectedDongleProvider.notifier).clear();
-  await ref.read(forgetDongleUseCaseProvider).call();
+  return ref.read(forgetDongleUseCaseProvider).call();
 }
 
 /// Confirma com o usuário (diálogo padrão do design system) e, se
@@ -26,6 +27,18 @@ Future<void> confirmAndForgetDongle(BuildContext context, WidgetRef ref) async {
     confirmLabel: 'Esquecer',
   );
   if (confirmed != true) return;
-  await forgetDongle(ref);
+  final result = await forgetDongle(ref);
+  if (!context.mounted) return;
+  if (result.needsManualForget) {
+    await showConfirmDialog(
+      context,
+      title: 'Esqueça também no iPhone',
+      message:
+          'Abra Ajustes › Bluetooth, toque em (i) ao lado do dongle e em '
+          'Esquecer este dispositivo. Sem isso, o iPhone não consegue parear '
+          'de novo.',
+      confirmLabel: 'Entendi',
+    );
+  }
   if (context.mounted) context.go(AppRoutes.blePermissions);
 }

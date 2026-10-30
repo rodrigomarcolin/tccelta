@@ -15,3 +15,11 @@ stateDiagram-v2
     Processing --> Sending: local AT command
     Sending --> Idle: response ends with >
 ```
+
+## PairingTask (Fase 2)
+
+Núcleo 0, prioridade 2, pilha 4096 B, período 20 ms (`vTaskDelayUntil`). Lê o GPIO0 (BOOT),
+alimenta o `PairButton` e, ao segurar `PAIR_BUTTON_HOLD_MS`, chama
+`PairingController::onButtonHold()` (derruba conexões, apaga bonds, abre a janela). Também
+dá o `tick()` da política (prazos da janela e de autenticação) e anima o LED opcional
+(`PAIR_LED_PIN`).

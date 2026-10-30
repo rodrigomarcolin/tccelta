@@ -8,7 +8,11 @@
 #include "collector/MarkerBlock.h"
 #include "collector/SeqReserve.h"
 #include "collector/SequentialPidReader.h"
+#include "connectivity/ble/BleSecurity.h"
 #include "connectivity/ble/BleSyncLink.h"
+#include "connectivity/ble/LinkSecurityMode.h"
+#include "connectivity/pairing/PairingConfig.h"
+#include "connectivity/pairing/PairingController.h"
 #include "rtos/Adapters.h"
 #include "rtos/CollectorContext.h"
 #include "rtos/CollectorControl.h"
@@ -27,6 +31,7 @@
 #include "tasks/AcquisitionTask.h"
 #include "tasks/Elm327Task.h"
 #include "tasks/FlushTask.h"
+#include "tasks/PairingTask.h"
 #include "tasks/SyncTask.h"
 
 namespace app {
@@ -166,20 +171,34 @@ bool startCollector(BusFactory makeBus, BleConnectivity& ble) {
     static rtos::QueuedObd2 queuedObd2(ctx);
     static rtos::CollectorControl control(ctx, nvs, values, tmaxReport, pool, store, syncStatus, config);
 
-    // 11. BLE (NUS + SYNC), com as filas já prontas.
+    // 11. BLE (NUS + SYNC) e pareamento, com as filas já prontas.
+#if !defined(LINK_SECURITY_OPEN)
+    static pairing::PairingController pairing(ble, timingsFromConfig(), CONFIG_BT_NIMBLE_MAX_CONNECTIONS);
+    ble.setPairingController(&pairing);
+#endif
     ble.setConnectionCallback([](bool connected) { onConnection(ctx, connected); });
     ble.setSyncLink(&syncLink);
     static Elm327Task elm327Task(&ble, &queuedObd2, &control);
     if (!ble.begin()) return false;
+#if !defined(LINK_SECURITY_OPEN)
+    ble_security::BleSecurity::sanitizeBondsAtBoot();
+    pairing.begin();  // bonding desligado e anúncio conforme o estado; só o botão abre a janela
+#endif
 
     // 12. Tarefas.
     static FlushTask flushTask(ctx, writer, store);
     static AcquisitionTask acquisitionTask(ctx, collector, bus, clock, tmaxReport);
     static SyncTask syncTask(ctx, engine, syncStatus);
+#if !defined(LINK_SECURITY_OPEN)
+    static PairingTask pairingTask(pairing, PairingTaskConfig::fromBuildFlags());
+#endif
     eventLog.watch("flush", flushTask.start());
     eventLog.watch("acquisition", acquisitionTask.start(config));
     eventLog.watch("elm327", elm327Task.start(kElm327Priority, kElm327Stack));
     eventLog.watch("sync", syncTask.start());
+#if !defined(LINK_SECURITY_OPEN)
+    eventLog.watch("pairing", pairingTask.start());
+#endif
     return true;
 }
 

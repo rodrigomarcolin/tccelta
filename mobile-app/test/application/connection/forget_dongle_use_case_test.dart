@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tccelta_mobile/src/application/connection/forget_dongle_use_case.dart';
+import 'package:tccelta_mobile/src/domain/ble/last_dongle.dart';
 import 'package:tccelta_mobile/src/domain/repositories/dongle_repository.dart';
 import 'package:tccelta_mobile/src/domain/repositories/last_dongle_repository.dart';
 
@@ -19,15 +20,52 @@ void main() {
     useCase = ForgetDongleUseCase(dongle, lastDongle);
     when(dongle.disconnect).thenAnswer((_) async {});
     when(lastDongle.clear).thenAnswer((_) async {});
+    when(
+      lastDongle.load,
+    ).thenAnswer((_) async => const LastDongle(id: '1', name: 'D'));
   });
 
-  test('desconecta e apaga o dongle salvo (só os dois repositories '
-      'recebidos)', () async {
-    await useCase.call();
+  test('Android: desconecta, remove o bond e apaga o registro', () async {
+    when(() => dongle.canManageBonds).thenReturn(true);
+    when(() => dongle.removeBond('1')).thenAnswer((_) async {});
 
+    final result = await useCase();
+
+    expect(result.bondRemoved, isTrue);
+    expect(result.needsManualForget, isFalse);
     verify(dongle.disconnect).called(1);
+    verify(() => dongle.removeBond('1')).called(1);
     verify(lastDongle.clear).called(1);
-    verifyNoMoreInteractions(dongle);
-    verifyNoMoreInteractions(lastDongle);
+  });
+
+  test('falha ao remover o bond não impede limpar o registro', () async {
+    when(() => dongle.canManageBonds).thenReturn(true);
+    when(() => dongle.removeBond('1')).thenThrow(Exception('bloqueado'));
+
+    final result = await useCase();
+
+    expect(result.bondRemoved, isFalse);
+    verify(lastDongle.clear).called(1);
+  });
+
+  test('iOS: pede para esquecer manualmente nos Ajustes', () async {
+    when(() => dongle.canManageBonds).thenReturn(false);
+
+    final result = await useCase();
+
+    expect(result.bondRemoved, isFalse);
+    expect(result.needsManualForget, isTrue);
+    verifyNever(() => dongle.removeBond(any()));
+    verify(lastDongle.clear).called(1);
+  });
+
+  test('sem dongle salvo não há o que esquecer no SO', () async {
+    when(lastDongle.load).thenAnswer((_) async => null);
+    when(() => dongle.canManageBonds).thenReturn(false);
+
+    final result = await useCase();
+
+    expect(result.needsManualForget, isFalse);
+    verify(dongle.disconnect).called(1);
   });
 }

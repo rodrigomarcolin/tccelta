@@ -22,3 +22,14 @@ Dois serviços GATT no mesmo servidor NimBLE (`ble/BleConnectivity`):
   conectar e `APP_CONNECTED`/`INTERNET` desligam ao desconectar.
 
 Eventos de depuração do SYNC e do handshake: `docs/debug-events.md` (§5.7).
+
+## Segurança de enlace (Fase 2)
+
+- O dongle só aceita enlaces BLE LESC Just Works com bond, e **só entrega dados do NUS e do
+  SYNC à conexão autorizada** (cifrada + bond LESC válido). Escritas de quem não está
+  autorizado são descartadas (`WRITE_DROP`); notificações vão sempre para a conexão autorizada.
+- `APP_CONNECTED`/`CONN up=1` significam "sessão autorizada", não "conexão crua".
+- A decisão é de `pairing::PairingPolicy` (`pairing/`), ligada à NimBLE por
+  `PairingController` e `BleConnectivity` (`ILinkControl`); `BleSecurity` guarda as chamadas
+  à pilha. O botão BOOT (5 s) abre a janela de 45 s (`[pairing]` no `platformio.ini`).
+- Eventos: `docs/debug-events.md` §5.9.

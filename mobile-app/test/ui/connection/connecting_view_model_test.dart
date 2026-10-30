@@ -2,8 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tccelta_mobile/src/core/persistence/shared_preferences_provider.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_bond_state.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
+import 'package:tccelta_mobile/src/domain/ble/ble_link_error.dart';
+import 'package:tccelta_mobile/src/domain/ble/dongle_pairing_hint.dart';
+import 'package:tccelta_mobile/src/domain/ble/last_dongle.dart';
 import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
@@ -19,7 +23,7 @@ import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import '../../support/fake_ble_service.dart';
 
 /// Repository OBD-II fake e instantâneo, para não depender de trocas ELM327
-/// reais durante a preparação (Fase 2).
+/// reais durante a preparação.
 class _FakeObd2Repository implements Obd2Repository {
   @override
   Future<void> reportGps(GpsFix fix) async {}
@@ -51,109 +55,209 @@ class _FakeObd2Repository implements Obd2Repository {
       const DtcSnapshot(active: [], milOn: false);
 }
 
+BleDevice _frame({required bool windowOpen}) => BleDevice(
+  id: '1',
+  name: 'TCCeltaDongle',
+  rssi: -50,
+  manufacturerData: manufacturerFor(windowOpen: windowOpen),
+);
+
+FakeConnectPlan _failingPlan(BleLinkError error) => FakeConnectPlan(const [
+  BleConnectionPhase.connecting,
+  BleConnectionPhase.securing,
+  BleConnectionPhase.failed,
+], error: error);
+
 void main() {
+  late SharedPreferences prefs;
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
+  });
+
+  ProviderContainer makeContainer(FakeBleService ble) {
+    final container = ProviderContainer(
+      overrides: [
+        bleServiceProvider.overrideWithValue(ble),
+        obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+    );
+    addTearDown(container.dispose);
+    return container;
+  }
+
+  Future<void> until(
+    ProviderContainer container,
+    bool Function(ConnectingState) test,
+  ) async {
+    for (var i = 0; i < 300; i++) {
+      if (test(container.read(connectingViewModelProvider))) return;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    final s = container.read(connectingViewModelProvider);
+    fail('estado esperado não alcançado: ${s.security} / ${s.phase}');
+  }
+
+  const openHint = DonglePairingHint(windowOpen: true, hasBond: false);
+
   group('ConnectingViewModel', () {
-    setUp(() {
-      SharedPreferences.setMockInitialValues({});
-    });
-
-    test('connect avança BLE + preparação OBD-II até prep done', () async {
-      final container = ProviderContainer(
-        overrides: [
-          bleServiceProvider.overrideWithValue(FakeBleService()),
-          obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
-        ],
+    test('com bond restaura a sessão e conclui a preparação OBD-II', () async {
+      final container = makeContainer(
+        FakeBleService(bondStates: {'1': BleBondState.bonded}),
       );
-      addTearDown(container.dispose);
-
       await container.read(connectingViewModelProvider.notifier).connect('1');
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-
+      await until(container, (s) => s.prep == ConnectingPrep.done);
       final state = container.read(connectingViewModelProvider);
       expect(state.phase, BleConnectionPhase.ready);
-      expect(state.prep, ConnectingPrep.done);
+      expect(state.security, LinkSecurityStep.secured);
     });
 
-    test('reconexão reinicia a preparação (não fica com prep done)', () async {
-      final container = ProviderContainer(
-        overrides: [
-          bleServiceProvider.overrideWithValue(FakeBleService()),
-          obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
+    test('janela aberta sem bond: pareia agora e lembra o dongle', () async {
+      final ble = FakeBleService();
+      final container = makeContainer(ble);
+      container
+          .read(selectedDongleProvider.notifier)
+          .select(const BleDevice(id: '1', name: 'OBD2Dongle', rssi: -50));
+      final phases = <BleConnectionPhase>[];
+      container.listen(
+        connectingViewModelProvider.select((s) => s.phase),
+        (_, next) => phases.add(next),
+      );
+      await container
+          .read(connectingViewModelProvider.notifier)
+          .connect('1', hint: openHint);
+      await until(container, (s) => s.prep == ConnectingPrep.done);
+      expect(phases, contains(BleConnectionPhase.securing));
+      expect(ble.connectCount, 1);
+      final saved = await container.read(lastDongleRepositoryProvider).load();
+      expect(saved?.id, '1');
+      expect(saved?.name, 'OBD2Dongle');
+    });
+
+    test('janela fechada: espera o botão e pareia quando ela abre', () async {
+      final container = makeContainer(
+        FakeBleService(
+          hintFrames: [
+            [_frame(windowOpen: false)],
+            [_frame(windowOpen: true)],
+          ],
+        ),
+      );
+      await container.read(connectingViewModelProvider.notifier).connect('1');
+      await until(
+        container,
+        (s) => s.security == LinkSecurityStep.waitingButton && s.dongleSeen,
+      );
+      await until(container, (s) => s.security == LinkSecurityStep.secured);
+    });
+
+    test('Android: bond perdido remove o bond e pareia de novo', () async {
+      final ble = FakeBleService(
+        bondStates: {'1': BleBondState.bonded},
+        plans: [_failingPlan(BleLinkError.bondLost)],
+        hintFrames: [
+          [_frame(windowOpen: true)],
         ],
       );
-      addTearDown(container.dispose);
+      final container = makeContainer(ble);
+      await container.read(connectingViewModelProvider.notifier).connect('1');
+      await until(container, (s) => s.security == LinkSecurityStep.secured);
+      expect(ble.removeBondCalls, ['1']);
+      expect(ble.connectCount, 2);
+    });
 
+    test('iOS: bond perdido orienta esquecer e apaga o registro', () async {
+      final ble = FakeBleService(
+        canManageBonds: false,
+        plans: [_failingPlan(BleLinkError.bondLostIos)],
+      );
+      final container = makeContainer(ble);
+      await container
+          .read(lastDongleRepositoryProvider)
+          .save(const LastDongle(id: '1', name: 'D'));
+      await container.read(connectingViewModelProvider.notifier).connect('1');
+      await until(container, (s) => s.security == LinkSecurityStep.forgetOnIos);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(await container.read(lastDongleRepositoryProvider).load(), isNull);
+      expect(ble.removeBondCalls, isEmpty);
+    });
+
+    test('recusa com a janela ainda aberta vira rejected', () async {
+      final container = makeContainer(
+        FakeBleService(
+          plans: [_failingPlan(BleLinkError.pairingRejected)],
+          hintFrames: [
+            [_frame(windowOpen: true)],
+          ],
+        ),
+      );
+      await container
+          .read(connectingViewModelProvider.notifier)
+          .connect('1', hint: openHint);
+      await until(container, (s) => s.security == LinkSecurityStep.rejected);
+    });
+
+    test('recusa com a janela fechada vira windowExpired', () async {
+      final container = makeContainer(
+        FakeBleService(
+          plans: [_failingPlan(BleLinkError.notAuthorized)],
+          hintFrames: [
+            [_frame(windowOpen: false)],
+          ],
+        ),
+      );
+      await container
+          .read(connectingViewModelProvider.notifier)
+          .connect('1', hint: openHint);
+      await until(
+        container,
+        (s) => s.security == LinkSecurityStep.windowExpired,
+      );
+    });
+
+    test('iOS: "já pareei" tenta restaurar com o bond do SO', () async {
+      final container = makeContainer(FakeBleService(canManageBonds: false));
       final notifier = container.read(connectingViewModelProvider.notifier);
-
-      // 1ª conexão até concluir a preparação.
       await notifier.connect('1');
-      await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(
-        container.read(connectingViewModelProvider).prep,
-        ConnectingPrep.done,
+        container.read(connectingViewModelProvider).security,
+        LinkSecurityStep.waitingButton,
       );
-
-      // Reconecta: o estado deve zerar de imediato (prep volta a idle), não
-      // ficar preso no `done` da sessão anterior.
-      final future = notifier.connect('1');
-      expect(
-        container.read(connectingViewModelProvider).prep,
-        ConnectingPrep.idle,
-      );
-
-      // E a preparação reexecuta até done novamente.
-      await future;
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      final state = container.read(connectingViewModelProvider);
-      expect(state.phase, BleConnectionPhase.ready);
-      expect(state.prep, ConnectingPrep.done);
+      await notifier.assumePaired();
+      await until(container, (s) => s.security == LinkSecurityStep.secured);
     });
 
-    test('falha na conexão vira fase failed (sem preparação)', () async {
-      final container = ProviderContainer(
-        overrides: [
-          bleServiceProvider.overrideWithValue(
-            FakeBleService(phases: const [BleConnectionPhase.failed]),
-          ),
-          obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
-        ],
+    test('falha genérica com bond existente vira failed', () async {
+      final container = makeContainer(
+        FakeBleService(
+          bondStates: {'1': BleBondState.bonded},
+          phases: const [BleConnectionPhase.failed],
+        ),
       );
-      addTearDown(container.dispose);
-
       await container.read(connectingViewModelProvider.notifier).connect('1');
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-
+      await until(container, (s) => s.security == LinkSecurityStep.failed);
       final state = container.read(connectingViewModelProvider);
       expect(state.phase, BleConnectionPhase.failed);
       expect(state.prep, ConnectingPrep.idle);
     });
 
-    test(
-      'ao ficar ready, grava o dongle selecionado como o último conectado',
-      () async {
-        SharedPreferences.setMockInitialValues({});
-        final container = ProviderContainer(
-          overrides: [
-            bleServiceProvider.overrideWithValue(FakeBleService()),
-            obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
-            sharedPreferencesProvider.overrideWithValue(
-              await SharedPreferences.getInstance(),
-            ),
-          ],
-        );
-        addTearDown(container.dispose);
-        container
-            .read(selectedDongleProvider.notifier)
-            .select(const BleDevice(id: '1', name: 'OBD2Dongle', rssi: -50));
-
-        await container.read(connectingViewModelProvider.notifier).connect('1');
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-
-        final saved = await container.read(lastDongleRepositoryProvider).load();
-        expect(saved?.id, '1');
-        expect(saved?.name, 'OBD2Dongle');
-      },
-    );
+    test('reconectar reinicia a preparação (não fica com prep done)', () async {
+      final container = makeContainer(
+        FakeBleService(bondStates: {'1': BleBondState.bonded}),
+      );
+      final notifier = container.read(connectingViewModelProvider.notifier);
+      await notifier.connect('1');
+      await until(container, (s) => s.prep == ConnectingPrep.done);
+      final future = notifier.connect('1');
+      expect(
+        container.read(connectingViewModelProvider).prep,
+        ConnectingPrep.idle,
+      );
+      await future;
+      await until(container, (s) => s.prep == ConnectingPrep.done);
+    });
   });
 
   group('connectingStepsFor', () {
@@ -162,36 +266,45 @@ void main() {
         const ConnectingState(phase: BleConnectionPhase.connecting),
       );
       expect(steps[0].state, ConnectStepState.active);
-      expect(steps[1].state, ConnectStepState.pending);
-      expect(steps[2].state, ConnectStepState.pending);
-      expect(steps[3].state, ConnectStepState.pending);
+      expect(
+        steps.skip(1).every((s) => s.state == ConnectStepState.pending),
+        isTrue,
+      );
     });
 
-    test('ready + preparação em curso: passo 3 ativo, 4 pendente', () {
+    test('securing deixa o passo de pareamento ativo', () {
+      final steps = connectingStepsFor(
+        const ConnectingState(phase: BleConnectionPhase.securing),
+      );
+      expect(steps[0].state, ConnectStepState.done);
+      expect(steps[1].state, ConnectStepState.active);
+      expect(steps[2].state, ConnectStepState.pending);
+    });
+
+    test('ready + preparação em curso: passo 4 ativo, 5 pendente', () {
       final steps = connectingStepsFor(
         const ConnectingState(
           phase: BleConnectionPhase.ready,
           prep: ConnectingPrep.preparing,
         ),
       );
-      expect(steps[0].state, ConnectStepState.done);
-      expect(steps[1].state, ConnectStepState.done);
-      expect(steps[2].state, ConnectStepState.active);
-      expect(steps[3].state, ConnectStepState.pending);
+      expect(steps[2].state, ConnectStepState.done);
+      expect(steps[3].state, ConnectStepState.active);
+      expect(steps[4].state, ConnectStepState.pending);
     });
 
-    test('ready + leitura de capacidades: passo 3 done, 4 ativo', () {
+    test('ready + leitura de capacidades: passo 4 done, 5 ativo', () {
       final steps = connectingStepsFor(
         const ConnectingState(
           phase: BleConnectionPhase.ready,
           prep: ConnectingPrep.reading,
         ),
       );
-      expect(steps[2].state, ConnectStepState.done);
-      expect(steps[3].state, ConnectStepState.active);
+      expect(steps[3].state, ConnectStepState.done);
+      expect(steps[4].state, ConnectStepState.active);
     });
 
-    test('preparação concluída: todos os 4 passos done', () {
+    test('preparação concluída: todos os 5 passos done', () {
       final steps = connectingStepsFor(
         const ConnectingState(
           phase: BleConnectionPhase.ready,
