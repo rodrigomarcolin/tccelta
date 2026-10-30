@@ -76,12 +76,12 @@ Todos os comandos rodam a partir de `backend/`.
 | `COMPOSE` | `docker compose` | Stack de desenvolvimento (`compose.yaml`, projeto `tccelta`) |
 | `COMPOSE_PL` | `docker compose -f compose.yaml -f compose.prodlike.yaml` | Mesma stack com o ajuste `prodlike` por cima |
 | `COMPOSE_T` | `docker compose -f compose.test.yaml` | Stack isolada de teste (projeto `tccelta-teste`), usada pelo `e2e` |
-| `DOCKER_GO` | `docker run --rm -v "$(CURDIR)":/src -w /src -v tccelta_gomod:/go/pkg/mod golang:1.24-bookworm` | Roda comandos Go; o volume `tccelta_gomod` guarda o cache dos módulos |
+| `DOCKER_GO` | `docker run --rm -v "$(CURDIR)":/src -w /src -v tccelta_gomod:/go/pkg/mod golang:1.26-bookworm` | Roda comandos Go; o volume `tccelta_gomod` guarda o cache dos módulos |
 | `TOOLS` | `run --rm ferramentas` | Serviço `ferramentas`: o binário `tccelta` (banco e API) |
 | `KMS_TOOLS` | `run --rm kms-ferramentas` | Serviço `kms-ferramentas`: o binário `tccelta-kms` (Vault) |
 | `SIM_DB` | `--db-url-env SIM_BANCO_URL` | Aponta o simulador para a variável com a URL do banco |
 
-**Imagens de ferramenta (versões fixas)**: Go `golang:1.24-bookworm`, sqlc `sqlc/sqlc:1.27.0`,
+**Imagens de ferramenta (versões fixas)**: Go `golang:1.26-bookworm`, sqlc `sqlc/sqlc:1.27.0`,
 golangci-lint `golangci/golangci-lint:v1.64.8`, goose `ghcr.io/pressly/goose:v3.22.1`,
 Python `python:3.12-slim`.
 
