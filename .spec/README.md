@@ -5,16 +5,16 @@ verdade; formatos, máquinas de estado e fluxos descritos aqui batem com o
 código testado). Cada fase é uma pasta com um `README.md` (visão geral,
 arquitetura, índice), documentos numerados e, nas fases 1 e 2, um
 `DESVIOS-E-MELHORIAS.md` com o que divergiu do plano original e o que ainda
-pode melhorar. A Fase 4 ainda é um plano de implementação (specs por entrega,
-com decisões e critérios de aceite), a consolidar no estado do código quando
-for implementada.
+pode melhorar. A Fase 4 está implementada no código (specs por entrega em `fase-4-ecdsa/`);
+falta consolidá-las no estado final, como nas fases 1 a 3, e rodar o roteiro de
+bancada com a placa.
 
 | Fase | Pasta | Entrega |
 |---|---|---|
 | 1 | `fase-1-seguranca-telemetria/` | Firmware + app: build único Arduino + ESP-IDF, chaves na partição `secnvs`, bloco autenticado (HMAC/ECDSA + CRC32) em segmentos v2, reserva de `seq` + BOOT, serviço BLE SYNC (TLV + fragmentação), handshake app↔dongle, cursor de envio, buffer e `SyncCoordinator` no app, GPS periódico, port do servidor com stub e servidor de bancada. Fluxos: leitura contínua (Fig. 15) e handshake (Fig. 5, perna app↔dongle). |
 | 2 | `fase-2-lesc/` | Firmware + app: pareamento BLE LESC Just Works fim a fim, janela de pareamento por botão (GPIO0, 5 s ⇒ 45 s), um bond por vez, derrubada de bonds e conexões. |
 | 3 | `fase-3-servidor/` | `backend/` (um módulo Go, dois binários): API (`tccelta api`) com handshake, ingestão de lotes e confirmação; worker de tempo e reprocessamento; KMS próprio (`tccelta-kms`, único cliente do Vault Transit: `K_auth` gerar+verificar, `K_rec` só verificar, JWT Ed25519 com rotação); PostgreSQL/TimescaleDB/PostGIS; Redis, Caddy/túnel, Docker Compose (dev, prodlike, teste); simulador e `make e2e`. App: `HttpsSyncServerGateway` atrás do port da Fase 1. |
-| 4 | `fase-4-ecdsa/` | **Plano.** Perfil `asym` fim a fim: verificação ECDSA P-256 local na ingestão (despacho por perfil, `none` incluso), `provision new/import` com `k_sig`, simulador e cenário `asym` no `make e2e`, vetor de assinatura RFC 6979 cruzado firmware ↔ servidor, falha de assinatura explícita no firmware. |
+| 4 | `fase-4-ecdsa/` | **Implementada (falta a bancada com a placa).** Perfil `asym` fim a fim: verificação ECDSA P-256 local na ingestão (despacho por perfil, `none` incluso), `provision new/import` com `k_sig`, simulador e cenário `asym` no `make e2e`, vetor de assinatura RFC 6979 cruzado firmware ↔ servidor, falha de assinatura explícita no firmware. |
 
 A Fase 2 só troca a camada de enlace; a Fase 3 depende dos formatos e do port
 de servidor da Fase 1; a Fase 4 depende das Fases 1 e 3.
