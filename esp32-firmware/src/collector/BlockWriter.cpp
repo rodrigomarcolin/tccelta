@@ -1,4 +1,5 @@
 #include "collector/BlockWriter.h"
+#include "collector/Events.h"
 #include "collector/MarkerBlock.h"
 #include "collector/SegmentFormat.h"
 
@@ -59,8 +60,20 @@ bool BlockWriter::commit(Block& block, WriteReport& report) {
     // Assina e calcula o CRC uma vez; a nova tentativa grava os mesmos bytes.
     uint64_t t0 = _clock.nowUs();
     block.tagLength = static_cast<uint8_t>(_auth.tagSize());
-    _auth.sign(block.bytes, block.length, block.tag);
+    bool signed_ = false;
+    for (int attempt = 1; attempt <= kSignAttempts && !signed_; ++attempt) {
+        signed_ = _auth.sign(block.bytes, block.length, block.tag);
+        if (!signed_) {
+            Event("SIGN_FAIL").token("kind", "block").num("seq", seq).num("attempt", attempt)
+                .num("rc", _auth.lastError());
+        }
+    }
     report.signUs = elapsedUs(_clock, t0);
+    if (!signed_) {
+        report.signOk = false;
+        ++_failedBlocks;  // como a falha de gravação: o seq não é consumido
+        return false;
+    }
 
     t0 = _clock.nowUs();
     block.crc = computeCrc(block);

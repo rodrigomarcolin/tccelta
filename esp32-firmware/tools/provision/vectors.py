@@ -55,13 +55,62 @@ def _add(p, q):
     return x, (s * (p[0] - x) - p[1]) % P
 
 
+N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+
+
+def _mul(d: int):
+    return _mul_point(d, (GX, GY))
+
+
 def public_key(d: int) -> bytes:
-    r, q = None, (GX, GY)
+    r = _mul(d)
+    return b"\x04" + r[0].to_bytes(32, "big") + r[1].to_bytes(32, "big")
+
+
+def _hmac(key, data): return hmac.new(key, data, hashlib.sha256).digest()
+
+
+def sign_rfc6979(d: int, h1: bytes) -> bytes:
+    """ECDSA P-256 determinística (RFC 6979 §3.2, HMAC-SHA256); `h1` é o digest
+    já calculado, como o firmware o passa a `mbedtls_ecdsa_sign_det_ext`.
+    Devolve `r(32) ‖ s(32)` big-endian."""
+    x = d.to_bytes(32, "big")
+    h1o = (int.from_bytes(h1, "big") % N).to_bytes(32, "big")
+    v, k = b"\x01" * 32, b"\x00" * 32
+    k = _hmac(k, v + b"\x00" + x + h1o)
+    v = _hmac(k, v)
+    k = _hmac(k, v + b"\x01" + x + h1o)
+    v = _hmac(k, v)
+    while True:
+        v = _hmac(k, v)
+        kk = int.from_bytes(v, "big")
+        if 1 <= kk < N:
+            r = _mul(kk)[0] % N
+            s = pow(kk, -1, N) * (int.from_bytes(h1, "big") + r * d) % N
+            if r and s:
+                return r.to_bytes(32, "big") + s.to_bytes(32, "big")
+        k = _hmac(k, v + b"\x00")
+        v = _hmac(k, v)
+
+
+def _verify(pub: bytes, h: bytes, tag: bytes) -> bool:
+    q = (int.from_bytes(pub[1:33], "big"), int.from_bytes(pub[33:], "big"))
+    r, s = int.from_bytes(tag[:32], "big"), int.from_bytes(tag[32:], "big")
+    if not (1 <= r < N and 1 <= s < N):
+        return False
+    w = pow(s, -1, N)
+    u1, u2 = int.from_bytes(h, "big") * w % N, r * w % N
+    pt = _add(_mul(u1), _mul_point(u2, q))
+    return pt is not None and pt[0] % N == r
+
+
+def _mul_point(d: int, q):
+    r = None
     while d:
         if d & 1: r = _add(r, q)
         q = _add(q, q)
         d >>= 1
-    return b"\x04" + r[0].to_bytes(32, "big") + r[1].to_bytes(32, "big")
+    return r
 
 
 def mac(key, typ, payload, size):
@@ -95,7 +144,10 @@ def build():
         "blocks": [
             {"name": n, "data": d.hex().upper(),
              "tag": mac(K_REC, 0x03, d, 32).hex().upper(),
-             "ecdsa_hash": hashlib.sha256(LABEL + b"\x03" + DEV_ID + d).hexdigest().upper()}
+             "ecdsa_hash": hashlib.sha256(LABEL + b"\x03" + DEV_ID + d).hexdigest().upper(),
+             "ecdsa_tag": sign_rfc6979(
+                 int.from_bytes(K_SIG, "big"),
+                 hashlib.sha256(LABEL + b"\x03" + DEV_ID + d).digest()).hex().upper()}
             for n, d in blocks],
         "sha256": [
             {"name": "empty", "input_hex": "", "digest": hashlib.sha256(b"").hexdigest().upper()},
@@ -128,6 +180,14 @@ def self_check(v):
         "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
     assert v["hmac_rfc4231"][1]["mac"].lower() == \
         "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+    # RFC 6979 A.2.5 (P-256, SHA-256, mensagem "sample")
+    x = int("C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721", 16)
+    assert sign_rfc6979(x, hashlib.sha256(b"sample").digest()).hex().upper() == (
+        "EFD48B2AACB6A8FD1140DD9CD45E81D69D2C877B56AAF991C34D0EA84EAF3716"
+        "F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"),         "assinatura RFC 6979 difere do vetor A.2.5"
+    for b in v["blocks"]:  # a tag publicada verifica com a chave pública
+        assert _verify(bytes.fromhex(v["k_sig_public"]), bytes.fromhex(b["ecdsa_hash"]),
+                       bytes.fromhex(b["ecdsa_tag"])), f"ecdsa_tag de {b['name']} não verifica"
     try:  # conferência obrigatória da chave pública (spec 01 §2)
         from cryptography.hazmat.primitives.asymmetric import ec
         k = ec.derive_private_key(int.from_bytes(K_SIG, "big"), ec.SECP256R1())
@@ -155,6 +215,7 @@ def emit_header(v):
         out.append(s(f"VEC_BLK_{n}_DATA", b["data"]))
         out.append(s(f"VEC_BLK_{n}_TAG", b["tag"]))
         out.append(s(f"VEC_BLK_{n}_ECDSA_HASH", b["ecdsa_hash"]))
+        out.append(s(f"VEC_BLK_{n}_ECDSA_TAG", b["ecdsa_tag"]))
     for x in v["sha256"]:
         out.append(s(f"VEC_SHA256_{x['name'].upper()}_IN", x["input_hex"]))
         out.append(s(f"VEC_SHA256_{x['name'].upper()}_OUT", x["digest"]))

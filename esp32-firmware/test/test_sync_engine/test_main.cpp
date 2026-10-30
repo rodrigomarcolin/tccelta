@@ -391,6 +391,37 @@ void test_corrupt_blocks_become_one_loss_with_valid_tag() {
     TEST_ASSERT_EQUAL_HEX8_ARRAY(loss.data(), again[2].data(), loss.size());
 }
 
+void test_loss_sign_failure_sends_nothing_keeps_cursor_and_retries() {
+    Rig rig(2);  // tag falsa de 64 B (asym)
+    fill(rig.store, 65, 140);
+    rig.start();
+    rig.openSession(130);
+    rig.store.corrupt(133);
+    rig.store.corrupt(134);
+    rig.fake64.failSigns = 1;
+    rig.request(10);
+    const auto sent = rig.drain();
+    TEST_ASSERT_EQUAL_UINT32(2, sent.size());  // 131 e 132; o LOSS não sai sem tag válida
+    TEST_ASSERT_EQUAL_UINT32(133, rig.engine->status().cursor);
+    TEST_ASSERT_FALSE(rig.engine->batchActive());
+    const auto fail = sink.of("SIGN_FAIL");
+    TEST_ASSERT_EQUAL_UINT32(1, fail.size());
+    TEST_ASSERT_TRUE(fail[0].find("kind=loss") != std::string::npos);
+    TEST_ASSERT_TRUE(fail[0].find("seq=133") != std::string::npos);
+    TEST_ASSERT_TRUE(fail[0].find("attempt=1") != std::string::npos);
+    TEST_ASSERT_TRUE(fail[0].find("rc=-19968") != std::string::npos);
+    TEST_ASSERT_EQUAL_UINT32(0, sink.of("MARKER").size());
+
+    // Na próxima tentativa o LOSS é remontado, com tag, a partir do mesmo cursor.
+    rig.request(10);
+    const auto retry = rig.drain();
+    TEST_ASSERT_TRUE(retry.size() >= 2);
+    TEST_ASSERT_EQUAL_UINT32(133, u32(retry[0], 3));
+    TEST_ASSERT_EQUAL_HEX8(0xFD, retry[0][3 + 12]);
+    TEST_ASSERT_EQUAL_UINT16(23 + 64, collector::getU16(&retry[0][1]));
+    TEST_ASSERT_EQUAL_UINT32(1, sink.of("SIGN_FAIL").size());
+}
+
 // 9. Lacuna de boot
 void test_boot_gap_jumps_to_boot_in_same_batch() {
     Rig rig;
@@ -615,6 +646,7 @@ int main(int, char**) {
     RUN_TEST(test_cursor_does_not_wait_for_ack_and_ack_does_not_rewind);
     RUN_TEST(test_app_error_rewinds_cursor_and_next_request_restarts_at_ack);
     RUN_TEST(test_corrupt_blocks_become_one_loss_with_valid_tag);
+    RUN_TEST(test_loss_sign_failure_sends_nothing_keeps_cursor_and_retries);
     RUN_TEST(test_boot_gap_jumps_to_boot_in_same_batch);
     RUN_TEST(test_missing_range_without_boot_becomes_loss);
     RUN_TEST(test_corrupt_boot_is_not_a_marker);
