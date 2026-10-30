@@ -68,7 +68,7 @@ As políticas estão em `deploy/kms/vault/policies/` e são aplicadas por `deplo
 
 A política do provisionador permite `transit-auth|rec/keys/+/import` apenas com `type=hmac` e `ciphertext`, negando `exportable`, `allow_plaintext_backup`, `allow_rotation` e `derived`.
 
-Perfis de bloco: o caminho de verificação implementado é o HMAC `K_rec` (perfil `hmac`). Ver `DESVIOS-E-MELHORIAS.md` para `asym` e `none`.
+Perfis de bloco: o KMS só verifica o HMAC `K_rec` (perfil `hmac`). O `asym` é verificado localmente pela API com a `public_key` do cadastro e o `none` aceita tag vazia (Fase 4, `.spec/fase-4-ecdsa/02`); nenhum dos dois chama `/v1/blocks/verify`.
 
 ## Provisionamento (`tccelta-kms provision`, `internal/kms/provisioning`)
 
@@ -76,8 +76,8 @@ Em duas etapas, nesta ordem: KMS importa as chaves e grava `<out>/<devid>/record
 
 | Subcomando | Efeito |
 |---|---|
-| `new --count N [--profile hmac\|asym\|none] [--hw dev\|devsec] [--no-material] [--csv-out F]` | gera dongles de teste (DevId livre consultando o Vault), importa `K_auth`/`K_rec` por BYOK, grava o material NVS (`secnvs.bin` por `esp_idf_nvs_partition_gen` na imagem `kms-tools`, CSV só em memória; `devsec` cifra e grava `nvs_keys.bin`) e `bench_keys.json`; recusado em `producao` |
-| `import --file dongles.csv` | importa chaves de teste (`dev_id_hex,k_auth_hex,k_rec_hex,perfil`) e roda o teste dourado (só dev); recusado em `producao` |
+| `new --count N [--profile hmac\|asym\|none] [--hw dev\|devsec] [--no-material] [--csv-out F]` | gera dongles de teste (DevId livre consultando o Vault; no `asym`, também o par P-256: `k_sig` na NVS/CSV e `public_key` no `record.json`), importa `K_auth`/`K_rec` por BYOK, grava o material NVS (`secnvs.bin` por `esp_idf_nvs_partition_gen` na imagem `kms-tools`, CSV só em memória; `devsec` cifra e grava `nvs_keys.bin`) e `bench_keys.json`; recusado em `producao` |
+| `import --file dongles.csv` | importa chaves de teste (`dev_id_hex,k_auth_hex,k_rec_hex,perfil[,k_sig_hex]`; a 5ª coluna é obrigatória no `asym` e proibida nos demais) e roda o teste dourado (só dev); recusado em `producao` |
 | `import-record --file kms_record.json` | consome o envelope do firmware (`tccelta.kms.v1`): `alg` `vault-byok-rsa-oaep-sha256-aes-kwp` (confere o `kid` da wrapping key atual) ou `none` (fora de `producao`); perfil `asym` exige `k_sig_public` (65 B) |
 | `export-wrapping --out F` | grava `kms_wrapping.json` (`tccelta.kms.wrapping.v1`) com `{auth, rec}: {kid, pem}` das wrapping keys RSA dos mounts |
 | `verify --file CSV` ou `--dev-id` | teste dourado: HMAC do Vault = HMAC local; `verify` aceita a tag certa e recusa a errada |

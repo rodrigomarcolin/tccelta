@@ -1,0 +1,42 @@
+# Fase 4 — desvios e melhorias
+
+Estado da implementação em relação às specs `01`–`05`.
+
+## Desvios
+
+- **01 — teste no alvo de `ecdsa_tag`.** `EcdsaBlockAuth::sign(bloco 0) == ecdsa_tag` não foi
+  escrito como teste Unity no alvo: as classes mbedTLS não rodam no `native` e não havia placa à mão.
+  O vetor está em `vectors.json`/`vectors.h` (`VEC_BLK_*_ECDSA_TAG`) e o Go o verifica
+  (`TestECDSAFirmwareVectors`). **Pendente de bancada:** com a placa `collector_mock_debug_asym`,
+  conferir a assinatura de um `FLUSH` com `tools/provision/verify_block.py --record kms_record.json --event -`
+  (lê `hex=`/`tag=` do monitor). A igualdade byte a byte do bloco-vetor continua por fazer.
+- **01 — `ecdsa_tag` em todos os blocos do vetor** (`boot` e `loss`), não só no bloco 0; `k_sig` e
+  `k_sig_public` já eram campos de topo do `vectors.json`.
+- **03 — par de chaves por `crypto/ecdh`.** `NewDongle` gera `k_sig` com `ecdh.P256().GenerateKey`
+  (escalar de 32 B big-endian e ponto não comprimido de 65 B), em vez de `ecdsa.GenerateKey`; é o
+  mesmo par, sem converter `big.Int`. O depguard do KMS continua só com a biblioteca padrão.
+- **04 — `rejected_block` conferido por contagem.** O `Inspector` não expõe o motivo da linha; o cenário
+  `asym` confere `CountRejected == 1` e o `X-Lote-Motivo: tag_invalida` da resposta (422, sem progresso).
+- **04 — handshake com espera em 429.** O cenário `asym` termina em décimos de segundo e bate no
+  limite de desafios por IP ao passar de um dongle para o outro; ele repete o handshake respeitando o
+  `Retry-After`.
+- **04 — sem checagem automática de "zero chamadas a `/v1/blocks/verify`".** O cenário não olha o
+  KMS. O critério vale por construção (o despacho do `asym` não chama `VerifyBlocks`, coberto por
+  `TestAsymBatchAcceptedWithoutKMSVerify`) e pode ser conferido em `tccelta_kms_calls_total{operation="verify_rec"}`.
+- **05 — `IMessageAuth::lastError()`.** Para o campo `rc` do `SIGN_FAIL`, a interface ganhou
+  `int lastError() const` (0 por padrão); só o `EcdsaBlockAuth` o preenche.
+
+## Verificado, mas não em hardware
+
+`pio run` dos ambientes `*_none`/`*_hmac`/`*_asym` não foi concluído nesta máquina: o link do
+`collector_mock_debug_none` falha por símbolos `fs::LittleFSFS` (biblioteca LittleFS do Arduino,
+sem relação com a assinatura); a compilação das fontes alteradas passa. Os testes `native` do
+`test_block_format` e do `test_sync_engine` cobrem a falha de assinatura. O `test_persistence` já
+falhava antes (`TmaxMeter` esperando 99 amostras depois do commit que as reduziu para 15).
+
+## Melhorias
+
+- Chave pública guardada ou verificada no KMS em vez da linha `dongle` (D6).
+- Verificação ECDSA no servidor de bancada do app (fora do escopo desta fase).
+- Rotação de `k_sig`.
+- Handshake assimétrico.

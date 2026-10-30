@@ -46,8 +46,8 @@ sequenceDiagram
     A->>API: POST /blocos (TLVs 0x03)
     API->>API: JWT, limites, forma do corpo, DecodeBlock por perfil
     API->>DB: ReadSnapshot (contiguous_seq, c_conf, last_ack) - sem lock
-    par verificação do lote (fase pre)
-        API->>K: POST /v1/blocks/verify (K_rec, lotes de KMS_VERIFY_LOTE)
+    par verificação do lote (fase pre, por perfil)
+        API->>K: POST /v1/blocks/verify (perfil hmac: K_rec, lotes de KMS_VERIFY_LOTE)
     and ACK provável
         API->>K: POST /v1/hmac (K_auth), salvo se igual ao last_ack
     end
@@ -65,7 +65,7 @@ sequenceDiagram
 Passos de `ReceiveBatch.Run`:
 
 1. Dongle ativo/perfil permitido; `ReadBatch` e `DecodeBlock` (tamanho `L = tamanho + T`); qualquer falha de forma rejeita o lote todo (400).
-2. Snapshot sem lock. Só blocos com `seq > contiguous_seq` (sem repetir `seq`) vão ao KMS (`VerifyBlocks`, em fatias de `KMS_VERIFY_LOTE`, até `KMS_VERIFY_PARALELO` em paralelo) e, em paralelo, o ACK provável é pré-assinado (simulando todas as tags válidas), a menos que o `last_ack` já seja igual ao provável. Em regime, ≤ 1 ida e volta ao KMS antes da transação e nenhuma sob o lock quando o ACK não muda.
+2. Snapshot sem lock. Só blocos com `seq > contiguous_seq` (sem repetir `seq`) são verificados, pelo perfil do dongle: `hmac` vai ao KMS (`VerifyBlocks`, em fatias de `KMS_VERIFY_LOTE`, até `KMS_VERIFY_PARALELO` em paralelo); `asym` é ECDSA local com a `public_key` do cadastro; `none` vale se a tag é vazia (Fase 4/02) e, em paralelo, o ACK provável é pré-assinado (simulando todas as tags válidas), a menos que o `last_ack` já seja igual ao provável. Em regime, ≤ 1 ida e volta ao KMS antes da transação e nenhuma sob o lock quando o ACK não muda.
 3. Transação (advisory lock, `lock_timeout` 3 s, `statement_timeout` 10 s): estado relido, `Apply`, gravações, e o ACK final reaproveita `last_ack` ou o pré-assinado; só reassina (fase `tx`) se divergir.
 4. Atualiza `dongle_state` apenas se ACK, `max_seen_seq`, geração ou `last_ack` mudaram.
 
