@@ -71,6 +71,7 @@ scenario:        output-dir build-tools
 	$(COMPOSE) --profile ferramentas $(TOOLS) provision register --file /saida/cenario-$(C)
 	$(COMPOSE) --profile ferramentas $(TOOLS) simulator --scenario $(C) --keys /saida/dongles-$(C).csv --api http://api:8080 $(SIM_DB) $(ARGS)
 e2e:             env secrets output-dir
+	chmod a+r deploy/segredos/*
 	$(COMPOSE_T) up -d --build --wait
 	$(COMPOSE_T) --profile ferramentas build ferramentas kms-ferramentas
 	$(call E2E_NEW_DONGLES,e2e) && $(call E2E_SIMULATE,e2e) \
