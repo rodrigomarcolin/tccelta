@@ -83,7 +83,7 @@ func poolFromEnv(ctx context.Context, prefix string, log *slog.Logger) (*pgxpool
 	}
 	password := ""
 	if file := os.Getenv(prefix + "BANCO_SENHA_ARQUIVO"); file != "" {
-		b, err := os.ReadFile(file)
+		b, err := os.ReadFile(file) //nolint:gosec // G703: caminho vem da variável de ambiente BANCO_SENHA_ARQUIVO, definida pelo operador
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +100,7 @@ func cmdHealth(args []string) error {
 		}
 	}
 	cli := &http.Client{Timeout: 3 * time.Second}
-	r, err := cli.Get(url)
+	r, err := cli.Get(url) //nolint:gosec // G704: url vem do flag --url do healthcheck, passado pelo operador
 	if err != nil {
 		return err
 	}

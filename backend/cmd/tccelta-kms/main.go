@@ -76,7 +76,7 @@ func cmdHealth(args []string) error {
 		}
 	}
 	cli := &http.Client{Timeout: 3 * time.Second}
-	r, err := cli.Get(url)
+	r, err := cli.Get(url) //nolint:gosec // G704: url vem do flag --url do healthcheck, passado pelo operador
 	if err != nil {
 		return err
 	}

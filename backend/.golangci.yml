@@ -126,8 +126,6 @@ linters:
         - G115
         # G703/G704 (taint analysis, novas no gosec do golangci-lint v2): caminhos e URLs vem dos
         # argumentos das CLIs (cmd/*), nao de entrada de usuario da API.
-        - G703
-        - G704
   exclusions:
     generated: lax
     presets:
