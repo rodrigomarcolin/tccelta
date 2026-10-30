@@ -55,7 +55,7 @@ func TestWrapFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, _ := base64.StdEncoding.DecodeString(b64)
-	k := priv.PublicKey.Size()
+	k := priv.Size()
 	ke, err := rsa.DecryptOAEP(sha256.New(), nil, priv, raw[:k], nil)
 	if err != nil || len(ke) != 32 {
 		t.Fatal(err)

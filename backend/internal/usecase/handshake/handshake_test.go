@@ -247,7 +247,7 @@ func TestAccess(t *testing.T) {
 
 func TestKMSUnavailable(t *testing.T) {
 	a := newTest(t)
-	var f error = port.ErrKMSUnavailable
+	f := port.ErrKMSUnavailable
 	a.kms.Failure.Store(&f)
 	if _, err := a.issue.Run(context.Background(), IssueChallengeInput{DevID: dev}); !errors.Is(err, port.ErrKMSUnavailable) {
 		t.Fatal(err)

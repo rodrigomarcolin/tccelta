@@ -138,7 +138,7 @@ loop:
 		switch {
 		case c.Marker != nil && c.Marker.Type == protocol.RegBoot:
 			m := c.Marker
-			if !(m.ToSeq == seq-1 && m.FromSeq <= exp && seq >= exp) {
+			if m.ToSeq != seq-1 || m.FromSeq > exp || seq < exp {
 				r.Rejected = append(r.Rejected, Rejection{B: b.B, Reason: ReasonInvalidMarker, Detail: "BOOT fora da regra"})
 				r.Reason = ReasonInvalidMarker
 				break loop
@@ -151,7 +151,7 @@ loop:
 			a.Generation, r.U, _ = r.assign(b.B.Hdr.BootID)
 		case c.Marker != nil:
 			m := c.Marker
-			if !(m.FromSeq == exp && m.FromSeq <= seq && seq <= m.ToSeq) {
+			if m.FromSeq != exp || m.FromSeq > seq || seq > m.ToSeq {
 				r.Rejected = append(r.Rejected, Rejection{B: b.B, Reason: ReasonInvalidMarker, Detail: "LOSS fora da regra"})
 				r.Reason = ReasonInvalidMarker
 				break loop

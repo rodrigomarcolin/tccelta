@@ -284,7 +284,7 @@ func TestMalformedAndLargeBatch(t *testing.T) {
 
 func TestKMSUnavailableWritesNothing(t *testing.T) {
 	a := newTest(t)
-	var failure error = port.ErrKMSUnavailable
+	failure := port.ErrKMSUnavailable
 	a.kms.Failure.Store(&failure)
 	if _, err := a.send(t, batch(seqs(1, 2)...)); !errors.Is(err, port.ErrKMSUnavailable) {
 		t.Fatal(err)

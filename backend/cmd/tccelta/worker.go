@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"flag"
 	"fmt"
 	"os"
@@ -119,7 +118,7 @@ func cmdMigrate(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	var db *sql.DB = stdlib.OpenDB(*pc)
+	db := stdlib.OpenDB(*pc)
 	defer db.Close()
 	action := "up"
 	if len(args) > 0 {
