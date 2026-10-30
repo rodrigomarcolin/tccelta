@@ -141,6 +141,7 @@ func (c *ReceiveBatch) Run(ctx context.Context, e ReceiveBatchInput) (BatchResul
 		if par <= 0 {
 			par = 1
 		}
+		verify := c.verifier(d)
 		var without = make(chan struct{}, par)
 		var res = make([]bool, len(idx))
 		for start := 0; start < len(idx); start += batch {
@@ -155,10 +156,12 @@ func (c *ReceiveBatch) Run(ctx context.Context, e ReceiveBatchInput) (BatchResul
 					inputs = append(inputs, protocol.TagInput(protocol.BlockType, d.DevID, blocks[i].B.Data))
 					tags = append(tags, blocks[i].B.Tag)
 				}
-				out, err := c.kms.VerifyBlocks(gctx, d.RecKey, inputs, tags)
+				t0v := time.Now()
+				out, err := verify(gctx, inputs, tags)
 				if err != nil {
 					return err
 				}
+				c.met.BlockVerifyDuration(d.Profile.Name, time.Since(t0v))
 				copy(res[start:end], out)
 				return nil
 			})
@@ -276,6 +279,41 @@ func (c *ReceiveBatch) Run(ctx context.Context, e ReceiveBatchInput) (BatchResul
 		c.log.Warn("lote.interrompido", "dongle", d.DevID.Hex(), "motivo", string(out.Reason), "ack_seq", out.AckSeq)
 	}
 	return out, nil
+}
+
+// verifier escolhe como as tags dos blocos do dongle são conferidas, pelo perfil:
+// hmac no KMS (K_rec), asym localmente com a public_key do cadastro, none sem tag.
+// Só o hmac pode falhar com erro; o asym nunca chama o KMS.
+func (c *ReceiveBatch) verifier(d dongle.Dongle) func(ctx context.Context, inputs, tags [][]byte) ([]bool, error) {
+	switch d.Profile.Name {
+	case protocol.ProfileAsym.Name:
+		pub, err := protocol.ParsePublicKey(d.PublicKey)
+		if err != nil {
+			c.log.Error("ingestion.public_key_invalida", "dongle", d.DevID.Hex(), "erro", err)
+		}
+		return func(_ context.Context, inputs, tags [][]byte) ([]bool, error) {
+			out := make([]bool, len(inputs))
+			if err != nil {
+				return out, nil // chave inválida: todos os blocos inválidos, sem 5xx
+			}
+			for i := range inputs {
+				out[i] = protocol.VerifyBlockSignature(pub, inputs[i], tags[i])
+			}
+			return out, nil
+		}
+	case protocol.ProfileNone.Name:
+		return func(_ context.Context, _, tags [][]byte) ([]bool, error) {
+			out := make([]bool, len(tags))
+			for i := range tags {
+				out[i] = len(tags[i]) == 0
+			}
+			return out, nil
+		}
+	default:
+		return func(ctx context.Context, inputs, tags [][]byte) ([]bool, error) {
+			return c.kms.VerifyBlocks(ctx, d.RecKey, inputs, tags)
+		}
+	}
 }
 
 func (c *ReceiveBatch) count(r ding.ApplyResult) {

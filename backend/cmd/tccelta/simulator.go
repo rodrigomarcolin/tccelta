@@ -45,7 +45,7 @@ func cmdSimulator(ctx context.Context, args []string) error {
 	if *keys == "" {
 		return fmt.Errorf("informe --keys (CSV gerado por `tccelta-kms provisionar`)")
 	}
-	ks, err := readKeysCSV(*keys)
+	ks, err := simulator.ReadKeysCSV(*keys)
 	if err != nil {
 		return err
 	}

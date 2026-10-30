@@ -29,7 +29,7 @@ func cmdProvision(ctx context.Context, args []string) error {
 	file := fs.String("file", "", "arquivo de entrada")
 	devID := fs.String("dev-id", "", "DevId (verify)")
 	noMaterial := fs.Bool("no-material", false, "new: so importa as chaves e grava o record.json (sem gerar a imagem NVS)")
-	csvOut := fs.String("csv-out", "", "acrescenta dev_id,k_auth,k_rec,profile dos dongles criados (new), para o simulador")
+	csvOut := fs.String("csv-out", "", "acrescenta dev_id,k_auth,k_rec,profile,k_sig dos dongles criados (new), para o simulador")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -125,6 +125,8 @@ func cmdProvision(ctx context.Context, args []string) error {
 
 type keyRecord struct{ dev, kAuth, kRec []byte }
 
+// readKeysCSV lê 4 ou 5 colunas (a 5ª, k_sig_hex, não interessa ao KMS).
+
 func readKeysCSV(file string) ([]keyRecord, error) {
 	f, err := os.Open(file) //nolint:gosec // G703: caminho do CSV passado pelo operador na CLI de provisionamento
 	if err != nil {
@@ -133,13 +135,16 @@ func readKeysCSV(file string) ([]keyRecord, error) {
 	defer f.Close()
 	rd := csv.NewReader(f)
 	rd.Comment = '#'
-	rd.FieldsPerRecord = 4
+	rd.FieldsPerRecord = -1
 	recs, err := rd.ReadAll()
 	if err != nil {
 		return nil, err
 	}
 	var out []keyRecord
 	for _, r := range recs {
+		if len(r) != 4 && len(r) != 5 {
+			return nil, fmt.Errorf("linha inválida %q", r[0])
+		}
 		dev, e1 := hex.DecodeString(strings.TrimSpace(r[0]))
 		ka, e2 := hex.DecodeString(strings.TrimSpace(r[1]))
 		kr, e3 := hex.DecodeString(strings.TrimSpace(r[2]))
@@ -158,6 +163,7 @@ func appendCSV(file string, d provisioning.Dongle) error {
 		return err
 	}
 	defer f.Close()
-	_, err = fmt.Fprintf(f, "%s,%s,%s,%s\n", hex.EncodeToString(d.DevID), hex.EncodeToString(d.KAuth), hex.EncodeToString(d.KRec), d.Profile)
+	_, err = fmt.Fprintf(f, "%s,%s,%s,%s,%s\n", hex.EncodeToString(d.DevID), hex.EncodeToString(d.KAuth), hex.EncodeToString(d.KRec), d.Profile,
+		hex.EncodeToString(d.KSig))
 	return err
 }

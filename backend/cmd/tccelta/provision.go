@@ -2,19 +2,14 @@ package main
 
 import (
 	"context"
-	"encoding/csv"
-	"encoding/hex"
 	"flag"
 	"fmt"
-	"os"
-	"strings"
 
 	"tccelta/backend/internal/adapter/postgres"
 	"tccelta/backend/internal/config"
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/dongle"
 	"tccelta/backend/internal/tools/provisioning"
-	"tccelta/backend/internal/tools/simulator"
 	provisioningUC "tccelta/backend/internal/usecase/provisioning"
 )
 
@@ -74,34 +69,4 @@ func cmdProvision(ctx context.Context, args []string) error {
 		}
 	}
 	return nil
-}
-
-// readKeysCSV lê dev_id_hex,k_auth_hex,k_rec_hex,perfil (dongles de teste do simulador).
-func readKeysCSV(file string) ([]simulator.Keys, error) {
-	f, err := os.Open(file)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	rd := csv.NewReader(f)
-	rd.Comment = '#'
-	rd.FieldsPerRecord = 4
-	recs, err := rd.ReadAll()
-	if err != nil {
-		return nil, err
-	}
-	var out []simulator.Keys
-	for _, r := range recs {
-		var c simulator.Keys
-		dev, e1 := hex.DecodeString(strings.TrimSpace(r[0]))
-		ka, e2 := hex.DecodeString(strings.TrimSpace(r[1]))
-		kr, e3 := hex.DecodeString(strings.TrimSpace(r[2]))
-		if e1 != nil || e2 != nil || e3 != nil || len(dev) != 8 {
-			return nil, fmt.Errorf("linha inválida %q", r[0])
-		}
-		copy(c.Dev[:], dev)
-		c.KAuth, c.KRec = ka, kr
-		out = append(out, c)
-	}
-	return out, nil
 }

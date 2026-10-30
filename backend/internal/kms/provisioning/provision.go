@@ -10,6 +10,7 @@ package provisioning
 import (
 	"bytes"
 	"context"
+	"crypto/ecdh"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
@@ -153,12 +154,21 @@ func (p *Provisioner) importIfMissing(ctx context.Context, mount, name string, c
 	return nil
 }
 
-// Dongle de teste/gerado.
+// Dongle de teste/gerado. KSig (escalar P-256 de 32 B, big-endian) só existe no perfil asym.
 type Dongle struct {
 	DevID       []byte
 	KAuth, KRec []byte
 	Profile     string
 	KSig        []byte
+}
+
+// PublicKey deriva a chave pública não comprimida (04 ‖ X ‖ Y, 65 B) de KSig.
+func (d Dongle) PublicKey() ([]byte, error) {
+	k, err := ecdh.P256().NewPrivateKey(d.KSig)
+	if err != nil {
+		return nil, fmt.Errorf("k_sig inválida: %w", err)
+	}
+	return k.PublicKey().Bytes(), nil
 }
 
 // ImportWithKeys importa K_auth/K_rec do dongle (idempotente) e devolve o registro. As chaves do
@@ -172,6 +182,11 @@ func (p *Provisioner) ImportWithKeys(ctx context.Context, d Dongle, desc string)
 	if err != nil {
 		return Record{}, err
 	}
+	if d.Profile == "asym" {
+		if _, err := d.PublicKey(); err != nil {
+			return Record{}, err
+		}
+	}
 	hx := hex.EncodeToString(d.DevID)
 	if err := p.importIfMissing(ctx, p.MountAuth, hx, func() (string, error) { return Wrap(pa, d.KAuth) }); err != nil {
 		return Record{}, err
@@ -179,7 +194,15 @@ func (p *Provisioner) ImportWithKeys(ctx context.Context, d Dongle, desc string)
 	if err := p.importIfMissing(ctx, p.MountRec, hx, func() (string, error) { return Wrap(pr, d.KRec) }); err != nil {
 		return Record{}, err
 	}
-	return Record{Schema: RecordSchema, DevID: hx, Profile: d.Profile, KMSAuthKey: hx, KMSRecKey: hx, Description: desc}, nil
+	rec := Record{Schema: RecordSchema, DevID: hx, Profile: d.Profile, KMSAuthKey: hx, KMSRecKey: hx, Description: desc}
+	if d.Profile == "asym" {
+		pub, err := d.PublicKey()
+		if err != nil {
+			return Record{}, err
+		}
+		rec.PublicKey = strings.ToUpper(hex.EncodeToString(pub))
+	}
+	return rec, nil
 }
 
 // NewDongle gera um dongle de teste, importa as chaves e devolve o dongle e o registro (recusado em producao).
@@ -194,6 +217,13 @@ func (p *Provisioner) NewDongle(ctx context.Context, profile string) (Dongle, Re
 			if _, err := rand.Read(b); err != nil {
 				return Dongle{}, Record{}, err
 			}
+		}
+		if profile == "asym" {
+			k, err := ecdh.P256().GenerateKey(rand.Reader)
+			if err != nil {
+				return Dongle{}, Record{}, err
+			}
+			d.KSig = k.Bytes()
 		}
 		already, err := p.exists(ctx, p.MountAuth, hex.EncodeToString(d.DevID))
 		if err != nil {
@@ -211,7 +241,8 @@ func (p *Provisioner) NewDongle(ctx context.Context, profile string) (Dongle, Re
 	return Dongle{}, Record{}, errors.New("não foi possível gerar um DevId livre")
 }
 
-// ImportCSV importa dev_id_hex,k_auth_hex,k_rec_hex,perfil (só fora de produção). Idempotente.
+// ImportCSV importa dev_id_hex,k_auth_hex,k_rec_hex,perfil[,k_sig_hex] (só fora de produção).
+// A 5ª coluna é obrigatória no asym e proibida nos outros perfis (vazia é aceita). Idempotente.
 func (p *Provisioner) ImportCSV(ctx context.Context, file string) ([]Dongle, []Record, error) {
 	if p.Environment == "producao" {
 		return nil, nil, errors.New("importar chaves de teste é recusado em AMBIENTE=producao")
@@ -223,7 +254,7 @@ func (p *Provisioner) ImportCSV(ctx context.Context, file string) ([]Dongle, []R
 	defer f.Close()
 	rd := csv.NewReader(f)
 	rd.Comment = '#'
-	rd.FieldsPerRecord = 4
+	rd.FieldsPerRecord = -1
 	var ds []Dongle
 	var rs []Record
 	for {
@@ -234,6 +265,9 @@ func (p *Provisioner) ImportCSV(ctx context.Context, file string) ([]Dongle, []R
 		if err != nil {
 			return nil, nil, err
 		}
+		if len(rec) != 4 && len(rec) != 5 {
+			return nil, nil, fmt.Errorf("linha inválida: %v (esperadas 4 ou 5 colunas)", rec[0])
+		}
 		dev, e1 := hex.DecodeString(strings.TrimSpace(rec[0]))
 		ka, e2 := hex.DecodeString(strings.TrimSpace(rec[1]))
 		kr, e3 := hex.DecodeString(strings.TrimSpace(rec[2]))
@@ -241,6 +275,22 @@ func (p *Provisioner) ImportCSV(ctx context.Context, file string) ([]Dongle, []R
 			return nil, nil, fmt.Errorf("linha inválida: %v", rec[0])
 		}
 		d := Dongle{DevID: dev, KAuth: ka, KRec: kr, Profile: strings.TrimSpace(rec[3])}
+		kSigHex := ""
+		if len(rec) == 5 {
+			kSigHex = strings.TrimSpace(rec[4])
+		}
+		switch {
+		case d.Profile == "asym" && kSigHex == "":
+			return nil, nil, fmt.Errorf("dongle %s: perfil asym exige k_sig_hex", rec[0])
+		case d.Profile != "asym" && kSigHex != "":
+			return nil, nil, fmt.Errorf("dongle %s: k_sig_hex só é válida no perfil asym", rec[0])
+		case kSigHex != "":
+			ks, err := hex.DecodeString(kSigHex)
+			if err != nil || len(ks) != 32 {
+				return nil, nil, fmt.Errorf("dongle %s: k_sig_hex inválida", rec[0])
+			}
+			d.KSig = ks
+		}
 		r, err := p.ImportWithKeys(ctx, d, "dongle de teste (CSV)")
 		if err != nil {
 			return nil, nil, fmt.Errorf("%s: %w", rec[0], err)

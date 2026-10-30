@@ -19,7 +19,7 @@ A API não tem nenhuma credencial do Vault. O AppRole que ela usava (`tccelta-ap
 tccelta-kms serve                                    # serviço HTTP (:8300) + métricas/saúde (:9300)
 tccelta-kms jwt rotate [--now]                    # rotaciona/expurga a chave do JWT uma vez
 tccelta-kms jwt schedule                            # idem, em laço (serviço jwt-rotacao)
-tccelta-kms provision new --count N [--csv-out FILE]
+tccelta-kms provision new --count N [--profile hmac|asym|none] [--csv-out FILE]
 tccelta-kms provision import --file dongles.csv
 tccelta-kms provision import-record --file kms_record.json
 tccelta-kms provision export-wrapping --out kms_wrapping.json
@@ -29,6 +29,20 @@ tccelta-kms health --url http://127.0.0.1:9300/saude/pronta
 
 `provision` grava `<out>/<devid>/record.json` ([`kms-dongle-record.md`](kms-dongle-record.md));
 o cadastro no banco é `tccelta provision register --file …` no backend.
+
+### CSV de chaves de teste
+
+`provision import --file`, `provision verify --file`, `--csv-out` e o `--keys` do simulador usam o mesmo CSV:
+
+```
+dev_id_hex,k_auth_hex,k_rec_hex,perfil[,k_sig_hex]
+```
+
+A 5ª coluna é opcional. No perfil `asym` ela é **obrigatória** e traz o escalar P-256 de 32 B (big-endian);
+a `public_key` do `record.json` é derivada dela. Nos outros perfis ela é proibida (vazia é aceita). Arquivos de
+4 colunas continuam válidos. `provision new --profile asym` gera o par, grava `k_sig` na NVS
+(`secnvs.bin`), inclui `k_sig` e `k_sig_public` no `bench_keys.json` e a `k_sig` na 5ª coluna do `--csv-out`.
+`K_auth` e `K_rec` são importadas no Transit em todos os perfis; no `asym` a `K_rec` não é usada nos blocos.
 
 ## Configuração (variáveis de ambiente)
 
