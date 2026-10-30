@@ -1,88 +1,152 @@
-run:
-  timeout: 5m
+version: "2"
 linters:
-  enable: [errcheck, gosec, bodyclose, sqlclosecheck, contextcheck, depguard]
-linters-settings:
-  gosec:
-    excludes:
-      # G115 (overflow em conversao de inteiros): o protocolo binario e as colunas int2/int4 do banco
-      # exigem conversoes entre larguras; os valores sao limitados pelo formato (validado na borda).
-      - G115
-  depguard:
-    rules:
-      # Direção: domain <- port <- usecase <- http <- cmd, com os adaptadores (adapter/*) implementando port.
-      # Os adaptadores só são ligados em cmd/tccelta (composition root).
-      # Banco: so adapter/postgres, database (e dbgen) e cmd falam com pgx; o resto chega ao banco pelas portas.
-      # worker e tools sao ligados aos adaptadores por cmd.
-      domain:
-        files: ["**/internal/domain/**"]
-        deny:
-          - { pkg: github.com/jackc/pgx, desc: "o dominio e puro: sem banco" }
-          - { pkg: github.com/prometheus, desc: "o dominio e puro: sem metricas" }
-          - { pkg: net/http, desc: "o dominio e puro: sem transporte" }
-          - { pkg: tccelta/backend/internal/database, desc: "o dominio e puro: sem banco" }
-          - { pkg: tccelta/backend/internal/port, desc: "o dominio nao conhece as portas" }
-          - { pkg: tccelta/backend/internal/usecase, desc: "o dominio nao conhece os casos de uso" }
-          - { pkg: tccelta/backend/internal/adapter, desc: "o dominio nao conhece os adaptadores" }
-          - { pkg: tccelta/backend/internal/http, desc: "o dominio nao conhece o transporte" }
-      port:
-        files: ["**/internal/port/**", "!**/internal/port/porttest/**"]
-        deny:
-          - { pkg: github.com/jackc/pgx, desc: "as portas sao interfaces: sem banco" }
-          - { pkg: github.com/prometheus, desc: "as portas sao interfaces: sem metricas concretas" }
-          - { pkg: net/http, desc: "as portas nao conhecem o transporte" }
-          - { pkg: tccelta/backend/internal/database, desc: "as portas nao conhecem a infraestrutura" }
-          - { pkg: tccelta/backend/internal/usecase, desc: "as portas nao conhecem os casos de uso" }
-          - { pkg: tccelta/backend/internal/adapter, desc: "as portas nao conhecem os adaptadores" }
-          - { pkg: tccelta/backend/internal/http, desc: "as portas nao conhecem o transporte" }
-      usecase:
-        # os testes podem usar o adaptador em memoria
-        files: ["**/internal/usecase/**", "!$test"]
-        deny:
-          - { pkg: github.com/jackc/pgx, desc: "casos de uso acessam o banco so pelas portas de internal/port" }
-          - { pkg: github.com/prometheus, desc: "metricas so pelas portas de internal/port" }
-          - { pkg: net/http, desc: "casos de uso nao conhecem o transporte" }
-          - { pkg: tccelta/backend/internal/database, desc: "casos de uso acessam o banco so pelas portas de internal/port" }
-          - { pkg: tccelta/backend/internal/adapter, desc: "casos de uso dependem das portas, nunca dos adaptadores" }
-          - { pkg: tccelta/backend/internal/http, desc: "casos de uso nao conhecem o transporte" }
-      http:
-        files: ["**/internal/http/**", "!$test"]
-        deny:
-          - { pkg: github.com/jackc/pgx, desc: "o HTTP e so transporte" }
-          - { pkg: tccelta/backend/internal/database, desc: "o HTTP e so transporte" }
-          - { pkg: tccelta/backend/internal/adapter, desc: "o HTTP chama casos de uso e portas, nunca adaptadores" }
-      adapter:
-        files: ["**/internal/adapter/**"]
-        deny:
-          - { pkg: tccelta/backend/internal/usecase, desc: "adaptadores implementam portas, nao conhecem os casos de uso" }
-          - { pkg: tccelta/backend/internal/http, desc: "adaptadores nao conhecem o transporte" }
-      # worker (runtime assincrono) e tools (ferramentas) dependem de usecase e port; os adaptadores chegam por injecao em cmd.
-      runtime:
-        files: ["**/internal/worker/**", "**/internal/tools/**", "!$test"]
-        deny:
-          - { pkg: tccelta/backend/internal/adapter, desc: "worker e ferramentas recebem as portas de cmd, nunca importam adaptadores" }
-      # Nada fora de adapter/postgres, database e cmd importa o driver, o pacote database ou o sqlc gerado.
-      banco:
-        files: ["!**/internal/adapter/postgres/**", "!**/internal/database/**", "!**/cmd/**"]
-        deny:
-          - { pkg: github.com/jackc/pgx, desc: "o driver do banco so e importado por adapter/postgres, database e cmd" }
-          - { pkg: tccelta/backend/internal/database, desc: "o banco (database e dbgen) so e importado por adapter/postgres e cmd; o resto usa as portas" }
-      # O KMS e o unico cliente do Vault e outro processo: so enxerga a biblioteca padrao, o Prometheus e o
-      # disjuntor compartilhado (platform/breaker, sem dependencias do projeto); nunca os demais pacotes de
-      # tccelta/backend. Pacote -> regra: lista branca (strict) via allow.
-      kms-isolamento:
-        list-mode: strict
-        files: ["**/internal/kms/**", "**/cmd/tccelta-kms/**"]
-        allow:
-          - $gostd
-          - github.com/prometheus
-          - tccelta/backend/internal/kms
-          - tccelta/backend/internal/platform/breaker
-      # Nada fora do KMS importa internal/kms (a API fala com ele so por HTTP, contrato em
-      # docs/kms-http-contract.md).
-      sem-kms:
-        files: ["!**/internal/kms/**", "!**/cmd/tccelta-kms/**"]
-        deny:
-          - { pkg: tccelta/backend/internal/kms, desc: "o backend fala com o KMS so por HTTP (internal/adapter/kmsclient)" }
-issues:
-  exclude-dirs: [internal/database/dbgen]
+  enable:
+    - bodyclose
+    - contextcheck
+    - depguard
+    - gosec
+    - sqlclosecheck
+  settings:
+    depguard:
+      rules:
+        adapter:
+          files:
+            - '**/internal/adapter/**'
+          deny:
+            - pkg: tccelta/backend/internal/usecase
+              desc: adaptadores implementam portas, nao conhecem os casos de uso
+            - pkg: tccelta/backend/internal/http
+              desc: adaptadores nao conhecem o transporte
+        banco:
+          files:
+            - '!**/internal/adapter/postgres/**'
+            - '!**/internal/database/**'
+            - '!**/cmd/**'
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: o driver do banco so e importado por adapter/postgres, database e cmd
+            - pkg: tccelta/backend/internal/database
+              desc: o banco (database e dbgen) so e importado por adapter/postgres e cmd; o resto usa as portas
+        domain:
+          files:
+            - '**/internal/domain/**'
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: 'o dominio e puro: sem banco'
+            - pkg: github.com/prometheus
+              desc: 'o dominio e puro: sem metricas'
+            - pkg: net/http
+              desc: 'o dominio e puro: sem transporte'
+            - pkg: tccelta/backend/internal/database
+              desc: 'o dominio e puro: sem banco'
+            - pkg: tccelta/backend/internal/port
+              desc: o dominio nao conhece as portas
+            - pkg: tccelta/backend/internal/usecase
+              desc: o dominio nao conhece os casos de uso
+            - pkg: tccelta/backend/internal/adapter
+              desc: o dominio nao conhece os adaptadores
+            - pkg: tccelta/backend/internal/http
+              desc: o dominio nao conhece o transporte
+        http:
+          files:
+            - '**/internal/http/**'
+            - '!$test'
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: o HTTP e so transporte
+            - pkg: tccelta/backend/internal/database
+              desc: o HTTP e so transporte
+            - pkg: tccelta/backend/internal/adapter
+              desc: o HTTP chama casos de uso e portas, nunca adaptadores
+        kms-isolamento:
+          list-mode: strict
+          files:
+            - '**/internal/kms/**'
+            - '**/cmd/tccelta-kms/**'
+          allow:
+            - $gostd
+            - github.com/prometheus
+            - tccelta/backend/internal/kms
+            - tccelta/backend/internal/platform/breaker
+        port:
+          files:
+            - '**/internal/port/**'
+            - '!**/internal/port/porttest/**'
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: 'as portas sao interfaces: sem banco'
+            - pkg: github.com/prometheus
+              desc: 'as portas sao interfaces: sem metricas concretas'
+            - pkg: net/http
+              desc: as portas nao conhecem o transporte
+            - pkg: tccelta/backend/internal/database
+              desc: as portas nao conhecem a infraestrutura
+            - pkg: tccelta/backend/internal/usecase
+              desc: as portas nao conhecem os casos de uso
+            - pkg: tccelta/backend/internal/adapter
+              desc: as portas nao conhecem os adaptadores
+            - pkg: tccelta/backend/internal/http
+              desc: as portas nao conhecem o transporte
+        runtime:
+          files:
+            - '**/internal/worker/**'
+            - '**/internal/tools/**'
+            - '!$test'
+          deny:
+            - pkg: tccelta/backend/internal/adapter
+              desc: worker e ferramentas recebem as portas de cmd, nunca importam adaptadores
+        sem-kms:
+          files:
+            - '!**/internal/kms/**'
+            - '!**/cmd/tccelta-kms/**'
+          deny:
+            - pkg: tccelta/backend/internal/kms
+              desc: o backend fala com o KMS so por HTTP (internal/adapter/kmsclient)
+        usecase:
+          files:
+            - '**/internal/usecase/**'
+            - '!$test'
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: casos de uso acessam o banco so pelas portas de internal/port
+            - pkg: github.com/prometheus
+              desc: metricas so pelas portas de internal/port
+            - pkg: net/http
+              desc: casos de uso nao conhecem o transporte
+            - pkg: tccelta/backend/internal/database
+              desc: casos de uso acessam o banco so pelas portas de internal/port
+            - pkg: tccelta/backend/internal/adapter
+              desc: casos de uso dependem das portas, nunca dos adaptadores
+            - pkg: tccelta/backend/internal/http
+              desc: casos de uso nao conhecem o transporte
+    gosec:
+      excludes:
+        # G115 (overflow em conversao de inteiros): o protocolo binario e as colunas int2/int4 do banco
+        # exigem conversoes entre larguras; os valores sao limitados pelo formato (validado na borda).
+        - G115
+        # G703/G704 (taint analysis, novas no gosec do golangci-lint v2): caminhos e URLs vem dos
+        # argumentos das CLIs (cmd/*), nao de entrada de usuario da API.
+        - G703
+        - G704
+    staticcheck:
+      # paridade com o v1: so as checagens SA (as QF/ST, de estilo, entraram no v2).
+      checks: ["SA*"]
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - internal/database/dbgen
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

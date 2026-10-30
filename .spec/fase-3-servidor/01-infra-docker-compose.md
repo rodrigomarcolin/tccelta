@@ -108,7 +108,7 @@ Estágio `build` (`golang:${GO_VERSAO}-bookworm`) compila os dois binários. Alv
 | qualidade | `test`, `test-integration`, `vectors`, `lint`, `build-tools`, `build-kms`, `docker-kms` |
 | simulação | `scenario C= [N= ARGS=]`, `e2e`, `load-test [N=]` |
 
-Ferramentas em contêiner descartável com versões fixas (Go 1.24, sqlc 1.27.0, golangci-lint v1.64.8, goose v3.22.1, Python 3.12); nada é instalado no host. O `Makefile` exporta `MSYS_NO_PATHCONV=1` (Git Bash no Windows).
+Ferramentas em contêiner descartável com versões fixas (Go 1.26, sqlc 1.27.0, golangci-lint v2.15.0, goose v3.22.1, Python 3.12); nada é instalado no host. O `Makefile` exporta `MSYS_NO_PATHCONV=1` (Git Bash no Windows).
 
 ## Variáveis do `.env` (`.env.example`)
 

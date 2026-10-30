@@ -82,7 +82,7 @@ Todos os comandos rodam a partir de `backend/`.
 | `SIM_DB` | `--db-url-env SIM_BANCO_URL` | Aponta o simulador para a variável com a URL do banco |
 
 **Imagens de ferramenta (versões fixas)**: Go `golang:1.26-bookworm`, sqlc `sqlc/sqlc:1.27.0`,
-golangci-lint `golangci/golangci-lint:v1.64.8`, goose `ghcr.io/pressly/goose:v3.22.1`,
+golangci-lint `golangci/golangci-lint:v2.15.0`, goose `ghcr.io/pressly/goose:v3.22.1`,
 Python `python:3.12-slim`.
 
 **Parâmetros de linha de comando.** Alguns alvos leem variáveis que você passa depois do nome:
@@ -172,7 +172,7 @@ cadastrá-lo, monte um CSV com o mesmo formato (`dev_id_hex,k_auth_hex,k_rec_hex
 | `test` | `go test -race ./...` em contêiner | Todo o módulo, inclusive o KMS |
 | `test-integration` | `go test -p 1 -tags integration -race ./...`, com o socket do Docker montado para o testcontainers | Hoje **nenhum arquivo** tem a tag `integration`, então o alvo só reexecuta os testes de unidade |
 | `vectors` | Roda `scripts/gerar_vetores.py`, que gera `internal/domain/protocol/testdata/vetores.json` e o copia para `../mobile-app/test/fixtures/protocolo_vetores.json` | O script foi escrito de forma independente do código Go, a partir da spec, para servir de referência cruzada. Os vetores do firmware (`vetores_firmware.json`) vêm de outro gerador, o `vectors.py` |
-| `lint` | `golangci-lint run` (v1.64.8) com `.golangci.yml` | Inclui a regra `depguard` que impede a API e o KMS de importarem um ao outro. Ainda não foi executado |
+| `lint` | `golangci-lint run` (v2.15.0) com `.golangci.yml` | Inclui a regra `depguard` que impede a API e o KMS de importarem um ao outro. Ainda não foi executado |
 | `build-tools` | Reconstrói as imagens `ferramentas` e `kms-ferramentas` | O `docker compose run` só constrói uma imagem que **não existe**; depois de mudar o código, uma imagem antiga continua rodando o binário antigo. O `scenario` e o `e2e` já chamam este passo |
 | `scenario C=<nome> [N=3] [ARGS='…']` | Cria `N` dongles **novos** (KMS, depois banco), grava o CSV em `saida/dongles-<nome>.csv` e roda esse cenário do simulador sobre eles, na stack de desenvolvimento | Ex.: `make scenario C=negative-protocol` ou `make scenario C=time ARGS='--speedup 120'`. Cenários: `e2e`, `negative-protocol`, `time`, `generation`, `reconnection`, `load`, `knee` |
 | `e2e` | Sobe a stack isolada `compose.test.yaml`, reconstrói as imagens de ferramentas e roda quatro cenários do simulador em sequência: `e2e`, `negative-protocol`, `time --speedup 120` e `generation`. **Cada cenário recebe 3 dongles novos** | Derruba a stack com `down -v` no fim, passando ou não, e devolve o código do primeiro cenário que falhou. Os comandos foram validados com `make -n` e `bash -n`, e o alvo foi executado depois pelo autor do projeto (resultado não registrado aqui) |

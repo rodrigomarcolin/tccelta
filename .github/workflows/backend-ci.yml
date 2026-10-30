@@ -27,8 +27,8 @@ jobs:
       - name: sqlc diff (codigo gerado em dia)
         run: docker run --rm -v "$PWD":/src -w /src sqlc/sqlc:1.27.0 diff
       # inclui o depguard (.golangci.yml): camadas sem atalhos e isolamento de internal/kms
-      - uses: golangci/golangci-lint-action@v6
-        with: { version: v1.64.8, working-directory: backend }
+      - uses: golangci/golangci-lint-action@v8
+        with: { version: v2.15.0, working-directory: backend }
 
   unit:
     runs-on: ubuntu-latest
