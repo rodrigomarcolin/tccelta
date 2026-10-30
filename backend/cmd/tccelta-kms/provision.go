@@ -126,7 +126,7 @@ func cmdProvision(ctx context.Context, args []string) error {
 type keyRecord struct{ dev, kAuth, kRec []byte }
 
 func readKeysCSV(file string) ([]keyRecord, error) {
-	f, err := os.Open(file)
+	f, err := os.Open(file) //nolint:gosec // G703: caminho do CSV passado pelo operador na CLI de provisionamento
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func readKeysCSV(file string) ([]keyRecord, error) {
 
 // appendCSV grava as chaves do dongle de teste no CSV do simulador (0600: tem segredo).
 func appendCSV(file string, d provisioning.Dongle) error {
-	f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G703: caminho do CSV passado pelo operador na CLI de provisionamento
 	if err != nil {
 		return err
 	}
