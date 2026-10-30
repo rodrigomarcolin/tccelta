@@ -12,7 +12,7 @@ class HmacBlockAuth final : public collector::IMessageAuth {
 public:
     HmacBlockAuth(crypto::IHmacSha256& hmacRec, const uint8_t devId[8]);
     size_t tagSize() const override { return 32; }
-    void sign(const uint8_t* data, size_t len, uint8_t* tagOut) override;
+    bool sign(const uint8_t* data, size_t len, uint8_t* tagOut) override;
     bool verify(const uint8_t* data, size_t len, const uint8_t* tag) override;
 
 private:

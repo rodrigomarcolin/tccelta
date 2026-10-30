@@ -407,8 +407,13 @@ bool SyncEngine::sendLoss(uint32_t s, uint32_t to, const char* reason) {
     collector::buildLossMarker(_loss, s, to);
     const uint64_t t0 = _d.clock.nowUs();
     _loss.tagLength = static_cast<uint8_t>(_d.lossAuth.tagSize());
-    _d.lossAuth.sign(_loss.bytes, _loss.length, _loss.tag);
+    const bool signed_ = _d.lossAuth.sign(_loss.bytes, _loss.length, _loss.tag);
     const uint32_t signUs = sinceUs(t0);
+    if (!signed_) {
+        // Não envia um LOSS sem tag válida: o cursor não avança e o marcador é remontado na próxima tentativa.
+        Event("SIGN_FAIL").token("kind", "loss").num("seq", s).num("attempt", 1).num("rc", _d.lossAuth.lastError());
+        return false;
+    }
     Event("MARKER").token("kind", "loss").num("seq", s).num("from", s).num("to", to).token("reason", reason);
 
     uint8_t* value = &_tx[kTlvHeaderSize];

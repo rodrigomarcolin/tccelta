@@ -2,10 +2,12 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "collector/BlockFormat.h"
 #include "collector/BlockWriter.h"
+#include "collector/Events.h"
 #include "collector/MarkerBlock.h"
 #include "collector/SegmentFormat.h"
 #include "crypto/HmacSha256.h"
@@ -16,8 +18,27 @@
 
 using namespace collector;
 
-void setUp() {}
-void tearDown() {}
+namespace {
+class CaptureSink : public IEventSink {
+public:
+    void emit(const char* body, size_t len, const uint32_t*) override { lines.emplace_back(body, len); }
+    std::vector<std::string> of(const std::string& event) const {
+        std::vector<std::string> out;
+        for (const auto& l : lines) {
+            if (l.compare(0, event.size() + 1, event + " ") == 0) out.push_back(l);
+        }
+        return out;
+    }
+    std::vector<std::string> lines;
+};
+CaptureSink sink;
+}  // namespace
+
+void setUp() {
+    sink = CaptureSink();
+    setEventSink(&sink);
+}
+void tearDown() { setEventSink(nullptr); }
 
 static std::vector<uint8_t> unhex(const char* s) {
     std::vector<uint8_t> out;
@@ -309,9 +330,10 @@ void test_writer_boot_pending_blocks_data_until_written() {
 
 struct SlowAuth : FakeAuth {
     FakeClock* clock = nullptr;
-    void sign(const uint8_t* d, size_t l, uint8_t* t) override {
-        FakeAuth::sign(d, l, t);
+    bool sign(const uint8_t* d, size_t l, uint8_t* t) override {
+        const bool ok = FakeAuth::sign(d, l, t);
         clock->advanceUs(84);
+        return ok;
     }
 };
 
@@ -326,6 +348,62 @@ void test_writer_reports_durations_from_clock() {
     WriteReport report;
     TEST_ASSERT_TRUE(writer.write(block, report));
     TEST_ASSERT_EQUAL_UINT32(84, report.signUs);
+}
+
+void test_writer_sign_failure_once_retries_and_commits() {
+    WriterRig rig;
+    rig.auth.failSigns = 1;
+    Block block = blockWithOneRecord();
+    WriteReport report;
+    TEST_ASSERT_TRUE(rig.writer.write(block, report));
+    TEST_ASSERT_TRUE(report.ok);
+    TEST_ASSERT_TRUE(report.signOk);
+    TEST_ASSERT_EQUAL_UINT32(2, rig.auth.signedLengths.size());
+    TEST_ASSERT_EQUAL_UINT32(7, blockSeq(rig.store.blocks[0]));
+    TEST_ASSERT_EQUAL_UINT32(8, rig.writer.nextSeq());
+    TEST_ASSERT_EQUAL_UINT32(0, rig.writer.failedBlocks());
+    TEST_ASSERT_EQUAL_UINT8(2, rig.store.blocks[0].tag[0]);  // tag da 2ª chamada a `sign`
+    TEST_ASSERT_EQUAL_UINT32(1, sink.of("SIGN_FAIL").size());
+    TEST_ASSERT_TRUE(sink.of("SIGN_FAIL")[0].find("attempt=1") != std::string::npos);
+}
+
+void test_writer_sign_failure_twice_drops_block_without_consuming_seq() {
+    WriterRig rig;
+    rig.auth.failSigns = 2;
+    Block dropped = blockWithOneRecord();
+    WriteReport report;
+    TEST_ASSERT_FALSE(rig.writer.write(dropped, report));
+    TEST_ASSERT_FALSE(report.ok);
+    TEST_ASSERT_FALSE(report.signOk);
+    TEST_ASSERT_EQUAL_UINT32(0, rig.store.blocks.size());  // nada de tag inválida na flash
+    TEST_ASSERT_EQUAL_UINT32(7, rig.writer.nextSeq());
+    TEST_ASSERT_EQUAL_UINT32(1, rig.writer.failedBlocks());
+    const auto fail = sink.of("SIGN_FAIL");
+    TEST_ASSERT_EQUAL_UINT32(2, fail.size());
+    TEST_ASSERT_TRUE(fail[0].find("kind=block") != std::string::npos);
+    TEST_ASSERT_TRUE(fail[0].find("seq=7") != std::string::npos);
+    TEST_ASSERT_TRUE(fail[0].find("attempt=1") != std::string::npos);
+    TEST_ASSERT_TRUE(fail[1].find("attempt=2") != std::string::npos);
+    TEST_ASSERT_TRUE(fail[1].find("rc=-19968") != std::string::npos);
+
+    Block next = blockWithOneRecord();  // o próximo bloco reusa o seq: sem lacuna nem LOSS
+    TEST_ASSERT_TRUE(rig.writer.write(next, report));
+    TEST_ASSERT_TRUE(report.signOk);
+    TEST_ASSERT_EQUAL_UINT32(7, blockSeq(rig.store.blocks.back()));
+    TEST_ASSERT_EQUAL_UINT32(8, rig.writer.nextSeq());
+}
+
+void test_writer_sign_failure_keeps_boot_pending() {
+    WriterRig rig(10, 0, 4);
+    WriteReport report;
+    rig.auth.failSigns = 2;
+    TEST_ASSERT_FALSE(rig.writer.writeBootMarker(5, 9, report));
+    TEST_ASSERT_TRUE(rig.writer.bootPending());
+    TEST_ASSERT_EQUAL_UINT32(0, rig.store.blocks.size());
+    Block data = blockWithOneRecord();
+    TEST_ASSERT_TRUE(rig.writer.write(data, report));  // BOOT sai antes do dado
+    TEST_ASSERT_EQUAL_UINT32(2, rig.store.blocks.size());
+    TEST_ASSERT_EQUAL_UINT32(10, blockSeq(rig.store.blocks[0]));
 }
 
 int main(int, char**) {
@@ -343,5 +421,8 @@ int main(int, char**) {
     RUN_TEST(test_writer_retry_writes_same_bytes_and_double_failure_keeps_seq);
     RUN_TEST(test_writer_boot_pending_blocks_data_until_written);
     RUN_TEST(test_writer_reports_durations_from_clock);
+    RUN_TEST(test_writer_sign_failure_once_retries_and_commits);
+    RUN_TEST(test_writer_sign_failure_twice_drops_block_without_consuming_seq);
+    RUN_TEST(test_writer_sign_failure_keeps_boot_pending);
     return UNITY_END();
 }

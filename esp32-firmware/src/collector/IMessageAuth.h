@@ -15,15 +15,18 @@ class IMessageAuth {
 public:
     virtual ~IMessageAuth() = default;
     virtual size_t tagSize() const = 0;
-    virtual void sign(const uint8_t* message, size_t len, uint8_t* tagOut) = 0;
+    /** `false` = a assinatura falhou e `tagOut` não vale; nunca sai uma tag de zeros. */
+    virtual bool sign(const uint8_t* message, size_t len, uint8_t* tagOut) = 0;
     virtual bool verify(const uint8_t* message, size_t len, const uint8_t* tag) = 0;
+    /** Código da última falha de `sign` (mbedTLS, quando houver); 0 se não houve. */
+    virtual int lastError() const { return 0; }
 };
 
 /** Sem autenticação: não acrescenta nada e aceita tudo. */
 class NoAuth : public IMessageAuth {
 public:
     size_t tagSize() const override { return 0; }
-    void sign(const uint8_t*, size_t, uint8_t*) override {}
+    bool sign(const uint8_t*, size_t, uint8_t*) override { return true; }
     bool verify(const uint8_t*, size_t, const uint8_t*) override { return true; }
 };
 

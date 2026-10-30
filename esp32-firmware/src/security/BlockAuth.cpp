@@ -11,7 +11,7 @@ HmacBlockAuth::HmacBlockAuth(crypto::IHmacSha256& hmacRec, const uint8_t devId[8
     memcpy(_devId, devId, sizeof(_devId));
 }
 
-void HmacBlockAuth::sign(const uint8_t* data, size_t len, uint8_t* tagOut) {
+bool HmacBlockAuth::sign(const uint8_t* data, size_t len, uint8_t* tagOut) {
     const uint8_t type = kTypeBlock;
     _hmac.begin();
     _hmac.update(kDomainLabel, sizeof(kDomainLabel));
@@ -19,12 +19,13 @@ void HmacBlockAuth::sign(const uint8_t* data, size_t len, uint8_t* tagOut) {
     _hmac.update(_devId, sizeof(_devId));
     _hmac.update(data, len);
     _hmac.finish(tagOut);
+    return true;
 }
 
 bool HmacBlockAuth::verify(const uint8_t* data, size_t len, const uint8_t* tag) {
     uint8_t expected[32];
     sign(data, len, expected);
-    bool ok = crypto::ctEqual(expected, tag, sizeof(expected));
+    const bool ok = crypto::ctEqual(expected, tag, sizeof(expected));
     crypto::secureZero(expected, sizeof(expected));
     return ok;
 }
