@@ -9,6 +9,9 @@ import 'package:tccelta_mobile/src/ui/connection/widgets/connection_guard.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
+  // Restos da camada de PSK removida.
+  await prefs.remove('psk_hex');
+  await prefs.remove('security_mode');
   runApp(
     ProviderScope(
       overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],

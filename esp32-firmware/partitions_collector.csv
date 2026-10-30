@@ -1,8 +1,10 @@
-# Coleta (esp32dev, 4 MB): um único app + 2 MB de LittleFS para o log de blocos.
-# Sem OTA: duas partições de app não cabem junto com 2 MB de dados.
-# Name,   Type, SubType,  Offset,   Size
-nvs,      data, nvs,      0x9000,   0x5000,
-phy_init, data, phy,      0xe000,   0x1000,
-factory,  app,  factory,  0x10000,  0x1E0000,
+# Coleta (esp32dev, 4 MB). Mesma tabela em dev, devsec e prod (spec fase-1/01 §9.4).
+# Tabela em 0x10000 (CONFIG_PARTITION_TABLE_OFFSET). Sem OTA: um só app + 2 MB de LittleFS.
+# Name,   Type, SubType,  Offset,   Size,     Flags
+nvs,      data, nvs,      0x12000,  0x5000,
+nvs_key,  data, nvs_keys, 0x17000,  0x1000,   encrypted
+phy_init, data, phy,      0x18000,  0x1000,
+secnvs,   data, nvs,      0x19000,  0x3000,
+factory,  app,  factory,  0x20000,  0x1D0000,
 spiffs,   data, spiffs,   0x1F0000, 0x200000,
 coredump, data, coredump, 0x3F0000, 0x10000,

@@ -3,11 +3,13 @@
 
 namespace collector {
 
-/** Milissegundos desde o boot. */
+/** Tempo desde o boot. */
 class IClock {
 public:
     virtual ~IClock() = default;
     virtual uint32_t nowMs() const = 0;
+    /** Microssegundos desde o boot (durações `_us` dos eventos, spec fase-1/06 §1). */
+    virtual uint64_t nowUs() const { return static_cast<uint64_t>(nowMs()) * 1000u; }
 };
 
 /** `a` ocorre em ou depois de `b`, tolerando a volta do contador de 32 bits. */

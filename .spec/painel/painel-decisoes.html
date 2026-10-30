@@ -1,0 +1,853 @@
+<title>Decisões das Specs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@87.5,500;87.5,600;87.5,700&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: mesa de revisão — trilho de specs à esquerda, fila de cartões de decisão à direita; tipo de marcação codificado numa faixa lateral. */
+:root {
+  --bg: #f4f6f4;
+  --surface: #ffffff;
+  --surface-2: #eef1ee;
+  --fg: #17211d;
+  --muted: #5a6661;
+  --line: #d9dfdb;
+  --accent: #0e6b60;
+  --accent-soft: #dcefeb;
+  --on-accent: #ffffff;
+  --aberto: #a86300;
+  --aberto-soft: #fbefdc;
+  --decisao: #3c58a6;
+  --decisao-soft: #e4e9f7;
+  --verificar: #7447ad;
+  --verificar-soft: #efe7f8;
+  --ok: #2b7a4c;
+  --ok-soft: #e0f1e6;
+  --bad: #b23a3a;
+  --bad-soft: #f7e3e3;
+  --focus: #0e6b60;
+  --f-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1412; --surface: #151d1a; --surface-2: #1b2522; --fg: #e4ebe7; --muted: #94a19b; --line: #283430;
+    --accent: #4fc1ae; --accent-soft: #163a34; --on-accent: #08201c;
+    --aberto: #e6a548; --aberto-soft: #3a2a12; --decisao: #92aaf0; --decisao-soft: #1d2640;
+    --verificar: #bb98ea; --verificar-soft: #2a2040; --ok: #6fcb95; --ok-soft: #173326; --bad: #ef8a8a; --bad-soft: #3c1d1d;
+    --focus: #4fc1ae; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1412; --surface: #151d1a; --surface-2: #1b2522; --fg: #e4ebe7; --muted: #94a19b; --line: #283430;
+  --accent: #4fc1ae; --accent-soft: #163a34; --on-accent: #08201c;
+  --aberto: #e6a548; --aberto-soft: #3a2a12; --decisao: #92aaf0; --decisao-soft: #1d2640;
+  --verificar: #bb98ea; --verificar-soft: #2a2040; --ok: #6fcb95; --ok-soft: #173326; --bad: #ef8a8a; --bad-soft: #3c1d1d;
+  --focus: #4fc1ae; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+h1, h2, h3 { font-family: var(--f-display); font-stretch: 87.5%; text-wrap: balance; margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+code { background: var(--surface-2); padding: 0.05em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+
+.wrap { max-width: 1280px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* Cabeçalho */
+.top { border-bottom: 1px solid var(--line); background: var(--surface); }
+.top .wrap { padding-block: 22px 18px; display: grid; gap: 14px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.top h1 { font-size: clamp(26px, 4vw, 34px); font-weight: 700; line-height: 1.1; }
+.lede { color: var(--muted); max-width: 70ch; margin: 0; }
+.stats { display: flex; flex-wrap: wrap; gap: 10px; }
+.stat { display: grid; gap: 2px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--r); min-width: 150px; background: var(--bg); }
+.stat b { font-family: var(--f-display); font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat span { font-size: 13px; color: var(--muted); }
+.stat.pend b { color: var(--aberto); }
+.stat.apply b { color: var(--accent); }
+.progress { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
+.progress i { display: block; height: 100%; background: var(--aberto); width: 0; transition: width .3s ease; }
+.handoff { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 14px; color: var(--muted); }
+.handoff q { font-family: var(--f-mono); font-size: 13px; color: var(--fg); background: var(--surface-2); padding: 3px 8px; border-radius: 4px; quotes: none; }
+.banner { padding: 10px 14px; border-radius: var(--r); background: var(--bad-soft); color: var(--fg); border: 1px solid var(--bad); font-size: 14px; }
+
+/* Abas */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { border: 0; background: none; padding: 10px 14px; cursor: pointer; color: var(--muted); font-weight: 600; border-bottom: 2px solid transparent; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tab .n { font-family: var(--f-mono); font-weight: 400; font-size: 12px; margin-left: 6px; color: var(--muted); }
+
+/* Corpo */
+.body { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 24px; padding-block: 20px 60px; }
+@media (max-width: 900px) { .body { grid-template-columns: minmax(0, 1fr); } .rail { display: none; } .rail-select { display: block !important; } }
+.rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); align-self: start; max-height: calc(100vh - 24px); overflow-y: auto; display: grid; gap: 18px; padding-right: 4px; }
+.rail h3 { font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.rail-list { display: grid; gap: 2px; }
+.rail-btn { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: 5px; cursor: pointer; color: var(--fg); font-size: 14px; }
+.rail-btn:hover { background: var(--surface-2); }
+.rail-btn[aria-pressed="true"] { background: var(--accent-soft); }
+.rail-btn small { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rail-btn small .p { color: var(--aberto); }
+.rail-select { display: none; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+.chip { border: 1px solid var(--line); background: var(--surface); padding: 5px 11px; border-radius: 999px; cursor: pointer; font-size: 13px; color: var(--fg); }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.search { flex: 1 1 220px; min-width: 0; padding: 7px 11px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.select { padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); font-size: 14px; }
+.count-line { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+
+/* Cartões */
+.list { display: grid; gap: 14px; }
+.card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px 16px 22px; display: grid; gap: 10px; min-width: 0; }
+.card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; border-radius: var(--r) 0 0 var(--r); background: var(--kind); }
+.card[data-tipo="aberto"] { --kind: var(--aberto); --kind-soft: var(--aberto-soft); }
+.card[data-tipo="decisao"] { --kind: var(--decisao); --kind-soft: var(--decisao-soft); }
+.card[data-tipo="verificar"] { --kind: var(--verificar); --kind-soft: var(--verificar-soft); }
+.card-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; justify-content: space-between; }
+.card h3 { font-size: 19px; font-weight: 600; line-height: 1.25; flex: 1 1 320px; min-width: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill.kind { background: var(--kind-soft); color: var(--kind); }
+.pill.state-none { background: var(--surface-2); color: var(--muted); }
+.pill.state-answered { background: var(--accent-soft); color: var(--accent); }
+.pill.state-applied { background: var(--ok-soft); color: var(--ok); }
+.pill.state-bad { background: var(--bad-soft); color: var(--bad); }
+.tag { font-family: var(--f-mono); font-size: 12px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); }
+.ctx { margin: 0; max-width: 78ch; }
+.decided { margin: 0; padding: 8px 12px; background: var(--decisao-soft); border-radius: 5px; max-width: 78ch; }
+.decided b { color: var(--decisao); }
+.why { margin: 0; font-size: 14px; color: var(--muted); max-width: 78ch; }
+.why b { color: var(--fg); font-weight: 600; }
+.how { margin: 0; padding: 8px 12px; background: var(--verificar-soft); border-radius: 5px; font-size: 14px; max-width: 78ch; }
+
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
+.opt { text-align: left; display: grid; gap: 4px; padding: 10px 12px 10px 36px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); cursor: pointer; position: relative; min-width: 0; }
+.opt::before { content: ""; position: absolute; left: 12px; top: 13px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); background: var(--surface); }
+.opt:hover { border-color: var(--accent); }
+.opt[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.opt[aria-checked="true"]::before { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--surface); }
+.opt[disabled] { cursor: default; opacity: .75; }
+.opt .lbl { font-weight: 600; font-size: 14.5px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.opt .det { font-size: 13.5px; color: var(--muted); }
+.rec { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 0 5px; }
+
+.note-row { display: grid; gap: 4px; }
+.note-row label { font-size: 13px; color: var(--muted); }
+.note { width: 100%; min-height: 56px; resize: vertical; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); font-size: 14px; }
+.foot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
+details.refs summary { cursor: pointer; }
+details.refs ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+details.refs li { font-family: var(--f-mono); font-size: 12px; overflow-wrap: anywhere; }
+.saving { font-family: var(--f-mono); }
+.linkish { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font-size: 12.5px; text-decoration: underline; text-underline-offset: 2px; }
+
+/* Visão geral */
+.phase { display: grid; gap: 12px; margin-bottom: 28px; }
+.phase-head { display: grid; gap: 4px; }
+.phase-head h2 { font-size: 23px; font-weight: 700; }
+.phase-head p { margin: 0; color: var(--muted); max-width: 80ch; }
+.spec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.spec { text-align: left; display: grid; gap: 6px; align-content: start; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); cursor: pointer; min-width: 0; }
+.spec:hover { border-color: var(--accent); }
+.spec .file { font-family: var(--f-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.spec .t { font-weight: 600; font-size: 15.5px; }
+.spec .o { font-size: 13.5px; color: var(--muted); }
+.spec .counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.spec .counts span { font-family: var(--f-mono); font-size: 12px; padding: 1px 6px; border-radius: 4px; }
+.c-a { background: var(--aberto-soft); color: var(--aberto); }
+.c-d { background: var(--decisao-soft); color: var(--decisao); }
+.c-v { background: var(--verificar-soft); color: var(--verificar); }
+.c-ok { background: var(--ok-soft); color: var(--ok); }
+
+.empty { padding: 40px 20px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--r); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: var(--r); font-size: 14px; z-index: 20; }
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 6px 12px; border-radius: var(--r); cursor: pointer; font-size: 13.5px; font-weight: 600; }
+.btn:hover { border-color: var(--accent); }
+/* Leitura das specs */
+.reader-head { display: grid; gap: 8px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.reader-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.md { max-width: 82ch; font-size: 15.5px; line-height: 1.65; overflow-wrap: anywhere; }
+.md h1, .md h2, .md h3, .md h4 { line-height: 1.25; margin: 1.6em 0 0.5em; scroll-margin-top: 16px; }
+.md h1 { font-size: 30px; font-weight: 700; margin-top: 0; }
+.md h2 { font-size: 23px; font-weight: 700; padding-top: 0.4em; border-top: 1px solid var(--line); }
+.md h3 { font-size: 18.5px; font-weight: 600; }
+.md h4 { font-size: 16px; font-weight: 600; }
+.md p, .md ul, .md ol, .md blockquote { margin: 0 0 0.9em; }
+.md ul, .md ol { padding-left: 1.4em; }
+.md li + li { margin-top: 0.25em; }
+.md a { color: var(--accent); text-underline-offset: 2px; }
+.md .deadlink { border-bottom: 1px dotted var(--muted); }
+.md blockquote { border-left: 3px solid var(--aberto); background: var(--aberto-soft); padding: 8px 14px; border-radius: 0 5px 5px 0; }
+.md blockquote p:last-child { margin-bottom: 0; }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 1.6em 0; }
+.md pre { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.5; margin: 0 0 1em; }
+.md pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; white-space: pre; }
+.md pre.mermaid { background: var(--surface); text-align: center; }
+.md .tbl { overflow-x: auto; margin: 0 0 1em; border: 1px solid var(--line); border-radius: var(--r); }
+.md table { border-collapse: collapse; font-size: 14px; min-width: 100%; }
+.md th, .md td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.md th { background: var(--surface-2); font-weight: 600; white-space: nowrap; }
+.md tr:last-child td { border-bottom: 0; }
+.md td code, .md th code { overflow-wrap: normal; white-space: nowrap; }
+.mk { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--kind); background: var(--kind-soft); color: var(--kind); font: 600 12px/1.6 var(--f-body); padding: 0 7px; border-radius: 4px; cursor: pointer; vertical-align: 1px; white-space: nowrap; }
+.mk[data-tipo="aberto"] { --kind: var(--aberto); --kind-soft: var(--aberto-soft); }
+.mk[data-tipo="decisao"] { --kind: var(--decisao); --kind-soft: var(--decisao-soft); }
+.mk[data-tipo="verificar"] { --kind: var(--verificar); --kind-soft: var(--verificar-soft); }
+.mk::after { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; }
+.mk.is-answered::after { background: currentColor; }
+.mk.is-applied { border-color: var(--ok); color: var(--ok); background: var(--ok-soft); }
+.mk.is-applied::after { background: currentColor; }
+.mk.no-item { cursor: default; opacity: .7; }
+.mk.flash { animation: flash 1.4s ease 2; }
+@keyframes flash { 50% { box-shadow: 0 0 0 4px var(--kind); } }
+.toc-btn { font-size: 13px; padding: 4px 8px; }
+.toc-btn.h3 { padding-left: 20px; color: var(--muted); }
+.raw { white-space: pre-wrap; font-family: var(--f-mono); font-size: 13px; }
+
+/* Painel lateral de decisão */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(540px, 100%); background: var(--bg); border-left: 1px solid var(--line); box-shadow: -12px 0 32px rgba(0,0,0,.12); z-index: 15; overflow-y: auto; display: grid; align-content: start; gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 20px) 16px; }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.drawer-head span { font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.drawer .opts { grid-template-columns: minmax(0, 1fr); }
+details.refs li button.linkish { font-family: var(--f-mono); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .mk.flash { animation: none; outline: 2px solid var(--kind); } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="eyebrow">TCCELTA · .spec · fases 1 a 3</div>
+    <h1>Decisões das specs</h1>
+    <p class="lede">Leia as specs na aba Ler specs, escolha uma opção em cada ponto em aberto, revise as decisões já tomadas e registre o resultado das verificações de bancada. As marcações coloridas no texto abrem a escolha ao lado. Cada clique fica salvo; depois o Claude lê suas escolhas e atualiza os arquivos Markdown.</p>
+    <div class="stats" id="stats" aria-live="polite">
+      <div class="stat pend"><b id="s-open">–</b><span>pontos em aberto sem resposta</span><div class="progress" aria-hidden="true"><i id="s-bar"></i></div></div>
+      <div class="stat"><b id="s-rev">–</b><span>decisões marcadas para revisar</span></div>
+      <div class="stat"><b id="s-ver">–</b><span>verificações concluídas</span></div>
+      <div class="stat apply"><b id="s-apply">–</b><span>respostas ainda não aplicadas nas specs</span></div>
+    </div>
+    <div class="handoff">
+      <span>Quando terminar, diga ao Claude:</span><q>aplique as escolhas do painel nas specs</q>
+      <button class="btn" id="copy-summary" type="button">Copiar resumo das escolhas</button>
+    </div>
+    <div class="banner" id="banner" hidden></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="tabs" role="tablist" aria-label="Visões">
+    <button class="tab" role="tab" id="tab-overview" data-view="overview" aria-selected="false">Visão geral</button>
+    <button class="tab" role="tab" id="tab-read" data-view="read" aria-selected="false">Ler specs<span class="n">27</span></button>
+    <button class="tab" role="tab" id="tab-aberto" data-view="aberto" aria-selected="true">Em aberto<span class="n" id="n-aberto"></span></button>
+    <button class="tab" role="tab" id="tab-decisao" data-view="decisao" aria-selected="false">Decisões tomadas<span class="n" id="n-decisao"></span></button>
+    <button class="tab" role="tab" id="tab-verificar" data-view="verificar" aria-selected="false">A verificar<span class="n" id="n-verificar"></span></button>
+  </nav>
+
+  <div class="body">
+    <aside class="rail" id="rail" aria-label="Specs"></aside>
+    <main id="main" style="min-width:0">
+      <div class="empty">Carregando as specs…</div>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Decisão selecionada">
+  <div class="drawer-head"><span>Marcação na spec</span><button class="btn" id="drawer-close" type="button">Fechar</button></div>
+  <div id="drawer-body"></div>
+</aside>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+<script>
+(() => {
+  "use strict";
+  const KIND_LABEL = { aberto: "Em aberto", decisao: "Decisão", verificar: "Verificar" };
+  const AREA_LABEL = { firmware: "Firmware", app: "App", servidor: "Servidor", infra: "Infra", transversal: "Transversal" };
+  const VER_OPTS = [
+    { id: "pendente", rotulo: "Pendente", detalhe: "Ainda não conferido." },
+    { id: "confirmado", rotulo: "Confirmado", detalhe: "Conferido e vale como está na spec." },
+    { id: "refutado", rotulo: "Refutado", detalhe: "Conferido e não vale; descreva o que encontrou na nota." },
+  ];
+
+  const state = {
+    data: null, byId: new Map(), specs: new Map(), phases: new Map(),
+    choices: new Map(),           // id -> doc body
+    view: "aberto", phase: "all", spec: "all", area: "all", status: "all", q: "",
+    db: null, canWrite: true, uid: null,
+    readSpec: null, readItem: null, toc: [],
+    lineMap: new Map(),           // ".spec/…/arquivo.md" -> Map(linha -> [ids])
+    pathToSpec: new Map(),        // ".spec/…/arquivo.md" -> spec
+  };
+  const MARK_RE = /\[(Aberto|Decisão[^\]]*|[Vv]erificar[^\]]*)\]/g;
+  const mdCache = new Map();
+  const fullPath = (spec) => (state.phases.get(spec.fase)?.pasta || ".spec") + "/" + spec.arquivo;
+  const pubPath = (spec) => fullPath(spec).replace(/^\.spec\//, "specs/");
+  const pending = new Map();      // id -> promise chain (uma escrita por vez por documento)
+  const noteTimers = new Map();
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // Texto das specs: escapa e converte `código` em <code>.
+  const rich = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  function toast(msg) {
+    const t = $("#toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, 2200);
+  }
+  function banner(msg) { const b = $("#banner"); b.textContent = msg; b.hidden = !msg; }
+
+  // ---------- estado de cada item ----------
+  function choiceOf(id) { return state.choices.get(id) || null; }
+  function answered(item) {
+    const c = choiceOf(item.id);
+    if (!c) return false;
+    if (item.tipo === "verificar") return c.escolha && c.escolha !== "pendente";
+    return !!c.escolha;
+  }
+  function applied(item) {
+    const c = choiceOf(item.id);
+    return !!(c && c.aplicado_em && c.atualizado_em && c.aplicado_em >= c.atualizado_em);
+  }
+  // Uma resposta precisa de ação nas specs se muda algo: decisão "Manter" sem nota não precisa.
+  function needsApply(item) {
+    const c = choiceOf(item.id);
+    if (!c || !c.escolha || applied(item)) return false;
+    if (item.tipo === "decisao") {
+      const keep = item.opcoes && item.opcoes[0] && c.escolha === item.opcoes[0].id;
+      return !(keep && !String(c.nota || "").trim());
+    }
+    if (item.tipo === "verificar") return c.escolha !== "pendente";
+    return true;
+  }
+  function stateOf(item) {
+    const c = choiceOf(item.id);
+    if (applied(item)) return { cls: "state-applied", txt: "Aplicada na spec" };
+    if (item.tipo === "verificar" && c && c.escolha === "refutado") return { cls: "state-bad", txt: "Refutado" };
+    if (answered(item)) return { cls: "state-answered", txt: item.tipo === "verificar" ? "Confirmado" : "Respondida" };
+    return { cls: "state-none", txt: item.tipo === "decisao" ? "Sem revisão" : "Sem resposta" };
+  }
+
+  // ---------- filtros ----------
+  function filtered(kind) {
+    const q = state.q.trim().toLowerCase();
+    return state.data.itens.filter((it) => {
+      if (kind && it.tipo !== kind) return false;
+      if (state.phase !== "all" && it.fase !== state.phase) return false;
+      if (state.spec !== "all" && it.spec !== state.spec) return false;
+      if (state.area !== "all" && it.area !== state.area) return false;
+      if (state.status === "pending" && answered(it)) return false;
+      if (state.status === "answered" && !answered(it)) return false;
+      if (state.status === "toapply" && !needsApply(it)) return false;
+      if (q) {
+        const hay = [it.titulo, it.contexto, it.decisao_atual, it.justificativa, it.como_verificar, it.id, ...(it.opcoes || []).map((o) => o.rotulo + " " + o.detalhe)].join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  // ---------- topo ----------
+  function renderStats() {
+    const its = state.data.itens;
+    const ab = its.filter((i) => i.tipo === "aberto");
+    const abDone = ab.filter(answered).length;
+    $("#s-open").textContent = ab.length - abDone;
+    $("#s-bar").style.width = ab.length ? (100 * abDone / ab.length).toFixed(1) + "%" : "0";
+    $("#s-rev").textContent = its.filter((i) => i.tipo === "decisao" && choiceOf(i.id)?.escolha === "revisar").length;
+    const ver = its.filter((i) => i.tipo === "verificar");
+    $("#s-ver").textContent = ver.filter(answered).length + " / " + ver.length;
+    $("#s-apply").textContent = its.filter(needsApply).length;
+    for (const k of ["aberto", "decisao", "verificar"]) {
+      const all = its.filter((i) => i.tipo === k);
+      const left = k === "decisao" ? all.length : all.filter((i) => !answered(i)).length;
+      $("#n-" + k).textContent = k === "decisao" ? String(all.length) : left + "/" + all.length;
+    }
+  }
+
+  // ---------- trilho de specs ----------
+  function specCounts(specId) {
+    const its = state.data.itens.filter((i) => i.spec === specId);
+    return {
+      a: its.filter((i) => i.tipo === "aberto").length,
+      ap: its.filter((i) => i.tipo === "aberto" && !answered(i)).length,
+      d: its.filter((i) => i.tipo === "decisao").length,
+      v: its.filter((i) => i.tipo === "verificar").length,
+    };
+  }
+  function renderRail() {
+    const rail = $("#rail");
+    const parts = [];
+    if (state.view === "read") {
+      for (const f of state.data.fases) {
+        parts.push(`<div><h3>${esc(f.nome)}</h3><div class="rail-list">`);
+        for (const s of state.data.specs.filter((x) => x.fase === f.id)) {
+          const c = specCounts(s.id);
+          parts.push(`<button class="rail-btn" type="button" data-read="${esc(s.id)}" aria-pressed="${state.readSpec === s.id}"><span>${esc(s.titulo)}</span><small>${c.ap ? `<span class="p">${c.ap}</span>` : ""}</small></button>`);
+          if (state.readSpec === s.id && state.toc.length) {
+            parts.push(state.toc.map((t) => `<button class="rail-btn toc-btn ${t.level}" type="button" data-toc="${esc(t.id)}"><span>${esc(t.text)}</span><small></small></button>`).join(""));
+          }
+        }
+        parts.push(`</div></div>`);
+      }
+      rail.innerHTML = parts.join("");
+      return;
+    }
+    parts.push(`<div><h3>Fase</h3><div class="rail-list">`);
+    parts.push(railBtn("phase", "all", "Todas as fases", "", state.phase === "all"));
+    for (const f of state.data.fases) {
+      const n = state.data.itens.filter((i) => i.fase === f.id && i.tipo === "aberto" && !answered(i)).length;
+      parts.push(railBtn("phase", f.id, f.nome, n ? `<span class="p">${n} abertas</span>` : "", state.phase === f.id));
+    }
+    parts.push(`</div></div>`);
+    for (const f of state.data.fases) {
+      if (state.phase !== "all" && state.phase !== f.id) continue;
+      const specs = state.data.specs.filter((s) => s.fase === f.id);
+      if (!specs.length) continue;
+      parts.push(`<div><h3>${esc(f.nome)}</h3><div class="rail-list">`);
+      for (const s of specs) {
+        const c = specCounts(s.id);
+        if (!c.a && !c.d && !c.v) continue;
+        parts.push(railBtn("spec", s.id, s.titulo, c.ap ? `<span class="p">${c.ap}</span>·${c.a + c.d + c.v}` : String(c.a + c.d + c.v), state.spec === s.id));
+      }
+      parts.push(`</div></div>`);
+    }
+    rail.innerHTML = parts.join("");
+  }
+  function railBtn(kind, val, label, count, on) {
+    return `<button class="rail-btn" type="button" data-${kind}="${esc(val)}" aria-pressed="${on}"><span>${esc(label)}</span><small>${count}</small></button>`;
+  }
+
+  // ---------- visão geral ----------
+  function renderOverview() {
+    const parts = [];
+    for (const f of state.data.fases) {
+      const specs = state.data.specs.filter((s) => s.fase === f.id);
+      parts.push(`<section class="phase"><div class="phase-head"><div class="eyebrow">${esc(f.pasta || "")}</div><h2>${esc(f.nome)}</h2><p>${rich(f.resumo)}</p></div><div class="spec-grid">`);
+      for (const s of specs) {
+        const c = specCounts(s.id);
+        const done = c.a - c.ap;
+        parts.push(`<button class="spec" type="button" data-read="${esc(s.id)}" title="Abrir para leitura">
+          <span class="file">${esc(s.arquivo)}</span>
+          <span class="t">${esc(s.titulo)}</span>
+          <span class="o">${rich(s.objetivo)}</span>
+          <span class="counts">
+            ${c.a ? `<span class="c-a">${c.ap} de ${c.a} em aberto</span>` : ""}
+            ${c.a && done === c.a ? `<span class="c-ok">respondida</span>` : ""}
+            ${c.d ? `<span class="c-d">${c.d} decisões</span>` : ""}
+            ${c.v ? `<span class="c-v">${c.v} a verificar</span>` : ""}
+          </span>
+        </button>`);
+      }
+      parts.push(`</div></section>`);
+    }
+    $("#main").innerHTML = parts.join("");
+  }
+
+  // ---------- lista de cartões ----------
+  function filtersBar() {
+    const areas = [...new Set(state.data.itens.map((i) => i.area))].filter(Boolean);
+    const specOpts = state.data.specs.filter((s) => state.phase === "all" || s.fase === state.phase)
+      .map((s) => `<option value="${esc(s.id)}" ${state.spec === s.id ? "selected" : ""}>${esc(s.titulo)}</option>`).join("");
+    const st = [["all", "Todos"], ["pending", state.view === "decisao" ? "Sem revisão" : "Sem resposta"], ["answered", "Respondidos"], ["toapply", "A aplicar nas specs"]];
+    return `<div class="filters">
+      <input class="search" id="q" type="search" placeholder="Buscar por termo, arquivo ou id" value="${esc(state.q)}" aria-label="Buscar">
+      <select class="select rail-select" id="spec-select" aria-label="Spec"><option value="all">Todas as specs</option>${specOpts}</select>
+      <select class="select" id="area-select" aria-label="Área"><option value="all">Todas as áreas</option>${areas.map((a) => `<option value="${esc(a)}" ${state.area === a ? "selected" : ""}>${esc(AREA_LABEL[a] || a)}</option>`).join("")}</select>
+      ${st.map(([v, l]) => `<button class="chip" type="button" data-status="${v}" aria-pressed="${state.status === v}">${l}</button>`).join("")}
+    </div>`;
+  }
+  function renderList() {
+    const items = filtered(state.view);
+    const head = filtersBar();
+    const scope = [state.phase !== "all" && state.phases.get(state.phase)?.nome, state.spec !== "all" && state.specs.get(state.spec)?.titulo].filter(Boolean).join(" · ");
+    const line = `<div class="count-line">${items.length} ${items.length === 1 ? "item" : "itens"}${scope ? " em " + esc(scope) : ""}${(state.spec !== "all" || state.phase !== "all") ? ` · <button class="linkish" type="button" id="clear-scope">ver todas as specs</button>` : ""}</div>`;
+    const body = items.length ? `<div class="list">${items.map(cardHtml).join("")}</div>`
+      : `<div class="empty">Nenhum item com esses filtros.</div>`;
+    $("#main").innerHTML = head + line + body;
+  }
+  function optionsFor(item) {
+    if (item.tipo === "verificar") return VER_OPTS;
+    const base = (item.opcoes || []).slice();
+    if (item.tipo === "decisao") base.push({ id: "revisar", rotulo: "Revisar esta decisão", detalhe: "Explique na nota o que deve mudar." });
+    return base;
+  }
+  function cardHtml(item) {
+    const c = choiceOf(item.id);
+    const st = stateOf(item);
+    const spec = state.specs.get(item.spec);
+    const phase = state.phases.get(item.fase);
+    const sel = c?.escolha || (item.tipo === "verificar" ? "pendente" : "");
+    const dis = state.canWrite ? "" : "disabled";
+    const opts = optionsFor(item).map((o) => `
+      <button class="opt" type="button" role="radio" aria-checked="${sel === o.id}" data-item="${esc(item.id)}" data-opt="${esc(o.id)}" ${dis}>
+        <span class="lbl">${rich(o.rotulo)}${o.recomendada && item.tipo === "aberto" ? ` <span class="rec">recomendada</span>` : ""}</span>
+        ${o.detalhe ? `<span class="det">${rich(o.detalhe)}</span>` : ""}
+      </button>`).join("");
+    const refs = (item.refs || []).map((r) => {
+      const where = `${esc(r.arquivo)}:${esc(r.linha)}`;
+      const link = state.pathToSpec.has(r.arquivo)
+        ? `<button class="linkish" type="button" data-goto="${esc(r.arquivo)}" data-goto-item="${esc(item.id)}">${where}</button>` : where;
+      return `<li>${link}${r.trecho ? " · " + esc(r.trecho) : ""}</li>`;
+    }).join("");
+    const imp = (item.impacta || []).map((s) => `<span class="tag" title="${esc(state.specs.get(s)?.titulo || s)}">${esc(s)}</span>`).join(" ");
+    const notePh = item.tipo === "verificar" ? "O que você observou (comando, saída, placa)" : item.tipo === "decisao" ? "O que deve mudar, se for revisar" : "Detalhe ou condição para a escolha (opcional)";
+    return `<article class="card" data-tipo="${item.tipo}" data-id="${esc(item.id)}">
+      <div class="card-head">
+        <h3>${rich(item.titulo)}</h3>
+        <span class="pill ${st.cls}" data-state>${st.txt}</span>
+      </div>
+      <div class="meta">
+        <span class="pill kind">${KIND_LABEL[item.tipo]}</span>
+        <span>${esc(phase?.nome || item.fase)}</span><span>·</span>
+        <span>${esc(spec?.titulo || item.spec)}</span><span>·</span>
+        <span>${esc(AREA_LABEL[item.area] || item.area || "")}</span>
+      </div>
+      ${item.contexto ? `<p class="ctx">${rich(item.contexto)}</p>` : ""}
+      ${item.tipo === "decisao" && item.decisao_atual ? `<p class="decided"><b>Decidido:</b> ${rich(item.decisao_atual)}</p>` : ""}
+      ${item.justificativa ? `<p class="why"><b>${item.tipo === "aberto" ? "Por que a recomendação" : "Justificativa"}:</b> ${rich(item.justificativa)}</p>` : ""}
+      ${item.tipo === "verificar" && item.como_verificar ? `<p class="how"><b>Como verificar:</b> ${rich(item.como_verificar)}</p>` : ""}
+      <div class="opts" role="radiogroup" aria-label="Opções">${opts}</div>
+      <div class="note-row">
+        <label for="note-${esc(item.id)}">Nota</label>
+        <textarea class="note" id="note-${esc(item.id)}" data-note="${esc(item.id)}" placeholder="${esc(notePh)}" ${dis}>${esc(c?.nota || "")}</textarea>
+      </div>
+      <div class="foot">
+        <details class="refs"><summary>Onde está nas specs (${(item.refs || []).length})</summary><ul>${refs}</ul></details>
+        <span>${imp ? "Afeta também: " + imp : ""}</span>
+        <span class="saving mono" data-saving></span>
+      </div>
+    </article>`;
+  }
+  // Atualiza um cartão já desenhado sem perder o foco da nota.
+  function patchCard(id) {
+    const item = state.byId.get(id); const c = choiceOf(id);
+    if (!item) return;
+    document.querySelectorAll(`.mk[data-mk="${CSS.escape(id)}"]`).forEach((m) => paintMark(m, item));
+    const el = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+    if (!el) return;
+    const sel = c?.escolha || (item.tipo === "verificar" ? "pendente" : "");
+    el.querySelectorAll(".opt").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.opt === sel)));
+    const st = stateOf(item); const pill = el.querySelector("[data-state]");
+    pill.className = "pill " + st.cls; pill.textContent = st.txt;
+    const ta = el.querySelector("textarea");
+    if (ta && document.activeElement !== ta && !noteTimers.has(id)) ta.value = c?.nota || "";
+  }
+
+  function render() {
+    document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.view === state.view)));
+    renderStats();
+    if (state.view === "read") { renderReader(); return; }
+    renderRail();
+    if (state.view === "overview") renderOverview(); else renderList();
+  }
+
+  // ---------- leitura das specs ----------
+  function getMd(spec) {
+    const p = pubPath(spec);
+    if (!mdCache.has(p)) {
+      mdCache.set(p, fetch(p, { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); })
+        .catch((e) => { mdCache.delete(p); throw e; }));
+    }
+    return mdCache.get(p);
+  }
+  function readerHead(spec) {
+    const c = specCounts(spec.id);
+    const opts = state.data.specs.map((s) => `<option value="${esc(s.id)}" ${s.id === spec.id ? "selected" : ""}>${esc(state.phases.get(s.fase)?.nome || "")} · ${esc(s.titulo)}</option>`).join("");
+    return `<div class="reader-head">
+      <div class="eyebrow">${esc(fullPath(spec))}</div>
+      <div class="reader-actions">
+        <select class="select rail-select" id="read-select" aria-label="Spec">${opts}</select>
+        ${c.a || c.d || c.v ? `<button class="btn" type="button" data-open-spec="${esc(spec.id)}" data-open-phase="${esc(spec.fase)}">Ver as marcações desta spec em cartões</button>` : ""}
+        <span class="meta">
+          ${c.a ? `<span class="pill" style="background:var(--aberto-soft);color:var(--aberto)">${c.ap} de ${c.a} em aberto</span>` : ""}
+          ${c.d ? `<span class="pill" style="background:var(--decisao-soft);color:var(--decisao)">${c.d} decisões</span>` : ""}
+          ${c.v ? `<span class="pill" style="background:var(--verificar-soft);color:var(--verificar)">${c.v} a verificar</span>` : ""}
+        </span>
+      </div>
+      <p class="why">Clique numa marcação colorida no texto para escolher ou revisar sem sair da leitura.</p>
+    </div>`;
+  }
+  async function renderReader() {
+    const spec = state.specs.get(state.readSpec) || state.data.specs[0];
+    state.readSpec = spec.id;
+    const tok = (renderReader.tok = (renderReader.tok || 0) + 1);
+    state.toc = []; renderRail();
+    const main = $("#main");
+    main.innerHTML = readerHead(spec) + `<div class="empty">Carregando ${esc(spec.arquivo)}…</div>`;
+    let md;
+    try { md = await getMd(spec); } catch {
+      if (tok === renderReader.tok) main.innerHTML = readerHead(spec) + `<div class="empty">Não foi possível carregar ${esc(spec.arquivo)}. Recarregue a página.</div>`;
+      return;
+    }
+    if (tok !== renderReader.tok) return;
+    if (!window.marked || typeof window.marked.parse !== "function") {
+      main.innerHTML = readerHead(spec) + `<pre class="raw">${esc(md)}</pre>`;
+      return;
+    }
+    const html = window.marked.parse(md, { gfm: true, headerIds: false, mangle: false });
+    main.innerHTML = readerHead(spec) + `<article class="md" id="md">${html}</article>`;
+    decorate(spec, md, $("#md"));
+    renderRail();
+    if (state.readItem) {
+      const m = document.querySelector(`.mk[data-mk="${CSS.escape(state.readItem)}"]`);
+      state.readItem = null;
+      if (m) { m.scrollIntoView({ block: "center" }); m.classList.add("flash"); setTimeout(() => m.classList.remove("flash"), 3000); }
+    } else window.scrollTo({ top: 0 });
+  }
+  function slug(t) {
+    return t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-");
+  }
+  function decorate(spec, md, root) {
+    // Tabelas com rolagem própria.
+    root.querySelectorAll("table").forEach((t) => { const w = document.createElement("div"); w.className = "tbl"; t.replaceWith(w); w.appendChild(t); });
+    // Ids dos títulos e sumário.
+    const seen = new Map();
+    root.querySelectorAll("h1, h2, h3, h4").forEach((h) => {
+      let id = slug(h.textContent) || "secao"; const n = seen.get(id) || 0; seen.set(id, n + 1); if (n) id += "-" + n;
+      h.id = id;
+      if (h.tagName === "H2" || h.tagName === "H3") state.toc.push({ id, text: h.textContent, level: h.tagName.toLowerCase() });
+    });
+    // Links entre specs abrem aqui; externos em nova aba; os do repositório que não estão no painel viram texto.
+    root.querySelectorAll("a[href]").forEach((a) => {
+      const href = a.getAttribute("href");
+      if (/^https?:\/\//i.test(href)) { a.target = "_blank"; a.rel = "noopener"; return; }
+      if (href.startsWith("#")) { a.dataset.anchor = slug(decodeURIComponent(href.slice(1))); return; }
+      let target = null;
+      try { target = new URL(href, "https://x/" + fullPath(spec)).pathname.slice(1); } catch { /* inválido */ }
+      const dest = target && state.pathToSpec.get(decodeURIComponent(target));
+      if (dest) { a.dataset.mdlink = dest.id; a.removeAttribute("href"); a.href = "#"; }
+      else { const s = document.createElement("span"); s.className = "deadlink"; s.title = "Arquivo do repositório fora do painel: " + href; s.textContent = a.textContent; a.replaceWith(s); }
+    });
+    // Diagramas mermaid.
+    const mm = [];
+    root.querySelectorAll("pre > code.language-mermaid").forEach((c) => { const p = document.createElement("pre"); p.className = "mermaid"; p.textContent = c.textContent; c.parentElement.replaceWith(p); mm.push(p); });
+    renderMermaid(mm);
+    // Marcações: a k-ésima no texto renderizado corresponde à k-ésima no Markdown.
+    const lines = state.lineMap.get(fullPath(spec)) || new Map();
+    const src = [];
+    md.split(/\r?\n/).forEach((ln, i) => {
+      const ids = lines.get(i + 1) || [];
+      for (const m of ln.matchAll(MARK_RE)) src.push({ ids, line: i + 1, raw: m[0] });
+    });
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => n.parentElement.closest("pre.mermaid") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    const nodes = []; while (walker.nextNode()) { MARK_RE.lastIndex = 0; if (MARK_RE.test(walker.currentNode.nodeValue)) nodes.push(walker.currentNode); }
+    let k = 0;
+    for (const node of nodes) {
+      const text = node.nodeValue; const frag = document.createDocumentFragment(); let last = 0;
+      MARK_RE.lastIndex = 0;
+      for (const m of text.matchAll(MARK_RE)) {
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        const s = src[k++]; const id = s && s.ids[0];
+        const item = id && state.byId.get(id);
+        const b = document.createElement("button"); b.type = "button"; b.className = "mk";
+        const kindOf = /^\[A/.test(m[0]) ? "aberto" : /^\[D/.test(m[0]) ? "decisao" : "verificar";
+        b.dataset.tipo = item ? item.tipo : kindOf;
+        b.textContent = m[1];
+        if (item) { b.dataset.mk = item.id; b.title = item.titulo; paintMark(b, item); }
+        else { b.classList.add("no-item"); b.title = "Marcação sem item no painel"; }
+        frag.appendChild(b); last = m.index + m[0].length;
+      }
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      node.replaceWith(frag);
+    }
+  }
+  function paintMark(b, item) {
+    b.classList.toggle("is-applied", applied(item));
+    b.classList.toggle("is-answered", !applied(item) && answered(item));
+  }
+  let mermaidP = null;
+  function loadMermaid() {
+    if (window.mermaid) return Promise.resolve(window.mermaid);
+    if (!mermaidP) mermaidP = new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js";
+      s.onload = () => res(window.mermaid); s.onerror = rej; document.head.appendChild(s);
+    });
+    return mermaidP;
+  }
+  async function renderMermaid(nodes) {
+    if (!nodes.length) return;
+    try {
+      const m = await loadMermaid();
+      const root = document.documentElement.dataset.theme;
+      const dark = root === "dark" || (root !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+      m.initialize({ startOnLoad: false, theme: dark ? "dark" : "neutral", securityLevel: "strict" });
+      await m.run({ nodes });
+    } catch { /* o diagrama fica como texto */ }
+  }
+  function openDrawer(id) {
+    const item = state.byId.get(id); if (!item) return;
+    $("#drawer-body").innerHTML = cardHtml(item);
+    $("#drawer").hidden = false;
+    $("#drawer-close").focus();
+  }
+  function closeDrawer() { $("#drawer").hidden = true; $("#drawer-body").innerHTML = ""; }
+  function refreshCounts() { renderStats(); renderRail(); }
+
+  // ---------- escrita ----------
+  function write(id, patch) {
+    if (!state.db) { toast("Não dá para salvar nesta visualização."); return; }
+    const item = state.byId.get(id);
+    const prev = choiceOf(id) || {};
+    const body = {
+      item: id, tipo: item.tipo, fase: item.fase, spec: item.spec, titulo: item.titulo,
+      escolha: prev.escolha || null, nota: prev.nota || "",
+      ...patch,
+      atualizado_em: new Date().toISOString(),
+    };
+    if (prev.aplicado_em) { body.aplicado_em = prev.aplicado_em; }
+    if (state.uid) body.por = state.uid;
+    state.choices.set(id, body);  // otimista
+    patchCard(id); refreshCounts();
+    const el = document.querySelector(`.card[data-id="${CSS.escape(id)}"] [data-saving]`);
+    if (el) el.textContent = "salvando…";
+    const chain = (pending.get(id) || Promise.resolve()).then(() => state.db.collection("escolhas").doc(id).set(body))
+      .then(() => { if (el) el.textContent = "salvo"; setTimeout(() => { if (el && el.textContent === "salvo") el.textContent = ""; }, 1500); })
+      .catch((e) => {
+        if (el) el.textContent = "";
+        if (e && e.code === "invalid_argument") { state.canWrite = false; banner("Você pode ver as escolhas, mas não alterá-las com este acesso."); render(); }
+        else if (e && e.code === "quota_exceeded") toast("O banco do painel está cheio.");
+        else toast("Não foi possível salvar. Tente de novo.");
+      });
+    pending.set(id, chain);
+  }
+
+  // ---------- eventos ----------
+  document.addEventListener("click", (ev) => {
+    const a = ev.target.closest("a[data-mdlink], a[data-anchor]");
+    if (a) {
+      ev.preventDefault();
+      if (a.dataset.mdlink) { state.readSpec = a.dataset.mdlink; state.view = "read"; render(); }
+      else { const h = document.getElementById(a.dataset.anchor); if (h) h.scrollIntoView({ block: "start" }); }
+      return;
+    }
+    const t = ev.target.closest("button"); if (!t) return;
+    if (t.classList.contains("mk")) { if (t.dataset.mk) openDrawer(t.dataset.mk); return; }
+    if (t.id === "drawer-close") { closeDrawer(); return; }
+    if (t.dataset.read) { state.readSpec = t.dataset.read; state.view = "read"; closeDrawer(); render(); return; }
+    if (t.dataset.toc) { const h = document.getElementById(t.dataset.toc); if (h) h.scrollIntoView({ block: "start" }); return; }
+    if (t.dataset.goto) {
+      const s = state.pathToSpec.get(t.dataset.goto); if (!s) return;
+      state.readItem = t.dataset.gotoItem; state.view = "read";
+      if (state.readSpec === s.id && document.getElementById("md")) {
+        const m = document.querySelector(`#md .mk[data-mk="${CSS.escape(state.readItem)}"]`); state.readItem = null;
+        if (m) { m.scrollIntoView({ block: "center" }); m.classList.add("flash"); setTimeout(() => m.classList.remove("flash"), 3000); }
+        return;
+      }
+      state.readSpec = s.id; render(); return;
+    }
+    if (t.classList.contains("tab")) { state.view = t.dataset.view; closeDrawer(); render(); return; }
+    if (t.dataset.phase !== undefined) { state.phase = t.dataset.phase; state.spec = "all"; if (state.view === "overview") state.view = "aberto"; render(); return; }
+    if (t.dataset.spec !== undefined && t.classList.contains("rail-btn")) { state.spec = state.spec === t.dataset.spec ? "all" : t.dataset.spec; if (state.view === "overview") state.view = "aberto"; render(); return; }
+    if (t.dataset.openSpec) {
+      state.spec = t.dataset.openSpec; state.phase = t.dataset.openPhase;
+      const c = specCounts(state.spec);
+      state.view = c.a ? "aberto" : c.d ? "decisao" : "verificar";
+      render(); window.scrollTo({ top: 0 }); return;
+    }
+    if (t.dataset.status) { state.status = t.dataset.status; renderList(); return; }
+    if (t.id === "clear-scope") { state.spec = "all"; state.phase = "all"; render(); return; }
+    if (t.id === "copy-summary") { copySummary(); return; }
+    if (t.dataset.opt && !t.disabled) {
+      const id = t.dataset.item; const cur = choiceOf(id)?.escolha;
+      if (cur === t.dataset.opt) return;
+      write(id, { escolha: t.dataset.opt });
+    }
+  });
+  document.addEventListener("input", (ev) => {
+    const t = ev.target;
+    if (t.id === "q") { state.q = t.value; clearTimeout(renderList._q); renderList._q = setTimeout(() => { renderList(); const q = $("#q"); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }, 200); return; }
+    if (t.dataset.note) {
+      const id = t.dataset.note;
+      clearTimeout(noteTimers.get(id));
+      noteTimers.set(id, setTimeout(() => { noteTimers.delete(id); if ((choiceOf(id)?.nota || "") !== t.value) write(id, { nota: t.value }); }, 800));
+    }
+  });
+  document.addEventListener("change", (ev) => {
+    const t = ev.target;
+    if (t.id === "spec-select") { state.spec = t.value; renderList(); }
+    if (t.id === "area-select") { state.area = t.value; renderList(); }
+    if (t.id === "read-select") { state.readSpec = t.value; render(); }
+  });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("#drawer").hidden) closeDrawer(); });
+
+  function copySummary() {
+    const lines = [];
+    for (const it of state.data.itens) {
+      const c = choiceOf(it.id); if (!c || !c.escolha) continue;
+      const opt = optionsFor(it).find((o) => o.id === c.escolha);
+      lines.push(`- [${it.tipo}] ${it.id}: ${opt ? opt.rotulo : c.escolha}${c.nota ? " — nota: " + c.nota.replace(/\s+/g, " ") : ""}`);
+    }
+    const text = lines.length ? "Escolhas do painel de decisões:\n" + lines.join("\n") : "Nenhuma escolha registrada ainda.";
+    const done = () => toast("Resumo copiado.");
+    try { navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text)); } catch { fallbackCopy(text); }
+  }
+  function fallbackCopy(text) {
+    const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("Resumo copiado."); } catch { toast("Selecione e copie manualmente."); }
+    ta.remove();
+  }
+
+  // ---------- carga ----------
+  async function load() {
+    try {
+      const r = await fetch("decisoes.json", { cache: "no-cache" });
+      if (!r.ok) throw new Error(r.status);
+      state.data = await r.json();
+    } catch (e) {
+      $("#main").innerHTML = `<div class="empty">Não foi possível carregar as specs (decisoes.json). Recarregue a página.</div>`;
+      return;
+    }
+    for (const f of state.data.fases) state.phases.set(f.id, f);
+    for (const s of state.data.specs) state.specs.set(s.id, s);
+    for (const i of state.data.itens) state.byId.set(i.id, i);
+    for (const s of state.data.specs) state.pathToSpec.set(fullPath(s), s);
+    for (const i of state.data.itens) {
+      for (const r of i.refs || []) {
+        if (!state.lineMap.has(r.arquivo)) state.lineMap.set(r.arquivo, new Map());
+        const m = state.lineMap.get(r.arquivo);
+        if (!m.has(r.linha)) m.set(r.linha, []);
+        m.get(r.linha).push(i.id);
+      }
+    }
+    state.readSpec = state.data.specs[0]?.id || null;
+    render();
+    connect();
+  }
+
+  async function connect() {
+    const claude = window.claude;
+    if (!claude || typeof claude.use !== "function") { state.canWrite = false; banner("Abra o painel pelo claude.ai para salvar escolhas."); render(); return; }
+    const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+    if (!db) { state.canWrite = false; banner("As escolhas não podem ser salvas nesta visualização."); render(); return; }
+    state.db = db;
+    if (user) {
+      try { state.uid = await user.id(); } catch { /* sem id */ }
+      try { const w = await user.can("data.write"); if (w === false) { state.canWrite = false; banner("Você pode ver as escolhas, mas não alterá-las com este acesso."); render(); } } catch { /* sem informação */ }
+    }
+    db.collection("escolhas").onSnapshot((snap) => {
+      const changed = [];
+      for (const ch of snap.docChanges()) {
+        const id = ch.doc.id;
+        if (ch.type === "removed") state.choices.delete(id);
+        else {
+          const d = ch.doc.data();
+          // Mantém o valor otimista enquanto uma escrita local está pendente.
+          if (!ch.doc.metadata.hasPendingWrites || !state.choices.has(id)) state.choices.set(id, d);
+        }
+        changed.push(id);
+      }
+      for (const id of changed) patchCard(id);
+      refreshCounts();
+      if (state.view === "overview") renderOverview();
+    }, (e) => { banner("A conexão com as escolhas salvas caiu. Recarregue a página."); });
+  }
+
+  load();
+})();
+</script>

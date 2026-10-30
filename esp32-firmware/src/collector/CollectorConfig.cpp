@@ -1,4 +1,5 @@
 #include "collector/CollectorConfig.h"
+#include "collector/BlockFormat.h"
 #include "collector/Utilization.h"
 
 namespace collector {
@@ -58,6 +59,7 @@ const PidSetting* CollectorConfig::find(uint8_t pid) const {
 }
 
 bool CollectorConfig::setPid(uint8_t pid, uint32_t periodMs) {
+    if (pid > kPidRecordTypeMax) return false;
     const PidSetting setting = {pid, periodMs, defaultMinInterval(periodMs)};
     for (size_t i = 0; i < pidCount; ++i) {
         if (pids[i].pid == pid) {
@@ -88,6 +90,7 @@ ConfigError validate(const CollectorConfig& config) {
         return ConfigError::FlushOutOfRange;
     }
     for (size_t i = 0; i < config.pidCount; ++i) {
+        if (config.pids[i].pid > kPidRecordTypeMax) return ConfigError::InvalidPid;
         if (config.pids[i].periodMs < kMinPeriodMs ||
             config.pids[i].minIntervalMs < kMinPeriodMs) {
             return ConfigError::PeriodTooSmall;

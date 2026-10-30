@@ -1,4 +1,4 @@
-# Collector debug events — format specification (v1)
+# Collector debug events — format specification (v2)
 
 This document specifies the debug event stream emitted by the TCCELTA dongle
 firmware when built with collector debug events enabled. It is the contract
@@ -6,7 +6,10 @@ for any tool that parses the stream, in particular a step-by-step **viewer**
 that reconstructs the collector's behaviour. A reader should be able to build
 such a viewer from this document alone, without reading the firmware.
 
-Status: specification agreed; firmware implementation pending.
+Status: v2 implemented in the firmware. v2 adds the security and SYNC events
+(spec `fase-1/06`), microsecond durations in `*_us` fields, and the block
+format with marker records, tag and CRC. Parsers should accept `FORMAT v=1` and
+`v=2`; `UP_*` and `TIME_*` (v1) no longer exist.
 
 ## 1. Context in one page
 
@@ -45,9 +48,9 @@ Two bench aids interact with the stream:
 - `COLLECTOR_WIPE_ON_BOOT` (build flag, off by default): every boot starts
   with an empty flash log and `seq` back at 1; `boot` keeps increasing.
   Visible as `BOOT wiped=1`.
-- `AT#ACK n` (debug builds only): simulates the server confirming all blocks
-  up to `n`, so upload can be exercised without the BLE data channel. It
-  appears as `CMD txt="AT#ACK n"` followed by `UP_ACK`.
+- `AT#ACK n` (debug builds only): injects an ACK with a valid tag, as if it came from the app, so the session can open and flash be freed without the app. Also `AT#SYNC?` (engine state), `AT#CORRUPT n` (corrupt block n on flash) and `AT#WIPE` (wipe at next boot). `COLLECTOR_EVENTS_NO_HEX` (benchmark envs `*_bench_*`) drops `hex`/`tag` from `FLUSH`; `SECURITY_DEV_FIXED_KEYS` (debug builds) uses the bench keys when the `secnvs` partition is not provisioned.
+
+  It appears as `CMD txt="AT#ACK n"` followed by `HS_ACK`.
 
 ## 3. Line grammar
 
@@ -107,8 +110,10 @@ rely on it.
 
 | Event | Fields | Meaning |
 |---|---|---|
-| `FORMAT` | `v:int` | First event of a boot. `v=1` for this spec. |
-| `BOOT` | `boot:int` `wiped:bool` `seq_next:int` `nvs_last:int` `log_oldest:int` `log_newest:int` `lost:int` | Persistent counters at start. `wiped=1`: the flash log and `seq` were erased at this boot (bench builds only). `seq_next = max(nvs_last, log_newest) + 1`. `log_oldest/log_newest` are 0 if the flash log is empty. `lost` = blocks dropped for lack of space so far (this boot). |
+| `FORMAT` | `v:int` | First event of a boot. `v=2` for this spec. |
+| `KEYS` | `profile:enum(none,hmac,asym)` `source:enum(partition,dev_fixed,mac,missing)` `dev_id:hex` `tag_len:int` `fe:enum(off,dev,release)` `sb:int` `load_us:us` | Keys loaded from the `secnvs` partition. `tag_len` = block tag size of the profile (0/32/64). Never shows key material. |
+| `BOOT` | `boot:int` `wiped:bool` `rsv:int` `rsv_new:int` `legacy_last:int\|-` `boot_seq:int` `from:int` `to:int` `seq_next:int` `log_oldest:int` `log_newest:int` `lost:int` | Seq recovery. `rsv` = reserve read from NVS (0 = absent), `rsv_new` = reserve written for the BOOT block, `boot_seq` = `R`, `[from,to]` = range declared by the BOOT marker (empty if `to = from - 1`), `seq_next` = next seq after the BOOT. `wiped=1`: log, `seq_rsv` and `last_cs` were erased (bench builds). |
+| `LOG_MIGRATE` | `removed:int` | Files of the v1 log (`/log`) deleted at the first boot of the v2 firmware. |
 | `CONFIG` | `reason:enum(boot,apply)` `proto:int` `tmax:int` `flush:int` `u:int` `pids:list` | Active configuration. `proto` 6–9 (CAN 11/29 bit, 500/250 kbps). `flush` = block deadline in ms (1000–30000, default 10000; absent in older logs = 10000). `u` = planned bus utilization **in permille** (`Σ tmax/p × 1000`, e.g. `782`). Followed by one `CVT` line per PID. |
 | `CVT` | `pid:hex` `p:int` `pmin:int` `due:ms` `last:ms` `val:hex\|-` | Full snapshot of one scheduler table row. Emitted for every PID right after `CONFIG`. |
 
@@ -134,8 +139,11 @@ rely on it.
 
 | Event | Fields | Meaning |
 |---|---|---|
-| `FLUSH` | `buf:int` `seq:int` `boot:int` `len:int` `ok:bool` `attempts:int` `dur:int` `hex:hex` | A block write finished. `t` = end of the write; `dur` = time spent writing (start = `t − dur`). `hex` = **the exact bytes written** (`len` bytes, header included, see §7). `ok=0`: both attempts failed, the block was discarded and `seq` was **not** consumed (the next `FLUSH` reuses the same `seq`). |
-| `SEG_DROP` | `first:int` `last:int` `count:int` | Flash full: the oldest segment (blocks `first..last`) was deleted. These blocks are lost. |
+| `FLUSH` | `buf:int\|-` `kind:enum(data,boot)` `seq:int` `boot:int` `len:int` `tag_len:int` `ok:bool` `attempts:int` `reserved:bool` `reserve_us:us` `sign_us:us` `crc_us:us` `write_us:us` `dur:int` `crc:hex` `hex:hex\|-` `tag:hex\|-` | A block write finished. `t` = end of the write; `dur` (ms) = total time. `reserved=1`: `seq_rsv` was written to NVS first (`reserve_us`). `hex` = **the exact data bytes written** (`len` bytes, see §7), `tag` = the `tag_len` bytes of the tag, `crc` = CRC32 of data and tag as an 8-digit big-endian value (stored little-endian on flash). Builds with `COLLECTOR_EVENTS_NO_HEX` print `hex=-` and `tag=-`. `ok=0`: both attempts failed, the block was discarded and `seq` was **not** consumed. |
+| `MARKER` | `kind:enum(boot,loss)` `seq:int` `from:int` `to:int` `reason:enum(boot,crc,missing)` | A marker block was built: BOOT at boot (before its `FLUSH kind=boot`), LOSS at send time (never stored). |
+| `SEG_NEW` | `first:int` `tag_len:int` `reason:enum(first,full,boot,sealed,tag_len)` | A new log segment was opened. |
+| `SEG_SEAL` | `first:int` `last:int` `reason:enum(write_fail,scan_tail)` | A segment stopped accepting writes (write failure or invalid tail found at boot). |
+| `SEG_DROP` | `first:int` `last:int` `count:int` | Flash full: the oldest segment (blocks `first..last`) was deleted. These blocks are lost; `overflowUpTo` becomes `last`. |
 
 ### 5.5 Commands from the app (ELM327 text channel)
 
@@ -155,24 +163,37 @@ rely on it.
 | `TMAX_SAMPLE` | `pid:hex` `ok:bool` `lat:int` | One measurement request. `lat` = response latency in ms (bus occupancy). |
 | `TMAX_DONE` | `tmax:int` | Measurement finished; suggested Tmax in ms. |
 
-### 5.7 Connection, upload and time sync
+### 5.7 Connection, SYNC and handshake
+
+Durations in `*_us` are microseconds from the same clock as `t`; they never
+include event formatting.
 
 | Event | Fields | Meaning |
 |---|---|---|
-| `CONN` | `up:bool` | App connected / disconnected over BLE. |
-| `NET` | `up:bool` | The app reported Internet available / unavailable. |
-| `UP_SEND` | `seq:int` `oldest:int` `len:int` | A block was sent towards the server. `oldest` = oldest block still in flash. |
-| `UP_ACK` | `seq:int` `advanced:bool` `deleted_upto:int\|-` | The server confirmed all blocks up to `seq`. `advanced=0`: stale ACK, ignored. |
-| `UP_REWIND` | `reason:enum(timeout,reconnect)` `from:int` | Blocks in flight are resent from `seq=from`: no ACK in 5 s, or the app reconnected (whatever was in flight on the previous connection was lost). |
-| `TIME_REQ` | `boot:int` `t1:ms` | Time sync request sent. |
-| `TIME_RESP` | `ok:bool` | Time sync response received; `ok=0` if it did not match the pending request. |
-| `TIME_REPORT` | `t1:ms` `t2:ms` | Round trip complete; sent to the server. |
+| `CONN` | `up:bool` `gen:int` | App connected / disconnected over BLE; `gen` = connection generation. |
+| `NET` | `up:bool` | The app reported Internet available / unavailable (informational). |
+| `SYNC_SUB` | `on:bool` | Notifications on SYNC_TX enabled / disabled. |
+| `SYNC_MTU` | `mtu:int` | Negotiated MTU changed. |
+| `SYNC_RX` | `type:hex\|-` `len:int` `q_us:us` `ok:bool` `reason:enum(ok,short,bad_len,unexpected,queue_full)` | Message received on SYNC_RX. `queue_full` (with `type=-`, `len` = messages lost) is emitted by the sync task from a counter. |
+| `SYNC_TX` | `type:hex` `len:int` `frags:int` `mtu:int` `dur_us:us` `retries:int` `ok:bool` | A message was sent (all notifications). |
+| `SYNC_ERR` | `dir:enum(tx,rx)` `code:hex` | Error message (0x06) sent to or received from the app. |
+| `HS_CHALLENGE` | `c_s:int` `last_cs:int` `ack:int` `c_conf:int` `flags:hex` `diag_min:int\|-` `len:int` `verify_us:us` `result:enum(ok,bad_len,bad_tag,old_cs,nvs_fail)` | Challenge processed. |
+| `HS_RESPONSE` | `c_s:int` `tail:int` `head:int` `boot:int` `t_ms:ms` `deleted_upto:int\|-` `nvs_us:us` `tag_us:us` `total_us:us` `q_us:us` | Response sent. `t_ms` is the time anchor. |
+| `HS_ACK` | `ack:int` `c_conf:int` `flags:hex` `verify_us:us` `result:enum(ok,bad_len,bad_tag,bad_seq)` `advanced:bool` `opened:bool` `anchor_ok:bool` | ACK processed. `opened=1` opened the session. |
+| `SYNC_SESSION` | `open:bool` `reason:enum(connect,ack,overflow,disconnect)` | Session state changed. |
+| `SYNC_NOTICE` | `head:int` `flags:hex` `reason:enum(subscribe,flush,ack,resync,overflow,flash,retry)` | New-block notice (0x07) sent. |
+| `SYNC_REQ` | `k:int` `cursor:int` `head:int` `end:int\|-` `result:enum(ok,no_session,empty,ignored)` | Batch request received. |
+| `SYNC_BLOCK` | `seq:int` `kind:enum(data,boot,loss)` `len:int` `tag_len:int` `read_us:us` `crc_us:us\|-` `crc_ok:bool\|-` `sign_us:us\|-` `tx_us:us` `frags:int` `mtu:int` `cursor:int` | One block sent; `cursor` is the value after the send. |
+| `SYNC_BATCH_END` | `reason:enum(done,link,overflow,app_error,superseded,empty)` `sent:int` `bytes:int` `dur_us:us` | End of a batch. |
+| `SYNC_CURSOR` | `from:int` `to:int` `reason:enum(connect,ack,app_error,boot_gap,loss)` | Cursor jump outside the normal +1 per block. |
+| `SYNC_FREE` | `upto:int` `segs:int` `oldest:int` `dur_us:us` | Flash freed after an ACK or challenge. |
+| `SYNC_OVERFLOW` | `upto:int` `ack:int` | Flash-full discard reached unconfirmed blocks; session invalidated. |
 
 ### 5.8 Health
 
 | Event | Fields | Meaning |
 |---|---|---|
-| `STACK` | `task:enum(acquisition,flush,elm327,session,upload,logger)` `free:int` | Every 60 s, one line per task: minimum free stack ever (bytes). |
+| `STACK` | `task:enum(acquisition,flush,elm327,sync,logger)` `free:int` | Every 60 s, one line per task: minimum free stack ever (bytes). |
 | `HEAP` | `free:int` `min:int` | Every 60 s: current and minimum free heap (bytes). |
 | `LOG_DROP` | `count:int` | `count` events were lost because the logger queue was full. Also visible as a gap in `n`. |
 
@@ -219,31 +240,72 @@ must yield the same `DECIDE`; a mismatch indicates a bug or lost events.
 - `seq` continuity: successful `FLUSH`es have `seq` = previous + 1 within a
   boot; across boots, the first `FLUSH` has `seq = BOOT.seq_next`.
 
-### 6.5 Upload
+### 6.5 Session and handshake
 
-The server's progress is the latest `UP_ACK advanced=1 seq`. Blocks in flight
-= sent (`UP_SEND`) but not yet covered by an ACK. Data lost to full flash:
-`SEG_DROP` ranges.
+Per `gen` (from `CONN up=1` to the next `CONN up=0`): `SYNC_SUB`,
+`SYNC_NOTICE` (flags bit 0), `HS_CHALLENGE result=ok`, `HS_RESPONSE`,
+`HS_ACK opened=1`, `SYNC_SESSION open=1`. Every `HS_RESPONSE.c_s` is greater
+than the `last_cs` of the preceding `HS_CHALLENGE`; no `SYNC_BLOCK` precedes
+`SYNC_SESSION open=1`; every `SYNC_REQ result=no_session` is followed by
+`SYNC_ERR dir=tx code=05`.
+
+### 6.6 Cursor
+
+Per `gen`, the cursor starts at `ack + 1` (`SYNC_CURSOR reason=connect`); each
+`SYNC_BLOCK.seq` equals the reconstructed cursor and sets it to `seq + 1`
+(data/BOOT) or to `to + 1` of the preceding `MARKER kind=loss`; jumps only
+through `SYNC_CURSOR`.
+
+### 6.7 `seq` audit
+
+Over the successful `FLUSH`es and the `BOOT` events: `seq` is strictly
+increasing; the first `FLUSH` of each boot is `kind=boot seq=boot_seq`; every
+integer from 1 to the last `seq` lies in a successful `FLUSH`, in a BOOT range
+`[from,to]` or in a `MARKER kind=loss` range. Losses by full flash appear as
+`SEG_DROP`.
+
+### 6.8 Benchmark metrics
+
+`tools/event-bench/bench_report.py` computes, from `FLUSH`, `SYNC_BLOCK`,
+`HS_*`, `SYNC_TX` and `STACK`, the cost of signing and CRC per block, the
+handshake cost at the dongle, the BLE throughput per MTU, the fragmentation
+overhead and the confirmation latency per `seq`, for the `none`, `hmac` and
+`asym` builds (`collector_*_bench_*` envs).
 
 ## 7. Block binary format (for `FLUSH hex`)
 
 Little-endian. All offsets in bytes.
 
 ```
+Data area (`tamanho` bytes, header included = FLUSH.len)
 Header (12 bytes)
   0  seq        u32
-  4  boot_id    u16
-  6  t_ms_start u32   (= BLK_OPEN.t0)
- 10  length     u16   (total block length, header included = FLUSH.len)
+  4  boot_id    u16   (0 in LOSS)
+  6  t_ms_start u32   (= BLK_OPEN.t0; 0 in LOSS)
+ 10  tamanho    u16
 
-Records, back to back until `length`:
-  PID record (5 bytes):  type u8 (= PID, 0x00–0xFE) | dt i16 | value 2 bytes
-  GPS record (15 bytes): type u8 (= 0xFF)           | dt i16 | lat i32 | lon i32 | alt i32
+Records, back to back until `tamanho`:
+  PID record (5 bytes):    type u8 (0x00-0xFC = PID) | dt u16 | value 2 bytes
+  LOSS marker (11 bytes):  0xFD | dt u16 | from_seq u32 | to_seq u32
+  BOOT marker (11 bytes):  0xFE | dt u16 | from_seq u32 | to_seq u32
+  GPS record (15 bytes):   0xFF | dt u16 | lat i32 | lon i32 | alt i32
 ```
 
-`dt` is signed ms since `t_ms_start` (two's complement); a GPS record may be
-slightly earlier than the block start. Record type `0xFF` is GPS; any other value is a
-PID record.
+`dt` is unsigned ms since `t_ms_start` (0-65535). A record earlier than the
+block start closes the block and opens another, so `t_ms_start` is not
+increasing between consecutive blocks. A marker block has a single 11-byte
+record (`tamanho = 23`).
+
+On flash each record is `data(tamanho) | tag(T) | CRC32 LE` with `T` = 0, 32
+or 64 by security profile and the CRC over data and tag; segment files start
+with `"TCS2" | version 2 | tag_len | reserved u16`. The tag is
+`HMAC-SHA256_{K_rec}("MALCONG" || 0x03 || DevId || data)` (profile `hmac`),
+an ECDSA P-256 `r||s` over the SHA-256 of the same input (`asym`), or empty
+(`none`).
+
+Over BLE the SYNC service carries TLV messages `T(1) | L(2 LE) | V`; SYNC_TX
+notifications are `C | piece of TLV` with `C` = bit 7 (first fragment) | counter
+mod 128, and a piece of `MTU - 4` bytes.
 
 ## 8. Example
 
@@ -274,4 +336,4 @@ EV 231 10849 FLUSH buf=0 seq=128 boot=3 len=612 ok=1 attempts=1 dur=24 hex=80000
 - Waits are not logged; the viewer infers them from the reconstructed table.
 - Resolution is 1 ms; reads shorter than 1 ms show `dur=0`.
 - Timestamps are relative to boot. Absolute time comes only from the server's
-  time sync (`TIME_REPORT`), which the dongle does not log in absolute terms.
+  the handshake response (`HS_RESPONSE t_ms`), which the dongle does not log in absolute terms.

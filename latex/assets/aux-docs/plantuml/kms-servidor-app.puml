@@ -1,0 +1,39 @@
+' Arquitetura de chaves: app, servidor de aplicação e servidor KMS (vault)
+' Diagrama de componentes UML: cada bloco é um sistema.
+' Server aplicação e Server KMS se comunicam dentro de uma rede privada.
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:kms-servidor-app)
+' Gerar PNG (Git Bash): ./generate.sh kms-servidor-app.puml
+@startuml kms-servidor-app
+skinparam componentStyle uml2
+skinparam defaultFontSize 14
+skinparam ArrowFontSize 11
+skinparam defaultTextAlignment center
+skinparam dpi 200
+skinparam nodesep 50
+skinparam ranksep 150
+skinparam linetype ortho
+skinparam ComponentBackgroundColor #F0F0F0
+skinparam ArtifactBackgroundColor #FFFFFF
+skinparam PackageBackgroundColor #F5F9FF
+skinparam PackageBorderColor #4A6FA5
+skinparam PackageStyle rectangle
+left to right direction
+
+component "App mobile" as app
+
+package "Rede privada" {
+  ' quebras de linha deixam o Server aplicação alto, para as duas setas saírem retas
+  component "\n\n\nServer aplicação\n\n\n" as sapp
+
+  component "Server KMS" as kms #E6F4EA {
+    artifact "K<sub>auth</sub>" as kauth
+    artifact "K<sub>rec</sub>" as krec
+  }
+}
+kauth -[hidden]down- krec
+
+
+app --> sapp : HTTPS
+sapp --> kms : requisição
+kms --> sapp : MAC e verificação
+@enduml

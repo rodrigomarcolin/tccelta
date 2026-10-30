@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/router/app_tab_navigation.dart';
 import 'package:tccelta_mobile/src/ui/connection/actions/forget_dongle_action.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/view_model/dtc_view_model.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/widgets/dtc_tab_badge.dart';
+import 'package:tccelta_mobile/src/ui/settings/view/sync_settings_screen.dart';
+import 'package:tccelta_mobile/src/ui/sync/widgets/sync_status_card.dart';
 
 /// Tela de opções — a aba "Mais" da tab bar.
 class MoreScreen extends ConsumerWidget {
@@ -39,6 +43,17 @@ class MoreScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.s7),
+            CardButton(
+              icon: AppIconData.sinal,
+              title: 'Sincronização',
+              subtitle: ref.watch(syncSettingsSummaryProvider),
+              subtitleMono: false,
+              showValue: false,
+              onTap: () => context.push(AppRoutes.syncSettings),
+            ),
+            const SizedBox(height: AppSpacing.s3),
+            SyncStatusCard(onTap: () => context.push(AppRoutes.syncSettings)),
+            const SizedBox(height: AppSpacing.s3),
             CardButton(
               icon: AppIconData.desconectar,
               iconColor: AppColors.red500,

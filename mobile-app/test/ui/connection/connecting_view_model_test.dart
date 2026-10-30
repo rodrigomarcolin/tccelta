@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tccelta_mobile/src/core/persistence/shared_preferences_provider.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_device.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
@@ -20,6 +21,9 @@ import '../../support/fake_ble_service.dart';
 /// Repository OBD-II fake e instantâneo, para não depender de trocas ELM327
 /// reais durante a preparação (Fase 2).
 class _FakeObd2Repository implements Obd2Repository {
+  @override
+  Future<void> reportGps(GpsFix fix) async {}
+
   @override
   List<Obd2Pid> get pids => Obd2Pid.values;
 

@@ -5,9 +5,11 @@
 namespace collector {
 
 /**
- * Ponto de encaixe da segurança Dongle ↔ Servidor. O Dongle assina o que
- * envia (BATCH, TIME_REPORT) e verifica o que recebe (ACK, TIME_RESP) antes
- * de agir. A implementação real fica a cargo da parte de segurança.
+ * Autentica a área de dados de um bloco (cabeçalho + registros, `len` =
+ * `tamanho`). A implementação acrescenta o separador de contexto
+ * ("MALCONG" || 0x03 || DevId) antes dos dados. `tagSize()` é constante
+ * durante toda a vida da instância. Não é reentrante: uma instância por tarefa.
+ * Implementações: `NoAuth` (aqui), `security::HmacBlockAuth` e `EcdsaBlockAuth`.
  */
 class IMessageAuth {
 public:

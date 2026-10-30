@@ -1,0 +1,91 @@
+' Diagrama de classes UML das tabelas da camada de contexto (boots e handshakes)
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:modelo-contexto)
+' Gerar PNG (Git Bash): ./generate.sh modelo-dados-contexto.puml
+@startuml modelo-dados-contexto
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam linetype ortho
+hide circle
+hide methods
+skinparam class {
+  BackgroundColor #E8EAF6
+  BorderColor #3949AB
+  ArrowColor #555555
+}
+
+class boot << (T,#3949AB) table >> {
+  + dongle_id : int
+  + boot_id : int
+  --
+  config : jsonb
+  a_ms : double precision
+  b : double precision
+  incerteza_base_ms : int
+  origem_tempo : text
+  tempo_atualizado_em : timestamptz
+}
+
+class desafio << (T,#3949AB) table >> {
+  + dongle_id : int
+  + c_s : bigint
+  --
+  nonce : bytea <<unique>>
+  s1 : timestamptz
+  expira_em : timestamptz
+  respondido_em : timestamptz
+  boot_id : int
+  t_ms : bigint
+  head_seq : bigint
+  tail_seq : bigint
+  resultado : text
+  ack_seq : bigint
+  token_jti : uuid
+}
+
+class ancora_tempo << (T,#3949AB) table >> {
+  + dongle_id : int
+  + boot_id : int
+  + t_ms : bigint
+  --
+  nonce : bytea <<FK>>
+  s1 : timestamptz
+  s2 : timestamptz
+}
+
+class lacuna << (T,#3949AB) table >> {
+  + id : bigint
+  --
+  dongle_id : int
+  from_seq : bigint
+  to_seq : bigint
+  causa : text
+  registrado_em : timestamptz
+  c_s : bigint <<FK, nullable>>
+  seq_bloco : bigint <<nullable>>
+}
+
+desafio "1" -- "0..1" ancora_tempo : nonce (FK)
+desafio "0..*" -- "1" boot : dongle_id, boot_id\n(via resposta 0x02)
+ancora_tempo "0..*" -- "1" boot : dongle_id, boot_id
+lacuna "0..*" -- "0..1" desafio : c_s (FK, causa OVERFLOW)
+
+note bottom of lacuna
+  causa OVERFLOW referencia c_s (handshake);
+  causa BOOT ou LOSS referencia seq_bloco
+  (bloco marcador 0x03 na ingestão).
+end note
+
+note left of desafio
+  c_S obtido de dongle_estado.ultimo_c_s
+  (camada bronze) por UPDATE atômico
+end note
+
+note bottom of desafio
+  Uma linha por desafio emitido,
+  respondido ou não. PK (dongle_id, c_s).
+end note
+
+note bottom of ancora_tempo
+  Só existe quando S2 - S1 <= 2s.
+end note
+@enduml

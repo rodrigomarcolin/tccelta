@@ -81,18 +81,18 @@ The bridge expects the firmware to accept serial messages at **115200 baud** by 
 
 ### 4. Run the bridge
 
-Save the Python script as `obd_receiver.py`.
+Save the Python script as `tccelta_bridge.py`.
 
 **Print-only mode** — receive telemetry and display the calculated values without connecting to the Arduino:
 
 ```bash
-python obd_receiver.py
+python tccelta_bridge.py
 ```
 
 **Serial mode** — receive telemetry and send PID updates to an Arduino on COM8:
 
 ```bash
-python obd_receiver.py --port COM8
+python tccelta_bridge.py --port COM8
 ```
 
 Replace `COM8` with the serial port assigned to your Arduino. On Linux, a port might look like `/dev/ttyACM0` or `/dev/ttyUSB0`.
@@ -109,24 +109,66 @@ Replace `COM8` with the serial port assigned to your Arduino. On Linux, a port m
 For example:
 
 ```bash
-python obd_receiver.py --port COM8 --baud 115200 --hz 20 --gap-ms 3
+python tccelta_bridge.py --port COM8 --baud 115200 --hz 20 --gap-ms 3
 ```
 
-The bridge sends changed PID values at the configured refresh rate and resends all supported values every two seconds to help recover from missed updates.
+Each tick, the bridge sends the PIDs whose value changed or that were not sent in the last two seconds (to recover from missed updates), oldest first. A tick only sends as many messages as fit in its period at the configured `--gap-ms` (about 10 at 20 Hz); the remaining ones go out on the next tick.
 
 ## Supported OBD-II PIDs
 
+The bridge feeds **every Service 01 data PID the dongle forwards to the bus in diagnostic mode** (the whitelist in `esp32-firmware/src/elm327/whitelist/WhitelistConfig.h`), not only those read by the collector. Service 02 freeze frames are snapshots of these same values, taken by the ECUSim when a DTC is set.
+
+Not fed on purpose: `00`/`20`/`40`/`60` (supported-PID bitmaps, computed by the firmware) and `01`/`02` (monitor status and freeze-frame DTC, owned by the DTC control channel).
+
+Sources: **BeamNG** = direct signal; **estimated** = physical model from BeamNG signals; **modelled** = synthetic but plausible value (BeamNG has no such signal); **accumulated** = counted by the bridge since it started, which plays the role of the last "codes cleared".
+
 | PID | Parameter | Source |
 |---|---|---|
-| `04` | Calculated engine load | BeamNG telemetry |
-| `05` | Engine coolant temperature | BeamNG telemetry |
-| `0C` | Engine RPM | BeamNG telemetry |
-| `0D` | Vehicle speed | BeamNG telemetry |
-| `10` | Mass air flow (MAF) | Estimated |
-| `2F` | Fuel tank level input | BeamNG telemetry |
-| `49` | Accelerator pedal position D | BeamNG telemetry |
+| `04` | Calculated engine load | BeamNG |
+| `05` | Engine coolant temperature | BeamNG |
+| `06` | Short-term fuel trim, bank 1 | Modelled (±3 % oscillation) |
+| `07` | Long-term fuel trim, bank 1 | Modelled (+1.5 %) |
+| `0A` | Fuel pressure (gauge) | Modelled (300 kPa running) |
+| `0B` | Intake manifold absolute pressure | Estimated (load, boost, baro) |
+| `0C` | Engine RPM | BeamNG |
+| `0D` | Vehicle speed | BeamNG |
+| `0E` | Timing advance | Modelled (rpm, load) |
+| `0F` | Intake air temperature | Estimated (ambient + boost heating) |
+| `10` | Mass air flow (MAF) | Estimated (speed-density) |
+| `11` | Throttle position | BeamNG |
+| `14` | O2 sensor B1S1 voltage + trim | Modelled (switching 0.05–0.85 V) |
+| `15` | O2 sensor B1S2 voltage | Modelled (0.65 V) |
+| `1F` | Run time since engine start | Accumulated |
+| `21` | Distance with MIL on | Accumulated (while BeamNG check engine is on) |
+| `2C` | Commanded EGR | Modelled (10 % at part load) |
+| `2D` | EGR error | Modelled (0 %) |
+| `2E` | Commanded evaporative purge | Modelled (15 % when warm) |
+| `2F` | Fuel tank level | BeamNG |
+| `30` | Warm-ups since codes cleared | Accumulated (coolant crossing 70 °C) |
+| `31` | Distance since codes cleared | Accumulated |
+| `32` | Evap system vapor pressure | Modelled (50 Pa) |
+| `33` | Absolute barometric pressure | BeamNG |
+| `3C` | Catalyst temperature B1S1 | Modelled (first-order lag on load/rpm) |
+| `42` | Control module voltage | Modelled (14.2 V running, 12.5 V off) |
+| `43` | Absolute load value | Estimated (MAP / baro) |
+| `44` | Commanded equivalence ratio (λ) | Modelled (1.0, 0.87 at full load) |
+| `45` | Relative throttle position | BeamNG |
+| `46` | Ambient air temperature | BeamNG |
+| `47` | Absolute throttle position B | BeamNG |
+| `49` | Accelerator pedal position D | BeamNG |
+| `4C` | Commanded throttle actuator | BeamNG |
+| `4D` | Time run with MIL on | Accumulated (while BeamNG check engine is on) |
+| `4E` | Time since codes cleared | Accumulated |
+| `52` | Ethanol fuel % | Modelled (27 %, Brazilian E27) |
+| `5A` | Relative accelerator pedal position | BeamNG |
+| `5C` | Engine oil temperature | BeamNG |
+| `5D` | Fuel injection timing | Modelled (load) |
+| `5E` | Engine fuel rate | Estimated (MAF / AFR) |
+| `61` | Driver's demand engine torque | BeamNG (pedal) |
+| `62` | Actual engine torque | BeamNG (torque / max torque) |
+| `63` | Engine reference torque | BeamNG (max torque) |
 
-MAP and MAF are estimated because BeamNG does not directly provide all the required measurements through this protocol. The estimation parameters can be adjusted in the Python script.
+The estimation and model parameters (displacement, volumetric efficiency, stoichiometric AFR, ethanol content, etc.) are constants at the top of the Python script and can be tuned.
 
 ## Serial Protocol
 
@@ -162,6 +204,7 @@ Each message is sent separately, with a configurable delay between messages to r
 
 - The default UDP destination is `127.0.0.1:4446`.
 - The Python bridge does not communicate directly with the OBD-II dongle; the Arduino handles OBD-II requests and responses.
-- MAP and MAF readings are estimates, not direct measurements.
+- Estimated and modelled PIDs are not direct measurements; they exist so a diagnostic app sees a plausible value for every PID the dongle exposes.
+- The UDP packet format changed from `OBD1` (36 bytes) to `OBD2` (64 bytes): update `tccelta.lua` and the bridge together.
 - Serial commands must match the format expected by the installed ECUSim firmware.
 

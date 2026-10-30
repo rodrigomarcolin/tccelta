@@ -1,0 +1,50 @@
+' Diagrama de sequência do handshake entre dongle, app e server
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:sequencia-handshake)
+' Gerar PNG (Git Bash): ./generate.sh handshake-sequencia.puml
+@startuml handshake-sequencia
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam noteBackgroundColor #FFF4E0
+skinparam noteBorderColor #C77700
+
+participant "Dongle" as D
+participant "App\n(intermediário)" as A
+participant "Server" as S
+
+note over D, S : Gatilho de handshake
+A -> S : pedido de desafio\n(HTTPS)
+
+note over S
+  **S1** = relógio do server
+  (anota o instante do envio)
+end note
+
+S -> A : Desafio 0x01\n(c_S, N_S, ACK_seq, c_conf, flags_c, diag_min, tag)
+A -> D : Desafio 0x01 (BLE)
+
+note over D
+  Lê **t_ms** (tempo desde o boot)
+  e **boot_id** da NVS
+end note
+
+D -> A : Resposta 0x02\n(c_S, N_S, TAIL_seq, HEAD_seq, boot_id, t_ms, tag)
+A -> S : Resposta 0x02 (HTTPS)
+
+note over S
+  **S2** = relógio do server
+  (instante da recepção)
+end note
+
+group Âncora de tempo (algoritmo de Cristian)
+  S -> S : valida tag e eco de c_S e N_S
+  S -> S : RTT = S2 − S1
+  S -> S : âncora do boot_id:\nt_ms ↔ S1 + RTT / 2
+  S -> S : verifica TAIL_seq e atualiza ACK_seq
+end
+
+S -> A : ACK 0x04\n(ACK_seq, c_conf, flags, tag)
+A -> D : ACK 0x04 (BLE)
+S -> A : token JWT\n(autoriza envio de blocos)
+@enduml

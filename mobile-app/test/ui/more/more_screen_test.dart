@@ -10,6 +10,7 @@ import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 import '../../support/fake_ble_service.dart';
 import '../../support/fake_obd2_repository.dart';
 import '../../support/fake_panel_repository.dart';
+import '../../support/sync_provider_overrides.dart';
 
 void main() {
   // Usa o `appRouter` real (`MaterialApp.router`): a tab bar da tela "Mais"
@@ -17,6 +18,7 @@ void main() {
   // `GoRouter` no contexto (mesmo padrão de `painel_screen_test.dart`).
   Widget app() => ProviderScope(
     overrides: [
+      ...syncProviderOverrides(),
       bleServiceProvider.overrideWithValue(FakeBleService()),
       obd2RepositoryProvider.overrideWithValue(FakeObd2Repository()),
       panelRepositoryProvider.overrideWithValue(FakePanelRepository()),

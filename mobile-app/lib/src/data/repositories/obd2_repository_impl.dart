@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:tccelta_mobile/src/core/errors/dtc_failure.dart';
 import 'package:tccelta_mobile/src/core/errors/obd_failure.dart';
+import 'package:tccelta_mobile/src/data/datasources/collector_command_datasource.dart';
 import 'package:tccelta_mobile/src/data/datasources/dtc_datasource.dart';
 import 'package:tccelta_mobile/src/data/datasources/elm327_client.dart';
 import 'package:tccelta_mobile/src/data/datasources/obd2_datasource.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_code_codec.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_freeze_frame_entry.dart';
@@ -67,6 +69,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
   Elm327Client? _elm;
   Obd2Datasource? _datasource;
   DtcDatasource? _dtcDatasource;
+  CollectorCommandDatasource? _collectorDatasource;
   bool _initialized = false;
 
   /// Identidade capturada da conexão atual (versão no init, protocolo após a
@@ -102,6 +105,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
       _elm = elm;
       _datasource = Obd2Datasource(elm);
       _dtcDatasource = DtcDatasource(elm);
+      _collectorDatasource = CollectorCommandDatasource(elm);
     }
     return _datasource;
   }
@@ -111,6 +115,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
     _elm = null;
     _datasource = null;
     _dtcDatasource = null;
+    _collectorDatasource = null;
     _boundConn = null;
     _initialized = false;
     _version = null;
@@ -239,6 +244,22 @@ class Obd2RepositoryImpl implements Obd2Repository {
       _protocol = await ds.describeProtocol();
     }
     return readings;
+  }
+
+  @override
+  Future<void> reportGps(GpsFix fix) async {
+    _ensureDatasource();
+    final collector = _collectorDatasource;
+    if (collector == null) {
+      throw const ObdCommandFailure('Sem conexão BLE pronta para enviar o GPS');
+    }
+    try {
+      await collector.sendGps(fix);
+    } on ObdCommandFailure {
+      rethrow;
+    } on Object catch (e) {
+      throw ObdCommandFailure('Falha ao enviar o GPS', cause: e);
+    }
   }
 
   @override

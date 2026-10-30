@@ -46,6 +46,12 @@ class ScriptedBleConnection implements BleConnection {
   bool get isReady => ready;
 
   @override
+  BleChannel? channel(String serviceUuid) => null;
+
+  @override
+  int get mtu => 247;
+
+  @override
   Future<void> write(List<int> bytes) async {
     final cmd = String.fromCharCodes(
       bytes,

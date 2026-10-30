@@ -1,8 +1,9 @@
 #pragma once
-#include "collector/DataProtocol.h"
+#include "collector/IBlockStore.h"
 #include "collector/ICollectorControl.h"
 #include "rtos/Adapters.h"
 #include "rtos/CollectorContext.h"
+#include "rtos/SharedSyncStatus.h"
 #include "storage/NvsStore.h"
 
 namespace rtos {
@@ -15,9 +16,10 @@ class CollectorControl : public collector::ICollectorControl {
 public:
     CollectorControl(CollectorContext& ctx, NvsStore& nvs, const SharedValues& values,
                      const SharedTmaxReport& tmax, const QueueBlockPool& pool,
-                     collector::DataProtocol& protocol, const collector::CollectorConfig& config)
-        : _ctx(ctx), _nvs(nvs), _values(values), _tmax(tmax), _pool(pool), _protocol(protocol),
-          _config(config) {}
+                     collector::IBlockStore& store, const SharedSyncStatus& syncStatus,
+                     const collector::CollectorConfig& config)
+        : _ctx(ctx), _nvs(nvs), _values(values), _tmax(tmax), _pool(pool), _store(store),
+          _syncStatus(syncStatus), _config(config) {}
 
     bool diagMode() const override { return _ctx.hasBits(DIAG_MODE); }
     bool setDiagMode(bool on) override;
@@ -39,6 +41,9 @@ public:
 
     collector::CollectorStats stats() const override;
     bool injectAck(uint32_t seq) override;
+    void syncStatusLine(char* out, size_t capacity) const override;
+    bool corruptBlock(uint32_t seq) override;
+    void requestWipe() override;
 
 private:
     CollectorContext&          _ctx;
@@ -46,7 +51,8 @@ private:
     const SharedValues&        _values;
     const SharedTmaxReport&    _tmax;
     const QueueBlockPool&      _pool;
-    collector::DataProtocol&   _protocol;
+    collector::IBlockStore&    _store;
+    const SharedSyncStatus&    _syncStatus;
     collector::CollectorConfig _config;
 
     /** Valida, grava e aplica; só troca `_config` se tudo der certo. */

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
@@ -10,6 +11,9 @@ import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
 /// Repository fake que devolve uma identidade e um conjunto suportado fixos.
 class _FakeObd2Repository implements Obd2Repository {
+  @override
+  Future<void> reportGps(GpsFix fix) async {}
+
   @override
   List<Obd2Pid> get pids => Obd2Pid.values;
 

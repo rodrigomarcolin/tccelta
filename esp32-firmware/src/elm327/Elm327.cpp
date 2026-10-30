@@ -1,5 +1,6 @@
 #include "Elm327.h"
 #include "collector/AtHashParser.h"
+#include "collector/Events.h"
 #include "collector/Utilization.h"
 
 static constexpr char CR = '\r';
@@ -238,6 +239,18 @@ String Elm327::processAtHash(const String& upper) {
             return _control->setFlushInterval(cmd.periodMs) == collector::ConfigError::None ? ok : fail;
         case Kind::Ack:
             return _control->injectAck(cmd.seq) ? ok : fail;
+        case Kind::SyncStatus: {
+            if (!collector::kEventsEnabled) return fail;
+            char line[160];
+            _control->syncStatusLine(line, sizeof(line));
+            return String(line) + prompt();
+        }
+        case Kind::Corrupt:
+            return collector::kEventsEnabled && _control->corruptBlock(cmd.seq) ? ok : fail;
+        case Kind::Wipe:
+            if (!collector::kEventsEnabled) return fail;
+            _control->requestWipe();  // reinicia
+            return ok;
         case Kind::Invalid:
             break;
     }

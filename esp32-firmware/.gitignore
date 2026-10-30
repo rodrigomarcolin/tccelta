@@ -6,3 +6,11 @@
 
 # Configuração local (porta, flags de teste) — ver platformio_local.ini.example
 platformio_local.ini
+
+# Segurança (spec fase-1/01): material sensível e sdkconfig gerado por env
+secure_boot_signing_key.pem
+keys/
+tools/provision/out/
+/sdkconfig.*
+!/sdkconfig.defaults
+!/sdkconfig.*.defaults

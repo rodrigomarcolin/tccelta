@@ -180,12 +180,15 @@ void test_block_builder_serializes_records() {
     TEST_ASSERT_EQUAL_INT32(-235000000, static_cast<int32_t>(getU32(&gps[3])));
 }
 
-void test_gps_before_block_start_gets_negative_delta() {
+void test_delta_is_unsigned_and_rejects_out_of_range() {
     Block block;
     BlockBuilder builder;
     builder.open(block, 5000, kDefaultFlushIntervalMs);
-    TEST_ASSERT_TRUE(builder.addGps({1, 2, 3}, 4990));
-    TEST_ASSERT_EQUAL_INT16(-10, static_cast<int16_t>(getU16(&block.bytes[kHeaderSize + 1])));
+    TEST_ASSERT_FALSE(builder.addGps({1, 2, 3}, 4990));  // anterior ao início: não cabe (spec 02 §2)
+    TEST_ASSERT_TRUE(builder.addGps({1, 2, 3}, 5000 + 65535));
+    TEST_ASSERT_EQUAL_UINT16(65535, getU16(&block.bytes[kHeaderSize + 1]));
+    const uint8_t v[2] = {1, 2};
+    TEST_ASSERT_FALSE(builder.addPid(0x0C, v, 2, 5000 + 65536));
 }
 
 void test_block_builder_rejects_when_full() {
@@ -284,6 +287,37 @@ void test_collector_counts_records_dropped_without_free_buffer() {
     TEST_ASSERT_EQUAL_UINT32(1, values.updates.size());  // o valor corrente segue atualizado
 }
 
+void test_gps_before_block_start_closes_block_and_opens_another() {
+    FakeClock clock;
+    FakeObd2 obd(clock);
+    SequentialPidReader reader(obd, clock);
+    FakePool pool;
+    FakeValues values;
+    Collector collector(clock, reader, pool, values);
+    collector.applyConfig(twoPids(50, 250, 250));
+    collector.setRunning(true);
+
+    collector.poll();  // abre o bloco no primeiro registro
+    const uint32_t t0 = getU32(&pool.buffers[0].bytes[header::kStartMs]);
+    collector.addGps({1, 2, 3}, 900);  // anterior ao primeiro registro do bloco
+    collector.closeBlock(CloseReason::Stop);
+
+    TEST_ASSERT_EQUAL_UINT32(2, pool.submitted.size());
+    TEST_ASSERT_TRUE(900 < 1000);
+    (void)t0;
+    TEST_ASSERT_EQUAL_UINT32(900, getU32(&pool.submitted[1].bytes[header::kStartMs]));
+}
+
+void test_validate_rejects_reserved_pids() {
+    CollectorConfig config = CollectorConfig::defaults();
+    TEST_ASSERT_FALSE(config.setPid(0xFD, 1000));
+    TEST_ASSERT_FALSE(config.setPid(0xFE, 1000));
+    TEST_ASSERT_FALSE(config.setPid(0xFF, 1000));
+    TEST_ASSERT_TRUE(config.setPid(0xFC, 1000));
+    config.pids[0].pid = 0xFE;
+    TEST_ASSERT_EQUAL(ConfigError::InvalidPid, validate(config));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_defaults_match_table_11);
@@ -294,12 +328,14 @@ int main(int, char**) {
     RUN_TEST(test_scheduler_keeps_phase_for_overdue_reads);
     RUN_TEST(test_interval_bound_with_worst_case_responses);
     RUN_TEST(test_block_builder_serializes_records);
-    RUN_TEST(test_gps_before_block_start_gets_negative_delta);
+    RUN_TEST(test_delta_is_unsigned_and_rejects_out_of_range);
     RUN_TEST(test_block_builder_rejects_when_full);
     RUN_TEST(test_collector_closes_block_by_deadline_even_without_answers);
     RUN_TEST(test_collector_wait_includes_block_deadline);
     RUN_TEST(test_collector_counts_records_dropped_without_free_buffer);
     RUN_TEST(test_collector_closes_block_at_configured_interval);
     RUN_TEST(test_validate_flush_interval_range);
+    RUN_TEST(test_gps_before_block_start_closes_block_and_opens_another);
+    RUN_TEST(test_validate_rejects_reserved_pids);
     return UNITY_END();
 }

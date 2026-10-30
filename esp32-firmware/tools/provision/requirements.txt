@@ -1,0 +1,3 @@
+esp-idf-nvs-partition-gen
+cryptography
+esptool

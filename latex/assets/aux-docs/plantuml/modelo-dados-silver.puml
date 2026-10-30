@@ -1,0 +1,60 @@
+' Diagrama de classes UML das tabelas da camada silver (leituras decodificadas)
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:modelo-silver)
+' Gerar PNG (Git Bash): ./generate.sh modelo-dados-silver.puml
+@startuml modelo-dados-silver
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam linetype ortho
+hide circle
+hide methods
+skinparam class {
+  BackgroundColor #E6F4EA
+  BorderColor #2E7D32
+  ArrowColor #555555
+}
+
+class pid << (T,#2E7D32) table >> {
+  + pid : smallint
+  --
+  nome : text
+  unidade : text
+  n_bytes : smallint
+  fator : double precision
+  deslocamento : double precision
+  valor_min : double precision
+  valor_max : double precision
+}
+
+class leitura << (T,#2E7D32) hypertable >> {
+  dongle_id : int
+  boot_id : int
+  t_ms : bigint
+  pid : smallint
+  valor_bruto : int
+  valor : real
+  seq_bloco : bigint
+  recebido_em : timestamptz
+}
+
+class posicao << (T,#2E7D32) hypertable >> {
+  dongle_id : int
+  boot_id : int
+  t_ms : bigint
+  geom : geography(PointZ)
+  origem : text
+  seq_bloco : bigint
+  recebido_em : timestamptz
+}
+
+pid "1" -- "0..*" leitura : pid (FK)
+
+note bottom of leitura
+  Índice (dongle_id, boot_id, pid, t_ms)
+  Particionada por recebido_em
+end note
+
+note bottom of posicao
+  Índice (dongle_id, boot_id, t_ms)
+  Particionada por recebido_em
+end note
+@enduml

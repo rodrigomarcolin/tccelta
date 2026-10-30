@@ -1,0 +1,85 @@
+' Diagrama de sequência do handshake no servidor: POST /v1/dongles/{id}/desafio/resposta
+' Cada tabela do banco aparece como uma entidade própria, recebendo métodos que
+' representam a ação (não SQL cru). Continuação de handshake-servidor-desafio.puml;
+' o processamento assíncrono do worker está em handshake-servidor-worker.puml,
+' disparado pelo NOTIFY ao final deste diagrama.
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:handshake-servidor-resposta)
+' Gerar PNG (Git Bash): ./generate.sh handshake-servidor-resposta.puml
+@startuml handshake-servidor-resposta
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam noteBackgroundColor #FFF4E0
+skinparam noteBorderColor #C77700
+
+participant "App" as A
+participant "API" as S
+entity "desafio" as Desafio
+entity "dongle_estado" as DongleEstado
+entity "lacuna" as Lacuna
+entity "ancora_tempo" as AncoraTempo
+entity "boot" as Boot
+participant "Worker" as W
+
+== POST /v1/dongles/{id}/desafio/resposta ==
+
+A -> S : Resposta 0x02\n(c_S, N_S, TAIL_seq, HEAD_seq,\nboot_id, t_ms, tag K_auth)
+
+note over S
+  **S2** = relógio da API
+  (anotado na chegada,\nantes de processar)
+end note
+
+S -> S : verifica tag com K_auth do dongle
+break tag inválida
+  S -> Desafio : marcarResultado(tag_invalida)
+  S --> A : 422
+end
+
+S -> Desafio : responder(c_S, nonce, s2, boot_id,\nt_ms, head_seq, tail_seq)
+Desafio --> S : s1 (ou nenhuma linha)
+break nenhuma linha afetada
+  S --> A : 409 (desafio desconhecido,\nvencido ou já usado)
+end
+
+S -> S : confere consistência:\nTAIL_seq <= HEAD_seq + 1\nHEAD_seq >= salvo
+break inconsistente
+  S -> Desafio : marcarResultado(inconsistente)
+  S --> A : 422
+end
+
+S -> S : confere S2 - S1 <= 2s
+opt latência alta
+  S -> Desafio : marcarResultado(aceito_sem_ancora)
+  note right of S
+    Handshake segue sem âncora;
+    ACK pede novo desafio.
+  end note
+end
+
+critical transação (lock por dongle_id)
+  S -> DongleEstado : travar(dongle_id)
+  opt TAIL_seq > seq_contiguo + 1
+    S -> Lacuna : registrar(causa = OVERFLOW,\nfrom_seq, to_seq, c_S)
+    S -> DongleEstado : avancarSeqContiguo(tail_seq - 1)
+    note right of Lacuna
+      Flash cheia descartou blocos:
+      perda declarada e autenticada.
+    end note
+  end
+  S -> DongleEstado : atualizarHandshake(head_seq,\ntail_seq, head_relatado_em)
+  S -> AncoraTempo : registrarSeHouver(s1, s2)
+  S -> Boot : criarSeNaoExistir(boot_id)
+  S -> Boot : marcarPendente()
+  S -> Desafio : marcarResultado(aceito)
+end
+
+S -> W : NOTIFY
+note right of W
+  Continua na figura do
+  processamento do worker.
+end note
+S -> S : emite JWT (sub = DevId,\njti gravado em desafio.token_jti)
+S -> A : ACK 0x04\n(ACK_seq, tag K_auth) + token JWT
+@enduml

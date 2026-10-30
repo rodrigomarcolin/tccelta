@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
@@ -19,6 +20,9 @@ class _FakeObd2Repository implements Obd2Repository {
   _FakeObd2Repository({this.readings = const []});
 
   final List<Obd2Reading> readings;
+
+  @override
+  Future<void> reportGps(GpsFix fix) async {}
 
   @override
   List<Obd2Pid> get pids => Obd2Pid.values;

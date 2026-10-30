@@ -1,0 +1,9 @@
+0.1	EV 0 640 FORMAT v=2
+0.2	EV 3 671 FLUSH buf=- kind=boot seq=192 boot=4 len=23 tag_len=32 ok=1 attempts=1 reserved=1 reserve_us=5210 sign_us=61 crc_us=4 write_us=9890 dur=15 crc=B294D366 hex=- tag=-
+0.3	EV 10 700 FLUSH buf=0 kind=data seq=193 boot=4 len=500 tag_len=32 ok=1 attempts=1 reserved=0 reserve_us=0 sign_us=100 crc_us=20 write_us=8000 dur=9 crc=00000000 hex=- tag=-
+0.4	EV 11 800 FLUSH buf=1 kind=data seq=194 boot=4 len=1000 tag_len=32 ok=1 attempts=1 reserved=0 reserve_us=0 sign_us=140 crc_us=30 write_us=8100 dur=9 crc=00000000 hex=- tag=-
+0.5	EV 59 9908 HS_CHALLENGE c_s=1761480000 last_cs=1761479000 ack=130 c_conf=1761479000 flags=00 diag_min=- len=45 verify_us=38 result=ok
+0.6	EV 63 9915 HS_RESPONSE c_s=1761480000 tail=131 head=192 boot=4 t_ms=9912 deleted_upto=130 nvs_us=5480 tag_us=36 total_us=12100 q_us=310
+0.7	EV 65 10388 HS_ACK ack=194 c_conf=1761480000 flags=00 verify_us=35 result=ok advanced=1 opened=1 anchor_ok=1
+0.8	EV 72 10530 SYNC_BLOCK seq=192 kind=boot len=23 tag_len=32 read_us=9800 crc_us=3 crc_ok=1 sign_us=- tx_us=1100 frags=1 mtu=247 cursor=193
+0.9	EV 73 10530 SYNC_BATCH_END reason=done sent=1 bytes=58 dur_us=17200

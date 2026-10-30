@@ -1,3 +1,4 @@
+import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
@@ -28,6 +29,15 @@ class FakeObd2Repository implements Obd2Repository {
 
   /// Nº de chamadas a [readDtc] — para testes que verificam "reler".
   int readDtcCalls = 0;
+
+  /// Posições recebidas por [reportGps], na ordem.
+  final List<GpsFix> reportedGps = [];
+
+  @override
+  Future<void> reportGps(GpsFix fix) async {
+    if (failure case final f?) throw f;
+    reportedGps.add(fix);
+  }
 
   @override
   List<Obd2Pid> get pids => readings.map((r) => r.pid).toList();

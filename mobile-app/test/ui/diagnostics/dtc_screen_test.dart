@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_status.dart';
@@ -23,6 +24,9 @@ import '../../support/fake_obd2_repository.dart';
 /// permite observar o estado "carregando" do botão "Reler" no meio de uma
 /// leitura, algo que o [FakeObd2Repository] (resolve na hora) não permite.
 class _ControllableObd2Repository implements Obd2Repository {
+  @override
+  Future<void> reportGps(GpsFix fix) async {}
+
   Completer<DtcSnapshot> _completer = Completer<DtcSnapshot>();
 
   /// Nº de leituras iniciadas.

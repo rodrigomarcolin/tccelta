@@ -8,6 +8,7 @@ import 'package:tccelta_mobile/src/ui/connection/view/connection_lost_screen.dar
 import 'package:tccelta_mobile/src/ui/connection/view/scan_screen.dart';
 import 'package:tccelta_mobile/src/ui/diagnostics/view/dtc_screen.dart';
 import 'package:tccelta_mobile/src/ui/more/view/more_screen.dart';
+import 'package:tccelta_mobile/src/ui/settings/view/sync_settings_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view/sensor_picker_screen.dart';
 
@@ -51,6 +52,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.more,
       builder: (context, state) => const MoreScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.syncSettings,
+      builder: (context, state) => const SyncSettingsScreen(),
     ),
     GoRoute(
       path: AppRoutes.sensorPicker,

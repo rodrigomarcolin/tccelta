@@ -6,14 +6,13 @@
 #include "collector/Events.h"
 
 using collector::Block;
-using collector::kBlockSize;
-using collector::kHeaderSize;
+using collector::ReadStatus;
 
 namespace {
 
-constexpr const char* kDir             = "/log";
-constexpr uint16_t    kBlocksPerSegment = 64;
-constexpr size_t      kReserveBytes    = 8 * 1024;  // folga para metadados do LittleFS
+constexpr const char* kDir       = "/log2";
+constexpr const char* kLegacyDir = "/log";
+constexpr size_t      kReserveBytes = 8 * 1024;  // folga para metadados do LittleFS
 
 class Lock {
 public:
@@ -30,8 +29,6 @@ String segmentPath(uint32_t firstSeq) {
     return String(path);
 }
 
-size_t freeBytes() { return LittleFS.totalBytes() - LittleFS.usedBytes(); }
-
 /** "0000000128.seg" → 128. */
 bool parseSegmentName(const String& name, uint32_t& firstSeq) {
     if (!name.endsWith(".seg")) return false;
@@ -42,21 +39,43 @@ bool parseSegmentName(const String& name, uint32_t& firstSeq) {
     return true;
 }
 
-/** Lê o cabeçalho do próximo bloco; false se acabou ou está inconsistente. */
-bool readHeader(File& file, uint8_t* header, size_t& length) {
-    if (file.read(header, kHeaderSize) != kHeaderSize) return false;
-    length = collector::getU16(&header[collector::header::kLength]);
-    return length >= kHeaderSize && length <= kBlockSize &&
-           static_cast<size_t>(file.available()) >= length - kHeaderSize;
-}
+/** Adaptador de File para o codec puro (varredura e leitura de registro). */
+class FileByteSource : public collector::IByteSource {
+public:
+    explicit FileByteSource(File& file) : _file(file) {}
+    size_t read(uint8_t* out, size_t n) override { return _file.read(out, n); }
+    bool skip(size_t n) override { return _file.seek(n, SeekCur); }
+    size_t remaining() const override { return _file.size() - _file.position(); }
+
+private:
+    File& _file;
+};
 
 }  // namespace
 
 LittleFsBlockStore::LittleFsBlockStore() : _mutex(xSemaphoreCreateMutex()) { configASSERT(_mutex); }
 
+void LittleFsBlockStore::migrateV1() {
+    if (!LittleFS.exists(kLegacyDir)) return;
+    int removed = 0;
+    std::vector<String> names;
+    File dir = LittleFS.open(kLegacyDir);
+    for (File file = dir.openNextFile(); file; file = dir.openNextFile()) {
+        names.push_back(String(kLegacyDir) + "/" + file.name());
+        file.close();
+    }
+    dir.close();
+    for (const String& path : names) {
+        if (LittleFS.remove(path)) ++removed;
+    }
+    LittleFS.rmdir(kLegacyDir);
+    collector::Event("LOG_MIGRATE").num("removed", removed);
+}
+
 bool LittleFsBlockStore::begin(bool wipe) {
     if (!LittleFS.begin(true)) return false;
     if (wipe && !LittleFS.format()) return false;
+    migrateV1();
     if (!LittleFS.exists(kDir)) LittleFS.mkdir(kDir);
 
     // O nome de cada segmento é o seq do seu primeiro bloco: ordena por ele.
@@ -69,38 +88,33 @@ bool LittleFsBlockStore::begin(bool wipe) {
         if (parseSegmentName(name, firstSeq)) firstSeqs.push_back(firstSeq);
         else LittleFS.remove(String(kDir) + "/" + name);  // não é um segmento
     }
+    dir.close();
     std::sort(firstSeqs.begin(), firstSeqs.end());
 
     Lock lock(_mutex);
     for (uint32_t firstSeq : firstSeqs) {
-        Segment segment;
-        if (loadSegment(segmentPath(firstSeq).c_str(), segment)) {
-            pushSegment(segment);  // acima do limite, descarta os mais antigos
-        } else {
-            LittleFS.remove(segmentPath(firstSeq));  // vazio ou ilegível
+        const String path = segmentPath(firstSeq);
+        File file = LittleFS.open(path, "r");
+        collector::ScanResult scan;
+        bool valid = false;
+        if (file) {
+            FileByteSource source(file);
+            valid = collector::scanSegment(source, firstSeq, scan) && scan.count > 0;
+            file.close();
         }
+        if (!valid) {
+            LittleFS.remove(path);  // cabeçalho inválido ou sem registro válido
+            continue;
+        }
+        Segment segment = {scan.firstSeq, scan.lastSeq, scan.count, scan.bytes, scan.tagLen,
+                           scan.trailingGarbage || scan.count >= collector::kBlocksPerSegment};
+        if (scan.trailingGarbage) {
+            collector::Event("SEG_SEAL").num("first", scan.firstSeq).num("last", scan.lastSeq).token("reason", "scan_tail");
+        }
+        pushSegment(segment);  // acima do limite, descarta os mais antigos
     }
+    refreshUsage();
     return true;
-}
-
-bool LittleFsBlockStore::loadSegment(const char* path, Segment& out) {
-    File file = LittleFS.open(path, "r");
-    if (!file) return false;
-
-    out = {};
-    uint8_t header[kHeaderSize];
-    size_t length;
-    // Um bloco cortado no meio (energia) não é visível no LittleFS, mas por
-    // garantia a varredura para no primeiro cabeçalho inconsistente.
-    while (readHeader(file, header, length)) {
-        const uint32_t seq = collector::getU32(&header[collector::header::kSeq]);
-        if (out.count == 0) out.firstSeq = seq;
-        out.lastSeq = seq;
-        ++out.count;
-        out.bytes += length;
-        file.seek(length - kHeaderSize, SeekCur);
-    }
-    return out.count > 0;
 }
 
 void LittleFsBlockStore::pushSegment(const Segment& segment) {
@@ -116,68 +130,155 @@ void LittleFsBlockStore::dropOldest() {
 }
 
 void LittleFsBlockStore::discardOldest() {
-    const Segment& oldest = at(0);
-    collector::Event("SEG_DROP").num("first", oldest.firstSeq).num("last", oldest.lastSeq)
-        .num("count", oldest.count);
+    const Segment oldest = at(0);
+    collector::Event("SEG_DROP").num("first", oldest.firstSeq).num("last", oldest.lastSeq).num("count", oldest.count);
     _lostBlocks += oldest.count;
+    if (oldest.lastSeq > _overflowUpTo) _overflowUpTo = oldest.lastSeq;
     dropOldest();
 }
 
+// Em bancada, BLOCK_LOG_LIMIT_BYTES limita o log para provocar a flash cheia sem encher 2 MB.
+#if defined(BLOCK_LOG_LIMIT_BYTES)
+size_t LittleFsBlockStore::capacityBytes() const { return BLOCK_LOG_LIMIT_BYTES; }
+size_t LittleFsBlockStore::usedBytes() const {
+    size_t sum = 0;
+    for (size_t i = 0; i < _count; ++i) sum += at(i).bytes;
+    return sum;
+}
+size_t LittleFsBlockStore::freeBytes() const {
+    const size_t used = usedBytes();
+    return used >= BLOCK_LOG_LIMIT_BYTES ? 0 : BLOCK_LOG_LIMIT_BYTES - used;
+}
+#else
+size_t LittleFsBlockStore::capacityBytes() const { return LittleFS.totalBytes(); }
+size_t LittleFsBlockStore::usedBytes() const { return LittleFS.usedBytes(); }
+size_t LittleFsBlockStore::freeBytes() const { return LittleFS.totalBytes() - LittleFS.usedBytes(); }
+#endif
+
+void LittleFsBlockStore::refreshUsage() {
+    const size_t capacity = capacityBytes();
+    _usagePermille = capacity == 0 ? 0 : static_cast<uint16_t>(std::min<size_t>(1000, usedBytes() * 1000 / capacity));
+}
+
 void LittleFsBlockStore::ensureSpace(size_t bytes) {
-    while (_count > 1 && freeBytes() < bytes + kReserveBytes) discardOldest();
+#if defined(BLOCK_LOG_LIMIT_BYTES)
+    const size_t reserve = 0;
+#else
+    const size_t reserve = kReserveBytes;
+#endif
+    while (_count > 1 && freeBytes() < bytes + reserve) discardOldest();
+}
+
+void LittleFsBlockStore::startNewSegment() {
+    Lock lock(_mutex);
+    _forceNew = true;
 }
 
 bool LittleFsBlockStore::append(const Block& block) {
     Lock lock(_mutex);
-    ensureSpace(block.length);
-
     const uint32_t seq = collector::blockSeq(block);
-    const bool newSegment = _count == 0 || newest().count >= kBlocksPerSegment;
-    const uint32_t firstSeq = newSegment ? seq : newest().firstSeq;
+    const uint8_t tagLen = block.tagLength;
 
-    // close() sincroniza: ao retornar, o bloco está na flash.
-    File file = LittleFS.open(segmentPath(firstSeq), "a");
-    if (!file) return false;
-    const size_t written = file.write(block.bytes, block.length);
-    file.close();
-    if (written != block.length) return false;
+    const char* reason = "first";
+    bool newSegment = true;
+    if (_count > 0) {
+        const Segment& last = newest();
+        if (_forceNew) reason = "boot";
+        else if (last.sealed) reason = "sealed";
+        else if (last.count >= collector::kBlocksPerSegment) reason = "full";
+        else if (last.tagLen != tagLen) reason = "tag_len";
+        else if (last.lastSeq + 1 != seq) reason = "boot";  // defensivo: I1 exige seq contíguo
+        else newSegment = false;
+    }
 
+    const size_t recordBytes = collector::recordSize(block.length, tagLen);
+    ensureSpace(recordBytes + (newSegment ? collector::kSegmentHeaderSize : 0));
+
+    // Monta cabeçalho (se novo) + dados + tag + CRC LE e escreve de uma vez.
+    size_t n = 0;
     if (newSegment) {
-        pushSegment({seq, seq, 1, static_cast<uint32_t>(block.length)});
+        collector::encodeSegmentHeader(tagLen, _record);
+        n = collector::kSegmentHeaderSize;
+    }
+    memcpy(_record + n, block.bytes, block.length);
+    n += block.length;
+    memcpy(_record + n, block.tag, tagLen);
+    n += tagLen;
+    collector::putU32(_record + n, block.crc);
+    n += collector::kCrcSize;
+
+    const uint32_t firstSeq = newSegment ? seq : newest().firstSeq;
+    // close() sincroniza: ao retornar, o registro está na flash.
+    File file = LittleFS.open(segmentPath(firstSeq), newSegment ? "w" : "a");
+    if (!file) {
+        if (!newSegment) newest().sealed = true;
+        _forceNew = true;
+        return false;
+    }
+    const size_t written = file.write(_record, n);
+    file.close();
+    if (written != n) {
+        if (newSegment) {
+            LittleFS.remove(segmentPath(firstSeq));
+        } else {
+            Segment& s = newest();
+            s.sealed = true;
+            collector::Event("SEG_SEAL").num("first", s.firstSeq).num("last", s.lastSeq).token("reason", "write_fail");
+        }
+        _forceNew = true;
+        return false;
+    }
+
+    _forceNew = false;
+    if (newSegment) {
+        collector::Event("SEG_NEW").num("first", seq).num("tag_len", tagLen).token("reason", reason);
+        pushSegment({seq, seq, 1, static_cast<uint32_t>(n), tagLen, false});
     } else {
         Segment& segment = newest();
         segment.lastSeq = seq;
         ++segment.count;
-        segment.bytes += block.length;
+        segment.bytes += static_cast<uint32_t>(n);
+        if (segment.count >= collector::kBlocksPerSegment) segment.sealed = true;
     }
+    refreshUsage();
     return true;
 }
 
-bool LittleFsBlockStore::read(uint32_t seq, Block& out) {
+ReadStatus LittleFsBlockStore::read(uint32_t seq, Block& out) {
     Lock lock(_mutex);
     for (size_t i = 0; i < _count; ++i) {
         const Segment& segment = at(i);
         if (seq < segment.firstSeq || seq > segment.lastSeq) continue;
 
         File file = LittleFS.open(segmentPath(segment.firstSeq), "r");
-        if (!file) return false;
-        size_t length;
-        while (readHeader(file, out.bytes, length)) {
-            if (collector::blockSeq(out) == seq) {
-                out.length = length;
-                return file.read(out.bytes + kHeaderSize, length - kHeaderSize) == length - kHeaderSize;
-            }
-            file.seek(length - kHeaderSize, SeekCur);
-        }
-        return false;
+        if (!file) return ReadStatus::Corrupt;
+        FileByteSource source(file);
+        const ReadStatus status = collector::readRecord(source, segment.firstSeq, seq, out);
+        file.close();
+        return status;
     }
-    return false;
+    return ReadStatus::NotFound;
 }
 
-void LittleFsBlockStore::deleteUpTo(uint32_t upTo) {
+uint32_t LittleFsBlockStore::nextStoredSeq(uint32_t fromSeq) const {
     Lock lock(_mutex);
+    for (size_t i = 0; i < _count; ++i) {
+        const Segment& segment = at(i);
+        if (segment.lastSeq >= fromSeq) return std::max(fromSeq, segment.firstSeq);
+    }
+    return 0;
+}
+
+size_t LittleFsBlockStore::deleteUpTo(uint32_t upTo) {
+    Lock lock(_mutex);
+    size_t removed = 0;
     // Só remove segmentos inteiros; o aberto (o mais novo) fica até encher.
-    while (_count > 1 && at(0).lastSeq <= upTo) dropOldest();
+    while (_count > 1 && at(0).lastSeq <= upTo) {
+        dropOldest();
+        ++removed;
+    }
+    refreshUsage();
+    return removed;
 }
 
 bool LittleFsBlockStore::empty() const {
@@ -193,4 +294,32 @@ uint32_t LittleFsBlockStore::oldestSeq() const {
 uint32_t LittleFsBlockStore::newestSeq() const {
     Lock lock(_mutex);
     return _count == 0 ? 0 : at(_count - 1).lastSeq;
+}
+
+bool LittleFsBlockStore::corrupt(uint32_t seq) {
+    if (!collector::kEventsEnabled) return false;
+    Lock lock(_mutex);
+    for (size_t i = 0; i < _count; ++i) {
+        const Segment& segment = at(i);
+        if (seq < segment.firstSeq || seq > segment.lastSeq) continue;
+
+        File file = LittleFS.open(segmentPath(segment.firstSeq), "r+");
+        if (!file) return false;
+        // Percorre os cabeçalhos até o registro `seq` e inverte o 1º byte de registro
+        // (offset 12): o cabeçalho fica intacto e a varredura do boot continua válida.
+        size_t offset = collector::kSegmentHeaderSize;
+        for (uint32_t k = segment.firstSeq; k < seq; ++k) {
+            uint8_t head[collector::kHeaderSize];
+            if (!file.seek(offset) || file.read(head, sizeof(head)) != sizeof(head)) return false;
+            offset += collector::recordSize(collector::getU16(&head[collector::header::kLength]), segment.tagLen);
+        }
+        const size_t target = offset + collector::kHeaderSize;
+        uint8_t value;
+        if (!file.seek(target) || file.read(&value, 1) != 1) return false;
+        value = static_cast<uint8_t>(~value);
+        const bool ok = file.seek(target) && file.write(&value, 1) == 1;
+        file.close();
+        return ok;
+    }
+    return false;
 }

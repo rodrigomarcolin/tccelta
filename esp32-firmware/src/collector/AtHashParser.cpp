@@ -79,7 +79,7 @@ bool matches(const char* text, const char* name, const char*& rest) {
 AtHashCommand parseArgs(Kind kind, const char* rest) {
     AtHashCommand cmd;
     Args args(rest);
-    int64_t a, b, c;
+    int64_t a = 0, b = 0, c = 0;
     bool ok = false;
 
     switch (kind) {
@@ -95,6 +95,7 @@ AtHashCommand parseArgs(Kind kind, const char* rest) {
             cmd.periodMs = static_cast<uint32_t>(a);
             break;
         case Kind::Ack:
+        case Kind::Corrupt:
             ok = args.decimal(a, 1, UINT32_MAX);
             cmd.seq = static_cast<uint32_t>(a);
             break;
@@ -129,6 +130,8 @@ AtHashCommand parseAtHash(const char* text) {
         {"AT#NET", Kind::Net},        {"AT#GPS", Kind::Gps},
         {"AT#TMAX?", Kind::TmaxQuery}, {"AT#TMAX", Kind::Tmax},
         {"AT#ACK", Kind::Ack},        {"AT#FLUSH", Kind::Flush},
+        {"AT#SYNC?", Kind::SyncStatus}, {"AT#CORRUPT", Kind::Corrupt},
+        {"AT#WIPE", Kind::Wipe},
     };
 
     for (const auto& command : kCommands) {

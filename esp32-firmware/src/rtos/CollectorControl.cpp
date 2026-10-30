@@ -32,6 +32,7 @@ collector::ConfigError CollectorControl::commit(const collector::CollectorConfig
 
 collector::ConfigError CollectorControl::setPid(uint8_t pid, uint32_t periodMs) {
     collector::CollectorConfig candidate = _config;
+    if (pid > collector::kPidRecordTypeMax) return collector::ConfigError::InvalidPid;
     if (!candidate.setPid(pid, periodMs)) return collector::ConfigError::TooManyPids;
     return commit(candidate);
 }
@@ -100,9 +101,32 @@ bool CollectorControl::startTmaxMeasurement() {
 
 bool CollectorControl::injectAck(uint32_t seq) {
     if (!collector::kEventsEnabled) return false;
-    DataMessage message = {};
-    message.len = _protocol.encodeAck(seq, message.bytes, sizeof(message.bytes));
-    return message.len > 0 && xQueueSend(_ctx.uploadRx, &message, 0) == pdTRUE;
+    SyncInput input = {};
+    input.kind = SyncInputKind::InjectAck;
+    input.value = seq;
+    return xQueueSend(_ctx.syncRx, &input, 0) == pdTRUE;
+}
+
+void CollectorControl::syncStatusLine(char* out, size_t capacity) const {
+    const datasync::SyncStatus s = _syncStatus.get();
+    snprintf(out, capacity,
+             "SYNC conn=%d sub=%d open=%d ack=%lu cur=%lu end=%lu head=%lu tail=%lu cs=%lu rcs=%lu "
+             "flags=%02X mtu=%u rsv=%lu",
+             s.connected, s.subscribed, s.sessionOpen, static_cast<unsigned long>(s.ackLocal),
+             static_cast<unsigned long>(s.cursor), static_cast<unsigned long>(s.batchEnd),
+             static_cast<unsigned long>(s.head), static_cast<unsigned long>(s.tail),
+             static_cast<unsigned long>(s.lastAcceptedCs), static_cast<unsigned long>(s.respondedCs), s.flags,
+             s.mtu, static_cast<unsigned long>(_nvs.loadSeqReserve()));
+}
+
+bool CollectorControl::corruptBlock(uint32_t seq) {
+    return collector::kEventsEnabled && _store.corrupt(seq);
+}
+
+void CollectorControl::requestWipe() {
+    if (!collector::kEventsEnabled) return;
+    _nvs.requestWipe();
+    esp_restart();
 }
 
 collector::CollectorStats CollectorControl::stats() const {

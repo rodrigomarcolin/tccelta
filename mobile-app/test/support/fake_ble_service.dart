@@ -17,6 +17,8 @@ class FakeBleService implements BleService {
     this.adapterStates = const [BleAdapterState.on],
     this.scanError,
     this.holdScanOpen = false,
+    this.channels = const {},
+    this.onPhase,
     this.phases = const [
       BleConnectionPhase.connecting,
       BleConnectionPhase.optimizingLink,
@@ -47,6 +49,16 @@ class FakeBleService implements BleService {
 
   /// Sequência de fases que a conexão falsa percorre.
   final List<BleConnectionPhase> phases;
+
+  /// Canais extras (por UUID do serviço) expostos pela conexão.
+  final Map<String, BleChannel> channels;
+
+  /// Chamado a cada fase, ANTES de ela ser emitida (permite simular uma
+  /// notificação enviada durante o `setNotifyValue`).
+  final void Function(BleConnectionPhase phase)? onPhase;
+
+  /// Quantas conexões foram abertas.
+  int connectCount = 0;
 
   /// Se há um scan ativo (não parado). Modela o contrato do FBP: um scan por
   /// vez — o anterior precisa ser parado antes de o novo render resultados.
@@ -123,19 +135,37 @@ class FakeBleService implements BleService {
     required String serviceUuid,
     required String rxUuid,
     required String txUuid,
+    List<BleChannelSpec> extraChannels = const [],
     int mtu = 512,
-  }) async => FakeBleConnection(phases);
+  }) async {
+    connectCount++;
+    return FakeBleConnection(
+      phases,
+      channelsByService: channels,
+      onPhase: onPhase,
+    );
+  }
 }
 
 /// Conexão falsa que percorre uma sequência de fases, uma por turno do loop de
 /// eventos (para que os assinantes tenham tempo de se registrar).
 class FakeBleConnection implements BleConnection {
   /// Cria a conexão e começa a emitir a sequência de fases recebida.
-  FakeBleConnection(this._phases) {
+  FakeBleConnection(
+    this._phases, {
+    this.channelsByService = const {},
+    this.onPhase,
+  }) {
     unawaited(_run());
   }
 
   final List<BleConnectionPhase> _phases;
+
+  /// Canais extras por UUID do serviço.
+  final Map<String, BleChannel> channelsByService;
+
+  /// Chamado antes de cada fase ser emitida.
+  final void Function(BleConnectionPhase phase)? onPhase;
   final StreamController<BleConnectionPhase> _phaseCtrl =
       StreamController<BleConnectionPhase>.broadcast();
   final StreamController<List<int>> _incomingCtrl =
@@ -145,10 +175,23 @@ class FakeBleConnection implements BleConnection {
   Future<void> _run() async {
     for (final p in _phases) {
       await Future<void>.delayed(Duration.zero);
+      onPhase?.call(p);
       _current = p;
       if (!_phaseCtrl.isClosed) _phaseCtrl.add(p);
     }
   }
+
+  /// Emite [phase] manualmente (simula queda e reconexão).
+  void emitPhase(BleConnectionPhase phase) {
+    _current = phase;
+    if (!_phaseCtrl.isClosed) _phaseCtrl.add(phase);
+  }
+
+  @override
+  BleChannel? channel(String serviceUuid) => channelsByService[serviceUuid];
+
+  @override
+  int get mtu => 247;
 
   @override
   Stream<BleConnectionPhase> get phase => _phaseCtrl.stream;

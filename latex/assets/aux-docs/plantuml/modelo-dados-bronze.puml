@@ -1,0 +1,51 @@
+' Diagrama de classes UML das tabelas da camada bronze (blocos recebidos)
+' Usado em: latex/aux-docs/segunraca-dongle-server.tex (fig:modelo-bronze)
+' Gerar PNG (Git Bash): ./generate.sh modelo-dados-bronze.puml
+@startuml modelo-dados-bronze
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam linetype ortho
+hide circle
+hide methods
+skinparam class {
+  BackgroundColor #FFF4E0
+  BorderColor #C77700
+  ArrowColor #555555
+}
+
+class bloco_bruto << (T,#C77700) table >> {
+  + dongle_id : int
+  + seq : bigint
+  --
+  boot_id : int
+  t0_ms : bigint
+  epoca : int
+  payload : bytea
+  assinatura : bytea
+  recebido_em : timestamptz
+}
+
+class dongle_estado << (T,#C77700) table >> {
+  + dongle_id : int
+  --
+  seq_contiguo : bigint
+  maior_seq_visto : bigint
+  head_seq : bigint
+  tail_seq : bigint
+  head_relatado_em : timestamptz
+  ultimo_c_s : bigint
+}
+
+dongle_estado "1" -- "1" bloco_bruto : dongle_id
+
+note bottom of bloco_bruto
+  Chave primária (dongle_id, seq)
+  neutraliza repetição e reordenação.
+end note
+
+note bottom of dongle_estado
+  head_seq/tail_seq vêm do último
+  handshake aceito; ultimo_c_s garante
+  c_S estritamente crescente.
+end note
+@enduml

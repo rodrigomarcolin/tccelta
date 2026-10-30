@@ -446,6 +446,8 @@ Implementa a abordagem combinada:
 `Δt` nunca estourando, GPS com `tMs` anterior ao `tStart` gravado com `Δt = 0`.
 
 ### 5.5 Buffer duplo, flush e log
+
+> **Substituído pela Fase 1 de segurança (specs `.spec/fase-1-seguranca-telemetria/02`, `03`, `05`):** o `last_seq` gravado a cada bloco deu lugar à reserva de `seq` (`seq_rsv`, a cada N blocos) e a um bloco BOOT em todo boot; o log passou ao formato v2 (`dados | tag | CRC32`, segmentos `TCS2`); o envio com janela e *timeout* de ACK (`UploadTask`, `UploadCursor`) e a sincronização de hora (Cristian) foram trocados pelo handshake e pelo cursor do `SyncEngine`. Ver `docs/debug-events.md` v2.
 - Buffer duplo como pool de dois blocos circulando entre `qFreeBlocks` e
   `qFullBlocks` (§4.5). Se não houver bloco livre ao fechar, os registros
   seguintes são descartados e contados (contador exposto em `AT#LIST`).

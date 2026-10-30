@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
@@ -15,6 +16,9 @@ import '../../support/fake_panel_repository.dart';
 /// Repository de telemetria fake que devolve leituras fixas e registra as
 /// chamadas de [readMany] (para asserir quais PIDs o ciclo rápido pediu).
 class _FakeObd2Repository implements Obd2Repository {
+  @override
+  Future<void> reportGps(GpsFix fix) async {}
+
   final List<List<Obd2Pid>> readManyCalls = [];
 
   @override

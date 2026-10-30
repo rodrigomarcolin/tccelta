@@ -7,6 +7,8 @@ import 'package:tccelta_mobile/src/router/app_routes.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/connection/view_model/connecting_view_model.dart';
 import 'package:tccelta_mobile/src/ui/core/hooks/hooks.dart';
+import 'package:tccelta_mobile/src/ui/gps/gps_providers.dart';
+import 'package:tccelta_mobile/src/ui/sync/sync_providers.dart';
 
 /// Guarda de sessão BLE de escopo global.
 ///
@@ -88,6 +90,11 @@ class ConnectionGuard extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Leitura contínua e GPS vivem enquanto o app vive: instanciados aqui.
+    ref
+      ..watch(syncCoordinatorProvider)
+      ..watch(gpsReporterProvider);
+
     // (3) Permissão revogada em runtime: re-checa a cada retorno ao primeiro
     // plano (o usuário passou pelos Ajustes do SO). Se a permissão caiu,
     // derruba a sessão morta e volta ao gate de permissões — que re-checa e

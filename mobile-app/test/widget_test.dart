@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/main.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_snapshot.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_adapter_info.dart';
 import 'package:tccelta_mobile/src/domain/obd2/obd2_pid.dart';
@@ -19,6 +20,7 @@ import 'package:tccelta_mobile/src/ui/telemetry/view/painel_screen.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/view_model/panel_view_model.dart';
 
 import 'support/fake_panel_repository.dart';
+import 'support/sync_provider_overrides.dart';
 
 /// Repository de permissões fake para os testes de widget: controla se a
 /// permissão já foi concedida sem tocar no plugin real.
@@ -81,6 +83,9 @@ const Map<Obd2Pid, double> _exampleValues = {
 /// transporte BLE.
 class _FakeObd2Repository implements Obd2Repository {
   @override
+  Future<void> reportGps(GpsFix fix) async {}
+
+  @override
   List<Obd2Pid> get pids => Obd2Pid.values;
 
   @override
@@ -115,6 +120,9 @@ class _FakeObd2Repository implements Obd2Repository {
 /// Repository que trava (nunca resolve) — mantém o painel na fase inicial, para
 /// exercitar os skeletons de carregamento antes da primeira leitura.
 class _HangingObd2Repository implements Obd2Repository {
+  @override
+  Future<void> reportGps(GpsFix fix) async {}
+
   final Completer<Never> _never = Completer<Never>();
 
   @override
@@ -149,6 +157,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...syncProviderOverrides(),
           blePermissionsRepositoryProvider.overrideWithValue(
             _FakeBlePermissionsRepository(),
           ),
@@ -164,6 +173,7 @@ void main() {
       'adicionados', (tester) async {
     final container = ProviderContainer(
       overrides: [
+        ...syncProviderOverrides(),
         obd2RepositoryProvider.overrideWithValue(_FakeObd2Repository()),
         panelRepositoryProvider.overrideWithValue(FakePanelRepository()),
       ],
@@ -210,6 +220,7 @@ void main() {
     (tester) async {
       final container = ProviderContainer(
         overrides: [
+          ...syncProviderOverrides(),
           obd2RepositoryProvider.overrideWithValue(_HangingObd2Repository()),
           panelRepositoryProvider.overrideWithValue(FakePanelRepository()),
         ],
