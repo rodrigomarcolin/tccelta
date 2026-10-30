@@ -637,6 +637,28 @@ Sobre a âncora de tempo, uma limitação conhecida é quando um boot fica todo 
 	\legend{Fonte: elaborado pelo autor.}
 \end{figure}
 
+\subsection{Assinatura digital}
+
+Na abordagem com assinatura digital, cada bloco de dados gravado na flash do dongle passa a ser autenticado com ECDSA sobre 
+a curva P-256 (\textit{secp256r1}), usando SHA-256 como função de hash, em lugar da tag HMAC-SHA256 calculada com $K_{rec}$. Na fabricação, 
+o dongle gera um par de chaves. A chave privada fica protegida na NVS cifrada e é usada para assinar cada bloco. A chave pública 
+é registrada no servidor, que a usa apenas para verificar as assinaturas dos blocos recebidos. Para evitar que um nonce mal 
+gerado comprometa a chave privada, as assinaturas são geradas de forma determinística, conforme a RFC 6979.
+
+Como a assinatura com ECDSA depende de um número aleatório $k$ e, se ele for repetido, há risco de vazamento da chave privada, é
+preciso garantir que assinaturas diferenças nunca sejam feitas com o mesmo $k$. assim, o RFC 6979 define um processo de utilização do
+algortimo HMAC-DRGB, baseado em SHA-256, que gera um número baseado na chave privada, que garante que $k$ seja imprevisível ao levar
+na sua formação uma informação secreta, e o hash da mensagem, o que ajuda a evitar repetição de k para mensagem diferentes.
+
+A principal vantagem da assinatura em relação ao HMAC é que o servidor guarda somente a chave pública, de modo que nem um invasor
+com acesso ao servidor consegue forjar blocos válidos. Além disso, a chave privada garante irretratabilidade para o motorista, não
+sendo possível forjar dados no seu nome sem a obtenção da chave privada, e isso pode ser importante para algumas aplicações como seguros
+personalizados. Escolheu-se ECDSA em vez de RSA por oferecer segurança equivalente com chaves e assinaturas muito menores: uma assinatura
+de 64 bytes, próxima da tag HMAC de 32 bytes, em vez dos 256 bytes do RSA-2048. A curva P-256 foi escolhida por ser a mesma que o LESC 
+usa no pareamento BLE, por estar disponível no mbedTLS do ESP32, por ter aceleração em hardware nos modelos mais recentes da Espressif e 
+por ser a única curva suportada pelo elemento seguro ATECC608B, previsto como evolução do projeto. Ela também é amplamente suportada 
+pelas ferramentas do servidor, como a biblioteca padrão do Go e o HashiCorp Vault.
+
 \section{Integração entre BLE e HTTPS/TLS para troca de dados entre dongle e servidor}
 
 O app se comunica com o dongle por meio de BLE. Como já foi modelado na seção \ref{secsec:comunicacao-wireless}, o BLE
