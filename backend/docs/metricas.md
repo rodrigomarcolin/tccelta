@@ -79,6 +79,7 @@ Valores de `result`:
 | `tccelta_batches_total` | contador | `status` | Lotes recebidos, por desfecho |
 | `tccelta_blocks_total` | contador | `result` | Blocos dos lotes, por desfecho |
 | `tccelta_ingestion_tx_duration_seconds` | histograma | — | Duração da transação de gravação de um lote. Baldes: 5 ms a 5 s |
+| `tccelta_block_verify_duration_seconds` | histograma | `profile` | Duração da verificação das tags de um lote, por perfil (`hmac`: chamadas ao KMS; `asym`: ECDSA local; `none`: comparação de tag vazia). Baldes: 100 µs a 1 s |
 | `tccelta_inserted_rows_total` | contador | `table` | Linhas gravadas nas tabelas de dados |
 | `tccelta_gaps_total` | contador | `cause` | Lacunas registradas no log do dongle |
 

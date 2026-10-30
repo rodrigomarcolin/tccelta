@@ -14,6 +14,7 @@ type MetricsIngestion interface {
 	Blocks(result string, n int)
 	Batch(status string)
 	IngestionTxDuration(d time.Duration)
+	BlockVerifyDuration(profile string, d time.Duration)
 	Rows(table string, n int)
 	Gap(cause string)
 }

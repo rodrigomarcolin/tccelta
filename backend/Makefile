@@ -10,11 +10,11 @@ TOOLS        = run --rm ferramentas
 KMS_TOOLS    = run --rm kms-ferramentas
 SIM_DB       = --db-url-env SIM_BANCO_URL
 
-# Dongles novos para um cenário do simulador (stack de teste): $(call E2E_NEW_DONGLES,<scenario>). O dongle virtual
+# Dongles novos para um cenário do simulador (stack de teste): $(call E2E_NEW_DONGLES,<scenario>[,<perfil>]). O dongle virtual
 # sempre recomeça do seq 1, e o servidor guarda o estado por DevId; reusar um DevId que outro cenário já
 # avançou dá 422 resposta_inconsistente. Cada cenário recebe 3 dongles recém-criados (KMS, depois banco).
 E2E_NEW_DONGLES = ( rm -rf saida/e2e-$(1) saida/dongles-$(1).csv || true ) \
-	&& $(COMPOSE_T) --profile ferramentas $(KMS_TOOLS) provision new --no-material --count 3 --out /saida/e2e-$(1) --csv-out /saida/dongles-$(1).csv \
+	&& $(COMPOSE_T) --profile ferramentas $(KMS_TOOLS) provision new --no-material --profile $(or $(2),hmac) --count 3 --out /saida/e2e-$(1) --csv-out /saida/dongles-$(1).csv \
 	&& $(COMPOSE_T) --profile ferramentas $(TOOLS) provision register --file /saida/e2e-$(1)
 E2E_SIMULATE    = $(COMPOSE_T) --profile ferramentas $(TOOLS) simulator --keys /saida/dongles-$(1).csv --api http://api:8080 $(SIM_DB) --scenario $(1)
 
@@ -45,7 +45,7 @@ seed-dev:        output-dir
 	$(COMPOSE) --profile ferramentas $(KMS_TOOLS) provision import --file /testdata/test-dongles.csv --out /saida/registros
 	$(COMPOSE) --profile ferramentas $(TOOLS) provision register --file /saida/registros
 provision:       output-dir
-	$(COMPOSE) --profile ferramentas $(KMS_TOOLS) provision new --out /saida --count $(or $(N),1) --hw $(or $(HW),dev)
+	$(COMPOSE) --profile ferramentas $(KMS_TOOLS) provision new --out /saida --profile $(or $(PROFILE),hmac) --count $(or $(N),1) --hw $(or $(HW),dev)
 	$(COMPOSE) --profile ferramentas $(TOOLS) provision register --file /saida
 kms-wrapping:    output-dir ; $(COMPOSE) --profile ferramentas $(KMS_TOOLS) provision export-wrapping --out /saida/kms_wrapping.json
 kms-import:      output-dir
@@ -65,9 +65,9 @@ lint:            ; docker run --rm -v "$(CURDIR)":/src -w /src $(LINT_IMG) golan
 build-tools:
 	$(COMPOSE) --profile ferramentas build ferramentas kms-ferramentas
 scenario:        output-dir build-tools
-	@[ -n "$(C)" ] || { echo "uso: make scenario C=<e2e|negative-protocol|time|generation|reconnection|...> [N=3] [ARGS='--speedup 120']"; exit 1; }
+	@[ -n "$(C)" ] || { echo "uso: make scenario C=<e2e|negative-protocol|time|generation|asym|reconnection|...> [N=3] [PROFILE=hmac|asym|none] [ARGS='--speedup 120']"; exit 1; }
 	-rm -rf saida/cenario-$(C) saida/dongles-$(C).csv
-	$(COMPOSE) --profile ferramentas $(KMS_TOOLS) provision new --no-material --count $(or $(N),3) --out /saida/cenario-$(C) --csv-out /saida/dongles-$(C).csv
+	$(COMPOSE) --profile ferramentas $(KMS_TOOLS) provision new --no-material --profile $(or $(PROFILE),$(if $(filter asym,$(C)),asym,hmac)) --count $(or $(N),3) --out /saida/cenario-$(C) --csv-out /saida/dongles-$(C).csv
 	$(COMPOSE) --profile ferramentas $(TOOLS) provision register --file /saida/cenario-$(C)
 	$(COMPOSE) --profile ferramentas $(TOOLS) simulator --scenario $(C) --keys /saida/dongles-$(C).csv --api http://api:8080 $(SIM_DB) $(ARGS)
 e2e:             env secrets output-dir
@@ -77,7 +77,8 @@ e2e:             env secrets output-dir
 	$(call E2E_NEW_DONGLES,e2e) && $(call E2E_SIMULATE,e2e) \
 	 && $(call E2E_NEW_DONGLES,negative-protocol) && $(call E2E_SIMULATE,negative-protocol) \
 	 && $(call E2E_NEW_DONGLES,time) && $(call E2E_SIMULATE,time) --speedup 120 \
-	 && $(call E2E_NEW_DONGLES,generation) && $(call E2E_SIMULATE,generation); \
+	 && $(call E2E_NEW_DONGLES,generation) && $(call E2E_SIMULATE,generation) \
+	 && $(call E2E_NEW_DONGLES,asym,asym) && $(call E2E_SIMULATE,asym); \
 	 st=$$?; $(COMPOSE_T) down -v; exit $$st
 load-test:       output-dir
 	rm -f saida/dongles-carga.csv

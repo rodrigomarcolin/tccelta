@@ -2,6 +2,7 @@
 package simulator
 
 import (
+	"crypto/ecdsa"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -12,10 +13,13 @@ import (
 	"tccelta/backend/internal/domain/protocol"
 )
 
-// Keys de um dongle virtual (as mesmas importadas no Vault de teste).
+// Keys de um dongle virtual (as mesmas importadas no Vault de teste). Profile vazio vale hmac; KSig só
+// existe no perfil asym.
 type Keys struct {
 	Dev         protocol.DevID
 	KAuth, KRec []byte
+	Profile     protocol.Profile
+	KSig        *ecdsa.PrivateKey
 }
 
 // ConfigDongle parametriza o comportamento do firmware simulado.
@@ -70,7 +74,22 @@ func (d *DongleVirtual) tMs(t time.Time) uint32 {
 	return uint32(int64(ms))
 }
 
+// sign devolve a tag do bloco pelo perfil: HMAC K_rec, ECDSA r‖s (big-endian) ou vazia.
 func (d *DongleVirtual) sign(data []byte) []byte {
+	switch d.ch.Profile.Name {
+	case protocol.ProfileAsym.Name:
+		h := sha256.Sum256(protocol.TagInput(protocol.BlockType, d.ch.Dev, data))
+		r, s, err := ecdsa.Sign(rand.Reader, d.ch.KSig, h[:])
+		if err != nil {
+			panic(err) // só com chave inválida: o simulador não tem como continuar
+		}
+		tag := make([]byte, protocol.SignatureSize)
+		r.FillBytes(tag[:32])
+		s.FillBytes(tag[32:])
+		return tag
+	case protocol.ProfileNone.Name:
+		return nil
+	}
 	m := hmac.New(sha256.New, d.ch.KRec)
 	m.Write(protocol.TagInput(protocol.BlockType, d.ch.Dev, data))
 	return m.Sum(nil)
@@ -110,7 +129,7 @@ func (d *DongleVirtual) LosePower(lost uint32) {
 	d.boot(lost)
 }
 
-// GenerateBlocks produz n blocos de dados (PIDs + GPS) assinados com K_rec.
+// GenerateBlocks produz n blocos de dados (PIDs + GPS) assinados pelo perfil do dongle.
 func (d *DongleVirtual) GenerateBlocks(n int) {
 	d.mu.Lock()
 	defer d.mu.Unlock()

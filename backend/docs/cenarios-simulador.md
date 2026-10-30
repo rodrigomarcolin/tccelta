@@ -9,7 +9,8 @@ Como rodar:
 
 ```
 make scenario C=<nome> [N=3] [ARGS='…']   # stack de desenvolvimento, com dongles novos
-make e2e                                 # stack isolada, quatro cenários em sequência
+make scenario C=asym                     # dongles asym (ECDSA); PROFILE=hmac|asym|none escolhe o perfil
+make e2e                                 # stack isolada, cinco cenários em sequência
 ```
 
 Veja o [README do backend](../README.md) para os alvos do Makefile.
@@ -22,11 +23,12 @@ Veja o [README do backend](../README.md) para os alvos do Makefile.
 | `negative-protocol` | 2 ou mais (usa os dois primeiros) | Entradas adulteradas, fora de ordem, repetidas ou sem autorização são recusadas sem corromper o estado | Qualquer uma das 11 verificações falha |
 | `time` | 1 (o primeiro) | O servidor reconstrói a hora das leituras a partir das âncoras de tempo | Qualquer uma das 4 verificações falha |
 | `generation` | 1 (o primeiro) | O `boot_id` de 16 bits volta a 1 e o servidor avança a "geração" do boot; o reprocessamento preserva as leituras | Qualquer uma das 4 verificações falha |
+| `asym` | todos do CSV, um por vez (todos `asym`, com `k_sig`) | Blocos assinados com ECDSA P-256 são aceitos; uma tag com 1 bit trocado é rejeitada como `invalid_tag` e o ACK não avança | Qualquer uma das 7 verificações por dongle falha |
 | `reconnection` | `N` do CSV | Um volume grande de blocos acumulados offline é drenado por inteiro | Algum dongle termina com `contiguous_seq` diferente do HEAD |
 | `load` | `N` do CSV | Mede latências por rota com muitos dongles em regime | Só se houver alguma resposta 5xx |
 | `knee` | `N` do CSV (cicla) | Sobe a carga em degraus até achar o limite | Nunca falha: só reporta a capacidade |
 
-Os cenários com verificação (`e2e`, `negative-protocol`, `time`, `generation`, `reconnection`) imprimem uma linha
+Os cenários com verificação (`e2e`, `negative-protocol`, `time`, `generation`, `asym`, `reconnection`) imprimem uma linha
 `OK` ou `FALHOU` por verificação e terminam com erro (`N verificação(ões) falharam`) se alguma falhar. `load`
 e `knee` não verificam dados; produzem um relatório.
 
@@ -41,13 +43,13 @@ e `knee` não verificam dados; produzem um relatório.
 
 ## O que o simulador simula
 
-**Dongle virtual** (`DongleVirtual`): guarda a identidade e as chaves do CSV (DevId, K_auth, K_rec), o contador
+**Dongle virtual** (`DongleVirtual`): guarda a identidade e as chaves do CSV (DevId, K_auth, K_rec e, no perfil `asym`, a K_sig), o contador
 `seq`, o `boot_id`, o último ACK gravado e uma flash em memória com capacidade configurável (padrão de um
 milhão de blocos). Ao ser criado, executa um primeiro boot e gera o bloco BOOT de faixa vazia.
 
 Cada bloco de dados gerado tem **61 registros**: 20 amostras de 3 PIDs (0x0C, 0x0D e 0x04, a 40 ms de
-intervalo) mais 1 posição de GPS. São assinados com HMAC-SHA256 da K_rec, no formato real
-(`MALCONG ‖ tipo ‖ DevId ‖ dados`). Por isso, no banco, cada bloco aceito vira **60 linhas em `reading` e 1
+intervalo) mais 1 posição de GPS. São assinados pelo perfil do dongle, no formato real
+(`MALCONG ‖ tipo ‖ DevId ‖ dados`): HMAC-SHA256 da K_rec (`hmac`), ECDSA P-256 `r‖s` (`asym`) ou tag vazia (`none`). Por isso, no banco, cada bloco aceito vira **60 linhas em `reading` e 1
 em `position`**.
 
 Operações usadas pelos cenários:
@@ -146,6 +148,23 @@ rodadas de 5 blocos com dreno; entre as três primeiras, `LosePower(0)` e novo h
 4. **Reprocessamento:** roda `reprocess` primeiro como ensaio e depois com `--apply`; a contagem de
    leituras antes e depois é a mesma e maior que zero.
 
+## `asym`
+
+Todos os dongles do CSV, um por vez; exige que sejam do perfil `asym` e tenham `k_sig` (`make scenario C=asym`
+já cria dongles `asym`; no `make e2e` são os do `E2E_NEW_DONGLES,asym,asym`). Faz o handshake, gera e drena 100
+blocos assinados com ECDSA e depois envia um bloco com 1 bit da tag trocado. Verificações por dongle:
+
+1. `contiguous_seq` igual ao HEAD do dongle.
+2. Há leituras e posições gravadas.
+3. `rejected_block` vazio antes da adulteração.
+4. A tag adulterada volta `422` com `X-Lote-Acao: reler` e `X-Lote-Motivo: tag_invalida` (sem progresso).
+5. O ACK devolvido fica parado no `seq` anterior.
+6. `rejected_block` tem exatamente 1 linha.
+7. Depois do reenvio do bloco intacto, o `contiguous_seq` chega ao HEAD.
+
+O que o cenário não olha é o KMS: no perfil `asym` a verificação é local, então
+`tccelta_kms_calls_total{operation="verify_rec"}` não cresce com esses dongles (confira em `/metricas`).
+
 ## `reconnection`
 
 Para cada dongle (`--dongles`, padrão: o tamanho do CSV): gera **`--accumulated` blocos** offline (padrão 500),
@@ -182,8 +201,8 @@ está sujeito ao limite por IP.
 ## O `make e2e`
 
 É um encadeamento, não um cenário: sobe a stack **isolada** (`compose.test.yaml`, projeto `tccelta-teste`),
-reconstrói as imagens de ferramentas e roda **`e2e`, `negative-protocol`, `time` e `generation`**, cada um com 3
-dongles recém-criados (KMS, depois banco). Se um falhar, os seguintes não rodam. No fim, com sucesso ou não,
+reconstrói as imagens de ferramentas e roda **`e2e`, `negative-protocol`, `time`, `generation` e `asym`**, cada um com 3
+dongles recém-criados (KMS, depois banco; o `asym` com `--profile asym`). Se um falhar, os seguintes não rodam. No fim, com sucesso ou não,
 derruba a stack com `down -v` e devolve o código de saída do cenário que falhou. Não cobre `reconnection`, `load`
 nem `knee`.
 

@@ -17,6 +17,7 @@ type M struct {
 	Blocks        *prometheus.CounterVec
 	Batches       *prometheus.CounterVec
 	IngestionTx   prometheus.Histogram
+	BlockVerify   *prometheus.HistogramVec
 	Rows          *prometheus.CounterVec
 	Handshakes    *prometheus.CounterVec
 	AnchorRTT     prometheus.Histogram
@@ -48,6 +49,8 @@ func New() *M {
 	m.Batches = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "tccelta_batches_total"}, []string{"status"})
 	m.IngestionTx = prometheus.NewHistogram(prometheus.HistogramOpts{Name: "tccelta_ingestion_tx_duration_seconds",
 		Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}})
+	m.BlockVerify = prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "tccelta_block_verify_duration_seconds",
+		Buckets: []float64{.0001, .0005, .001, .0025, .005, .01, .025, .05, .1, .25, .5, 1}}, []string{"profile"})
 	m.Rows = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "tccelta_inserted_rows_total"}, []string{"table"})
 	m.Handshakes = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "tccelta_handshakes_total"}, []string{"result"})
 	m.AnchorRTT = prometheus.NewHistogram(prometheus.HistogramOpts{Name: "tccelta_anchor_rtt_seconds",
@@ -68,7 +71,7 @@ func New() *M {
 	m.WorkerExpired = prometheus.NewCounter(prometheus.CounterOpts{Name: "tccelta_worker_expired_challenges_total"})
 	m.WorkerReconnect = prometheus.NewCounter(prometheus.CounterOpts{Name: "tccelta_worker_listen_reconnections_total"})
 	m.WorkerGroups = prometheus.NewCounter(prometheus.CounterOpts{Name: "tccelta_worker_anchor_groups_written_total"})
-	for _, c := range []prometheus.Collector{m.HTTPReq, m.HTTPDur, m.Blocks, m.Batches, m.IngestionTx, m.Rows, m.Handshakes,
+	for _, c := range []prometheus.Collector{m.HTTPReq, m.HTTPDur, m.Blocks, m.Batches, m.IngestionTx, m.BlockVerify, m.Rows, m.Handshakes,
 		m.AnchorRTT, m.Gaps, m.KMSCalls, m.KMSDur, m.KMSBreaker, m.Rejections, m.RedisFailures, m.Reprocessed,
 		m.WorkerBoots, m.WorkerDur, m.WorkerQueue, m.WorkerAlerts, m.WorkerExpired, m.WorkerReconnect, m.WorkerGroups} {
 		r.MustRegister(c)
