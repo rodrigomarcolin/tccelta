@@ -60,9 +60,7 @@ class DongleDatasource {
       )
       .map(
         (devices) => devices
-            .map(
-              (d) => d.copyWith(signal: BleSignalLevel.fromRssi(d.rssi)),
-            )
+            .map((d) => d.copyWith(signal: BleSignalLevel.fromRssi(d.rssi)))
             .toList(growable: false),
       );
 

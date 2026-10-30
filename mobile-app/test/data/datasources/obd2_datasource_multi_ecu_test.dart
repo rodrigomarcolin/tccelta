@@ -8,9 +8,7 @@ import '../../support/scripted_ble_connection.dart';
 void main() {
   test('returns one structured reading per ECU', () async {
     final connection = ScriptedBleConnection(
-      responses: const {
-        '010C': '7E8 06 41 0C 17 70\r7E9 06 41 0C 18 00\r>',
-      },
+      responses: const {'010C': '7E8 06 41 0C 17 70\r7E9 06 41 0C 18 00\r>'},
     );
     final client = Elm327Client(connection);
     final datasource = Obd2Datasource(client);

@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tccelta_mobile/src/core/network/dio_client.dart';
 import 'package:tccelta_mobile/src/core/persistence/shared_preferences_provider.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/router/app_router.dart';
@@ -12,12 +15,27 @@ Future<void> main() async {
   // Restos da camada de PSK removida.
   await prefs.remove('psk_hex');
   await prefs.remove('security_mode');
+  final devCa = await _loadDevCa();
   runApp(
     ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        syncTrustedCaProvider.overrideWithValue(devCa),
+      ],
       child: const TcceltaApp(),
     ),
   );
+}
+
+/// CA local do servidor de desenvolvimento, se `assets/dev/caddy-root.crt`
+/// existir. Só em debug; no release o app confia apenas no sistema.
+Future<Uint8List?> _loadDevCa() async {
+  if (!kDebugMode) return null;
+  const path = 'assets/dev/caddy-root.crt';
+  final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+  if (!manifest.listAssets().contains(path)) return null;
+  final data = await rootBundle.load(path);
+  return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
 }
 
 /// Raiz do app. Aplica o tema do OBD2 Cockpit design system e entra pelo fluxo

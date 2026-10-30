@@ -27,26 +27,23 @@ void main() {
       expect(state.panels, hasLength(1));
     });
 
-    test(
-      'estado salvo válido é devolvido sem alterações relevantes',
-      () async {
-        const saved = PanelsState(
-          panels: [
-            Panel(id: 'p1', name: 'Diário'),
-            Panel(id: 'p2', name: 'Pista'),
-          ],
-          activeId: 'p2',
-        );
-        final useCase = PanelPersistenceUseCase(
-          FakePanelRepository(initial: saved),
-        );
+    test('estado salvo válido é devolvido sem alterações relevantes', () async {
+      const saved = PanelsState(
+        panels: [
+          Panel(id: 'p1', name: 'Diário'),
+          Panel(id: 'p2', name: 'Pista'),
+        ],
+        activeId: 'p2',
+      );
+      final useCase = PanelPersistenceUseCase(
+        FakePanelRepository(initial: saved),
+      );
 
-        final state = await useCase.load();
+      final state = await useCase.load();
 
-        expect(state.panels.map((p) => p.name), ['Diário', 'Pista']);
-        expect(state.activeId, 'p2');
-      },
-    );
+      expect(state.panels.map((p) => p.name), ['Diário', 'Pista']);
+      expect(state.activeId, 'p2');
+    });
 
     test(
       'indicatorIds referenciando um Obd2Pid inexistente são descartados',

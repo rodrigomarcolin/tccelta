@@ -1,0 +1,53 @@
+# Vault + servico KMS num host separado da API (cenario de VPN; documentado, testado manualmente).
+# Pre-requisitos neste host:
+#   - sh scripts/gerar-certs.sh (ou certificados proprios) em deploy/kms/certs: ca.pem, vault*.pem, kms*.pem
+#   - o Vault inicializado/deselado e o bootstrap executado (deploy/kms/vault/scripts), que grava
+#     kms_role_id e kms_secret_id em ${KMS_APPROLE_DIR}
+#   - KMS_BIND_IP: IP da interface da VPN (wg0). O KMS NAO deve escutar em rede publica.
+# A API (outro host) so precisa de: KMS_URL=https://<KMS_BIND_IP>:8300, o certificado de cliente
+# (api-cliente.pem / api-cliente-key.pem) e a CA (ca.pem).
+name: tccelta-kms
+services:
+  vault:
+    image: hashicorp/vault:${VAULT_VERSAO:-1.18}
+    cap_add: [IPC_LOCK]
+    entrypoint: ["vault", "server", "-config=/vault/config/vault.hcl"]
+    volumes:
+      - ./vault/config:/vault/config:ro
+      - ./certs:/vault/certs:ro
+      - vault_dados:/vault/data
+    # o Vault so e alcancado pelo KMS, na rede interna do compose
+    networks: [kms]
+  kms:
+    image: tccelta-kms:local
+    build: { context: ../.., dockerfile: Dockerfile, target: kms }
+    read_only: true
+    tmpfs: [/tmp]
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    command: ["serve"]
+    environment:
+      AMBIENTE: ${AMBIENTE:-producao}
+      VAULT_ADDR: https://vault:8200
+      VAULT_CACERT: /run/certs/ca.pem
+      VAULT_APPROLE_ROLE_ID_ARQUIVO: /run/approle/kms_role_id
+      VAULT_APPROLE_SECRET_ID_ARQUIVO: /run/approle/kms_secret_id
+      KMS_ENDERECO: ":8300"
+      KMS_TLS_CERT: /run/certs/kms.pem
+      KMS_TLS_KEY: /run/certs/kms-key.pem
+      KMS_TLS_CLIENT_CA: /run/certs/ca.pem
+    volumes:
+      - ./certs:/run/certs:ro
+      - ${KMS_APPROLE_DIR:?defina o diretorio com kms_role_id e kms_secret_id}:/run/approle:ro
+    depends_on: [vault]
+    healthcheck:
+      test: ["CMD", "/tccelta-kms", "health", "--url", "http://127.0.0.1:9300/saude/pronta"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+    ports: ["${KMS_BIND_IP:?defina o IP da wg0}:8300:8300"]
+    networks: [kms]
+networks: { kms: {} }
+volumes: { vault_dados: {} }

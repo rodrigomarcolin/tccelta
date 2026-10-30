@@ -76,20 +76,19 @@ void main() {
     expect(find.text('OK'), findsNothing); // raiz de aba, sem botão OK
   });
 
-  testWidgets(
-    'tocar um sensor abre o picker de painéis, listando os painéis',
-    (tester) async {
-      await tester.pumpWidget(app());
-      await tester.pump(const Duration(milliseconds: 10));
+  testWidgets('tocar um sensor abre o picker de painéis, listando os painéis', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    await tester.pump(const Duration(milliseconds: 10));
 
-      await goToSensoresTab(tester);
-      await openSensorTile(tester, Obd2Pid.rpm);
+    await goToSensoresTab(tester);
+    await openSensorTile(tester, Obd2Pid.rpm);
 
-      expect(find.text('Adicionar a qual painel?'), findsOneWidget);
-      expect(find.text('Painel 1'), findsOneWidget);
-      expect(find.text('JÁ ADICIONADO'), findsNothing);
-    },
-  );
+    expect(find.text('Adicionar a qual painel?'), findsOneWidget);
+    expect(find.text('Painel 1'), findsOneWidget);
+    expect(find.text('JÁ ADICIONADO'), findsNothing);
+  });
 
   testWidgets(
     'escolher um painel sem o indicador abre o sheet em modo adicionar e '
@@ -125,30 +124,27 @@ void main() {
     },
   );
 
-  testWidgets(
-    'reabrir o picker mostra "JÁ ADICIONADO" no painel que recebeu o '
-    'indicador, e escolhê-lo abre o sheet em modo editar',
-    (tester) async {
-      await tester.pumpWidget(
-        app(readings: const [Obd2Reading(pid: Obd2Pid.rpm, value: 1500)]),
-      );
-      await tester.pump(const Duration(milliseconds: 10));
+  testWidgets('reabrir o picker mostra "JÁ ADICIONADO" no painel que recebeu o '
+      'indicador, e escolhê-lo abre o sheet em modo editar', (tester) async {
+    await tester.pumpWidget(
+      app(readings: const [Obd2Reading(pid: Obd2Pid.rpm, value: 1500)]),
+    );
+    await tester.pump(const Duration(milliseconds: 10));
 
-      await goToSensoresTab(tester);
-      await openSensorTile(tester, Obd2Pid.rpm);
-      await pickPanel(tester, 'Painel 1');
-      await tapPrimary(tester); // adiciona com o formato padrão
+    await goToSensoresTab(tester);
+    await openSensorTile(tester, Obd2Pid.rpm);
+    await pickPanel(tester, 'Painel 1');
+    await tapPrimary(tester); // adiciona com o formato padrão
 
-      await openSensorTile(tester, Obd2Pid.rpm);
-      expect(find.text('JÁ ADICIONADO'), findsOneWidget);
+    await openSensorTile(tester, Obd2Pid.rpm);
+    expect(find.text('JÁ ADICIONADO'), findsOneWidget);
 
-      await pickPanel(tester, 'Painel 1');
+    await pickPanel(tester, 'Painel 1');
 
-      expect(find.text('Exibir no painel'), findsOneWidget);
-      expect(find.text('Salvar'), findsOneWidget); // edição, não adição
-      expect(find.text('Remover do painel'), findsOneWidget);
-    },
-  );
+    expect(find.text('Exibir no painel'), findsOneWidget);
+    expect(find.text('Salvar'), findsOneWidget); // edição, não adição
+    expect(find.text('Remover do painel'), findsOneWidget);
+  });
 
   testWidgets('"Novo painel" no picker cria e usa um painel vazio na hora', (
     tester,

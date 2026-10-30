@@ -304,8 +304,26 @@ String Elm327::formatTmaxReport(const collector::TmaxReport& report) const {
 }
 
 // Modo coletor: responde do último valor lido, no formato do Modo 01.
+// Bitmap de 4 bytes dos PIDs da faixa (base, base+0x20], como na resposta a 0100/0120/…; o bit 0 do
+// último byte indica que há PIDs coletados em faixas seguintes.
+static void supportedBitmap(const collector::CollectorConfig& config, uint8_t base, uint8_t out[4]) {
+    memset(out, 0, 4);
+    for (size_t i = 0; i < config.pidCount; ++i) {
+        const unsigned pid = config.pids[i].pid;
+        if (pid <= base) continue;
+        const unsigned offset = pid - base - 1;
+        if (offset < 32) out[offset / 8] |= static_cast<uint8_t>(0x80u >> (offset % 8));
+        else             out[3] |= 0x01;
+    }
+}
+
 String Elm327::processCollectorPid(uint8_t service, uint8_t pid) {
     collector::CurrentValues::Value value;
+    if (service == 0x01 && pid % 0x20 == 0) {
+        uint8_t bitmap[4];
+        supportedBitmap(_control->config(), pid, bitmap);
+        return formatDataBytes(service, pid, bitmap, sizeof(bitmap), 0x7E8) + prompt();
+    }
     if (service != 0x01 || !_control->config().find(pid)) return "?" + prompt();
     if (!_control->currentValue(pid, value)) return "NO DATA" + prompt();
     return formatDataBytes(service, pid, value.bytes, value.len, 0x7E8) + prompt();

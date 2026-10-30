@@ -68,20 +68,11 @@ class ConnectedScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: AppSpacing.s7),
               ],
-              const StatCard.info(
-                label: 'Canal',
-                value: 'Nordic UART (BLE)',
-              ),
+              const StatCard.info(label: 'Canal', value: 'Nordic UART (BLE)'),
               const SizedBox(height: AppSpacing.s3),
-              StatCard.info(
-                label: 'Protocolo',
-                value: protocol,
-              ),
+              StatCard.info(label: 'Protocolo', value: protocol),
               const SizedBox(height: AppSpacing.s3),
-              StatCard.info(
-                label: 'Sensores disponíveis',
-                value: sensores,
-              ),
+              StatCard.info(label: 'Sensores disponíveis', value: sensores),
             ],
           ),
         ),

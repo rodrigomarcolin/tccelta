@@ -8,10 +8,8 @@ class BenchKeys {
   const BenchKeys({required this.kAuth, required this.kRec});
 
   /// Padrão: chaves fixas de bancada.
-  factory BenchKeys.defaults() => BenchKeys(
-    kAuth: _fromHex(_defaultKAuth),
-    kRec: _fromHex(_defaultKRec),
-  );
+  factory BenchKeys.defaults() =>
+      BenchKeys(kAuth: _fromHex(_defaultKAuth), kRec: _fromHex(_defaultKRec));
 
   /// Lê `SYNC_BENCH_KAUTH` e `SYNC_BENCH_KREC` (hex de 64 dígitos) de
   /// `--dart-define`; ausentes, valem as chaves padrão.

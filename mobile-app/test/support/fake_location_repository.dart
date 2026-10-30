@@ -6,9 +6,7 @@ import 'package:tccelta_mobile/src/domain/repositories/location_repository.dart'
 /// Repository de localização controlado pelo teste.
 class FakeLocationRepository implements LocationRepository {
   /// Cria o dublê com a permissão inicial.
-  FakeLocationRepository({
-    this.state = LocationPermissionState.granted,
-  });
+  FakeLocationRepository({this.state = LocationPermissionState.granted});
 
   /// Permissão devolvida por [permission] e [requestPermission].
   LocationPermissionState state;

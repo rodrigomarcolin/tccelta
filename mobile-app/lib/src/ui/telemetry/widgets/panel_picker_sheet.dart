@@ -99,9 +99,7 @@ class PanelPickerSheet extends ConsumerWidget {
                         NewPanelRow(
                           onTap: () {
                             notifier.createPanel();
-                            Navigator.of(
-                              context,
-                            ).pop(
+                            Navigator.of(context).pop(
                               ref
                                   .read(panelViewModelProvider)
                                   .requireValue

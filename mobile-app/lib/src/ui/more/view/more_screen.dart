@@ -38,9 +38,7 @@ class MoreScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.s2),
             Text(
               'Opções e configurações do app',
-              style: AppTypography.body.copyWith(
-                color: AppColors.textTertiary,
-              ),
+              style: AppTypography.body.copyWith(color: AppColors.textTertiary),
             ),
             const SizedBox(height: AppSpacing.s7),
             CardButton(

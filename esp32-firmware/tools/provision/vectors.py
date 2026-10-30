@@ -169,7 +169,14 @@ def emit_header(v):
 
 
 def emit_dart(v):
-    def c(name, hexs): return f"const String {name} = '{hexs}';\n"
+    # Já no formato do `dart format` (CI do app: --set-exit-if-changed): acima
+    # de 80 colunas ele quebra depois do `=` e indenta o literal com 4 espaços.
+    # Assim `--check` e o formatador concordam sobre o mesmo arquivo.
+    def c(name, hexs):
+        line = f"const String {name} = '{hexs}';"
+        if len(line) <= 80:
+            return line + "\n"
+        return f"const String {name} =\n    '{hexs}';\n"
     out = ["// GERADO por esp32-firmware/tools/provision/vectors.py — não editar.\n",
            "// ignore_for_file: lines_longer_than_80_chars\n\n"]
     for k in ("dev_id", "k_auth", "k_rec", "k_sig", "k_sig_public"):

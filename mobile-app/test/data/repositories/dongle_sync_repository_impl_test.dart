@@ -98,10 +98,7 @@ void main() {
 
     final typed = events.where((e) => e is! SyncLinkChanged).toList();
     expect(typed, hasLength(2));
-    expect(
-      (typed[0] as DongleErrorReceived).code,
-      SyncErrorCode.noSession,
-    );
+    expect((typed[0] as DongleErrorReceived).code, SyncErrorCode.noSession);
     expect((typed[1] as ResponseReceived).info.tailSeq, 65);
     sync.dispose();
   });
@@ -120,14 +117,8 @@ void main() {
       [0x05, 0x02, 0x00, 0x0A, 0x00],
       [0x06, 0x01, 0x00, 0x04],
     ]);
-    expect(
-      () => sync.sendError(SyncErrorCode.noSession),
-      throwsArgumentError,
-    );
-    expect(
-      () => sync.sendAck(SyncFrame.batchRequest(1)),
-      throwsArgumentError,
-    );
+    expect(() => sync.sendError(SyncErrorCode.noSession), throwsArgumentError);
+    expect(() => sync.sendAck(SyncFrame.batchRequest(1)), throwsArgumentError);
     channel.writeError = Exception('falhou');
     await expectLater(sync.requestBatch(1), throwsA(isA<SyncLinkFailure>()));
     sync.dispose();

@@ -81,6 +81,7 @@ flutter:
   # google_fonts package, so no `fonts:` declaration is required here.
   assets:
     - assets/icons/
+    - assets/dev/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

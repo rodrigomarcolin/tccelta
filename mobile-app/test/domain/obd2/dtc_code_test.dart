@@ -16,23 +16,20 @@ void main() {
     causes: ['Vela ou bobina do cilindro 1'],
   );
 
-  test(
-    'sem entrada ativa, o código sai inativo (status/detectedLabel nulos, '
-    'freezeFrame vazio)',
-    () {
-      final code = DtcCode.fromDefinition(definition);
+  test('sem entrada ativa, o código sai inativo (status/detectedLabel nulos, '
+      'freezeFrame vazio)', () {
+    final code = DtcCode.fromDefinition(definition);
 
-      expect(code.code, definition.code);
-      expect(code.component, definition.component);
-      expect(code.name, definition.name);
-      expect(code.severity, definition.severity);
-      expect(code.causes, definition.causes);
-      expect(code.status, isNull);
-      expect(code.detectedLabel, isNull);
-      expect(code.freezeFrame, isEmpty);
-      expect(code.isActive, isFalse);
-    },
-  );
+    expect(code.code, definition.code);
+    expect(code.component, definition.component);
+    expect(code.name, definition.name);
+    expect(code.severity, definition.severity);
+    expect(code.causes, definition.causes);
+    expect(code.status, isNull);
+    expect(code.detectedLabel, isNull);
+    expect(code.freezeFrame, isEmpty);
+    expect(code.isActive, isFalse);
+  });
 
   test('com entrada ativa correspondente, repassa status, detectedLabel e '
       'freezeFrame', () {

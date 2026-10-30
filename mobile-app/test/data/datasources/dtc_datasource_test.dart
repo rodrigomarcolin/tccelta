@@ -35,9 +35,7 @@ void main() {
     });
 
     test('comando rejeitado ("?") lança', () async {
-      final connection = ScriptedBleConnection(
-        responses: const {'03': '?\r>'},
-      );
+      final connection = ScriptedBleConnection(responses: const {'03': '?\r>'});
       final client = Elm327Client(connection);
       final datasource = DtcDatasource(client);
 

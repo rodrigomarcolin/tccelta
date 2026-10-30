@@ -28,7 +28,7 @@ void initializeCAN()
   bool initSucess = false;
   while (!initSucess)
   {
-    if (CAN_OK == CAN.begin(MCP_ANY, CAN_250KBPS, MCP_8MHZ)) // init can bus : baudrate = 250k
+    if (CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ)) // init can bus : baudrate = 500k (padrão do firmware: AT SP 6)
     {
       Serial.println(F("CAN BUS Shield init ok!"));
       initSucess = true;

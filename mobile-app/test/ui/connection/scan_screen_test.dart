@@ -106,10 +106,7 @@ void main() {
 
     expect(find.text('Procurando dispositivos próximos…'), findsOneWidget);
     expect(tester.widget<RadarScanner>(find.byType(RadarScanner)).active, true);
-    expect(
-      tester.widget<AppButton>(find.byType(AppButton)).onPressed,
-      isNull,
-    );
+    expect(tester.widget<AppButton>(find.byType(AppButton)).onPressed, isNull);
     // rssi -50 -> "sinal forte" (classificação vinda do datasource).
     expect(find.text('ELM327 · sinal forte'), findsOneWidget);
   });

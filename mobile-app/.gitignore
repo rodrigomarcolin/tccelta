@@ -104,3 +104,8 @@ Desktop.ini
 # *.freezed.dart
 # *.config.dart
 # *.gr.dart
+# URLs locais de API (nao versionar)
+env/*.local.json
+
+# CA local do Caddy usada so em debug (copiar de backend/saida/caddy-root.crt)
+assets/dev/*.crt

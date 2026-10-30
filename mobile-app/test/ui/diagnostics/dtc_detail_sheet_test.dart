@@ -31,34 +31,32 @@ void main() {
     ),
   );
 
-  testWidgets(
-    'sem freeze frame, a seção de congelamento fica escondida',
-    (tester) async {
-      await tester.pumpWidget(app(base));
-      await tester.tap(find.text('abrir'));
-      await tester.pumpAndSettle();
+  testWidgets('sem freeze frame, a seção de congelamento fica escondida', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app(base));
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
 
-      expect(find.text('CONGELAMENTO NO MOMENTO DA FALHA'), findsNothing);
-    },
-  );
+    expect(find.text('CONGELAMENTO NO MOMENTO DA FALHA'), findsNothing);
+  });
 
-  testWidgets(
-    'com freeze frame, a seção aparece com os valores congelados',
-    (tester) async {
-      const dtc = DtcCode(
-        code: 'P0301',
-        component: DtcComponent.engine,
-        name: 'Falha de combustão — cilindro 1',
-        severity: DtcSeverity.high,
-        status: DtcStatus.confirmed,
-        freezeFrame: [DtcFreezeFrameEntry(label: 'RPM', value: '1.500 RPM')],
-      );
-      await tester.pumpWidget(app(dtc));
-      await tester.tap(find.text('abrir'));
-      await tester.pumpAndSettle();
+  testWidgets('com freeze frame, a seção aparece com os valores congelados', (
+    tester,
+  ) async {
+    const dtc = DtcCode(
+      code: 'P0301',
+      component: DtcComponent.engine,
+      name: 'Falha de combustão — cilindro 1',
+      severity: DtcSeverity.high,
+      status: DtcStatus.confirmed,
+      freezeFrame: [DtcFreezeFrameEntry(label: 'RPM', value: '1.500 RPM')],
+    );
+    await tester.pumpWidget(app(dtc));
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
 
-      expect(find.text('CONGELAMENTO NO MOMENTO DA FALHA'), findsOneWidget);
-      expect(find.text('1.500 RPM'), findsOneWidget);
-    },
-  );
+    expect(find.text('CONGELAMENTO NO MOMENTO DA FALHA'), findsOneWidget);
+    expect(find.text('1.500 RPM'), findsOneWidget);
+  });
 }

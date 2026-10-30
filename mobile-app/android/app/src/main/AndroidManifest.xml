@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Servidor de sincronizacao (HTTPS). -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- BLE: Android 11 e anteriores (API ≤30) exigem as permissões legadas e,
          para escanear, a localização fina. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />

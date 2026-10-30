@@ -26,10 +26,7 @@ void main() {
   });
 
   test('mensagem de um fragmento', () {
-    final out = assembler.add(
-      [0x80, 0x06, 0x01, 0x00, 0x04],
-      t0,
-    );
+    final out = assembler.add([0x80, 0x06, 0x01, 0x00, 0x04], t0);
     expect((out.single as AssemblyComplete).tlv, [0x06, 0x01, 0x00, 0x04]);
   });
 

@@ -70,10 +70,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final confirmButton = tester.widget<AppButton>(
-      find.ancestor(
-        of: find.text('Remover'),
-        matching: find.byType(AppButton),
-      ),
+      find.ancestor(of: find.text('Remover'), matching: find.byType(AppButton)),
     );
     expect(confirmButton.variant, AppButtonVariant.danger);
   });

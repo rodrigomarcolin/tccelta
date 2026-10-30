@@ -128,12 +128,8 @@ class PainelScreen extends ConsumerWidget {
                         reading: byPid[pid],
                         display: panel.displayFor(pid),
                         history: telemetry.history[pid] ?? const [],
-                        onTap: () => _openEdit(
-                          context,
-                          ref,
-                          pid,
-                          panel.displayFor(pid),
-                        ),
+                        onTap: () =>
+                            _openEdit(context, ref, pid, panel.displayFor(pid)),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.s3),

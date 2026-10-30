@@ -37,9 +37,7 @@ final Provider<DongleRepository> dongleRepositoryProvider =
 
 /// Datasource das permissões de BLE, sobre o plugin `permission_handler`.
 final Provider<BlePermissionsDatasource> blePermissionsDatasourceProvider =
-    Provider<BlePermissionsDatasource>(
-      (_) => const BlePermissionsDatasource(),
-    );
+    Provider<BlePermissionsDatasource>((_) => const BlePermissionsDatasource());
 
 /// Repository = *source of truth* das permissões. O view model fala com este
 /// provider, nunca com o datasource.

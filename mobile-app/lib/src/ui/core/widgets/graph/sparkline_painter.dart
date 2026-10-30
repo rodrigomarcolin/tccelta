@@ -75,10 +75,7 @@ class SparklinePainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          color.withValues(alpha: 0.18),
-          color.withValues(alpha: 0),
-        ],
+        colors: [color.withValues(alpha: 0.18), color.withValues(alpha: 0)],
       ).createShader(Offset.zero & size);
     canvas.drawPath(fill, fillPaint);
 

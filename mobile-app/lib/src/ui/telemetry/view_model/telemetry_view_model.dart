@@ -173,9 +173,7 @@ class TelemetryViewModel extends Notifier<TelemetryState> {
   /// ao mesmo PID não se sobrescrevem; telas legadas que indexam apenas por PID
   /// continuam escolhendo explicitamente uma leitura para exibição.
   void _applyReadings(List<Obd2Reading> readings) {
-    final merged = {
-      for (final r in state.readings) _readingKey(r): r,
-    };
+    final merged = {for (final r in state.readings) _readingKey(r): r};
     for (final r in readings) {
       merged[_readingKey(r)] = r;
     }
