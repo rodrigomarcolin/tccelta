@@ -41,19 +41,12 @@ flowchart LR
 
 | # | Documento | Conteúdo |
 |---|---|---|
-<<<<<<< HEAD
-| 01 | `01-firmware-lesc-nimble.md` | Configuração LESC no NimBLE, gate de bond, flags de características e CCCD, autorização por conexão, advertising, bonds na NVS. |
-| 02 | `02-firmware-botao-e-janela-de-pareamento.md` | Detector do botão, máquina de estados da janela e das conexões (`PairingPolicy`), tarefa, timers, prioridades, build flags. |
-| 03 | `03-firmware-eventos-e-testes.md` | Catálogo de eventos para `docs/debug-events.md`, testes nativos, roteiro de bancada B1–B16 e métricas. |
-| 04 | `04-app-pareamento-just-works.md` | Port/adapter BLE, use cases, `ConnectingViewModel`, `PairingScreen`, conferência de que a camada PSK (removida na Fase 1) saiu do caminho de conexão, testes com `FakeBleService`. |
-| 05 | `05-enlace-aberto-bancada.md` | Env de bancada `collector_mock_debug_open` (`LINK_SECURITY_OPEN`): enlace sem LESC para o `sync_bench.py`; proteções de build. Nota posterior às specs 01–04. |
-=======
 | 01 | [`01-firmware-lesc-nimble.md`](01-firmware-lesc-nimble.md) | Security Manager, gate de bond, flags, autorização por conexão, anúncio, `BondStoreGuard`, bonds na NVS |
 | 02 | [`02-firmware-botao-e-janela-de-pareamento.md`](02-firmware-botao-e-janela-de-pareamento.md) | `PairButton`, `PairingPolicy` (janela e conexões), `PairingController`, `PairingTask`, build flags |
 | 03 | [`03-firmware-eventos-e-testes.md`](03-firmware-eventos-e-testes.md) | Eventos, suíte nativa, roteiro de bancada B1–B16 |
 | 04 | [`04-app-pareamento-just-works.md`](04-app-pareamento-just-works.md) | Adapter BLE, classificação de erros, plano e máquina de estados, telas |
+| 05 | [`05-enlace-aberto-bancada.md`](05-enlace-aberto-bancada.md) | Env de bancada `collector_mock_debug_open` (`LINK_SECURITY_OPEN`): enlace sem LESC para o `sync_bench.py`; proteções de build. Nota posterior às specs 01–04 |
 | — | [`DESVIOS-E-MELHORIAS.md`](DESVIOS-E-MELHORIAS.md) | Desvios do plano e melhorias possíveis |
->>>>>>> 83f50a1 (docs(spec): consolida a fase 2 e o índice no estado atual do código)
 
 ## Fronteira com a Fase 1
 
