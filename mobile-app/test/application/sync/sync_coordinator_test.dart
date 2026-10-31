@@ -336,6 +336,18 @@ void main() {
       expect(h.status.postsFailed, 3);
     });
 
+    withHarness('lote aceito depois de 503 apaga a próxima tentativa', (h) {
+      h.dongle.addData(1, 40);
+      h.server.scripted.add(const PostUnavailable(null));
+      h.open();
+      expect(h.status.nextAttemptAt, isNotNull);
+
+      h.elapse(const Duration(seconds: 2));
+      expect(h.status.appAck, isNotNull);
+      expect(h.status.phase, SyncPhase.open);
+      expect(h.status.nextAttemptAt, isNull);
+    });
+
     withHarness('dongle bloqueado para o coordenador', (h) {
       h.dongle.addData(1, 40);
       h.server.scripted.add(const DongleBlocked('dongle_inativo'));
