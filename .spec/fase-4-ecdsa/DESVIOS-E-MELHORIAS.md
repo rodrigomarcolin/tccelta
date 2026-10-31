@@ -25,6 +25,14 @@ Estado da implementação em relação às specs `01`–`05`.
   `TestAsymBatchAcceptedWithoutKMSVerify`) e pode ser conferido em `tccelta_kms_calls_total{operation="verify_rec"}`.
 - **05 — `IMessageAuth::lastError()`.** Para o campo `rc` do `SIGN_FAIL`, a interface ganhou
   `int lastError() const` (0 por padrão); só o `EcdsaBlockAuth` o preenche.
+- **Novo — `prod` e `devsec` aceitam `asym`.** O plano original (`README.md`) só previa `asym` em
+  bancada (`*_debug_asym`, `*_bench_asym`); com a ingestão verificando `asym` localmente (02) e sem
+  segredo de KMS no caminho, não há razão para restringir produção a `hmac`. `collector_twai_prod_asym`
+  (mesmo `sdkconfig.prod.defaults`, só troca `SECURITY_PROFILE`) e o `static_assert` de
+  `KeyStore.cpp` (guardado por `CONFIG_SECURE_FLASH_ENCRYPTION_MODE_RELEASE`) passam a aceitar
+  `hmac` ou `asym`; só `none` continua proibido em flash encryption *release*. `provision.py --profile
+  prod --security asym` passa a ser aceito (antes só `hmac`). `collector_mock_devsec_asym` ensaia o
+  mesmo perfil na placa descartável (spec 01 §10.2) antes de queimar eFuse de verdade em `prod`.
 
 ## Verificado, mas não em hardware
 

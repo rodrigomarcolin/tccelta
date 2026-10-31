@@ -123,8 +123,8 @@ def main():
 
     if args.flash and args.profile == "prod":
         raise SystemExit("prod não tem --flash: a gravação é o passo 5 do procedimento (spec 01 §10.3)")
-    if args.profile == "prod" and args.security != "hmac":
-        raise SystemExit("prod exige o perfil hmac")
+    if args.profile == "prod" and args.security == "none":
+        raise SystemExit("prod não aceita o perfil none")
 
     dev_id = bytes.fromhex(args.dev_id) if args.dev_id else new_dev_id()
     if len(dev_id) != 8:

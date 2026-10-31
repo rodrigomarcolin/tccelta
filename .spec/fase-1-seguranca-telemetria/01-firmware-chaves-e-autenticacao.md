@@ -156,8 +156,8 @@ então arquivos específicos de env ficam sob `#if`, ex. `USE_MCP2515`).
 | Perfil de hardware | Env | `sdkconfig` | NVS encryption | Flash enc. | Secure Boot V2 | eFuse |
 |---|---|---|---|---|---|---|
 | `dev` | `collector_*`, `*_debug*`, `*_bench_*` | `sdkconfig.defaults` | não (`secnvs` e `nvs` em claro) | não | não | nenhum |
-| `devsec` | `collector_mock_devsec` | `+ sdkconfig.devsec.defaults` | sim | modo desenvolvimento | sim (`SECURE_BOOT_INSECURE`, `ALLOW_JTAG`) | parcial; download pela UART livre |
-| `prod` | `collector_twai_prod` | `+ sdkconfig.prod.defaults` | sim | modo *release* | sim | tudo, irreversível (`SECURE_DISABLE_ROM_DL_MODE`) |
+| `devsec` | `collector_mock_devsec`, `collector_mock_devsec_asym` | `+ sdkconfig.devsec.defaults` | sim | modo desenvolvimento | sim (`SECURE_BOOT_INSECURE`, `ALLOW_JTAG`) | parcial; download pela UART livre |
+| `prod` | `collector_twai_prod`, `collector_twai_prod_asym` | `+ sdkconfig.prod.defaults` | sim | modo *release* | sim | tudo, irreversível (`SECURE_DISABLE_ROM_DL_MODE`) |
 
 `devsec` e `prod` diferem do env de origem só por `board_build.cmake_extra_args`
 (`-DSDKCONFIG_DEFAULTS="a;b"`); `devsec` acrescenta `board_build.encryption_key`.
@@ -201,8 +201,10 @@ flowchart LR
 
 Saída em `<out>/<DevId>/`: `secnvs.csv`, `secnvs.bin`, `kms_record.json`,
 `bench_keys.json` (dev/devsec; `dev_id`, `k_auth`, `k_rec` em hex),
-`keys/nvs_keys.bin` (devsec/prod). `prod` não aceita `--flash` nem perfil
-diferente de `hmac`. Offset e tamanho da `secnvs` vêm de `partitions_collector.csv`.
+`keys/nvs_keys.bin` (devsec/prod). `prod` não aceita `--flash` nem o perfil
+`none` (fase-4/`DESVIOS-E-MELHORIAS.md`: `prod` com `asym` passou a ser aceito
+depois que o servidor verifica blocos `asym` localmente). Offset e tamanho da
+`secnvs` vêm de `partitions_collector.csv`.
 
 `kms_record.json` (contrato consumido pela Fase 3):
 
