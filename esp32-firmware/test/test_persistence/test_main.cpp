@@ -11,20 +11,35 @@ void tearDown() {}
 
 // ── Tmax e AT# ───────────────────────────────────────────────────────────
 
+// Independe de kTmaxSamplesPerPid: as N-1 primeiras amostras respondem com
+// latências 20, 40, …, 20·(N-1) ms e a última é timeout. Com até 100
+// respostas, o posto ⌈0,99·n⌉ é o próprio n, então o p99 é a maior latência.
+static_assert(kTmaxSamplesPerPid >= 2 && kTmaxSamplesPerPid <= 101,
+              "com mais de 100 respostas o p99 deixa de ser o maximo: reveja este teste");
+
 void test_tmax_meter_p99_and_suggestion() {
+    constexpr uint32_t kStepLatencyMs = 20;
     CollectorConfig config;
     config.pids[0] = {0x0C, 250, 125};
     config.pidCount = 1;
     TmaxMeter meter;
     meter.begin(config);
     for (uint32_t i = 1; i <= kTmaxSamplesPerPid; ++i) {
-        meter.record(i != 100, i);  // latências 1..99 e um timeout
+        meter.record(i != kTmaxSamplesPerPid, i * kStepLatencyMs);
     }
     const TmaxReport report = meter.report();
     TEST_ASSERT_TRUE(report.state == TmaxReport::State::Done);
-    TEST_ASSERT_EQUAL_UINT32(99, report.pids[0].p99Ms);   // posto ⌈0,99·99⌉ = 99
+
+    const uint32_t expectedP99 = (kTmaxSamplesPerPid - 1) * kStepLatencyMs;
+    TEST_ASSERT_EQUAL_UINT32(expectedP99, report.pids[0].p99Ms);
     TEST_ASSERT_EQUAL_UINT32(1, report.pids[0].timeouts);
-    TEST_ASSERT_EQUAL_UINT32(132, report.suggestedTmaxMs);  // ⌈1,3·99⌉ = 129 → 132
+
+    // Sugestão = 1,3 · p99 arredondado para cima ao próximo múltiplo de 4 ms
+    // (acima do piso de 20 ms, já que o p99 é no mínimo 20).
+    const double withMargin = kTmaxMargin * expectedP99;
+    TEST_ASSERT_EQUAL_UINT32(0, report.suggestedTmaxMs % kTmaxStepMs);
+    TEST_ASSERT_TRUE(report.suggestedTmaxMs >= withMargin);
+    TEST_ASSERT_TRUE(report.suggestedTmaxMs < withMargin + kTmaxStepMs);
 }
 
 void test_at_hash_parser() {
