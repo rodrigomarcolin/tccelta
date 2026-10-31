@@ -78,6 +78,8 @@ func Run(ctx context.Context, name string, o Options) error {
 		return timeScenario(ctx, o)
 	case "generation":
 		return generation(ctx, o)
+	case "asym":
+		return asymScenario(ctx, o)
 	case "load":
 		return load(ctx, o)
 	case "reconnection":
@@ -541,4 +543,75 @@ func knee(ctx context.Context, o Options) error {
 	}
 	o.Report.Extra["dongle_capacity"] = capacity
 	return nil
+}
+
+// handshakeWithBackoff repete o handshake enquanto o servidor responde 429, respeitando o Retry-After:
+// um cenário curto e sem pausas entre os dongles bate no limite de desafios por IP.
+func handshakeWithBackoff(ctx context.Context, a *AppVirtual) error {
+	for attempt := 0; ; attempt++ {
+		err := a.Handshake(ctx)
+		var herr *httpErr
+		if !errors.As(err, &herr) || herr.Status != 429 || attempt >= 5 {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(max(herr.RetryAfter, time.Second)):
+		}
+	}
+}
+
+// asymScenario confere o perfil asym fim a fim: blocos assinados com ECDSA são aceitos (sem passar pelo
+// KMS para verificar) e uma tag adulterada vira invalid_tag, com o ACK parado no seq anterior.
+func asymScenario(ctx context.Context, o Options) error {
+	v := &verifier{log: o.Log}
+	q := o.Inspect
+	for i, ch := range o.Keys {
+		if ch.Profile.Name != protocol.ProfileAsym.Name || ch.KSig == nil {
+			return fmt.Errorf("dongle %d: o cenário asym exige dongles do perfil asym com k_sig", i)
+		}
+		d := NewDongle(ch, ConfigDongle{FlashCapacity: 30})
+		a := NewApp(o.API, d, client(), o.Report)
+		if err := handshakeWithBackoff(ctx, a); err != nil {
+			return fmt.Errorf("dongle %d: handshake: %w", i, err)
+		}
+		if err := generateAndDrain(ctx, a, 100); err != nil {
+			return fmt.Errorf("dongle %d: blocos válidos: %w", i, err)
+		}
+		est, err := q.DongleState(ctx, ch.Dev)
+		if err != nil {
+			return err
+		}
+		v.ok(est.ContiguousSeq == int64(d.Head()), "dongle %d: contiguous_seq=%d head=%d", i, est.ContiguousSeq, d.Head())
+		readings, _ := q.CountReadings(ctx, est.DongleID)
+		pos, _ := q.CountPositions(ctx, est.DongleID)
+		v.ok(readings > 0 && pos > 0, "dongle %d: leituras=%d posicoes=%d", i, readings, pos)
+		rej, _ := q.CountRejected(ctx, est.DongleID)
+		v.ok(rej == 0, "dongle %d: rejected_block vazio (%d)", i, rej)
+
+		// 1 bit da tag trocado (a tag ocupa o fim do TLV do bloco); sem progresso o servidor responde 422 com o ACK
+		d.GenerateBlocks(1)
+		okAck := d.Head() - 1
+		tlvs := d.ReadForSending(1)
+		bad := append([]byte(nil), tlvs[0]...)
+		bad[len(bad)-1] ^= 1
+		r, err := a.SendBatch(ctx, [][]byte{bad})
+		v.ok(err == nil && r.Status == 422 && r.Reason == "tag_invalida" && r.Action == "reler" && !r.Full,
+			"dongle %d: tag adulterada => reler/tag_invalida (status=%d acao=%s motivo=%s err=%v)", i, r.Status, r.Action, r.Reason, err)
+		v.ok(err == nil && r.Ack.AckSeq == okAck, "dongle %d: ACK parado em %d (veio %d)", i, okAck, r.Ack.AckSeq)
+		rej, _ = q.CountRejected(ctx, est.DongleID)
+		v.ok(rej == 1, "dongle %d: rejected_block=%d (invalid_tag)", i, rej)
+
+		// o bloco original, intacto, ainda é aceito
+		if len(r.AckTLV) > 0 {
+			_, _ = d.ProcessAck(r.AckTLV)
+		}
+		if err := a.Drain(ctx); err != nil {
+			return fmt.Errorf("dongle %d: reenvio do bloco válido: %w", i, err)
+		}
+		est, _ = q.DongleState(ctx, ch.Dev)
+		v.ok(est.ContiguousSeq == int64(d.Head()), "dongle %d: bloco válido aceito depois da rejeição (contiguous_seq=%d)", i, est.ContiguousSeq)
+	}
+	return v.result()
 }

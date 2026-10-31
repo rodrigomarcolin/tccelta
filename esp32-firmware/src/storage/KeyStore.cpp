@@ -15,7 +15,8 @@
 
 // Guardas derivadas do sdkconfig, não de build flag (spec fase-1/01 §7).
 #if CONFIG_SECURE_FLASH_ENCRYPTION_MODE_RELEASE
-static_assert(SECURITY_PROFILE == SECURITY_PROFILE_HMAC, "prod exige o perfil hmac");
+static_assert(SECURITY_PROFILE == SECURITY_PROFILE_HMAC || SECURITY_PROFILE == SECURITY_PROFILE_ASYM,
+              "prod exige o perfil hmac ou asym");
 #  ifdef SECURITY_DEV_FIXED_KEYS
 #    error "chaves fixas de bancada não podem ir para o perfil prod"
 #  endif

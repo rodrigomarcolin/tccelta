@@ -341,3 +341,14 @@ func BenchmarkReadRecords(b *testing.B) {
 		_, _ = ReadRecords(d)
 	}
 }
+
+func TestMaxBlockTagSizeCoversEveryProfile(t *testing.T) {
+	for _, p := range []Profile{ProfileHMAC, ProfileAsym, ProfileNone} {
+		if p.BlockTagSize > MaxBlockTagSize {
+			t.Fatalf("perfil %s: tag de %d B acima de MaxBlockTagSize (%d)", p.Name, p.BlockTagSize, MaxBlockTagSize)
+		}
+	}
+	if MaxBlockTLVSize != 1091 {
+		t.Fatalf("MaxBlockTLVSize = %d", MaxBlockTLVSize)
+	}
+}

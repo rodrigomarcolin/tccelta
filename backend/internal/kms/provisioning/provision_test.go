@@ -19,9 +19,10 @@ import (
 
 // fakeVault guarda quais chaves existem e quantas importações aconteceram.
 type fakeVault struct {
-	pub      string
-	keys     map[string]bool // "<mount>/<nome>"
-	imported []string
+	pub         string
+	keys        map[string]bool // "<mount>/<nome>"
+	imported    []string
+	ciphertexts map[string]string // "<mount>/<nome>" → ciphertext BYOK recebido
 }
 
 func newFake(t *testing.T) *fakeVault {
@@ -31,7 +32,8 @@ func newFake(t *testing.T) *fakeVault {
 		t.Fatal(err)
 	}
 	der, _ := x509.MarshalPKIXPublicKey(&k.PublicKey)
-	return &fakeVault{pub: string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})), keys: map[string]bool{}}
+	return &fakeVault{pub: string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})), keys: map[string]bool{},
+		ciphertexts: map[string]string{}}
 }
 
 func (f *fakeVault) Read(_ context.Context, path string) (map[string]any, error) {
@@ -51,6 +53,7 @@ func (f *fakeVault) Write(_ context.Context, path string, body map[string]any) (
 	}
 	f.keys[p[0]+"/"+p[2]] = true
 	f.imported = append(f.imported, p[0]+"/"+p[2])
+	f.ciphertexts[p[0]+"/"+p[2]], _ = body["ciphertext"].(string)
 	return map[string]any{}, nil
 }
 

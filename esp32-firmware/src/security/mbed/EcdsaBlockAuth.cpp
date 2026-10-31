@@ -42,7 +42,7 @@ void EcdsaBlockAuth::digest(const uint8_t* data, size_t len, uint8_t out[32]) co
     mbedtls_sha256_free(&ctx);
 }
 
-void EcdsaBlockAuth::sign(const uint8_t* data, size_t len, uint8_t* tagOut) {
+bool EcdsaBlockAuth::sign(const uint8_t* data, size_t len, uint8_t* tagOut) {
     uint8_t hash[32];
     digest(data, len, hash);
     mbedtls_mpi r, s;
@@ -50,14 +50,15 @@ void EcdsaBlockAuth::sign(const uint8_t* data, size_t len, uint8_t* tagOut) {
     mbedtls_mpi_init(&s);
     const int rc = mbedtls_ecdsa_sign_det_ext(&_grp, &r, &s, &_d, hash, sizeof(hash), MBEDTLS_MD_SHA256,
                                               blindingRng, nullptr);
-    if (rc == 0) {
-        mbedtls_mpi_write_binary(&r, tagOut, 32);
-        mbedtls_mpi_write_binary(&s, tagOut + 32, 32);
-    } else {
-        memset(tagOut, 0, 64);  // tag inválida: o servidor rejeita
+    _lastRc = rc;
+    bool ok = rc == 0;
+    if (ok) {
+        ok = mbedtls_mpi_write_binary(&r, tagOut, 32) == 0 && mbedtls_mpi_write_binary(&s, tagOut + 32, 32) == 0;
+        if (!ok) _lastRc = MBEDTLS_ERR_MPI_BUFFER_TOO_SMALL;
     }
     mbedtls_mpi_free(&r);
     mbedtls_mpi_free(&s);
+    return ok;
 }
 
 bool EcdsaBlockAuth::verify(const uint8_t* data, size_t len, const uint8_t* tag) {

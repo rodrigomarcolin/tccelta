@@ -5,8 +5,8 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -38,6 +38,7 @@ type testEnv struct {
 	receive *ReceiveBatch
 	conf    *GetConfirmation
 	session port.Session
+	logs    *bytes.Buffer // JSON, nível debug
 }
 
 func newTest(t *testing.T) *testEnv {
@@ -50,13 +51,34 @@ func newTest(t *testing.T) *testEnv {
 		{PID: 4, NBytes: 1, Factor: 100.0 / 255, Min: f(0), Max: f(100)},
 		{PID: 12, NBytes: 2, Factor: 0.25, Min: f(0), Max: f(16383.75)},
 	})
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logs := &bytes.Buffer{}
+	log := slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	p := Params{MaxBatch: 32, VerifyBatch: 2, VerifyParallel: 2}
 	repos := db.Repositories()
 	return &testEnv{db: db, kms: k,
 		receive: NewReceiveBatch(repos, db, k, cat, porttest.Nop{}, porttest.FixedClock(t0), log, p),
 		conf:    NewGetConfirmation(repos, false),
-		session: port.Session{Dev: dev, CS: 3, JTI: uuid.New(), ExpiresAt: t0.Add(time.Hour)}}
+		session: port.Session{Dev: dev, CS: 3, JTI: uuid.New(), ExpiresAt: t0.Add(time.Hour)},
+		logs:    logs}
+}
+
+// logged devolve os registros de log com a mensagem msg, na ordem.
+func (a *testEnv) logged(t *testing.T, msg string) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range bytes.Split(a.logs.Bytes(), []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal(line, &m); err != nil {
+			t.Fatalf("log não é JSON: %s", line)
+		}
+		if m["msg"] == msg {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func mac(key []byte, typ protocol.Type, payload []byte) []byte {

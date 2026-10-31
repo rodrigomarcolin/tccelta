@@ -25,8 +25,11 @@ func (p ingestionPort) Blocks(r string, n int) {
 }
 func (p ingestionPort) Batch(s string)                      { p.m.Batches.WithLabelValues(s).Inc() }
 func (p ingestionPort) IngestionTxDuration(d time.Duration) { p.m.IngestionTx.Observe(d.Seconds()) }
-func (p ingestionPort) Rows(t string, n int)                { p.m.Rows.WithLabelValues(t).Add(float64(n)) }
-func (p ingestionPort) Gap(c string)                        { p.m.Gaps.WithLabelValues(c).Inc() }
+func (p ingestionPort) BlockVerifyDuration(profile string, d time.Duration) {
+	p.m.BlockVerify.WithLabelValues(profile).Observe(d.Seconds())
+}
+func (p ingestionPort) Rows(t string, n int) { p.m.Rows.WithLabelValues(t).Add(float64(n)) }
+func (p ingestionPort) Gap(c string)         { p.m.Gaps.WithLabelValues(c).Inc() }
 
 type httpPort struct{ m *M }
 

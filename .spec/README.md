@@ -5,16 +5,19 @@ verdade; formatos, máquinas de estado e fluxos descritos aqui batem com o
 código testado). Cada fase é uma pasta com um `README.md` (visão geral,
 arquitetura, índice), documentos numerados e, nas fases 1 e 2, um
 `DESVIOS-E-MELHORIAS.md` com o que divergiu do plano original e o que ainda
-pode melhorar.
+pode melhorar. A Fase 4 está implementada no código (specs por entrega em `fase-4-ecdsa/`);
+falta consolidá-las no estado final, como nas fases 1 a 3, e rodar o roteiro de
+bancada com a placa.
 
 | Fase | Pasta | Entrega |
 |---|---|---|
 | 1 | `fase-1-seguranca-telemetria/` | Firmware + app: build único Arduino + ESP-IDF, chaves na partição `secnvs`, bloco autenticado (HMAC/ECDSA + CRC32) em segmentos v2, reserva de `seq` + BOOT, serviço BLE SYNC (TLV + fragmentação), handshake app↔dongle, cursor de envio, buffer e `SyncCoordinator` no app, GPS periódico, port do servidor com stub e servidor de bancada. Fluxos: leitura contínua (Fig. 15) e handshake (Fig. 5, perna app↔dongle). |
 | 2 | `fase-2-lesc/` | Firmware + app: pareamento BLE LESC Just Works fim a fim, janela de pareamento por botão (GPIO0, 5 s ⇒ 45 s), um bond por vez, derrubada de bonds e conexões. |
 | 3 | `fase-3-servidor/` | `backend/` (um módulo Go, dois binários): API (`tccelta api`) com handshake, ingestão de lotes e confirmação; worker de tempo e reprocessamento; KMS próprio (`tccelta-kms`, único cliente do Vault Transit: `K_auth` gerar+verificar, `K_rec` só verificar, JWT Ed25519 com rotação); PostgreSQL/TimescaleDB/PostGIS; Redis, Caddy/túnel, Docker Compose (dev, prodlike, teste); simulador e `make e2e`. App: `HttpsSyncServerGateway` atrás do port da Fase 1. |
+| 4 | `fase-4-ecdsa/` | **Implementada (falta a bancada com a placa).** Perfil `asym` fim a fim: verificação ECDSA P-256 local na ingestão (despacho por perfil, `none` incluso), `provision new/import` com `k_sig`, simulador e cenário `asym` no `make e2e`, vetor de assinatura RFC 6979 cruzado firmware ↔ servidor, falha de assinatura explícita no firmware. |
 
 A Fase 2 só troca a camada de enlace; a Fase 3 depende dos formatos e do port
-de servidor da Fase 1.
+de servidor da Fase 1; a Fase 4 depende das Fases 1 e 3.
 
 ## Documentos de referência
 
@@ -46,7 +49,7 @@ mensagem; Tabela 4 flags do aviso; Tabela 5 erros.
 9. **Contrato do servidor no app.** O app fala com o servidor pelo port `SyncServerGateway`: desafio e resposta ao desafio em JSON com os bytes em base64 (a resposta devolve o ACK em base64 junto com o JWT); blocos e o ACK do lote em `application/octet-stream` (TLVs concatenados). O gateway HTTPS é da Fase 3; stub e servidor de bancada embutido (só *debug*) são da Fase 1.
 10. **Mesmo firmware em todos os perfis de hardware.** Todo o firmware é Arduino como componente do ESP-IDF 4.4.7 (`framework = arduino, espidf`), com o mesmo código, o mesmo `CMakeLists.txt` e a mesma `partitions_collector.csv` em `dev`, `devsec` (ensaio de produção em placa descartável) e `prod`. A diferença é só o arquivo de *defaults* do `sdkconfig` (`sdkconfig.devsec.defaults` / `sdkconfig.prod.defaults`, via `board_build.cmake_extra_args`) e o procedimento de provisionamento/eFuse. A NVS encryption (cobre `secnvs` e `nvs`, inclusive os bonds do NimBLE) está ligada em `devsec`/`prod`; no `dev` a NVS fica em claro (`KeyStore` escolhe por `#if CONFIG_NVS_ENCRYPTION`).
 11. **Enlace.** O dongle só entrega dados do NUS e do SYNC à conexão autorizada (cifrada + bond LESC com `sc == 1`, chave de 16 B); `APP_CONNECTED`/`CONN up` significam "sessão autorizada".
-12. **KMS isolado.** A API não tem credencial do Vault: todo HMAC `K_auth`, verificação `K_rec` e assinatura do JWT passam pelo serviço `tccelta-kms` (HTTP, mTLS fora do dev), único cliente do Vault Transit em runtime. `K_rec` só é usada para verificar; as chaves entram no Vault por BYOK (`kms_record.json` do firmware ou `provision new`/`import` de teste). Identificadores do backend, esquema do banco, CLI e métricas estão em inglês; rotas, JSON do handshake, `codigo` dos erros, `X-Lote-*`, variáveis de ambiente e alvos do Makefile continuam em português (contrato de fio e de operação).
+12. **KMS isolado.** A API não tem credencial do Vault: todo HMAC `K_auth`, verificação `K_rec` e assinatura do JWT passam pelo serviço `tccelta-kms` (HTTP, mTLS fora do dev), único cliente do Vault Transit em runtime. `K_rec` só é usada para verificar; as chaves entram no Vault por BYOK (`kms_record.json` do firmware ou `provision new`/`import` de teste). Identificadores do backend, esquema do banco, CLI e métricas estão em inglês; rotas, JSON do handshake, `codigo` dos erros, `X-Lote-*`, variáveis de ambiente e serviços do compose continuam em português (contrato de fio e de operação); os alvos do Makefile estão em inglês.
 
 ## Contratos cruzados entre fases
 
@@ -59,7 +62,7 @@ doc deve ser corrigida.
 | Δt dos registros (PID, GPS, marcador): **u16 LE sem sinal**, em ms a partir do `t_ms` inicial do bloco (0…65 535); registro anterior ao `t_ms` inicial fecha o bloco e abre outro, então `t_ms` inicial não é crescente entre blocos consecutivos e a Fase 3 agrega o tempo do boot por `min`/`max` | Fase 1 | Fase 3 | `fase-1/02` | `fase-3/03` §Pacote `domain/protocol`, `05` |
 | `L` do TLV (u16 LE) = comprimento de V = `tamanho + tag_len`; `tamanho` (u16 LE do cabeçalho) = área de dados **com** o cabeçalho de 12 B; dados ≥ 17 B (marcador = 23 B). A Tabela 3 do `.tex` ("55 a 1.056") está incorreta | Fase 1 | Fase 3 | `fase-1/04` | `fase-3/03` §Pacote `domain/protocol` |
 | Entrada das tags: `"MALCONG"(7) ‖ tipo(1) ‖ DevId(8) ‖ payload`; handshake = campos sem a tag, HMAC `K_auth` truncado a 16 B; bloco = os `tamanho` bytes, HMAC `K_rec` 32 B | Fase 1 | Fase 3 | `fase-1/01` | `fase-3/03` (`TagInput`) |
-| Perfis `SECURITY_PROFILE=none\|hmac\|asym`: só a tag do **bloco** muda (0/32/64 B); `asym` = ECDSA P-256 determinística, `r‖s` 64 B (mbedTLS 2.28 não tem Ed25519) | Fase 1 | Fase 3 | `fase-1/01` | `fase-3/03`, `07`, `02` (`dongle.security_profile`) |
+| Perfis `SECURITY_PROFILE=none\|hmac\|asym`: só a tag do **bloco** muda (0/32/64 B); `asym` = ECDSA P-256 determinística, `r‖s` 64 B (mbedTLS 2.28 não tem Ed25519) | Fase 1 | Fase 3, Fase 4 | `fase-1/01` | `fase-3/03`, `07`, `02` (`dongle.security_profile`); `fase-4/01`, `02` |
 | Vetores de teste: gerador único `esp32-firmware/tools/provision/vectors.py` → `vectors.json` (DevId `544343454C544101`), consumido por firmware (`test/support/vectors.h`), app (`test/support/sync_vectors.dart`) e backend (`backend/internal/domain/protocol/testdata/vetores_firmware.json`) | Fase 1 | Fase 1 (app), Fase 3 | `fase-1/01` | `fase-3/03` §Pacote `domain/protocol` |
 | Serviço SYNC: UUIDs `7A3C0001/0002/0003-9B1E-4F2A-8C5D-2E6F1A0B3C4D`, criados dentro de `BleConnectivity`, transporte em `BleSyncLink`; o SYNC não vai no anúncio; o único listener de GAP é o do `BleSecurity` | Fase 1 | Fase 2 | `fase-1/04` | `fase-2/01` |
 | Mensagens 0x01–0x07, flags do aviso, erros da Tabela 5, regras do cursor | Fase 1 | Fase 3 (0x01–0x04 no HTTP) | `fase-1/04`, `05` | `fase-3/03`, `04`, `05` |

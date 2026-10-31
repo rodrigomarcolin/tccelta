@@ -166,14 +166,24 @@ class FakeAuth : public collector::IMessageAuth {
 public:
     explicit FakeAuth(size_t tagLen = 32) : tagLen(tagLen) {}
     size_t tagSize() const override { return tagLen; }
-    void sign(const uint8_t*, size_t len, uint8_t* tagOut) override {
+    bool sign(const uint8_t*, size_t len, uint8_t* tagOut) override {
         signedLengths.push_back(len);
+        if (failSigns > 0) {
+            --failSigns;
+            lastRc = kFailRc;
+            return false;
+        }
         for (size_t i = 0; i < tagLen; ++i) tagOut[i] = static_cast<uint8_t>(signedLengths.size() + i);
+        return true;
     }
     bool verify(const uint8_t*, size_t, const uint8_t*) override { return true; }
+    int lastError() const override { return lastRc; }
 
+    static constexpr int kFailRc = -0x4E00;  // código de falha arbitrário, para conferir o `rc` do evento
+    int lastRc = 0;
     size_t tagLen;
-    std::vector<size_t> signedLengths;
+    std::vector<size_t> signedLengths;  // uma entrada por chamada a `sign`, inclusive as que falham
+    int failSigns = 0;                  // as próximas N chamadas a `sign` falham
 };
 
 /** NVS falsa: registra as reservas gravadas e a ordem relativa ao `append` (via `log`). */

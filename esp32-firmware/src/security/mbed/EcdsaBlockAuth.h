@@ -18,13 +18,15 @@ public:
     EcdsaBlockAuth& operator=(const EcdsaBlockAuth&) = delete;
 
     size_t tagSize() const override { return 64; }
-    void sign(const uint8_t* data, size_t len, uint8_t* tagOut) override;
+    bool sign(const uint8_t* data, size_t len, uint8_t* tagOut) override;
     bool verify(const uint8_t* data, size_t len, const uint8_t* tag) override;
+    int lastError() const override { return _lastRc; }
 
 private:
     mbedtls_ecp_group _grp;
     mbedtls_mpi _d;
     uint8_t _devId[8];
+    int _lastRc = 0;
 
     void digest(const uint8_t* data, size_t len, uint8_t out[32]) const;
 };

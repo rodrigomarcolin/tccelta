@@ -84,7 +84,16 @@ func GenerateMaterial(ctx context.Context, d Dongle, outDir, hw string) (string,
 		}
 	}
 	_ = os.Chmod(bin, 0o600)
-	bench, _ := json.MarshalIndent(map[string]string{"dev_id": hx, "k_auth": hex.EncodeToString(d.KAuth), "k_rec": hex.EncodeToString(d.KRec)}, "", "  ")
+	benchKeys := map[string]string{"dev_id": hx, "k_auth": hex.EncodeToString(d.KAuth), "k_rec": hex.EncodeToString(d.KRec)}
+	if d.Profile == "asym" {
+		pub, err := d.PublicKey()
+		if err != nil {
+			return "", err
+		}
+		benchKeys["k_sig"] = hex.EncodeToString(d.KSig)
+		benchKeys["k_sig_public"] = hex.EncodeToString(pub)
+	}
+	bench, _ := json.MarshalIndent(benchKeys, "", "  ")
 	if err := os.WriteFile(filepath.Join(dir, "bench_keys.json"), bench, 0o600); err != nil {
 		return "", err
 	}

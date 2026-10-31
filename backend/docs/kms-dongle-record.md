@@ -9,6 +9,10 @@ tccelta provision register --file DIR/<devid>/record.json        # insere dongle
 tccelta provision register --file DIR                              # todos os DIR/*/record.json
 ```
 
+No perfil `asym` o `record.json` leva a `public_key` (derivada da `k_sig` gerada por `provision new --profile asym`,
+lida do CSV de teste ou vinda do `k_sig_public` do `kms_record.json` do firmware); o backend a guarda em
+`dongle.public_key` e verifica os blocos localmente, sem o KMS.
+
 ## Ordem e garantias
 
 1. **KMS primeiro, banco depois.** Se o segundo passo não acontecer, sobra no Vault uma chave órfã

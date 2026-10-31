@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"tccelta/backend/internal/config"
+	"tccelta/backend/internal/domain/protocol"
 	"tccelta/backend/internal/http/ratelimit"
 	"tccelta/backend/internal/port"
 )
@@ -35,7 +36,7 @@ func (d *Deps) Router() http.Handler {
 		}
 		return h
 	}
-	maxBatch := int64(d.Cfg.Protocol.MaxBatchBlocks*1059 + 64)
+	maxBatch := int64(d.Cfg.Protocol.MaxBatchBlocks*protocol.MaxBlockTLVSize + 64)
 	base := func(route string, h http.HandlerFunc, ms ...mw) http.Handler {
 		return chain(h, append([]mw{recoverPanics(d.Log), d.instrument(route)}, ms...)...)
 	}

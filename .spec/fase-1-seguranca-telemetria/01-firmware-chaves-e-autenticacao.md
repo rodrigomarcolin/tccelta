@@ -156,8 +156,8 @@ então arquivos específicos de env ficam sob `#if`, ex. `USE_MCP2515`).
 | Perfil de hardware | Env | `sdkconfig` | NVS encryption | Flash enc. | Secure Boot V2 | eFuse |
 |---|---|---|---|---|---|---|
 | `dev` | `collector_*`, `*_debug*`, `*_bench_*` | `sdkconfig.defaults` | não (`secnvs` e `nvs` em claro) | não | não | nenhum |
-| `devsec` | `collector_mock_devsec` | `+ sdkconfig.devsec.defaults` | sim | modo desenvolvimento | sim (`SECURE_BOOT_INSECURE`, `ALLOW_JTAG`) | parcial; download pela UART livre |
-| `prod` | `collector_twai_prod` | `+ sdkconfig.prod.defaults` | sim | modo *release* | sim | tudo, irreversível (`SECURE_DISABLE_ROM_DL_MODE`) |
+| `devsec` | `collector_mock_devsec`, `collector_mock_devsec_asym` | `+ sdkconfig.devsec.defaults` | sim | modo desenvolvimento | sim (`SECURE_BOOT_INSECURE`, `ALLOW_JTAG`) | parcial; download pela UART livre |
+| `prod` | `collector_twai_prod`, `collector_twai_prod_asym` | `+ sdkconfig.prod.defaults` | sim | modo *release* | sim | tudo, irreversível (`SECURE_DISABLE_ROM_DL_MODE`) |
 
 `devsec` e `prod` diferem do env de origem só por `board_build.cmake_extra_args`
 (`-DSDKCONFIG_DEFAULTS="a;b"`); `devsec` acrescenta `board_build.encryption_key`.
@@ -201,8 +201,10 @@ flowchart LR
 
 Saída em `<out>/<DevId>/`: `secnvs.csv`, `secnvs.bin`, `kms_record.json`,
 `bench_keys.json` (dev/devsec; `dev_id`, `k_auth`, `k_rec` em hex),
-`keys/nvs_keys.bin` (devsec/prod). `prod` não aceita `--flash` nem perfil
-diferente de `hmac`. Offset e tamanho da `secnvs` vêm de `partitions_collector.csv`.
+`keys/nvs_keys.bin` (devsec/prod). `prod` não aceita `--flash` nem o perfil
+`none` (fase-4/`DESVIOS-E-MELHORIAS.md`: `prod` com `asym` passou a ser aceito
+depois que o servidor verifica blocos `asym` localmente). Offset e tamanho da
+`secnvs` vêm de `partitions_collector.csv`.
 
 `kms_record.json` (contrato consumido pela Fase 3):
 
@@ -210,15 +212,21 @@ diferente de `hmac`. Offset e tamanho da `secnvs` vêm de `partitions_collector.
 {
   "schema": "tccelta.kms.v1", "dev_id": "544343454C544101", "security_profile": "hmac",
   "created_at": "2026-10-26T12:00:00Z",
-  "k_auth": { "alg": "vault-byok-rsa-oaep-sha256-aes-kwp", "kid": "<sha256 da wrapping key>", "ciphertext_b64": "..." },
+  "k_auth": { "alg": "vault-byok-rsa-oaep-sha256-aes-kwp", "kid": "<kid do kms_wrapping.json>", "ciphertext_b64": "..." },
   "k_rec":  { "alg": "...", "kid": "...", "ciphertext_b64": "..." },
   "k_sig_public": "04…"
 }
 ```
 
-Sem `--kms-wrapping` (JSON `{auth, rec}` com PEMs das wrapping keys), os campos
-saem com `"alg": "none"` e o material em claro, com aviso. `k_sig_public` (65 B,
-hex) só aparece no perfil `asym`.
+`--kms-wrapping` recebe o `kms_wrapping.json` do `tccelta-kms provision
+export-wrapping` (`tccelta.kms.wrapping.v1`, `{auth, rec}: {kid, pem}`); o
+`provision.py` copia o `kid` de lá (8 primeiros bytes do SHA-256 do DER da
+wrapping key, em hexa) e o `import-record` o confere com a wrapping key atual.
+Sem `--kms-wrapping`, os campos saem com `"alg": "none"`, `"kid": ""` e o
+material em claro, em base64, no próprio `ciphertext_b64`, com aviso.
+`k_sig_public` (65 B, hex) só aparece no perfil `asym`. O teste
+`internal/kms/provisioning/import_record_test.go` do backend importa
+`kms_record.json` gerados por este script nos dois modos.
 
 ## Vetores de teste
 

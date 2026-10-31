@@ -16,6 +16,7 @@ func (Nop) AnchorRTT(time.Duration)                       {}
 func (Nop) Blocks(string, int)                            {}
 func (Nop) Batch(string)                                  {}
 func (Nop) IngestionTxDuration(time.Duration)             {}
+func (Nop) BlockVerifyDuration(string, time.Duration)     {}
 func (Nop) Rows(string, int)                              {}
 func (Nop) Request(string, int, time.Duration)            {}
 func (Nop) Rejection(string)                              {}

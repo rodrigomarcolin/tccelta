@@ -611,6 +611,7 @@ class SyncCoordinator {
         _lotLimit = kMaxBlocksPerPost;
         if (!stalled) {
           _notBefore = null;
+          _nextAttemptAt = null;
           _backoff.reset();
         }
       case Unauthorized() || Forbidden():

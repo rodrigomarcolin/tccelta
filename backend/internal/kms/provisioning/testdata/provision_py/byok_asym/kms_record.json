@@ -1,0 +1,17 @@
+{
+  "schema": "tccelta.kms.v1",
+  "dev_id": "0011223344556677",
+  "security_profile": "asym",
+  "created_at": "2026-10-31T20:49:55Z",
+  "k_auth": {
+    "alg": "vault-byok-rsa-oaep-sha256-aes-kwp",
+    "kid": "df92c37d30b3099e",
+    "ciphertext_b64": "iirYi4izpcL+voQ+5/YQWLgqPUvYv5TtT10ISGANDj6MJnCmkYVLpqLGeijg/Njx6EUYnDkpvhtzPWe2aoMAMXgbLYd49wvmfZxT/bE0RtGIYSnzWAljVZP0C41mNpEvVMrfIlwEsTiOXTL0zqp6twyY2c0KufSinbADyZmZtBpxcsnrs7lnw6tosja4ji7lJt+J/KmdCuX3nGjXVlfurL2Yn/l216kop7UAJy/LC3cnEdDhAGZjxzZHb8Cp+d4+UiJO6TIhZsIbYExMUvM9jYAp6Sk22T73ylM9h9+QAUmW1NXig1ijiQNBNCsJ9bBNomudV9o4kjEEVsAHrXSLLzB8jtY9OfZeezS5EkUCzh6mnEair4GiMaUYCBNU8t4FuNLwf1PJEjE="
+  },
+  "k_rec": {
+    "alg": "vault-byok-rsa-oaep-sha256-aes-kwp",
+    "kid": "df92c37d30b3099e",
+    "ciphertext_b64": "QHe4rWzpt/AY+DHB2fnCg32YRvgSGMT9oLZNxXtwh4AtEtXBljk4/PgAmAQHEqzbdDbR/XEL17R65CdnbQ28j0raTAWLMOVQm3ofbVpZ0qKcajhRqg9mWkSiLBcORekwR7a+2N8XK4DOnRtzlKDu+snAu4vHr2ZJR5euoa5/9haksFB6xVgrj3pLLAIp7yOZwJwaPvdCqfKkrB75pzz4yDEIY2RB62xWYXvcB7w4vDukSsskFIHyc8V+1sZZ/TNY+QWJn7Fnpv/POjh94mrmdz1uufz20wbOEd5oncn/PvLKd7VgQ6DgOiF4oKGzblsmYRtoRw2RRLO8n/8ZMtYmPJRyi+ZbE7SPibA58gWu7GPdX3xKyxaqIWfK6putGe0NxqgszaNhaVA="
+  },
+  "k_sig_public": "04B54F27AAEAB216E2C3B93F29D2396F3D5A2EB203686FDF810A8B57AB256C5DE01256689C2196F72088A8FE88B7D698BD0C8FA5800EC150DACD1CDD6293A00B27"
+}
