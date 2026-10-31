@@ -237,6 +237,21 @@ func TestInactiveDongleAndSemaphore(t *testing.T) {
 	}
 }
 
+func TestBatchBodyLimitFitsFullAsymBatch(t *testing.T) {
+	d, em := build(t, newFakes(), true)
+	dev, _ := protocol.DevIDFromHex("0011223344556677")
+	tk, _ := em.Issue(context.Background(), dev, 7)
+	hdr := map[string]string{"Authorization": "Bearer " + tk.Token, "Content-Type": "application/octet-stream"}
+	// 32 blocos asym cheios: o lote válido mais longo do protocolo
+	full := d.Cfg.Protocol.MaxBatchBlocks * (protocol.TLVHeaderSize + protocol.MaxDataSize + protocol.ProfileAsym.BlockTagSize)
+	if w := req(d.Router(), "POST", "/v1/dongles/blocos", make([]byte, full), hdr); w.Code == 413 {
+		t.Fatalf("lote asym cheio (%d B) recusado como corpo_grande", full)
+	}
+	if w := req(d.Router(), "POST", "/v1/dongles/blocos", make([]byte, full+65), hdr); w.Code != 413 || code(w) != "corpo_grande" {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}
+
 func TestHealth(t *testing.T) {
 	d, _ := build(t, newFakes(), true)
 	ready := true

@@ -12,7 +12,7 @@ regras puras em `internal/domain/ingestion/apply.go`, HTTP em
 | Item | Valor |
 |---|---|
 | Autenticação | `Authorization: Bearer <JWT>` (ver `08`); o DevId vem do `sub` |
-| Requisição | `Content-Type: application/octet-stream`; 1 a `LOTE_MAX_BLOCOS` (32) TLVs 0x03 concatenados; corpo máximo `32·1059 + 64` B |
+| Requisição | `Content-Type: application/octet-stream`; 1 a `LOTE_MAX_BLOCOS` (32) TLVs 0x03 concatenados; corpo máximo `32·1091 + 64` B (1091 = TLV de 3 B + 1024 B de dados + tag de 64 B, a maior entre os perfis, `asym`) |
 | 200 | corpo `application/octet-stream` = TLV 0x04 (ACK, 28 B) |
 | 422 | lote interrompido **sem progresso** por tag inválida: corpo também é o ACK (`octet-stream`) |
 | 400 | `lote_malformado`, `tlv_invalido` |

@@ -33,6 +33,10 @@ Estado da implementação em relação às specs `01`–`05`.
   `hmac` ou `asym`; só `none` continua proibido em flash encryption *release*. `provision.py --profile
   prod --security asym` passa a ser aceito (antes só `hmac`). `collector_mock_devsec_asym` ensaia o
   mesmo perfil na placa descartável (spec 01 §10.2) antes de queimar eFuse de verdade em `prod`.
+- **Novo — limite do corpo do lote com a tag do `asym`.** O `limitBody` de `POST /v1/dongles/blocos`
+  usava 1059 B por bloco (tag de 32 B do `hmac`): 32 blocos `asym` reais (1022 B de dados, 34 848 B)
+  voltavam `413 corpo_grande` na bancada. Agora é `LOTE_MAX_BLOCOS·protocol.MaxBlockTLVSize + 64`, com
+  1091 B por bloco. O e2e não pegou porque os blocos do simulador são menores.
 - **Novo — `provision.py` ↔ `import-record`.** O envelope do firmware nunca tinha sido importado pelo
   KMS e não importava: no `alg none` o Go lia `key_hex`, campo que o `provision.py` não grava (o
   material vai em `ciphertext_b64`, como na spec `fase-1/01`); com `--kms-wrapping`, o script esperava

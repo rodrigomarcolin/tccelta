@@ -90,7 +90,7 @@ Segredos por arquivo: `<NOME>_ARQUIVO`.
 |---|---|
 | `POST /v1/dongles/{id}/desafio` | recover, instrument, `limitIP`, `limitDevID` (`LIMITE_DESAFIO_MIN`) |
 | `POST /v1/dongles/{id}/desafio/resposta` | recover, instrument, `annotateS2`, `limitIP`, `limitDevID` (`LIMITE_RESPOSTA_MIN`) |
-| `POST /v1/dongles/blocos` | recover, instrument, `limitIP`, `authenticateJWT(false)`, `limitDevID` (`LIMITE_BLOCOS_MIN`), `limitConcurrency`, `limitBody(LOTE_MAX_BLOCOS·1059 + 64)` |
+| `POST /v1/dongles/blocos` | recover, instrument, `limitIP`, `authenticateJWT(false)`, `limitDevID` (`LIMITE_BLOCOS_MIN`), `limitConcurrency`, `limitBody(LOTE_MAX_BLOCOS·protocol.MaxBlockTLVSize + 64)` (1091 B por bloco, com a tag de 64 B do `asym`) |
 | `GET /v1/dongles/{id}/confirmacao` | recover, instrument, `limitIP`, `authenticateJWT(true)` (sub = `{id}`), `limitDevID` (60/min) |
 | `GET /saude/viva`, `GET /saude/pronta` | `pronta`: banco, KMS, catálogo de PIDs e chaves públicas do JWT; 503 `nao_pronto` em encerramento ou dependência fora |
 

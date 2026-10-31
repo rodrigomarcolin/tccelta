@@ -35,6 +35,9 @@ const (
 	BlockHeaderSize = 12
 	MinDataSize     = 17 // 12 de cabeçalho + 1 registro de PID (5)
 	MaxDataSize     = 1024
+	TLVHeaderSize   = 3  // T(1) ‖ L(2)
+	MaxBlockTagSize = 64 // maior tag de bloco entre os perfis (asym)
+	MaxBlockTLVSize = TLVHeaderSize + MaxDataSize + MaxBlockTagSize
 	MarkerSize      = 11
 	MarkerBlockSize = BlockHeaderSize + MarkerSize
 	LChallenge      = 45
