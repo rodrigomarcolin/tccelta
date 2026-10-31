@@ -86,21 +86,25 @@ func (c *ReceiveBatch) Run(ctx context.Context, e ReceiveBatchInput) (BatchResul
 	}
 
 	// 1. forma
+	malformed := func(err error) (BatchResult, error) {
+		c.log.Warn("lote.malformado", "dongle", d.DevID.Hex(), "perfil", d.Profile.Name, "bytes", len(e.Body), "erro", err)
+		return BatchResult{}, err
+	}
 	tlvs, err := protocol.ReadBatch(e.Body, c.p.MaxBatch)
 	if err != nil {
 		if errors.Is(err, protocol.ErrBatchTooLarge) {
-			return BatchResult{}, ding.ErrBatchTooLarge
+			return malformed(ding.ErrBatchTooLarge)
 		}
-		return BatchResult{}, fmt.Errorf("%w: %v", ding.ErrMalformedBatch, err)
+		return malformed(fmt.Errorf("%w: %v", ding.ErrMalformedBatch, err))
 	}
 	blocks := make([]ding.BlockIn, len(tlvs))
 	for i, t := range tlvs {
 		if t.T != protocol.BlockType {
-			return BatchResult{}, fmt.Errorf("%w: tipo 0x%02x", ding.ErrMalformedBatch, uint8(t.T))
+			return malformed(fmt.Errorf("%w: tipo 0x%02x", ding.ErrMalformedBatch, uint8(t.T)))
 		}
 		b, err := protocol.DecodeBlock(t.V, d.Profile)
 		if err != nil {
-			return BatchResult{}, fmt.Errorf("%w: %v", ding.ErrMalformedBatch, err)
+			return malformed(fmt.Errorf("%w: %v", ding.ErrMalformedBatch, err))
 		}
 		blocks[i].B = b
 	}
@@ -200,6 +204,8 @@ func (c *ReceiveBatch) Run(ctx context.Context, e ReceiveBatchInput) (BatchResul
 
 	// 4. transação
 	var out BatchResult
+	var applied ding.ApplyResult
+	var ackBefore int64
 	t0tx := time.Now()
 	err = c.tx.InTransaction(ctx, func(ctx context.Context, rp port.Repositories) error {
 		out = BatchResult{}
@@ -212,6 +218,7 @@ func (c *ReceiveBatch) Run(ctx context.Context, e ReceiveBatchInput) (BatchResul
 		}
 		now := c.now()
 		r := ding.Apply(blocks, ding.StateIn{ContiguousSeq: uint32(est.ContiguousSeq), G: uint16(est.BootGeneration), U: uint16(est.LastBootID)}, c.pids)
+		applied, ackBefore = r, est.ContiguousSeq
 
 		for _, rej := range r.Rejected {
 			if err := c.reject(ctx, rp, d, e.Session, rej, now); err != nil {
@@ -275,10 +282,46 @@ func (c *ReceiveBatch) Run(ctx context.Context, e ReceiveBatchInput) (BatchResul
 		st = "interrompido"
 	}
 	c.met.Batch(st)
-	if out.Interrupted {
-		c.log.Warn("lote.interrompido", "dongle", d.DevID.Hex(), "motivo", string(out.Reason), "ack_seq", out.AckSeq)
-	}
+	c.logBatch(d, blocks, applied, ackBefore, out, st)
 	return out, nil
+}
+
+// logBatch registra o lote depois do commit (a transação pode ser repetida): um resumo por lote,
+// uma linha por bloco recusado e, em debug, uma por bloco aceito.
+func (c *ReceiveBatch) logBatch(d dongle.Dongle, blocks []ding.BlockIn, r ding.ApplyResult, ackBefore int64,
+	out BatchResult, status string) {
+	dev := d.DevID.Hex()
+	for _, a := range r.Accepted {
+		c.log.Debug("bloco.aceito", "dongle", dev, "seq", a.B.Hdr.Seq, "boot_id", a.B.Hdr.BootID,
+			"marcador", a.Marker, "t0_ms", a.B.Hdr.T0Ms, "bytes", len(a.B.Data))
+	}
+	for _, rej := range r.Rejected {
+		if rej.Reason == ding.ReasonInvalidTag {
+			c.log.Warn("bloco.tag_invalida", "dongle", dev, "perfil", d.Profile.Name, "verificacao", verification(d.Profile),
+				"seq", rej.B.Hdr.Seq, "boot_id", rej.B.Hdr.BootID, "t0_ms", rej.B.Hdr.T0Ms, "tag_bytes", len(rej.B.Tag))
+			continue
+		}
+		c.log.Warn("bloco.recusado", "dongle", dev, "motivo", string(rej.Reason), "detalhe", rej.Detail,
+			"seq", rej.B.Hdr.Seq, "boot_id", rej.B.Hdr.BootID, "t0_ms", rej.B.Hdr.T0Ms)
+	}
+	c.log.Info("lote.recebido", "dongle", dev, "perfil", d.Profile.Name, "blocos", len(blocks),
+		"seq_min", blocks[0].Seq(), "seq_max", blocks[len(blocks)-1].Seq(), "aceitos", out.Accepted,
+		"duplicados", out.Duplicates, "recusados", len(r.Rejected), "ack_anterior", ackBefore, "ack", out.AckSeq, "status", status)
+	if out.Interrupted {
+		c.log.Warn("lote.interrompido", "dongle", dev, "motivo", string(out.Reason), "ack_seq", out.AckSeq)
+	}
+}
+
+// verification diz como a tag do bloco é conferida no perfil.
+func verification(p protocol.Profile) string {
+	switch p.Name {
+	case protocol.ProfileAsym.Name:
+		return "ecdsa_p256_local"
+	case protocol.ProfileNone.Name:
+		return "tag_vazia"
+	default:
+		return "hmac_k_rec_kms"
+	}
 }
 
 // verifier escolhe como as tags dos blocos do dongle são conferidas, pelo perfil:
