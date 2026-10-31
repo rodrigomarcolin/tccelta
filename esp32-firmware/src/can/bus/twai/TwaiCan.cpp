@@ -23,7 +23,31 @@ bool TwaiCan::send(const CanFrame& frame) {
     msg.extd             = frame.extended ? 1 : 0;
     msg.data_length_code = frame.dlc;
     memcpy(msg.data, frame.data, frame.dlc);
-    return twai_transmit(&msg, pdMS_TO_TICKS(10)) == ESP_OK;
+    if (twai_transmit(&msg, pdMS_TO_TICKS(10)) == ESP_OK) return true;
+    ++_txDropped;
+    return false;
+}
+
+bool TwaiCan::status(CanStatus& out) const {
+    twai_status_info_t info;
+    if (twai_get_status_info(&info) != ESP_OK) return false;
+    switch (info.state) {
+        case TWAI_STATE_RUNNING:    out.state = CanStatus::State::Running;    break;
+        case TWAI_STATE_BUS_OFF:    out.state = CanStatus::State::BusOff;     break;
+        case TWAI_STATE_RECOVERING: out.state = CanStatus::State::Recovering; break;
+        default:                    out.state = CanStatus::State::Stopped;    break;
+    }
+    out.txErrors  = info.tx_error_counter;
+    out.rxErrors  = info.rx_error_counter;
+    out.txFailed  = info.tx_failed_count;
+    out.rxMissed  = info.rx_missed_count;
+    out.rxOverrun = info.rx_overrun_count;
+    out.arbLost   = info.arb_lost_count;
+    out.busErrors = info.bus_error_count;
+    out.txQueued  = info.msgs_to_tx;
+    out.rxQueued  = info.msgs_to_rx;
+    out.txDropped = _txDropped;
+    return true;
 }
 
 bool TwaiCan::receive(CanFrame& frame) {

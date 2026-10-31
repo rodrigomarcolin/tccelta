@@ -1,5 +1,6 @@
 #include "Obd2Can.h"
 #include <cstring>
+#include "collector/Events.h"
 
 // Convenções OBD-II/SAE-J1979 que o IsoTpClient (genérico, sem conhecimento
 // de diagnóstico) precisa receber como parâmetro.
@@ -33,12 +34,42 @@ Obd2Can::Obd2Can(ICanBus* can, const ObdAddressing& addressing, uint32_t timeout
 
 bool Obd2Can::begin() { return _can->begin(); }
 
+static const char* canStateName(CanStatus::State state) {
+    switch (state) {
+        case CanStatus::State::Running:    return "running";
+        case CanStatus::State::BusOff:     return "bus_off";
+        case CanStatus::State::Recovering: return "recovering";
+        default:                           return "stopped";
+    }
+}
+
+void Obd2Can::emitCanStatus() const {
+    if (!collector::kEventsEnabled) return;
+    CanStatus s;
+    if (!_can->status(s)) return;
+    collector::Event("CAN_STATUS")
+        .token("state", canStateName(s.state))
+        .num("tec", s.txErrors)
+        .num("rec", s.rxErrors)
+        .num("tx_failed", s.txFailed)
+        .num("tx_drop", s.txDropped)
+        .num("tx_q", s.txQueued)
+        .num("rx_q", s.rxQueued)
+        .num("rx_missed", s.rxMissed)
+        .num("rx_overrun", s.rxOverrun)
+        .num("arb_lost", s.arbLost)
+        .num("bus_err", s.busErrors);
+}
+
 int Obd2Can::requestFunctional(const uint8_t* req, size_t reqLen,
                                const IsoTp::ReplyPrefix& reply,
                                IsoTp::ResponseSet& raw, uint32_t timeoutMs,
                                size_t expectedResponses) {
-    return _isoTp.requestAll(_addr.functionalRequestId, _addr.responseIdMin, _addr.responseIdMax,
-                             req, reqLen, reply, raw, timeoutMs, expectedResponses);
+    const int result = _isoTp.requestAll(_addr.functionalRequestId, _addr.responseIdMin,
+                                         _addr.responseIdMax, req, reqLen, reply, raw,
+                                         timeoutMs, expectedResponses);
+    if (result == IsoTp::TIMEOUT) emitCanStatus();
+    return result;
 }
 
 // ── Modo 01/09 ───────────────────────────────────────────────────────────
@@ -70,6 +101,7 @@ int Obd2Can::readEnginePid(uint8_t pid, uint8_t* buf, size_t maxLen, uint32_t ti
                                    _addr.engineResponseId, req, sizeof(req),
                                    IsoTp::ReplyPrefix(replySid(SERVICE_CURRENT_DATA), pid),
                                    raw, timeoutMs, 1);
+    if (result == IsoTp::TIMEOUT) emitCanStatus();
     if (result < 0 || raw.count == 0) return -1;
 
     Obd2ResponseSet responses;
