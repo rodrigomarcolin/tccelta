@@ -33,6 +33,12 @@ Estado da implementação em relação às specs `01`–`05`.
   `hmac` ou `asym`; só `none` continua proibido em flash encryption *release*. `provision.py --profile
   prod --security asym` passa a ser aceito (antes só `hmac`). `collector_mock_devsec_asym` ensaia o
   mesmo perfil na placa descartável (spec 01 §10.2) antes de queimar eFuse de verdade em `prod`.
+- **Novo — `provision.py` ↔ `import-record`.** O envelope do firmware nunca tinha sido importado pelo
+  KMS e não importava: no `alg none` o Go lia `key_hex`, campo que o `provision.py` não grava (o
+  material vai em `ciphertext_b64`, como na spec `fase-1/01`); com `--kms-wrapping`, o script esperava
+  PEMs soltos em vez do `kms_wrapping.json` do `export-wrapping` (`{kid, pem}`) e calculava o `kid` sobre
+  o texto do PEM, não sobre o DER. Os dois lados seguem agora a spec, e
+  `TestImportRecordFromProvisionPy*` importa envelopes gerados pelo próprio `provision.py`.
 
 ## Verificado, mas não em hardware
 

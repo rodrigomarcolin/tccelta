@@ -311,11 +311,11 @@ type EnvelopeKMS struct {
 	KSigPublic      string `json:"k_sig_public"`
 }
 
+// kmsKey: no alg "none" (só fora de produção) o ciphertext_b64 é o material em claro.
 type kmsKey struct {
 	Alg           string `json:"alg"`
 	Kid           string `json:"kid"`
 	CiphertextB64 string `json:"ciphertext_b64"`
-	KeyHex        string `json:"key_hex"` // só alg "none" fora de produção
 }
 
 // ImportRecord importa o envelope de um dongle real (idempotente) e devolve o registro.
@@ -368,9 +368,9 @@ func (p *Provisioner) ImportRecord(ctx context.Context, file, desc string) (Reco
 				if p.Environment == "producao" {
 					return "", errors.New("alg none recusado em producao")
 				}
-				k, err := hex.DecodeString(c.KeyHex)
+				k, err := base64.StdEncoding.DecodeString(c.CiphertextB64)
 				if err != nil || len(k) != 32 {
-					return "", errors.New("key_hex inválida")
+					return "", errors.New("ciphertext_b64 do alg none não é uma chave de 32 B")
 				}
 				return Wrap(pub, k)
 			}

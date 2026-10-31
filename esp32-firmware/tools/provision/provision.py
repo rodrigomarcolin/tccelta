@@ -13,7 +13,6 @@ import argparse
 import base64
 import csv
 import datetime
-import hashlib
 import json
 import pathlib
 import secrets
@@ -54,23 +53,39 @@ def new_k_sig():
     return scalar, public
 
 
-def byok_wrap(key_material, wrapping_pem):
+WRAPPING_SCHEMA = "tccelta.kms.wrapping.v1"
+
+
+def load_wrapping(path):
+    """kms_wrapping.json do `tccelta-kms provision export-wrapping`: {auth, rec}: {kid, pem}."""
+    wrapping = json.loads(path.read_text(encoding="utf-8"))
+    if wrapping.get("schema") != WRAPPING_SCHEMA:
+        raise SystemExit(f"{path}: schema {wrapping.get('schema')!r}, esperado {WRAPPING_SCHEMA}")
+    for mount in ("auth", "rec"):
+        entry = wrapping.get(mount)
+        if not isinstance(entry, dict) or not entry.get("kid") or not entry.get("pem"):
+            raise SystemExit(f"{path}: falta {mount}.kid ou {mount}.pem")
+    return wrapping
+
+
+def byok_wrap(key_material, wrapping):
     """Formato BYOK do Vault Transit: chave AES-256 efêmera cifrada com RSA-OAEP-SHA256
-    pela wrapping key, seguida do material embrulhado com AES-KWP (RFC 5649)."""
+    pela wrapping key, seguida do material embrulhado com AES-KWP (RFC 5649). O kid é o
+    que o KMS exportou, e o import-record o confere com o da wrapping key atual."""
     from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.primitives.asymmetric import padding, rsa
     from cryptography.hazmat.primitives.keywrap import aes_key_wrap_with_padding
 
-    public = serialization.load_pem_public_key(wrapping_pem.encode())
+    public = serialization.load_pem_public_key(wrapping["pem"].encode())
+    if not isinstance(public, rsa.RSAPublicKey):
+        raise SystemExit("a wrapping key do KMS não é RSA")
     ephemeral = secrets.token_bytes(32)
     wrapped_ephemeral = public.encrypt(
         ephemeral,
         padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
     )
     wrapped_key = aes_key_wrap_with_padding(ephemeral, key_material)
-    return base64.b64encode(wrapped_ephemeral + wrapped_key).decode(), hashlib.sha256(
-        wrapping_pem.encode()
-    ).digest()[:8].hex()
+    return base64.b64encode(wrapped_ephemeral + wrapped_key).decode(), wrapping["kid"]
 
 
 def kms_field(key_material, wrapping, mount):
@@ -112,7 +127,7 @@ def main():
     ap.add_argument("--security", choices=list(SECURITY_CODE), default="hmac")
     ap.add_argument("--dev-id", help="16 dígitos hexa (reprovisionar a mesma placa)")
     ap.add_argument("--out", type=pathlib.Path, default=HERE / "out")
-    ap.add_argument("--kms-wrapping", type=pathlib.Path, help="JSON com as wrapping keys: {auth, rec} (PEM)")
+    ap.add_argument("--kms-wrapping", type=pathlib.Path, help="kms_wrapping.json do tccelta-kms provision export-wrapping")
     ap.add_argument("--nvs-key", choices=["auto", "new", "board"], default="auto")
     ap.add_argument("--fe-key", type=pathlib.Path, default=pathlib.Path("keys/devsec/fe_key_devsec.bin"))
     ap.add_argument("--port")
@@ -160,7 +175,7 @@ def main():
     secnvs_bin = out / "secnvs.bin"
     nvs_image(csv_path, secnvs_bin, secnvs_size, nvs_keys)
 
-    wrapping = json.loads(args.kms_wrapping.read_text()) if args.kms_wrapping else None
+    wrapping = load_wrapping(args.kms_wrapping) if args.kms_wrapping else None
     if wrapping is None:
         print("aviso: registro KMS com alg=none (sem --kms-wrapping); só para dev/devsec", file=sys.stderr)
     record = {

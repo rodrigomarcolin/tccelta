@@ -1,0 +1,16 @@
+{
+  "schema": "tccelta.kms.v1",
+  "dev_id": "0011223344556678",
+  "security_profile": "hmac",
+  "created_at": "2026-10-31T20:49:55Z",
+  "k_auth": {
+    "alg": "none",
+    "kid": "",
+    "ciphertext_b64": "m+7e4/3fFDoVKZSQJtqBiJiLJGqi94I/YoDk5mZ/dDg="
+  },
+  "k_rec": {
+    "alg": "none",
+    "kid": "",
+    "ciphertext_b64": "bfBe8dV9+RRp+6ySP5X2qeCGkwQGQeYkLFtJNekRjUk="
+  }
+}

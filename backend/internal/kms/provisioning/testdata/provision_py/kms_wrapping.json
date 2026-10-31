@@ -1,0 +1,11 @@
+{
+  "schema": "tccelta.kms.wrapping.v1",
+  "auth": {
+    "kid": "df92c37d30b3099e",
+    "pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4sf7ED9ixHjPV9yBAWSs\no2/vho1HqnEFP0oY+Dv/Etcm3rV2i0ifUomNTAevuwCs09F5ty4S3gK4+/Mf84wD\nJV0VDzO01EajXOC1mYQLbtcbWaYNKNcJXyBZhiitjKTSXapsim7tTz41fLe1N7oS\nPwbwyVAFBT+t4MiA36cfUO6ssqjD7oIXFKbn5lnwk4Y1fX1FL9Xaahj5diCF5Hkt\n5Z+a709EBSCcC2vnPW0Qd/CZKSILDXYzOwk1HCvC6MThKx7aGcq0nf2Gq/V6X98J\nKYd0poR2TotN0amzbgd0vXuiNajk01cnrbTfSsmtit11EX3iWtaXEQlYOfGr6mPN\n8wIDAQAB\n-----END PUBLIC KEY-----\n"
+  },
+  "rec": {
+    "kid": "df92c37d30b3099e",
+    "pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4sf7ED9ixHjPV9yBAWSs\no2/vho1HqnEFP0oY+Dv/Etcm3rV2i0ifUomNTAevuwCs09F5ty4S3gK4+/Mf84wD\nJV0VDzO01EajXOC1mYQLbtcbWaYNKNcJXyBZhiitjKTSXapsim7tTz41fLe1N7oS\nPwbwyVAFBT+t4MiA36cfUO6ssqjD7oIXFKbn5lnwk4Y1fX1FL9Xaahj5diCF5Hkt\n5Z+a709EBSCcC2vnPW0Qd/CZKSILDXYzOwk1HCvC6MThKx7aGcq0nf2Gq/V6X98J\nKYd0poR2TotN0amzbgd0vXuiNajk01cnrbTfSsmtit11EX3iWtaXEQlYOfGr6mPN\n8wIDAQAB\n-----END PUBLIC KEY-----\n"
+  }
+}
