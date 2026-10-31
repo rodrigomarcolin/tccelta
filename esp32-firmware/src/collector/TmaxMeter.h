@@ -23,7 +23,7 @@ struct TmaxReport {
 };
 
 /**
- * Medição de Tmax (plano §5.9): 100 requisições por PID, intercaladas entre
+ * Medição de Tmax (plano §5.9): kTmaxSamplesPerPid requisições por PID, intercaladas entre
  * os PIDs; Tmax sugerido = 1,3 · maior p99, arredondado para cima em
  * múltiplos de 4 ms. Timeouts contam à parte, fora do percentil.
  */

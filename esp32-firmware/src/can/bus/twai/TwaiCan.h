@@ -20,9 +20,11 @@ public:
     bool begin()   override;
     bool send(const CanFrame& frame)    override;
     bool receive(CanFrame& frame)       override;
+    bool status(CanStatus& out) const   override;
 
 private:
     CanBitrate _bitrate;
     int _txPin;
     int _rxPin;
+    uint32_t _txDropped = 0;
 };

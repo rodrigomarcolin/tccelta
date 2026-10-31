@@ -563,6 +563,12 @@ sem estouro de pilha (high-water mark registrado) e sem descarte de registros.
 - A medição suspende a coleta, faz **100 requisições** de cada PID
   configurado e depois retoma o escalonador. A aplicação do valor é feita
   depois com `AT ST`. Durante a medição, valem as regras da §4.4.
+- **Hoje o firmware faz menos que 100, para os testes.** O valor ideal
+  continua sendo 100 requisições por PID, mas `kTmaxSamplesPerPid`
+  (`esp32-firmware/src/collector/TmaxMeter.h`) está em **15** para encurtar o
+  `AT#TMAX` na bancada (~5 s com 7 PIDs e 50 ms). Com 15 amostras o p99 é o
+  próprio máximo, a mesma limitação apontada abaixo para as 20 da §2.5.1.
+  Antes das medições que entram no trabalho, voltar a constante para 100.
 - **Diverge do documento:** a §2.5.1 fala em 20 requisições, mas com 20
   amostras o percentil 99 é o próprio máximo, e uma única resposta lenta
   define o prazo. O documento deve ser atualizado para 100. O fator 1,3 é o

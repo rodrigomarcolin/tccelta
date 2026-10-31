@@ -54,4 +54,7 @@ private:
                           const IsoTp::ReplyPrefix& reply,
                           IsoTp::ResponseSet& raw, uint32_t timeoutMs,
                           size_t expectedResponses);
+
+    /** Evento CAN_STATUS depois de um timeout (só com COLLECTOR_EVENTS). */
+    void emitCanStatus() const;
 };
