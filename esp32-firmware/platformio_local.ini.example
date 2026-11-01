@@ -18,3 +18,8 @@ monitor_port = COM9
 ;     -DPAIR_WINDOW_MS=20000
 ;     -DCONFIG_BT_NIMBLE_MAX_BONDS=1
 ;     -DMYNEWT_VAL_BLE_SM_MAX_PROCS=3
+
+; Log de blocos: fixa o limite N (bancada), para provocar SEG_DROP sem encher a flash.
+; [block_log]
+; build_flags =
+;     -DBLOCK_LOG_MAX_BLOCKS=200

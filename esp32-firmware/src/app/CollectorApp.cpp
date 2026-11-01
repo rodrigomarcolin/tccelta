@@ -116,7 +116,7 @@ bool startCollector(BusFactory makeBus, BleConnectivity& ble) {
 
     // 2. Log de blocos (v2, com migração do /log). O wipe também zera seq_rsv, last_cs e wipe_req.
     static LittleFsBlockStore store;
-    if (!store.begin(wipe)) return false;
+    if (!store.begin(wipe, security::kBlockTagSize)) return false;
     if (wipe) nvs.clearSeqState();
 
     // 3. Recuperação de seq (spec 03 §3): o BOOT declara [último na flash + 1, R - 1].
@@ -146,7 +146,8 @@ bool startCollector(BusFactory makeBus, BleConnectivity& ble) {
         else                e.absent("legacy_last");
         e.num("boot_seq", rec.bootSeq).num("from", rec.fromSeq).num("to", rec.toSeq)
             .num("seq_next", writer.nextSeq()).num("log_oldest", store.oldestSeq())
-            .num("log_newest", store.newestSeq()).num("lost", store.lostBlocks());
+            .num("log_newest", store.newestSeq()).num("lost", store.lostBlocks())
+            .num("log_max", store.maxBlocks());
     }
     Serial.printf("[collector] boot %u, next seq %lu\n", bootId, static_cast<unsigned long>(writer.nextSeq()));
 

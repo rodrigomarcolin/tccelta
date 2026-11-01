@@ -150,7 +150,7 @@ Assina e calcula o CRC uma vez; a nova tentativa grava os mesmos bytes.
 - Índice em RAM de até `kMaxSegments` = 256 segmentos (`firstSeq`, `lastSeq`, `count`, `bytes`, `tagLen`, `sealed`); mutex interno.
 - `begin(wipe)`: apaga `/log` legado (`LOG_MIGRATE removed=n`); `wipe` formata; varre `/log2/*.seg` com `scanSegment`: cabeçalho inválido ou 0 registros ⇒ apaga o arquivo; varredura parou antes do fim ⇒ `sealed`; 64 registros ⇒ `sealed`.
 - `append` abre segmento novo se: índice vazio, mais novo cheio/selado, `tagLen` diferente, ou `startNewSegment()` pendente. Escrita incompleta sela o segmento e devolve `false`.
-- `ensureSpace(n)`: `while (_count > 1 && livre < n + kReserveBytes (8 KB)) discardOldest()`. `discardOldest` conta `lostBlocks`, sobe `overflowUpTo` e emite `SEG_DROP`. Em bancada, `-DBLOCK_LOG_LIMIT_BYTES=n` limita o log (sem folga de 8 KB).
+- `ensureSpace(n)`: `while (_count > 1 && (_blocks + 1 > _maxBlocks || livre < n + kReserveBytes (8 KB))) discardOldest()`. O limite N (`collector/LogLimit.h`: (LittleFS − `BLOCK_LOG_MARGIN_PCT`%) / registro máximo do perfil, piso 128, teto 16384) é a regra principal; os 8 KB são rede de segurança. `begin` descarta o excedente se N diminuiu. `discardOldest` conta `lostBlocks`, sobe `overflowUpTo` e emite `SEG_DROP`. Em bancada, `-DBLOCK_LOG_MAX_BLOCKS=n` fixa N. O `usagePermille` é `_blocks * 1000 / N`.
 - `read` varre os registros do segmento pelo `tamanho` de cada um (linear); sem cursor de leitura em cache.
 
 ## Eventos

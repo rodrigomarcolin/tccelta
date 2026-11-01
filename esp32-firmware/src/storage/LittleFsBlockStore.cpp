@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <vector>
 #include "collector/Events.h"
+#include "collector/LogLimit.h"
 
 using collector::Block;
 using collector::ReadStatus;
@@ -72,7 +73,7 @@ void LittleFsBlockStore::migrateV1() {
     collector::Event("LOG_MIGRATE").num("removed", removed);
 }
 
-bool LittleFsBlockStore::begin(bool wipe) {
+bool LittleFsBlockStore::begin(bool wipe, size_t tagLen) {
     if (!LittleFS.begin(true)) return false;
     if (wipe && !LittleFS.format()) return false;
     migrateV1();
@@ -113,6 +114,16 @@ bool LittleFsBlockStore::begin(bool wipe) {
         }
         pushSegment(segment);  // acima do limite, descarta os mais antigos
     }
+
+    // Limite N de blocos; BLOCK_LOG_MAX_BLOCKS (bancada) substitui o cálculo pela margem.
+    constexpr uint32_t kCeiling = kMaxSegments * collector::kBlocksPerSegment;
+#if defined(BLOCK_LOG_MAX_BLOCKS)
+    _maxBlocks = std::max<uint32_t>(2u * collector::kBlocksPerSegment, std::min<uint32_t>(BLOCK_LOG_MAX_BLOCKS, kCeiling));
+#else
+    _maxBlocks = collector::maxBlocksFor(LittleFS.totalBytes(), BLOCK_LOG_MARGIN_PCT, tagLen, kCeiling);
+#endif
+    // N pode ter diminuído entre dois firmwares: descarta os mais antigos até caber.
+    while (_count > 1 && _blocks > _maxBlocks) discardOldest();
     refreshUsage();
     return true;
 }
@@ -121,10 +132,12 @@ void LittleFsBlockStore::pushSegment(const Segment& segment) {
     if (_count == kMaxSegments) discardOldest();
     _segments[(_head + _count) % kMaxSegments] = segment;
     ++_count;
+    _blocks += segment.count;
 }
 
 void LittleFsBlockStore::dropOldest() {
     LittleFS.remove(segmentPath(at(0).firstSeq));
+    _blocks -= at(0).count;
     _head = (_head + 1) % kMaxSegments;
     --_count;
 }
@@ -137,36 +150,17 @@ void LittleFsBlockStore::discardOldest() {
     dropOldest();
 }
 
-// Em bancada, BLOCK_LOG_LIMIT_BYTES limita o log para provocar a flash cheia sem encher 2 MB.
-#if defined(BLOCK_LOG_LIMIT_BYTES)
-size_t LittleFsBlockStore::capacityBytes() const { return BLOCK_LOG_LIMIT_BYTES; }
-size_t LittleFsBlockStore::usedBytes() const {
-    size_t sum = 0;
-    for (size_t i = 0; i < _count; ++i) sum += at(i).bytes;
-    return sum;
-}
-size_t LittleFsBlockStore::freeBytes() const {
-    const size_t used = usedBytes();
-    return used >= BLOCK_LOG_LIMIT_BYTES ? 0 : BLOCK_LOG_LIMIT_BYTES - used;
-}
-#else
-size_t LittleFsBlockStore::capacityBytes() const { return LittleFS.totalBytes(); }
 size_t LittleFsBlockStore::usedBytes() const { return LittleFS.usedBytes(); }
 size_t LittleFsBlockStore::freeBytes() const { return LittleFS.totalBytes() - LittleFS.usedBytes(); }
-#endif
 
 void LittleFsBlockStore::refreshUsage() {
-    const size_t capacity = capacityBytes();
-    _usagePermille = capacity == 0 ? 0 : static_cast<uint16_t>(std::min<size_t>(1000, usedBytes() * 1000 / capacity));
+    _usagePermille = _maxBlocks == 0 ? 0 : static_cast<uint16_t>(std::min<uint64_t>(1000, uint64_t{_blocks} * 1000 / _maxBlocks));
 }
 
+// O limite de blocos é a regra principal; os bytes livres do LittleFS são a rede de
+// segurança (os blocos de 4 KB do LittleFS podem estourar uma margem pequena).
 void LittleFsBlockStore::ensureSpace(size_t bytes) {
-#if defined(BLOCK_LOG_LIMIT_BYTES)
-    const size_t reserve = 0;
-#else
-    const size_t reserve = kReserveBytes;
-#endif
-    while (_count > 1 && freeBytes() < bytes + reserve) discardOldest();
+    while (_count > 1 && (_blocks + 1 > _maxBlocks || freeBytes() < bytes + kReserveBytes)) discardOldest();
 }
 
 void LittleFsBlockStore::startNewSegment() {
@@ -237,6 +231,7 @@ bool LittleFsBlockStore::append(const Block& block) {
         Segment& segment = newest();
         segment.lastSeq = seq;
         ++segment.count;
+        ++_blocks;
         segment.bytes += static_cast<uint32_t>(n);
         if (segment.count >= collector::kBlocksPerSegment) segment.sealed = true;
     }
