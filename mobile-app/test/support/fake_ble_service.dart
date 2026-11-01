@@ -89,6 +89,12 @@ class FakeBleService implements BleService {
   /// Quantas conexões foram abertas.
   int connectCount = 0;
 
+  /// Conexões abertas, em ordem (para emitir notificações e asserir queda).
+  final List<FakeBleConnection> connections = [];
+
+  /// Valor de `requireBond` da última chamada a [connect].
+  bool? lastRequireBond;
+
   /// Se há um scan ativo (não parado). Modela o contrato do FBP: um scan por
   /// vez — o anterior precisa ser parado antes de o novo render resultados.
   bool _scanActive = false;
@@ -199,15 +205,19 @@ class FakeBleService implements BleService {
     List<BleChannelSpec> extraChannels = const [],
     int mtu = 512,
     Duration securingTimeout = const Duration(seconds: 30),
+    bool requireBond = true,
   }) async {
     connectCount++;
+    lastRequireBond = requireBond;
     final plan = plans.length >= connectCount ? plans[connectCount - 1] : null;
-    return FakeBleConnection(
+    final conn = FakeBleConnection(
       plan?.phases ?? phases,
       lastError: plan?.error,
       channelsByService: channels,
       onPhase: onPhase,
     );
+    connections.add(conn);
+    return conn;
   }
 }
 
@@ -255,6 +265,14 @@ class FakeBleConnection implements BleConnection {
     _current = phase;
     if (!_phaseCtrl.isClosed) _phaseCtrl.add(phase);
   }
+
+  /// Emite [bytes] na TX, como uma notificação do dispositivo.
+  void emitIncoming(List<int> bytes) {
+    if (!_incomingCtrl.isClosed) _incomingCtrl.add(bytes);
+  }
+
+  /// `true` depois de [disconnect].
+  bool get isDisconnected => _incomingCtrl.isClosed;
 
   @override
   BleChannel? channel(String serviceUuid) => channelsByService[serviceUuid];

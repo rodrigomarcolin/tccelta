@@ -6,12 +6,12 @@ import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
 import 'package:tccelta_mobile/src/ui/telemetry/telemetry_providers.dart';
 
-/// Envio periódico do GPS ao dongle. Instanciado pelo `ConnectionGuard`
-/// (global); nunca abre o diálogo de permissão.
+/// Envio periódico do GPS ao dongle; nunca abre o diálogo de permissão.
+/// Recriado (e o anterior encerrado) quando o repository de localização muda.
 final Provider<GpsReporter> gpsReporterProvider = Provider<GpsReporter>((ref) {
   final reporter = GpsReporter(
     dongle: ref.read(dongleRepositoryProvider),
-    location: ref.read(locationRepositoryProvider),
+    location: ref.watch(locationRepositoryProvider),
     obd2: ref.read(obd2RepositoryProvider),
     settings: ref.read(syncSettingsRepositoryProvider),
   )..start();

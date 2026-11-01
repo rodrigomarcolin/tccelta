@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tccelta_mobile/src/core/theme/theme.dart';
 import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_source.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_settings.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_status.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
@@ -77,6 +78,22 @@ class SyncSettingsScreen extends ConsumerWidget {
               labelOf: (on) => on ? 'Ligado' : 'Desligado',
               onChanged: (on) => vm.setGpsEnabled(enabled: on),
             ),
+            if (ref.watch(isDebugBuildProvider)) ...[
+              const SizedBox(height: AppSpacing.s5),
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                child: Text('Fonte', style: AppTypography.label),
+              ),
+              SegmentedToggle<GpsSource>(
+                options: GpsSource.values,
+                value: state.gpsSource,
+                labelOf: (source) => switch (source) {
+                  GpsSource.real => 'Real',
+                  GpsSource.simulador => 'Simulador (BeamNG)',
+                },
+                onChanged: vm.setGpsSource,
+              ),
+            ],
             NumberStepper(
               label: 'Período (T_GPS)',
               sublabel: 'intervalo entre posições enviadas · s',
@@ -85,10 +102,11 @@ class SyncSettingsScreen extends ConsumerWidget {
               max: SyncSettings.maxGpsPeriod.inSeconds.toDouble(),
               onChanged: (v) => vm.setGpsPeriod(v.round()),
             ),
-            _PermissionRow(
-              permission: state.gpsPermission,
-              onRequest: vm.requestGpsPermission,
-            ),
+            if (state.gpsSource == GpsSource.real)
+              _PermissionRow(
+                permission: state.gpsPermission,
+                onRequest: vm.requestGpsPermission,
+              ),
             const SizedBox(height: AppSpacing.s7),
             const _SectionTitle('Estado'),
             const _StatusSummary(),

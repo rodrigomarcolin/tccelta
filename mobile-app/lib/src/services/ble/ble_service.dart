@@ -35,7 +35,9 @@ abstract interface class BleService {
   /// Conecta e prepara a conexão (segurança + MTU + discover + notify) de forma
   /// resiliente a reconexão. Retorna o handle IMEDIATAMENTE; o progresso vem
   /// por [BleConnection.phase]. [securingTimeout] é o prazo do pareamento/cifra
-  /// (inclui o tempo do usuário no diálogo do SO).
+  /// (inclui o tempo do usuário no diálogo do SO). Com [requireBond] `false`,
+  /// a etapa de segurança é pulada: o app não cria bond e o link segue sem
+  /// cifra, para dispositivos que não a exigem.
   Future<BleConnection> connect({
     required String deviceId,
     required String serviceUuid,
@@ -44,6 +46,7 @@ abstract interface class BleService {
     List<BleChannelSpec> extraChannels = const [],
     int mtu,
     Duration securingTimeout,
+    bool requireBond,
   });
 
   /// Se o SO permite ao app consultar, criar e remover bonds (Android).

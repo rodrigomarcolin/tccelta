@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tccelta_mobile/src/data/datasources/sync_settings_datasource.dart';
 import 'package:tccelta_mobile/src/data/repositories/sync_settings_repository_impl.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_source.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_settings.dart';
 
 Future<(SharedPreferences, SyncSettingsRepositoryImpl)> _make([
@@ -48,6 +49,21 @@ void main() {
     expect(prefs.getInt(SyncSettingsDatasource.latencyKey), 300);
     expect(prefs.getInt(SyncSettingsDatasource.bufferKey), 64);
     expect(prefs.getInt(SyncSettingsDatasource.gpsPeriodKey), 1);
+  });
+
+  test('origem do GPS é gravada em gps_source e relida', () async {
+    final (prefs, repo) = await _make();
+    await repo.save(const SyncSettings(gpsSource: GpsSource.simulador));
+    expect(prefs.getString(SyncSettingsDatasource.gpsSourceKey), 'simulador');
+    final again = SyncSettingsRepositoryImpl(SyncSettingsDatasource(prefs));
+    expect(again.current.gpsSource, GpsSource.simulador);
+  });
+
+  test('origem do GPS desconhecida vira real', () async {
+    final (_, repo) = await _make({
+      SyncSettingsDatasource.gpsSourceKey: 'marte',
+    });
+    expect(repo.current.gpsSource, GpsSource.real);
   });
 
   test('save ajusta às faixas', () async {

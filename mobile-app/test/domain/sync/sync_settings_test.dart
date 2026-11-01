@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_source.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_settings.dart';
 
 void main() {
@@ -8,6 +9,7 @@ void main() {
     expect(s.bufferCapacity, 64);
     expect(s.gpsPeriod, const Duration(seconds: 1));
     expect(s.gpsEnabled, isTrue);
+    expect(s.gpsSource, GpsSource.real);
   });
 
   test('clamped nas bordas', () {
@@ -26,5 +28,15 @@ void main() {
       s.copyWith(gpsPeriod: const Duration(seconds: 90)).clamped().gpsPeriod,
       const Duration(seconds: 60),
     );
+  });
+
+  test('origem do GPS entra em copyWith, ==, hashCode e clamped', () {
+    const s = SyncSettings();
+    final sim = s.copyWith(gpsSource: GpsSource.simulador);
+    expect(sim.gpsSource, GpsSource.simulador);
+    expect(sim, isNot(s));
+    expect(sim, s.copyWith(gpsSource: GpsSource.simulador));
+    expect(sim.hashCode, s.copyWith(gpsSource: GpsSource.simulador).hashCode);
+    expect(sim.clamped().gpsSource, GpsSource.simulador);
   });
 }
