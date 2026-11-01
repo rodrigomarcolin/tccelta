@@ -92,7 +92,7 @@ pode vir ausente (`-`).
 |---|---|---|
 | `FORMAT` | `v` int | Primeiro evento de cada boot. `v` é a versão do formato (hoje `2`). |
 | `KEYS` | `profile` (none, hmac, asym) · `source` (partition, dev_fixed, mac, missing) · `dev_id` hex · `tag_len` int · `fe` (off, dev, release) · `sb` bool · `load_us` us | Chaves carregadas. `tag_len` é o tamanho da tag do perfil (0, 32 ou 64). `fe` é o estado da criptografia de flash e `sb` o do secure boot (`1` = ativo). **Nunca mostra material de chave.** |
-| `BOOT` | `boot` · `wiped` bool · `rsv` · `rsv_new` · `legacy_last` int\|- · `boot_seq` · `from` · `to` · `seq_next` · `log_oldest` · `log_newest` · `lost` | Recuperação de `seq` no boot. `rsv` é a reserva lida da NVS (0 = ausente) e `rsv_new` a gravada para o bloco BOOT. `boot_seq` é o seq do marcador, e `[from, to]` o intervalo que ele declara (vazio se `to = from - 1`). `seq_next` é o próximo seq. `log_oldest`/`log_newest` são os limites do log em flash e `lost` o total de blocos perdidos. |
+| `BOOT` | `boot` · `wiped` bool · `rsv` · `rsv_new` · `legacy_last` int\|- · `boot_seq` · `from` · `to` · `seq_next` · `log_oldest` · `log_newest` · `lost` · `log_max` | Recuperação de `seq` no boot. `rsv` é a reserva lida da NVS (0 = ausente) e `rsv_new` a gravada para o bloco BOOT. `boot_seq` é o seq do marcador, e `[from, to]` o intervalo que ele declara (vazio se `to = from - 1`). `seq_next` é o próximo seq. `log_oldest`/`log_newest` são os limites do log em flash e `lost` o total de blocos perdidos. `log_max` é o limite N de blocos do log (margem `BLOCK_LOG_MARGIN_PCT` ou `BLOCK_LOG_MAX_BLOCKS`). |
 | `LOG_MIGRATE` | `removed` int | Arquivos do log v1 (`/log`) removidos no primeiro boot do firmware v2. |
 | `NVS` | `free` · `used` · `total` | Entradas da partição `nvs` no boot (compartilhada por bonds e coleta). |
 | `CONFIG` | `reason` (boot, apply) · `proto` int · `tmax` int · `flush` int · `u` int · `pids` list | Configuração ativa. `proto` 6 a 9 (CAN 11/29 bits, 500/250 kbps). `tmax` é o prazo de resposta do carro em ms. `flush` é o prazo de fechamento de bloco em ms (1000 a 30000, padrão 10000). `u` é a utilização planejada do barramento **em permil** (`Σ tmax/p × 1000`, ex. `782`). Seguido de uma linha `CVT` por PID. |
@@ -125,7 +125,7 @@ pode vir ausente (`-`).
 | `MARKER` | `kind` (boot, loss) · `seq` · `from` · `to` · `reason` (boot, crc, missing) | Um bloco marcador foi montado: BOOT no boot (antes do `FLUSH kind=boot`) ou LOSS na hora do envio (nunca é gravado). |
 | `SEG_NEW` | `first` · `tag_len` · `reason` (first, full, boot, sealed, tag_len) | Um novo segmento do log foi aberto. |
 | `SEG_SEAL` | `first` · `last` · `reason` (write_fail, scan_tail) | Um segmento deixou de aceitar escrita (falha de gravação, ou cauda inválida encontrada no boot). |
-| `SEG_DROP` | `first` · `last` · `count` | Flash cheia: o segmento mais antigo (blocos `first..last`) foi apagado. Esses blocos estão perdidos. |
+| `SEG_DROP` | `first` · `last` · `count` | Limite de N blocos atingido ou flash cheia: o segmento mais antigo (blocos `first..last`) foi apagado. Esses blocos estão perdidos. |
 
 ### 3.5 Comandos do app (canal ELM327)
 
