@@ -91,6 +91,7 @@ class FlutterBluePlusBleService implements BleService {
     List<BleChannelSpec> extraChannels = const [],
     int mtu = 512,
     Duration securingTimeout = const Duration(seconds: 30),
+    bool requireBond = true,
   }) async {
     final device = _seen[deviceId] ?? BluetoothDevice.fromId(deviceId);
     final conn = _FbpConnection(
@@ -100,6 +101,7 @@ class FlutterBluePlusBleService implements BleService {
       tx: Guid(txUuid),
       mtu: mtu,
       securingTimeout: securingTimeout,
+      requireBond: requireBond,
       extraChannels: extraChannels,
     )..start(); // NÃO aguarda "ready"; começa a emitir fases imediatamente.
     return conn;
@@ -153,6 +155,7 @@ class _FbpConnection implements BleConnection {
     required this.tx,
     required int mtu,
     required this.securingTimeout,
+    required this.requireBond,
     List<BleChannelSpec> extraChannels = const [],
   }) : _requestedMtu = mtu,
        _channels = {
@@ -176,6 +179,9 @@ class _FbpConnection implements BleConnection {
 
   /// Prazo do pareamento/cifra (inclui o tempo do usuário no diálogo do SO).
   final Duration securingTimeout;
+
+  /// Exige enlace cifrado (bond); `false` pula a etapa `securing`.
+  final bool requireBond;
   final Map<String, _FbpChannel> _channels;
 
   final StreamController<BleConnectionPhase> _phaseCtrl =
@@ -348,12 +354,14 @@ class _FbpConnection implements BleConnection {
     // com `createBond` logo após conectar (evita o diálogo duplicado); com
     // bond existente, o Security Request do dongle dispara a cifra. No iOS
     // não há API: o alerta do sistema aparece na 1ª operação que exige cifra
-    // (a inscrição no TX, abaixo).
-    _stageTo(BleConnectionPhase.securing);
+    // (a inscrição no TX, abaixo). Sem [requireBond], nada disso acontece.
+    if (requireBond) _stageTo(BleConnectionPhase.securing);
     if (Platform.isAndroid) {
-      final bond = await device.bondState.first;
-      if (bond != BluetoothBondState.bonded) {
-        await device.createBond(timeout: securingTimeout.inSeconds);
+      if (requireBond) {
+        final bond = await device.bondState.first;
+        if (bond != BluetoothBondState.bonded) {
+          await device.createBond(timeout: securingTimeout.inSeconds);
+        }
       }
       _stageTo(BleConnectionPhase.optimizingLink);
       try {
@@ -375,11 +383,11 @@ class _FbpConnection implements BleConnection {
     // próprio `onSubscribe`, e `onValueReceived` é broadcast.
     _notifySub = _tx!.onValueReceived.listen(_incomingCtrl.add);
     device.cancelWhenDisconnected(_notifySub!);
-    // A inscrição exige enlace cifrado: no iOS é aqui que o alerta de
-    // pareamento aparece, então o prazo é o do pareamento.
+    // Com bond, a inscrição exige enlace cifrado: no iOS é aqui que o alerta
+    // de pareamento aparece, então o prazo é o do pareamento.
     await _tx!.setNotifyValue(
       true,
-      timeout: Platform.isIOS ? securingTimeout.inSeconds : 15,
+      timeout: Platform.isIOS && requireBond ? securingTimeout.inSeconds : 15,
     );
 
     // Canais extras: serviço ausente deixa o canal indisponível sem falhar a

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_source.dart';
 import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
 
 import '../../support/fake_location_repository.dart';
@@ -38,6 +39,16 @@ void main() {
     expect(s.gpsPeriod, const Duration(seconds: 5));
     expect(s.gpsEnabled, isFalse);
     expect(repo.saves, 4);
+  });
+
+  test('grava a origem do GPS', () async {
+    final vm = container.read(syncSettingsViewModelProvider.notifier);
+    await vm.setGpsSource(GpsSource.simulador);
+    expect(repo.current.gpsSource, GpsSource.simulador);
+    expect(repo.saves, 1);
+
+    await vm.setGpsSource(GpsSource.real);
+    expect(repo.current.gpsSource, GpsSource.real);
   });
 
   test('consulta e pede a permissão de localização', () async {

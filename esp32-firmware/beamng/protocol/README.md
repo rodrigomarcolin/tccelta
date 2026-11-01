@@ -4,6 +4,15 @@ A custom UDP protocol for BeamNG.drive that sends vehicle telemetry to an OBD-II
 
 The protocol is based on BeamNG's built-in `outgauge.lua` and sends vehicle data over UDP to `127.0.0.1:4446` at up to 50 updates per second.
 
+This folder holds two independent protocol files:
+
+| File | Magic | Destination | Rate | Consumer |
+|---|---|---|---|---|
+| `tccelta.lua` | `OBD1` | `127.0.0.1:4446` | 50 Hz | `../socket/tccelta_bridge.py` (engine telemetry → ECUSim) |
+| `tccelta_gps.lua` | `GPS1` | `127.0.0.1:4447` | 20 Hz | `../gps/tccelta_gps_bridge.py` (vehicle position → BLE → app) |
+
+`tccelta_gps.lua` sends a 28-byte packet (`<4s6f`): `format` (`GPS1`), `posX`, `posY`, `posZ` (world position, m) and `velX`, `velY`, `velZ` (world velocity, m/s), taken from `obj:getPositionXYZ()` / `obj:getVelocityXYZ()`. Install it the same way as `tccelta.lua`, in the same `protocols` folder; both are loaded as "others" protocols, so the game's "others" protocols option (setting `protocols_others_enabled`) must be enabled, as it already is for `tccelta.lua`. See `../gps/README.md` for the bridge and the coordinate conversion.
+
 ## Installation
 
 Choose one of the following methods.

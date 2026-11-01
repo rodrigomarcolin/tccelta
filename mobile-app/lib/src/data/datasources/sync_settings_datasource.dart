@@ -21,11 +21,17 @@ class SyncSettingsDatasource {
   /// Chave do GPS ligado.
   static const String gpsEnabledKey = 'gps_enabled';
 
+  /// Chave da origem das posições (nome do valor).
+  static const String gpsSourceKey = 'gps_source';
+
   /// Lê um inteiro, ou `null` se ausente.
   int? readInt(String key) => _prefs.getInt(key);
 
   /// Lê um booleano, ou `null` se ausente.
   bool? readBool(String key) => _prefs.getBool(key);
+
+  /// Lê um texto, ou `null` se ausente.
+  String? readString(String key) => _prefs.getString(key);
 
   /// Grava um inteiro.
   Future<void> writeInt(String key, int value) async {
@@ -35,5 +41,10 @@ class SyncSettingsDatasource {
   /// Grava um booleano.
   Future<void> writeBool(String key, {required bool value}) async {
     await _prefs.setBool(key, value);
+  }
+
+  /// Grava um texto.
+  Future<void> writeString(String key, String value) async {
+    await _prefs.setString(key, value);
   }
 }

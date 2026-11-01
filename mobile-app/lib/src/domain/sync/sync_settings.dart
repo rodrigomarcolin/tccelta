@@ -1,4 +1,5 @@
 import 'package:meta/meta.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_source.dart';
 
 /// Parâmetros editáveis da sincronização e do envio de GPS.
 @immutable
@@ -9,6 +10,7 @@ class SyncSettings {
     this.bufferCapacity = 64,
     this.gpsPeriod = const Duration(seconds: 1),
     this.gpsEnabled = true,
+    this.gpsSource = GpsSource.real,
   });
 
   /// Menor `T_lat`.
@@ -41,12 +43,16 @@ class SyncSettings {
   /// Envio de GPS ligado.
   final bool gpsEnabled;
 
+  /// Origem das posições.
+  final GpsSource gpsSource;
+
   /// Cópia com todos os valores dentro das faixas.
   SyncSettings clamped() => SyncSettings(
     latency: _clampDuration(latency, minLatency, maxLatency),
     bufferCapacity: bufferCapacity.clamp(minBuffer, maxBuffer),
     gpsPeriod: _clampDuration(gpsPeriod, minGpsPeriod, maxGpsPeriod),
     gpsEnabled: gpsEnabled,
+    gpsSource: gpsSource,
   );
 
   /// Cópia com campos trocados.
@@ -55,11 +61,13 @@ class SyncSettings {
     int? bufferCapacity,
     Duration? gpsPeriod,
     bool? gpsEnabled,
+    GpsSource? gpsSource,
   }) => SyncSettings(
     latency: latency ?? this.latency,
     bufferCapacity: bufferCapacity ?? this.bufferCapacity,
     gpsPeriod: gpsPeriod ?? this.gpsPeriod,
     gpsEnabled: gpsEnabled ?? this.gpsEnabled,
+    gpsSource: gpsSource ?? this.gpsSource,
   );
 
   static Duration _clampDuration(Duration v, Duration lo, Duration hi) =>
@@ -71,9 +79,10 @@ class SyncSettings {
       other.latency == latency &&
       other.bufferCapacity == bufferCapacity &&
       other.gpsPeriod == gpsPeriod &&
-      other.gpsEnabled == gpsEnabled;
+      other.gpsEnabled == gpsEnabled &&
+      other.gpsSource == gpsSource;
 
   @override
   int get hashCode =>
-      Object.hash(latency, bufferCapacity, gpsPeriod, gpsEnabled);
+      Object.hash(latency, bufferCapacity, gpsPeriod, gpsEnabled, gpsSource);
 }

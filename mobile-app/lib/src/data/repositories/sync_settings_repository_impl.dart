@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:tccelta_mobile/src/core/errors/settings_failure.dart';
 import 'package:tccelta_mobile/src/data/datasources/sync_settings_datasource.dart';
+import 'package:tccelta_mobile/src/domain/location/gps_source.dart';
 import 'package:tccelta_mobile/src/domain/repositories/sync_settings_repository.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_settings.dart';
 
@@ -36,7 +37,18 @@ class SyncSettingsRepositoryImpl implements SyncSettingsRepository {
       gpsPeriod: gps == null ? d.gpsPeriod : Duration(seconds: gps),
       gpsEnabled:
           _ds.readBool(SyncSettingsDatasource.gpsEnabledKey) ?? d.gpsEnabled,
+      gpsSource: _gpsSource(
+        _ds.readString(SyncSettingsDatasource.gpsSourceKey),
+      ),
     );
+  }
+
+  /// Valor ausente ou desconhecido vira [GpsSource.real].
+  static GpsSource _gpsSource(String? name) {
+    for (final s in GpsSource.values) {
+      if (s.name == name) return s;
+    }
+    return GpsSource.real;
   }
 
   Future<void> _write(SyncSettings s) async {
@@ -49,6 +61,10 @@ class SyncSettingsRepositoryImpl implements SyncSettingsRepository {
     await _ds.writeBool(
       SyncSettingsDatasource.gpsEnabledKey,
       value: s.gpsEnabled,
+    );
+    await _ds.writeString(
+      SyncSettingsDatasource.gpsSourceKey,
+      s.gpsSource.name,
     );
   }
 
