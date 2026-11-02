@@ -4,7 +4,7 @@ on:
   pull_request:
     paths: ["backend/**", ".github/workflows/backend-ci.yml"]
   push:
-    branches: [master]
+    branches: [main]
     paths: ["backend/**"]
 
 defaults:
