@@ -1,5 +1,7 @@
-# 1a vez (VPS recem-criada, so com root):  run.sh site.yml -e ansible_user=root --tags base
-# Depois:                                   run.sh site.yml
+# 1a vez (SSH so por chave, root sem login; usuario sudoer ja existente, ex.: davi):
+#   run.sh site.yml -e ansible_user=davi --ask-become-pass --tags base,pki
+# Depois:  run.sh site.yml
+# O endurecimento do sshd (sem senha, sem root) e feito antes, fora deste playbook. Ver deploy/README.md.
 - import_playbook: pki.yml
 
 - name: Servidor base
@@ -21,16 +23,6 @@
         content: "deploy ALL=(ALL) NOPASSWD:ALL\n"
         mode: "0440"
         validate: visudo -cf %s
-
-    - name: SSH so com chave
-      ansible.builtin.copy:
-        dest: /etc/ssh/sshd_config.d/10-endurecimento.conf
-        content: |
-          PasswordAuthentication no
-          PermitRootLogin no
-          KbdInteractiveAuthentication no
-        mode: "0644"
-      notify: recarregar ssh
 
     - name: Pacotes
       ansible.builtin.apt:
@@ -71,10 +63,6 @@
       community.general.ufw: { state: enabled }
 
     - ansible.builtin.service: { name: fail2ban, state: started, enabled: true }
-
-  handlers:
-    - name: recarregar ssh
-      ansible.builtin.service: { name: ssh, state: reloaded }
 
 - name: Aplicacao
   hosts: vps
