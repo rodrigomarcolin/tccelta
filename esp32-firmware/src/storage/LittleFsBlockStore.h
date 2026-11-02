@@ -12,7 +12,7 @@
  * e até 64 registros `dados | tag | CRC32`. O `seq` é contíguo dentro de um
  * segmento: o BOOT abre sempre um segmento novo e uma gravação que falha
  * sela o segmento. Apagar = remover um segmento inteiro; quando falta
- * espaço, o mais antigo é removido e a perda fica em `overflowUpTo`.
+ * espaço (limite de blocos ou flash), o mais antigo é removido e a perda fica em `overflowUpTo`.
  *
  * Usado pela Flush (append) e pela Sync (read/deleteUpTo) ao mesmo tempo,
  * por isso tem mutex interno. O log da versão 1 (`/log`, sem tag) é apagado
@@ -25,8 +25,10 @@ public:
     /**
      * Monta a partição (formatando se preciso), migra o log v1 e reconstrói o
      * índice. `wipe` = apagar todos os blocos antes (COLLECTOR_WIPE_ON_BOOT).
+     * `tagLen` = tag do perfil de segurança; define o limite N de blocos (LogLimit.h).
      */
-    bool begin(bool wipe = false);
+    bool begin(bool wipe = false, size_t tagLen = 0);
+    uint32_t maxBlocks() const { return _maxBlocks; }
 
     bool append(const collector::Block& block) override;
     collector::ReadStatus read(uint32_t seq, collector::Block& out) override;
@@ -58,6 +60,8 @@ private:
     Segment  _segments[kMaxSegments] = {};
     size_t   _head  = 0;   // índice circular do segmento mais antigo
     size_t   _count = 0;
+    uint32_t _blocks = 0;     // soma de Segment::count
+    uint32_t _maxBlocks = 0;  // limite N de blocos guardados
     bool     _forceNew = false;
     std::atomic<uint32_t> _lostBlocks{0};
     std::atomic<uint32_t> _overflowUpTo{0};
@@ -75,7 +79,6 @@ private:
     void discardOldest();   // idem, contando como perda (SEG_DROP) e atualizando overflowUpTo
     void ensureSpace(size_t bytes);
     size_t usedBytes() const;
-    size_t capacityBytes() const;
     size_t freeBytes() const;
     void refreshUsage();
     void migrateV1();

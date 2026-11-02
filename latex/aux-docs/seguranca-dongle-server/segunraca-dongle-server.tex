@@ -477,6 +477,11 @@ com causa LOSS e faz $ACK_{seq} = to\_seq$; o dongle avança o cursor para $to\_
 para recalcular em todo bloco. Por isso, é mais eficiente salvar um CRC32, calculado sobre os dados e a tag HMAC, em todo bloco e verificar esse CRC32 antes de mandar para o app. O uso do CRC32 adiciona apenas 4 bytes por
 bloco, que é justificável depois das otimizações feitas anteriormente.
 
+O mesmo marcador cobre o bloco que nem chega a ser lido. Ao religar, o dongle reconstrói o índice da \textit{flash} lendo só os cabeçalhos dos registros, e um cabeçalho corrompido no meio de
+um segmento, ou um segmento inteiro descartado por cabeçalho inválido, tira do índice os blocos que vinham depois dele. Se o envio chega a um $seq$ ausente do índice, mas existe um bloco guardado
+com $seq$ maior e o salto não é a faixa declarada por um BOOT, o dongle gera o LOSS com $[from\_seq, to\_seq] = [seq,\ $próximo $seq$ guardado$\ - 1]$. No servidor, os dois casos chegam como
+lacuna com causa LOSS.
+
 Para o caso de \textit{flash} cheia, um bloco marcador não serve, pois os blocos descartados já não existem para serem substituídos. O dongle informa então, na resposta do \textit{handshake} (seção
 \ref{subsec:handshake}), o $TAIL_{seq}$. Se $ACK_{seq} + 1 < TAIL_{seq} \leq HEAD_{seq} + 1$, o servidor registra a faixa $[ACK_{seq} + 1, TAIL_{seq} - 1]$ como lacuna com causa OVERFLOW e avança
 $ACK_{seq}$ para $TAIL_{seq} - 1$, valor devolvido ao dongle na confirmação do mesmo \textit{handshake}. Se $TAIL_{seq} > HEAD_{seq} + 1$, a resposta é inconsistente e é rejeitada. Se o descarte

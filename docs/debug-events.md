@@ -112,7 +112,7 @@ rely on it.
 |---|---|---|
 | `FORMAT` | `v:int` | First event of a boot. `v=2` for this spec. |
 | `KEYS` | `profile:enum(none,hmac,asym)` `source:enum(partition,dev_fixed,mac,missing)` `dev_id:hex` `tag_len:int` `fe:enum(off,dev,release)` `sb:int` `load_us:us` | Keys loaded from the `secnvs` partition. `tag_len` = block tag size of the profile (0/32/64). Never shows key material. |
-| `BOOT` | `boot:int` `wiped:bool` `rsv:int` `rsv_new:int` `legacy_last:int\|-` `boot_seq:int` `from:int` `to:int` `seq_next:int` `log_oldest:int` `log_newest:int` `lost:int` | Seq recovery. `rsv` = reserve read from NVS (0 = absent), `rsv_new` = reserve written for the BOOT block, `boot_seq` = `R`, `[from,to]` = range declared by the BOOT marker (empty if `to = from - 1`), `seq_next` = next seq after the BOOT. `wiped=1`: log, `seq_rsv` and `last_cs` were erased (bench builds). |
+| `BOOT` | `boot:int` `wiped:bool` `rsv:int` `rsv_new:int` `legacy_last:int\|-` `boot_seq:int` `from:int` `to:int` `seq_next:int` `log_oldest:int` `log_newest:int` `lost:int` `log_max:int` | Seq recovery. `rsv` = reserve read from NVS (0 = absent), `rsv_new` = reserve written for the BOOT block, `boot_seq` = `R`, `[from,to]` = range declared by the BOOT marker (empty if `to = from - 1`), `seq_next` = next seq after the BOOT. `log_max` = block-count limit N of the log (margin or `BLOCK_LOG_MAX_BLOCKS`). `wiped=1`: log, `seq_rsv` and `last_cs` were erased (bench builds). |
 | `LOG_MIGRATE` | `removed:int` | Files of the v1 log (`/log`) deleted at the first boot of the v2 firmware. |
 | `CONFIG` | `reason:enum(boot,apply)` `proto:int` `tmax:int` `flush:int` `u:int` `pids:list` | Active configuration. `proto` 6–9 (CAN 11/29 bit, 500/250 kbps). `flush` = block deadline in ms (1000–30000, default 10000; absent in older logs = 10000). `u` = planned bus utilization **in permille** (`Σ tmax/p × 1000`, e.g. `782`). Followed by one `CVT` line per PID. |
 | `CVT` | `pid:hex` `p:int` `pmin:int` `due:ms` `last:ms` `val:hex\|-` | Full snapshot of one scheduler table row. Emitted for every PID right after `CONFIG`. |
@@ -144,7 +144,7 @@ rely on it.
 | `MARKER` | `kind:enum(boot,loss)` `seq:int` `from:int` `to:int` `reason:enum(boot,crc,missing)` | A marker block was built: BOOT at boot (before its `FLUSH kind=boot`), LOSS at send time (never stored). |
 | `SEG_NEW` | `first:int` `tag_len:int` `reason:enum(first,full,boot,sealed,tag_len)` | A new log segment was opened. |
 | `SEG_SEAL` | `first:int` `last:int` `reason:enum(write_fail,scan_tail)` | A segment stopped accepting writes (write failure or invalid tail found at boot). |
-| `SEG_DROP` | `first:int` `last:int` `count:int` | Flash full: the oldest segment (blocks `first..last`) was deleted. These blocks are lost; `overflowUpTo` becomes `last`. |
+| `SEG_DROP` | `first:int` `last:int` `count:int` | Block limit or flash full: the oldest segment (blocks `first..last`) was deleted. These blocks are lost; `overflowUpTo` becomes `last`. |
 
 ### 5.5 Commands from the app (ELM327 text channel)
 
