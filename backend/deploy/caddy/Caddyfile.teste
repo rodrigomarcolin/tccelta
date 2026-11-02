@@ -1,5 +1,6 @@
 {
 	admin off
+	default_sni {$API_HOST}
 	skip_install_trust
 	servers {
 		protocols h1 h2
