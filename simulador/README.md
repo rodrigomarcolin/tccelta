@@ -48,6 +48,42 @@ The update serial scommand consists with 10 character and LF(\n).
     - -> Send "0C59C40000\n" via serial port (latter 2 bytes are ignored.)
 - Note that PIDs of "Supported PID" (such as 0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0 and 0xE0) are automatically calculated on compling the sketch. You don't have to set by serial port command. 
 
+# Response latency (variable, per PID)
+The ECU answers with no artificial delay by default. A latency can be set at runtime
+(no recompile) on a third serial channel, to test the dongle against a realistic ECU.
+
+`latency_ms = baseline + max(0, offset)` (saturated at 65535). The offset follows a
+distribution chosen per configuration:
+
+| Mode | Offset | Parameters (ms) |
+|---|---|---|
+| `F` | none (fixed latency) | - |
+| `U` | uniform | `A` = min, `B` = max |
+| `N` | normal, truncated at 0 | `A` = mean, `B` = std dev |
+| `E` | exponential | `A` = mean |
+
+One **default** configuration applies to every PID (and to the non-Mode-01 services);
+up to 16 **per-PID overrides** replace it. In a Mode 01 request with several PIDs the
+response waits for the **largest** latency among them. The latency counts from the
+request reception, so on the `0x7DF` broadcast the TCM's wait overlaps the ECM's.
+While waiting, the serial port keeps being served.
+
+Wire format (17 bytes): `Y M PP BBBB AAAA CCCC \n`, hex ASCII. `M` is `F/U/N/E` (set) or `C`
+(clear); `PP` is the PID or `FF` for the default; `BBBB` baseline; `AAAA`/`CCCC` the
+parameters above. `send_payload.py` builds it:
+
+```
+LAT.ALL=20              # every PID: fixed 20 ms
+LAT.ALL=20:U:0:10       # 20 ms + uniform [0,10]
+LAT.ALL=15:N:5:2        # 15 ms + normal(mean 5, sd 2)
+LAT.ALL=10:E:8          # 10 ms + exponential(mean 8)
+LAT.RPM=50:E:10         # override only for RPM
+LAT.CLEAR=RPM           # drop the RPM override
+LAT.CLEAR=ALL           # back to no latency
+```
+
+`analisar_latencia.py` summarizes the `READ dur` seen by the dongle from a `capture.py` log.
+
 # Enable/disable debug message
 You can enable/disable error or debug message on `ECUSim.h`.
 ```

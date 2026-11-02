@@ -18,9 +18,6 @@ constexpr unsigned long TCM_CAN_RESPONSE_ID = TCM_CAN_ID + 0x008;
 // OBD-II functional broadcast request ID (every ECU listens to this one)
 constexpr unsigned long OBD_BROADCAST_CAN_ID = 0x7DF;
 
-// ECU response(reply wait in ms)
-constexpr int ECU_WAIT = 0; 
-
 // Debug message serial out switch
 constexpr bool PIDSET_DEBUG = false;
 constexpr bool PIDSET_ERROR = true;
@@ -31,12 +28,18 @@ constexpr bool CANMSG_ERROR = true;
 constexpr bool CANMSG_FATAL = true;
 constexpr bool DTC_DEBUG = false;
 constexpr bool DTC_ERROR = true;
+constexpr bool LATENCY_DEBUG = false;
+constexpr bool LATENCY_ERROR = true;
 
 extern byte PID_Value_Map[];
 extern MCP_CAN CAN;
 
+// Atende a serial (usado também durante a espera de latência da resposta).
+void pollSerial();
+
 constexpr int SERIAL_MSG_LENGTH = 11;
 constexpr int DTC_SERIAL_MSG_LENGTH = 9;
+constexpr int LATENCY_SERIAL_MSG_LENGTH = 17;
 constexpr int CAN_PAYLOAD_LENGTH = 8;
 
 #endif
