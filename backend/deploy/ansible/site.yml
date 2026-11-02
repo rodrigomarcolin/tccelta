@@ -208,7 +208,7 @@
 
     - name: Proximo passo
       ansible.builtin.debug:
-        msg: "Faca o init, o unseal e o bootstrap do Vault, a mao (etapa 1, passo 5 do roteiro), e depois rode: run.sh stack.yml"
+        msg: "Na VPS, rode sh /opt/tccelta/deploy/vault-prod.sh init, unseal e bootstrap (ver deploy/README.md) e depois, no PC: run.sh stack.yml"
 
   handlers:
     - name: recarregar firewall do banco

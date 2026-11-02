@@ -61,6 +61,41 @@ ssh -i ~/.ssh/id_ed25519_contabo deploy@IP_DA_VPS 'docker --version && sudo -n t
 
 Os passos completos, a etapa 2 (domínio) e o provisionamento de dongles estão no runbook de implantação.
 
+## Vault em produção: init, unseal e bootstrap
+
+Fica fora do Ansible de propósito: as 5 chaves de unseal e o token raiz só passam pelo seu terminal. O
+`init-unseal.sh` do repositório é de laboratório (1 chave) e **recusa** `AMBIENTE=producao`. O procedimento de
+produção está em `deploy/vault-prod.sh`, que roda **na VPS** (usuário `deploy`):
+
+```bash
+ssh -i ~/.ssh/id_ed25519_contabo deploy@IP_DA_VPS
+sh /opt/tccelta/deploy/vault-prod.sh status      # esperado antes do init: Initialized false, Sealed true
+sh /opt/tccelta/deploy/vault-prod.sh init        # UMA vez: 5 chaves, limiar 3
+sh /opt/tccelta/deploy/vault-prod.sh unseal      # pede 3 chaves (sem eco)
+sh /opt/tccelta/deploy/vault-prod.sh bootstrap   # UMA vez: Transit, políticas, AppRoles, auditoria
+```
+
+| Subcomando | O que faz | Quando |
+|---|---|---|
+| `status` | `vault status` | Sempre |
+| `init` | `vault operator init -key-shares=5 -key-threshold=3`. Imprime as 5 chaves e o token raiz **uma única vez** | Uma vez, na implantação |
+| `unseal` | Pede chaves até o Vault abrir (3) | Após o `init` e **após todo reinício** do Vault ou da VPS |
+| `bootstrap` | Grava o token raiz em `/vault/init/init.json` (600), roda o `vault-bootstrap`, apaga o arquivo e revoga o token raiz | Uma vez, com o Vault aberto |
+
+Regras:
+
+- **Guarde as 5 chaves e o token raiz fora da VPS**, em lugares diferentes (gerenciadores de senhas, mídia
+  offline). O script nunca as grava. Perder 3 ou mais chaves torna o Vault irrecuperável, e com ele as chaves dos
+  dongles.
+- O Vault precisa ficar **aberto** depois do bootstrap: o KMS o consulta a cada operação. Ele volta selado a cada
+  reinício do contêiner; rode `unseal` de novo.
+- Se o `bootstrap` falhar no meio, o `init.json` pode ficar no volume. Apague-o antes de seguir:
+  `dc exec vault rm -f /vault/init/init.json` (com o alias `dc` do runbook) e revogue o token raiz.
+- Um token raiz novo, para uma mudança administrativa: `vault operator generate-root` (3 das 5 chaves).
+- Sem `-T`, os comandos pedem um terminal: rode por SSH interativo, não por script sem TTY.
+
+O procedimento acima ainda não foi executado contra um Vault de verdade (nem os comandos equivalentes do runbook).
+
 ## Outras tags de `site.yml`
 
 | Tag | Uso |
