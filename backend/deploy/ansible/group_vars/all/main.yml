@@ -11,6 +11,9 @@ dominio_db: ""
 api_host: "{{ dominio_api | default(vps_ip, true) }}"
 caddyfile: "{{ 'Caddyfile.prod' if dominio_api else 'Caddyfile.teste' }}"
 
+# Conexoes simultaneas do papel dbeaver_ro (o DBeaver abre varias por sessao: principal, metadados, editores)
+dbeaver_conexoes_max: 10
+
 app_dir: /opt/tccelta
 compose_cmd: >-
   docker compose -f compose.yaml -f compose.prodlike.yaml -f compose.prod.yaml

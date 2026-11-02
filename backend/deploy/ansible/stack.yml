@@ -41,8 +41,9 @@
       args:
         chdir: "{{ app_dir }}"
         stdin: |
-          SELECT 'CREATE ROLE dbeaver_ro LOGIN CONNECTION LIMIT 3 IN ROLE tccelta_reader'
+          SELECT 'CREATE ROLE dbeaver_ro LOGIN IN ROLE tccelta_reader'
             WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'dbeaver_ro')\gexec
+          ALTER ROLE dbeaver_ro CONNECTION LIMIT {{ dbeaver_conexoes_max }};
           \set pw '{{ senha_dbeaver }}'
           ALTER ROLE dbeaver_ro PASSWORD :'pw';
           ALTER ROLE dbeaver_ro SET default_transaction_read_only = on;
