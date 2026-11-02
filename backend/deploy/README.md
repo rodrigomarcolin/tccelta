@@ -109,6 +109,12 @@ O procedimento acima ainda não foi executado contra um Vault de verdade (nem os
 | `base` | Servidor: usuário, pacotes, Docker, firewall |
 | `pki` | Certificados (roda no PC) |
 | `app` | Aplicação: código, `.env`, segredos, certificados, `pg_hba`, firewall do banco |
-| `codigo` | Só sincroniza o código (rsync) |
+| `codigo` | Cria a pasta da aplicação e sincroniza o código (rsync) |
+| `dbeaver` | Só o acesso ao banco: `pg_hba.conf` e firewall da 5432. Use para trocar IPs permitidos |
+
+Para liberar ou trocar um IP do DBeaver: edite `dbeaver_ips` em `group_vars/all/local.yml` e rode
+`bash deploy/ansible/run.sh site.yml --tags dbeaver`. Sem `rsync`, sem `stack.yml` e sem recriar o banco. No fim, o
+playbook confere o firewall (um `RETURN` por IP e `DROP` no fim) e o `pg_hba.conf` visto pelo contêiner. Cada
+item de `dbeaver_ips` precisa ser IPv4 em CIDR (ex.: `203.0.113.5/32`).
 
 Sem `--tags`, roda tudo.

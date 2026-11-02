@@ -182,14 +182,30 @@
       no_log: true
       notify: recarregar pg_hba
 
+    # --- acesso do DBeaver: tag `dbeaver` troca so os IPs (pg_hba + firewall da 5432), sem rsync nem stack.yml ---
+    # Com --tags o Ansible nao coleta fatos sozinho, e o script do firewall usa a interface de rede.
+    - name: Fatos de rede (o script do firewall usa a interface padrao)
+      ansible.builtin.setup: { gather_subset: [network] }
+      tags: [dbeaver]
+
+    - name: O banco esta rodando? (na 1a execucao ainda nao; quem o sobe e o stack.yml)
+      ansible.builtin.command: "{{ compose_cmd }} ps --status running -q banco"
+      args: { chdir: "{{ app_dir }}" }
+      register: banco_up
+      changed_when: false
+      tags: [dbeaver]
+
     - ansible.builtin.file: { path: "{{ app_dir }}/deploy/postgres/hba", state: directory, owner: deploy, group: deploy, mode: "0755" }
+      tags: [dbeaver]
 
     - name: pg_hba.conf (numa pasta montada inteira no contêiner)
       ansible.builtin.template: { src: pg_hba.conf.j2, dest: "{{ app_dir }}/deploy/postgres/hba/pg_hba.conf", owner: deploy, group: deploy, mode: "0644" }
       notify: recarregar pg_hba
+      tags: [dbeaver]
 
     # --- firewall da 5432 ---
     - ansible.builtin.file: { path: /etc/tccelta, state: directory, mode: "0755" }
+      tags: [dbeaver]
 
     - name: Lista de IPs do DBeaver
       ansible.builtin.copy:
@@ -197,12 +213,68 @@
         content: "{{ dbeaver_ips | join('\n') }}\n"
         mode: "0644"
       notify: recarregar firewall do banco
+      tags: [dbeaver]
 
     - ansible.builtin.template: { src: tccelta-db-fw.sh.j2, dest: /usr/local/sbin/tccelta-db-fw.sh, mode: "0750" }
       notify: recarregar firewall do banco
+      tags: [dbeaver]
 
     - ansible.builtin.template: { src: tccelta-db-fw.service.j2, dest: /etc/systemd/system/tccelta-db-fw.service, mode: "0644" }
       notify: recarregar firewall do banco
+      tags: [dbeaver]
+
+    - name: Aplica agora o firewall e o pg_hba (antes das verificacoes)
+      ansible.builtin.meta: flush_handlers
+      tags: [dbeaver]
+
+    # --- verificacoes: falham se o que esta no ar nao e o que foi pedido ---
+    - name: Regras do firewall da 5432
+      ansible.builtin.command: iptables -S TCCELTA-DB
+      register: fw
+      changed_when: false
+      tags: [dbeaver]
+
+    - name: Salto do DOCKER-USER para a cadeia
+      ansible.builtin.command: iptables -S DOCKER-USER
+      register: fw_salto
+      changed_when: false
+      tags: [dbeaver]
+
+    - name: Firewall confere (um RETURN por IP, DROP no fim, salto presente)
+      ansible.builtin.assert:
+        that:
+          - (fw.stdout_lines | select('search', ' -j RETURN$') | list | length) == (dbeaver_ips | length)
+          - fw.stdout_lines | last is search(' -j DROP$')
+          - fw_salto.stdout is search('TCCELTA-DB')
+        fail_msg: "Firewall da 5432 diferente do esperado. Veja: sudo iptables -S TCCELTA-DB"
+        quiet: true
+      tags: [dbeaver]
+
+    - name: Checksum do pg_hba.conf no host
+      ansible.builtin.stat: { path: "{{ app_dir }}/deploy/postgres/hba/pg_hba.conf", checksum_algorithm: sha256 }
+      register: hba_host
+      tags: [dbeaver]
+
+    - name: O que o contêiner do banco enxerga (checksum e erros de sintaxe)
+      ansible.builtin.shell: |
+        set -e
+        {{ compose_cmd }} exec -T banco sha256sum /etc/postgresql/hba/pg_hba.conf
+        {{ compose_cmd }} exec -T banco psql -U postgres -At -c "select count(*) from pg_hba_file_rules where error is not null"
+      args: { chdir: "{{ app_dir }}", executable: /bin/sh }
+      register: hba_cont
+      changed_when: false
+      when: banco_up.stdout | length > 0
+      tags: [dbeaver]
+
+    - name: pg_hba do contêiner confere (mesmo arquivo do host, sem erros)
+      ansible.builtin.assert:
+        that:
+          - hba_cont.stdout_lines[0].split()[0] == hba_host.stat.checksum
+          - hba_cont.stdout_lines[-1] == '0'
+        fail_msg: "O contêiner do banco nao enxerga o pg_hba.conf novo, ou ele tem erro de sintaxe."
+        quiet: true
+      when: banco_up.stdout | length > 0
+      tags: [dbeaver]
 
     - name: Vault (o unico servico que sobe nesta etapa; sobe selado)
       ansible.builtin.command: "{{ compose_cmd }} up -d vault"
@@ -219,5 +291,5 @@
     - name: recarregar pg_hba
       ansible.builtin.command: "{{ compose_cmd }} exec -T banco psql -U postgres -c 'select pg_reload_conf()'"
       args: { chdir: "{{ app_dir }}" }
-      failed_when: false
+      when: (banco_up | default({})).stdout | default('') | length > 0    # banco parado: nada a recarregar
       changed_when: false

@@ -18,7 +18,8 @@
           - vps_ip is defined and vps_ip != '203.0.113.10'
           - acme_email is defined and acme_email != 'voce@exemplo.com'
           - dbeaver_ips is defined and dbeaver_ips | length > 0 and '198.51.100.7/32' not in dbeaver_ips
-        fail_msg: "Crie deploy/ansible/group_vars/all/local.yml a partir de local.yml.example e preencha vps_ip, acme_email e dbeaver_ips."
+          - dbeaver_ips | reject('match', '^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$') | list | length == 0
+        fail_msg: "Preencha deploy/ansible/group_vars/all/local.yml (modelo: local.yml.example): vps_ip, acme_email e dbeaver_ips (cada item IPv4 em CIDR, ex.: 203.0.113.5/32)."
         quiet: true
       tags: [always]
 
