@@ -29,6 +29,12 @@ class Log:
         self.n = None       # log_max do último BOOT
         self.flushes = 0
         self.diverge = 0
+        self.this_boot = []  # segmentos abertos desde o último FORMAT
+
+    def open_segment(self, first):
+        seg = [first, 0]
+        self.segs.append(seg)
+        self.this_boot.append(seg)
 
     def blocks(self):
         return sum(c for _, c in self.segs)
@@ -41,12 +47,17 @@ class Log:
     def feed(self, name, f, every):
         if name == "BOOT":
             self.n = int(f["log_max"]) if "log_max" in f else None
+            if f.get("wiped") == "1":
+                # O log foi apagado neste boot: só valem os segmentos criados depois do FORMAT.
+                self.segs = [s for s in self.segs if any(s is x for x in self.this_boot)]
             self.show("BOOT wiped=" + f.get("wiped", "?"))
+        elif name == "FORMAT":  # primeiro evento de cada boot
+            self.this_boot = []
         elif name == "SEG_NEW":
-            self.segs.append([int(f["first"]), 0])
+            self.open_segment(int(f["first"]))
         elif name == "FLUSH" and f.get("ok") == "1":
             if not self.segs:  # captura começou no meio de um segmento
-                self.segs.append([int(f["seq"]), 0])
+                self.open_segment(int(f["seq"]))
             self.segs[-1][1] += 1
             self.flushes += 1
             if every and self.flushes % every == 0:
