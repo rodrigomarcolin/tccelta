@@ -286,11 +286,13 @@ build_flags =
 
 **Config.** `MAX_BLOCKS=200`, `collector_mock_debug_open`, log com 165-190 blocos (flag de flash ligada).
 
+A e B são **alternativas**. O A basta para o objetivo do caso; o B é opcional e mostra a queda em degraus. Depois do A o log fica só com o segmento aberto (o ACK apaga todos os segmentos fechados), então o B não teria o que mostrar: para fazer os dois, espere o log voltar a 165 blocos ou mais entre eles, ou faça o B primeiro.
+
 **Passos (A: ACK injetado).**
 1. `python tools/sync-bench/nus_at.py 'AT#SYNC?'`. Resposta `SYNC conn=.. sub=.. open=.. ack=.. ... head=H tail=T ... flags=XX ...`. Anote `H`.
 2. `python tools/sync-bench/nus_at.py "AT#ACK <H>"`. `H` precisa estar em [`ack`, `head`], senão `HS_ACK result=bad_seq`.
 
-**Passos (B: sync completo).** `python tools/sync-bench/sync_bench.py --scenario stream --duration 120`: faz o handshake, lê os blocos (`SYNC_BLOCK`) e dá ACK a cada 10 s (`--tlat`). Imprime `ACK n`.
+**Passos (B, opcional: sync completo, a partir de um log cheio).** `python tools/sync-bench/sync_bench.py --scenario stream --duration 120`: faz o handshake, lê os blocos (`SYNC_BLOCK`) e dá ACK a cada 10 s (`--tlat`). Imprime `ACK n`.
 
 **Esperado.**
 - A: `CMD txt="AT#ACK H"`, `HS_ACK ... result=ok advanced=1`, `SYNC_FREE upto=H segs=k oldest=<first do segmento aberto> dur_us=..`. `deleteUpTo` remove todos os segmentos menos o mais novo (o aberto nunca é apagado, mesmo ≤ ACK). Logo, blocos = tamanho do segmento aberto (1 a 64), usage ≤ 320, e `AT#SYNC?` sem o bit `0x04` em até ~1 s. Se estiver inscrito, `SYNC_NOTICE reason=flash` sem `0x04`.
