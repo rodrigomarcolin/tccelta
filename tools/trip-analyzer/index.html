@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise de Viagem</title>
+<link rel="stylesheet" href="uPlot.min.css">
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f3f3f0; --panel:#fcfcfb; --panel-2:#f3f2ee; --hover:#ecebe6;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781; --line:#e1e0d9; --line-2:#c3c2b7;
+  --accent:#2a78d6; --sel:rgba(42,120,214,.13);
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b; --crit-ink:#b42828; --warn-ink:#8a5a00;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#6250d6; --s8:#e34948;
+  /* rampa sequencial azul, do fundo para o forte (mapa de calor e marchas) */
+  --seq: #cde2fb,#b7d3f6,#9ec5f4,#86b6ef,#6da7ec,#5598e7,#3987e5,#2a78d6,#256abf,#1c5cab,#184f95,#104281,#0d366b;
+  --ord: #86b6ef,#6da7ec,#5598e7,#3987e5,#2a78d6,#256abf,#1c5cab,#184f95,#104281,#0d366b;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#0d0d0d; --panel:#161615; --panel-2:#1e1e1d; --hover:#262624;
+    --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --line:#2a2a28; --line-2:#383835;
+    --accent:#3987e5; --sel:rgba(57,135,229,.2);
+    --crit-ink:#e66767; --warn-ink:#fab219;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    --seq: #0d366b,#104281,#184f95,#1c5cab,#256abf,#2a78d6,#3987e5,#5598e7,#6da7ec,#86b6ef,#9ec5f4,#b7d3f6,#cde2fb;
+    --ord: #184f95,#1c5cab,#256abf,#2a78d6,#3987e5,#5598e7,#6da7ec,#86b6ef,#9ec5f4,#b7d3f6;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0d0d0d; --panel:#161615; --panel-2:#1e1e1d; --hover:#262624;
+  --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --line:#2a2a28; --line-2:#383835;
+  --accent:#3987e5; --sel:rgba(57,135,229,.2);
+  --crit-ink:#e66767; --warn-ink:#fab219;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+  --seq: #0d366b,#104281,#184f95,#1c5cab,#256abf,#2a78d6,#3987e5,#5598e7,#6da7ec,#86b6ef,#9ec5f4,#b7d3f6,#cde2fb;
+  --ord: #184f95,#1c5cab,#256abf,#2a78d6,#3987e5,#5598e7,#6da7ec,#86b6ef,#9ec5f4,#b7d3f6;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:13px/1.45 var(--sans);min-height:100vh}
+button,select,input{font:inherit;color:inherit}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .ink2{color:var(--ink-2)}
+code{font-family:var(--mono);background:var(--panel-2);padding:1px 5px;border-radius:4px;font-size:12px}
+
+/* barra superior */
+.top{position:sticky;top:0;z-index:10;height:50px;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.brand b{font-size:14px;white-space:nowrap}
+.brand .file{color:var(--muted);font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--line-2);background:var(--panel);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.small{height:26px;padding:0 10px;font-size:12px}
+.ibtn{width:30px;height:30px;display:inline-grid;place-items:center;border-radius:7px;border:1px solid transparent;background:none;cursor:pointer;color:var(--ink-2)}
+.ibtn:hover{background:var(--hover);color:var(--ink)}
+
+/* estado vazio */
+.empty{min-height:calc(100vh - 50px);display:grid;place-items:center;padding:16px}
+.empty .card{max-width:640px;width:100%;padding:36px 32px;border:1.5px dashed var(--line-2);border-radius:14px;background:var(--panel)}
+.empty h1{font-size:18px;margin:0 0 6px;text-align:center}
+.empty p{color:var(--ink-2);margin:0 0 16px;text-align:center}
+.empty .actions{display:flex;gap:10px;justify-content:center;margin-bottom:20px}
+.empty pre{margin:0;padding:12px;border-radius:8px;background:var(--panel-2);font:12px/1.5 var(--mono);overflow-x:auto;color:var(--ink-2)}
+.empty .err{color:var(--crit-ink);text-align:center;margin-top:12px}
+body.drag .empty .card{border-color:var(--accent);background:var(--sel)}
+
+/* conteúdo */
+main.app{max-width:1280px;margin:0 auto;padding:16px 16px 48px;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h2{font-size:14px;margin:0 0 2px}
+.card .sub{color:var(--muted);font-size:12px;margin:0 0 12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;align-items:start}
+.controls .anchor{grid-column:span 2}
+@media (max-width:700px){.controls .anchor{grid-column:auto}}
+
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:12px;color:var(--ink-2);font-weight:600}
+.field .hint{font-size:11px;color:var(--muted)}
+.field input,.field select{height:32px;padding:0 10px;border-radius:7px;border:1px solid var(--line-2);background:var(--panel);min-width:0;width:100%}
+.field input.mono{font-size:12px}
+.field input:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.field input.bad{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 8%,var(--panel))}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.anchor-fields{display:grid;grid-template-columns:minmax(110px,.6fr) 1fr 1fr;gap:10px}
+@media (max-width:700px){.anchor-fields{grid-template-columns:1fr}}
+.radio{display:flex;gap:14px;font-size:12px;color:var(--ink-2);align-items:center;flex-wrap:wrap}
+.radio label{display:flex;gap:5px;align-items:center;cursor:pointer}
+.status{margin-top:10px;font-size:12px;padding:8px 10px;border-radius:7px;background:var(--panel-2);color:var(--ink-2)}
+.status.ok{border-left:3px solid var(--good)}
+.status.bad{border-left:3px solid var(--crit);color:var(--crit-ink)}
+.warnings{font-size:12px;color:var(--warn-ink)}
+.warnings div:not(.info)::before{content:"⚠ "}
+.warnings .info{color:var(--muted);margin-bottom:6px}
+
+/* indicadores */
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kpi .k{font-size:12px;color:var(--ink-2)}
+.kpi .v{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap}
+.kpi .v small{font-size:13px;font-weight:500;color:var(--ink-2);margin-left:3px}
+.kpi .d{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* painéis uPlot */
+.panel{margin-top:8px}
+.panel .ptitle{font-size:12px;font-weight:600;color:var(--ink-2);margin:0 0 2px 4px;display:flex;gap:8px;align-items:baseline}
+.panel .ptitle span{font-weight:400;color:var(--muted)}
+.uplot{font-family:var(--sans)}
+.uplot .u-legend{font-size:12px;text-align:left;padding-left:52px}
+.uplot .u-legend .u-marker{width:10px;height:10px;border-radius:2px}
+.uplot .u-legend th{font-weight:500;color:var(--ink-2)}
+.uplot .u-legend td{font-variant-numeric:tabular-nums}
+.u-select{background:var(--sel)}
+.toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:4px}
+
+/* gráficos SVG/canvas */
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;overflow:visible}
+.chart canvas{display:block;width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--ink-2);margin:8px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.empty-chart{padding:24px;text-align:center;color:var(--muted);font-size:12px;border:1px dashed var(--line-2);border-radius:8px}
+
+/* tabelas */
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--accent);font-size:12px}
+.tbl-wrap{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{padding:5px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--ink-2);font-weight:600;background:var(--panel-2)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+a.go{color:var(--accent);cursor:pointer;text-decoration:none}
+a.go:hover{text-decoration:underline}
+
+/* tooltip */
+#tip{position:fixed;z-index:50;pointer-events:none;background:var(--panel);border:1px solid var(--line-2);border-radius:8px;padding:7px 10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.14);max-width:280px;white-space:pre-line;color:var(--ink)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <b>Análise de viagem</b>
+    <span class="file" id="fileName"></span>
+  </div>
+  <button class="btn primary" id="openBtn">Abrir CSV</button>
+  <input type="file" id="fileInput" accept=".csv,text/csv,text/plain" hidden>
+  <button class="ibtn" id="themeBtn" title="Alternar tema claro/escuro" aria-label="Alternar tema">◐</button>
+</header>
+
+<section class="empty" id="empty">
+  <div class="card">
+    <h1>Abra o CSV de um boot</h1>
+    <p>Arraste o arquivo para cá ou use o botão. Tudo é processado no navegador.</p>
+    <div class="actions"><button class="btn primary" id="openBtn2">Escolher arquivo</button></div>
+    <p style="text-align:left;margin-bottom:6px">Exportação da tabela <code>reading</code> (colunas obrigatórias: <code>t_ms</code>, <code>pid</code>, <code>value</code>):</p>
+<pre>\copy (SELECT boot_generation, boot_id, t_ms, pid, value
+       FROM reading
+       WHERE dongle_id = 1 AND boot_generation = 0 AND boot_id = 7
+       ORDER BY t_ms) TO 'boot.csv' CSV HEADER</pre>
+    <div class="err" id="loadError" hidden></div>
+  </div>
+</section>
+
+<main class="app" id="app" hidden>
+  <div class="controls">
+    <div class="card anchor">
+      <h2>Âncora de tempo</h2>
+      <p class="sub">Copie uma linha de <code>time_anchor</code> deste boot. Sem âncora, o eixo mostra o tempo desde o boot.</p>
+      <div class="anchor-fields">
+        <div class="field">
+          <label for="aT">t_ms</label>
+          <input id="aT" class="mono" inputmode="numeric" placeholder="123456" autocomplete="off">
+          <span class="hint">ms desde o boot</span>
+        </div>
+        <div class="field">
+          <label for="aS1">s1</label>
+          <input id="aS1" class="mono" placeholder="2026-10-28 14:03:22.120+00" autocomplete="off">
+          <span class="hint">envio do desafio</span>
+        </div>
+        <div class="field">
+          <label for="aS2">s2</label>
+          <input id="aS2" class="mono" placeholder="2026-10-28 14:03:22.480+00" autocomplete="off">
+          <span class="hint">chegada da resposta (opcional)</span>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;justify-content:space-between">
+        <div class="radio" role="radiogroup" aria-label="Fuso de s1/s2 sem offset">
+          <span>s1/s2 sem fuso estão em:</span>
+          <label><input type="radio" name="tz" value="utc" checked> UTC</label>
+          <label><input type="radio" name="tz" value="local"> horário local</label>
+        </div>
+        <button class="btn small" id="anchorClear">Limpar</button>
+      </div>
+      <div class="status" id="anchorStatus">Sem âncora: tempo relativo ao boot.</div>
+    </div>
+
+    <div class="card">
+      <h2>Boot</h2>
+      <p class="sub" id="bootInfo"></p>
+      <div class="field" id="bootPick" hidden>
+        <label for="bootSel">O CSV tem mais de um boot</label>
+        <select id="bootSel"></select>
+      </div>
+      <div class="warnings" id="warnings"></div>
+    </div>
+
+    <div class="card">
+      <h2>Combustível</h2>
+      <p class="sub">Consumo estimado pelo MAF: vazão = MAF ÷ AFR.</p>
+      <div class="field">
+        <label for="fuelPreset">Tipo</label>
+        <select id="fuelPreset"></select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="field" style="flex:1"><label for="afr">AFR estequiométrico</label><input id="afr" type="number" step="0.1" min="5" max="20"></div>
+        <div class="field" style="flex:1"><label for="dens">Densidade (g/L)</label><input id="dens" type="number" step="1" min="600" max="900"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section class="card">
+    <div class="toolbar">
+      <div><h2>Linha do tempo</h2><p class="sub" style="margin:0">Arraste para ampliar · duplo clique para ver tudo · o cursor é compartilhado entre os painéis</p></div>
+      <button class="btn small" id="zoomReset">Ver tudo</button>
+    </div>
+    <div id="timeline"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Marchas: rotação × velocidade</h2>
+      <p class="sub">Cada marcha é uma reta saindo da origem. A numeração é relativa: 1ª = maior RPM por km/h observado.</p>
+      <div class="chart" id="scatter"></div>
+      <div class="legend" id="scatterLegend"></div>
+    </section>
+    <section class="card">
+      <h2>Tempo em cada marcha</h2>
+      <p class="sub">Só trechos com marcha identificada (velocidade ≥ 8 km/h e razão estável).</p>
+      <div class="chart" id="gearTime"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Trocas de marcha</h2>
+    <p class="sub">Rotação imediatamente antes de cada troca. Traço vertical = mediana. Clique num ponto para vê-lo na linha do tempo.</p>
+    <div class="grid2">
+      <div><div class="ptitle ink2" style="font-size:12px;font-weight:600;margin-bottom:4px">Subidas</div><div class="chart" id="stripUp"></div></div>
+      <div><div class="ptitle ink2" style="font-size:12px;font-weight:600;margin-bottom:4px">Reduções</div><div class="chart" id="stripDown"></div></div>
+    </div>
+    <details><summary>Ver tabela de trocas</summary><div class="tbl-wrap" id="shiftTable"></div></details>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Posição do pedal</h2>
+      <p class="sub">Tempo com o motor ligado em cada faixa do pedal do acelerador (PID 0x49).</p>
+      <div class="chart" id="pedalBands"></div>
+      <div class="note" id="pedalNote"></div>
+    </section>
+    <section class="card">
+      <h2>Faixas de rotação</h2>
+      <p class="sub">Tempo com o motor ligado em cada faixa de RPM.</p>
+      <div class="chart" id="rpmBands"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Rotação × pedal</h2>
+    <p class="sub">Tempo em cada combinação. Uso econômico concentra-se em baixa rotação e pedal moderado.</p>
+    <div class="chart" id="heatmap"></div>
+  </section>
+
+  <section class="card">
+    <h2>Combustível</h2>
+    <p class="sub" id="fuelSub"></p>
+    <div id="fuelPanels"></div>
+  </section>
+
+  <section class="card">
+    <h2>Temperatura do líquido de arrefecimento</h2>
+    <p class="sub" id="tempSub"></p>
+    <div id="tempPanels"></div>
+  </section>
+
+  <section class="card">
+    <h2>Eventos</h2>
+    <p class="sub">Aceleração ≥ 3,0 m/s², frenagem ≤ −3,5 m/s² (por ≥ 0,5 s) e marcha lenta ≥ 60 s.</p>
+    <div class="tbl-wrap" id="eventTable"></div>
+  </section>
+</main>
+
+<div id="tip" hidden></div>
+
+<script src="uPlot.iife.min.js"></script>
+<script src="analysis.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
