@@ -177,6 +177,7 @@ build_flags =
 1. `upload` do `collector_mock_debug_open`.
 2. Feche o monitor e inicie `capture.py --out logs/limite-caso3.log` (antes do wipe, para o boot de wipe ficar no arquivo).
 3. Wipe: `python tools/sync-bench/nus_at.py "AT#WIPE"` (a placa reinicia; alternativa: `COLLECTOR_WIPE_ON_BOOT`, caso 9).
+3b. Dica: para não esperar ~22 min, logo depois do wipe mande `python tools/sync-bench/nus_at.py 'AT#FLUSH 1000'` (~3,5 min até 200 blocos; ver 0.5). O valor fica na NVS: volte com `AT#FLUSH 10000` ao terminar.
 4. Espere ~22 min (ritmo padrão) até o primeiro `SEG_DROP`, e ~7 min por queda seguinte. Rode `contar_blocos.py` de vez em quando.
 5. Opcional, com `python tools/sync-bench/nus_at.py "AT#LIST"`: a última linha traz `LOST n`.
 
