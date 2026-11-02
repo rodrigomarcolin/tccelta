@@ -1,0 +1,100 @@
+# Roda na SUA maquina (dentro do contêiner). As chaves das CAs ficam em .pki-local/ e nunca vao para a VPS.
+- name: PKI local
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags: [pki]
+  vars:
+    pki: "{{ playbook_dir }}/.pki-local"
+    renovar: "{{ pki_renovar | default(false) | bool }}"
+    folhas:   # certificados assinados pela CA do KMS (validade de 1 ano)
+      - { nome: vault, cn: vault, uso: serverAuth, san: ["DNS:vault", "DNS:localhost", "IP:127.0.0.1"] }
+      - { nome: kms, cn: kms, uso: serverAuth, san: ["DNS:kms", "DNS:localhost", "IP:127.0.0.1"] }
+      - { nome: api-cliente, cn: tccelta-api, uso: clientAuth, san: ["DNS:api"] }
+  tasks:
+    - ansible.builtin.file: { path: "{{ pki }}", state: directory, mode: "0700" }
+
+    - name: Chaves das duas CAs (KMS e banco) e do servidor Postgres
+      community.crypto.openssl_privatekey:
+        path: "{{ pki }}/{{ item }}-key.pem"
+        type: ECC
+        curve: secp256r1
+        mode: "0600"
+      loop: [ca, db-ca, db-server]
+
+    - name: CSRs das CAs
+      community.crypto.openssl_csr:
+        path: "{{ pki }}/{{ item.nome }}.csr"
+        privatekey_path: "{{ pki }}/{{ item.nome }}-key.pem"
+        common_name: "{{ item.cn }}"
+        basic_constraints: ["CA:TRUE"]
+        basic_constraints_critical: true
+        key_usage: [keyCertSign, cRLSign]
+        key_usage_critical: true
+      loop:
+        - { nome: ca, cn: tccelta-ca }
+        - { nome: db-ca, cn: tccelta-db-ca }
+
+    - name: Certificados das CAs (10 anos)
+      community.crypto.x509_certificate:
+        path: "{{ pki }}/{{ item }}.pem"
+        csr_path: "{{ pki }}/{{ item }}.csr"
+        privatekey_path: "{{ pki }}/{{ item }}-key.pem"
+        provider: selfsigned
+        selfsigned_not_after: "+3650d"
+      loop: [ca, db-ca]
+
+    - name: Chaves dos certificados do KMS
+      community.crypto.openssl_privatekey:
+        path: "{{ pki }}/{{ item.nome }}-key.pem"
+        type: ECC
+        curve: secp256r1
+        mode: "0600"
+      loop: "{{ folhas }}"
+      loop_control: { label: "{{ item.nome }}" }
+
+    - name: CSRs do KMS
+      community.crypto.openssl_csr:
+        path: "{{ pki }}/{{ item.nome }}.csr"
+        privatekey_path: "{{ pki }}/{{ item.nome }}-key.pem"
+        common_name: "{{ item.cn }}"
+        subject_alt_name: "{{ item.san }}"
+        extended_key_usage: ["{{ item.uso }}"]
+      loop: "{{ folhas }}"
+      loop_control: { label: "{{ item.nome }}" }
+
+    - name: Certificados do KMS (1 ano)
+      community.crypto.x509_certificate:
+        path: "{{ pki }}/{{ item.nome }}.pem"
+        csr_path: "{{ pki }}/{{ item.nome }}.csr"
+        provider: ownca
+        ownca_path: "{{ pki }}/ca.pem"
+        ownca_privatekey_path: "{{ pki }}/ca-key.pem"
+        ownca_not_after: "+365d"
+        force: "{{ renovar }}"
+      loop: "{{ folhas }}"
+      loop_control: { label: "{{ item.nome }}" }
+
+    - name: CSR e certificado do Postgres (825 dias)
+      community.crypto.openssl_csr:
+        path: "{{ pki }}/db-server.csr"
+        privatekey_path: "{{ pki }}/db-server-key.pem"
+        common_name: "{{ dominio_db | default(vps_ip, true) }}"
+        subject_alt_name: "{{ ['IP:' ~ vps_ip] + (['DNS:' ~ dominio_db] if dominio_db else []) }}"
+        extended_key_usage: [serverAuth]
+
+    - community.crypto.x509_certificate:
+        path: "{{ pki }}/db-server.pem"
+        csr_path: "{{ pki }}/db-server.csr"
+        provider: ownca
+        ownca_path: "{{ pki }}/db-ca.pem"
+        ownca_privatekey_path: "{{ pki }}/db-ca-key.pem"
+        ownca_not_after: "+825d"
+        force: "{{ renovar }}"
+
+    - name: Senha do dbeaver_ro (gerada uma vez, fica so aqui)
+      ansible.builtin.copy:
+        dest: "{{ pki }}/dbeaver_ro.senha"
+        content: "{{ lookup('community.general.random_string', length=32, special=false) }}"
+        mode: "0600"
+        force: false

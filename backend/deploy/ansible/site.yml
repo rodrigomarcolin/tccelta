@@ -1,0 +1,229 @@
+# 1a vez (VPS recem-criada, so com root):  run.sh site.yml -e ansible_user=root --tags base
+# Depois:                                   run.sh site.yml
+- import_playbook: pki.yml
+
+- name: Servidor base
+  hosts: vps
+  become: true
+  tags: [base]
+  tasks:
+    - name: Usuario deploy
+      ansible.builtin.user: { name: deploy, shell: /bin/bash, groups: sudo, append: true }
+
+    - name: Chave SSH do deploy
+      ansible.posix.authorized_key:
+        user: deploy
+        key: "{{ lookup('file', '/ssh/key.pub') }}"
+
+    - name: sudo sem senha para o deploy (necessario ao Ansible; login por senha esta desligado)
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/deploy
+        content: "deploy ALL=(ALL) NOPASSWD:ALL\n"
+        mode: "0440"
+        validate: visudo -cf %s
+
+    - name: SSH so com chave
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/10-endurecimento.conf
+        content: |
+          PasswordAuthentication no
+          PermitRootLogin no
+          KbdInteractiveAuthentication no
+        mode: "0644"
+      notify: recarregar ssh
+
+    - name: Pacotes
+      ansible.builtin.apt:
+        name: [ufw, fail2ban, unattended-upgrades, rsync, curl, ca-certificates]
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Swap desligado (o Vault roda com disable_mlock)
+      ansible.builtin.command: swapoff -a
+      when: ansible_swaptotal_mb | int > 0
+      changed_when: true
+
+    - name: Swap fora do fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\sswap\s.*)$'
+        replace: '# \1'
+
+    - name: Docker Engine (script oficial; so se ainda nao instalado)
+      ansible.builtin.shell: curl -fsSL https://get.docker.com | sh
+      args: { creates: /usr/bin/docker }
+
+    - name: deploy no grupo docker
+      ansible.builtin.user: { name: deploy, groups: docker, append: true }
+
+    - name: UFW, politica padrao
+      community.general.ufw: { direction: incoming, default: deny }
+
+    - name: UFW, portas
+      community.general.ufw: { rule: allow, port: "{{ item.port }}", proto: "{{ item.proto }}" }
+      loop:
+        - { port: "22", proto: tcp }
+        - { port: "80", proto: tcp }
+        - { port: "443", proto: tcp }
+        - { port: "443", proto: udp }
+
+    - name: UFW ligado
+      community.general.ufw: { state: enabled }
+
+    - ansible.builtin.service: { name: fail2ban, state: started, enabled: true }
+
+  handlers:
+    - name: recarregar ssh
+      ansible.builtin.service: { name: ssh, state: reloaded }
+
+- name: Aplicacao
+  hosts: vps
+  become: true
+  tags: [app]
+  vars:
+    pki: "{{ playbook_dir }}/.pki-local"
+    certs: "{{ app_dir }}/deploy/kms/certs"
+    senhas: [pg_senha_superusuario, pg_senha_dono, pg_senha_api, pg_senha_worker, pg_senha_provisionador, redis_senha]
+  tasks:
+    - name: Pasta da aplicacao
+      ansible.builtin.file: { path: "{{ app_dir }}", state: directory, owner: deploy, group: deploy, mode: "0755" }
+
+    - name: Codigo (sem segredos nem certificados; nenhuma credencial de git na VPS)
+      become: false
+      ansible.posix.synchronize:
+        src: /work/
+        dest: "{{ app_dir }}/"
+        use_ssh_args: true
+        rsync_opts:
+          - --chmod=D755,F644
+          - --exclude=.git/
+          - --exclude=.env
+          - --exclude=/deploy/ansible/
+          - --exclude=/deploy/segredos/*
+          - --exclude=/deploy/kms/certs/*
+          - --exclude=/deploy/postgres/tls/*
+          - --exclude=/saida/
+      tags: [codigo]
+
+    - name: .env a partir do exemplo (so se nao existir)
+      ansible.builtin.copy:
+        src: "{{ app_dir }}/.env.example"
+        dest: "{{ app_dir }}/.env"
+        remote_src: true
+        owner: deploy
+        group: deploy
+        mode: "0600"
+        force: false
+
+    - name: Valores de producao no .env
+      ansible.builtin.lineinfile:
+        path: "{{ app_dir }}/.env"
+        regexp: '^{{ item.k }}='
+        line: "{{ item.k }}={{ item.v }}"
+      loop:
+        - { k: AMBIENTE, v: producao }
+        - { k: API_REPLICAS, v: "{{ api_replicas }}" }
+        - { k: API_HOST, v: "{{ api_host }}" }
+        - { k: CADDYFILE, v: "{{ caddyfile }}" }
+        - { k: ACME_EMAIL, v: "{{ acme_email }}" }
+        - { k: BANCO_PUBLICO_IP, v: "{{ vps_ip }}" }
+
+    - name: Pasta de segredos
+      ansible.builtin.file: { path: "{{ app_dir }}/deploy/segredos", state: directory, owner: deploy, group: deploy, mode: "0700" }
+
+    - name: Senhas geradas na VPS (uma vez; nunca sobrescritas)
+      ansible.builtin.shell: umask 077 && openssl rand -hex 24 | tr -d '\n' > "{{ app_dir }}/deploy/segredos/{{ item }}"
+      args: { creates: "{{ app_dir }}/deploy/segredos/{{ item }}" }
+      loop: "{{ senhas }}"
+      no_log: true
+
+    - name: Arquivos vazios que o compose referencia (token de dev do Vault e do tunel; nao usados)
+      ansible.builtin.copy:
+        dest: "{{ app_dir }}/deploy/segredos/{{ item }}"
+        content: ""
+        force: false
+      loop: [vault_dev_root_token, cloudflared_token]
+
+    - name: Os conteineres leem como usuarios sem privilegio; a pasta 700 protege o host
+      ansible.builtin.file: { path: "{{ app_dir }}/deploy/segredos/{{ item }}", mode: "0644", owner: deploy, group: deploy }
+      loop: "{{ senhas + ['vault_dev_root_token', 'cloudflared_token'] }}"
+
+    # --- certificados do KMS, separados por servico; as chaves das CAs nao sobem ---
+    - name: Pastas de certificados
+      ansible.builtin.file: { path: "{{ certs }}/{{ item }}", state: directory, owner: deploy, group: deploy, mode: "0755" }
+      loop: [vault, kms, api]
+
+    - name: Certificados do KMS
+      ansible.builtin.copy:
+        src: "{{ pki }}/{{ item.src }}"
+        dest: "{{ certs }}/{{ item.dir }}/{{ item.src }}"
+        owner: "{{ item.owner | default('deploy') }}"
+        group: "{{ item.owner | default('deploy') }}"
+        mode: "{{ item.mode | default('0644') }}"
+      loop:
+        - { dir: vault, src: ca.pem }
+        - { dir: vault, src: vault.pem }
+        - { dir: vault, src: vault-key.pem, owner: root, mode: "0600" }
+        - { dir: kms, src: ca.pem }
+        - { dir: kms, src: kms.pem }
+        - { dir: kms, src: kms-key.pem, owner: "65532", mode: "0600" }
+        - { dir: api, src: ca.pem }
+        - { dir: api, src: api-cliente.pem }
+        - { dir: api, src: api-cliente-key.pem, owner: "65532", mode: "0600" }
+      loop_control: { label: "{{ item.dir }}/{{ item.src }}" }
+      no_log: true
+
+    - ansible.builtin.file: { path: "{{ app_dir }}/deploy/postgres/tls", state: directory, owner: deploy, group: deploy, mode: "0755" }
+
+    - name: Certificado do Postgres (1000 = usuario postgres da imagem)
+      ansible.builtin.copy:
+        src: "{{ pki }}/{{ item.src }}"
+        dest: "{{ app_dir }}/deploy/postgres/tls/{{ item.dst }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.owner }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { src: db-server.pem, dst: server.pem, owner: "1000", mode: "0644" }
+        - { src: db-server-key.pem, dst: server-key.pem, owner: "1000", mode: "0600" }
+        - { src: db-ca.pem, dst: db-ca.pem, owner: deploy, mode: "0644" }
+      loop_control: { label: "{{ item.dst }}" }
+      no_log: true
+      notify: recarregar pg_hba
+
+    - name: pg_hba.conf
+      ansible.builtin.template: { src: pg_hba.conf.j2, dest: "{{ app_dir }}/deploy/postgres/pg_hba.conf", owner: deploy, group: deploy, mode: "0644" }
+      notify: recarregar pg_hba
+
+    # --- firewall da 5432 ---
+    - ansible.builtin.file: { path: /etc/tccelta, state: directory, mode: "0755" }
+
+    - name: Lista de IPs do DBeaver
+      ansible.builtin.copy:
+        dest: /etc/tccelta/dbeaver-allowlist.txt
+        content: "{{ dbeaver_ips | join('\n') }}\n"
+        mode: "0644"
+      notify: recarregar firewall do banco
+
+    - ansible.builtin.template: { src: tccelta-db-fw.sh.j2, dest: /usr/local/sbin/tccelta-db-fw.sh, mode: "0750" }
+      notify: recarregar firewall do banco
+
+    - ansible.builtin.template: { src: tccelta-db-fw.service.j2, dest: /etc/systemd/system/tccelta-db-fw.service, mode: "0644" }
+      notify: recarregar firewall do banco
+
+    - name: Vault (o unico servico que sobe nesta etapa; sobe selado)
+      ansible.builtin.command: "{{ compose_cmd }} up -d vault"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: false
+
+    - name: Proximo passo
+      ansible.builtin.debug:
+        msg: "Faca o init, o unseal e o bootstrap do Vault (secao 6 do roteiro) e depois rode: run.sh stack.yml"
+
+  handlers:
+    - name: recarregar firewall do banco
+      ansible.builtin.systemd: { name: tccelta-db-fw, daemon_reload: true, enabled: true, state: restarted }
+    - name: recarregar pg_hba
+      ansible.builtin.command: "{{ compose_cmd }} exec -T banco psql -U postgres -c 'select pg_reload_conf()'"
+      args: { chdir: "{{ app_dir }}" }
+      failed_when: false
+      changed_when: false

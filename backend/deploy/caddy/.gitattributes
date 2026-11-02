@@ -1,0 +1,2 @@
+# Caddyfile.prod e Caddyfile.teste tambem sao lidos por conteineres Linux
+Caddyfile.* text eol=lf

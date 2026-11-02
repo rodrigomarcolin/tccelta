@@ -1,0 +1,13 @@
+#!/bin/sh
+# Gerado pelo Ansible. Libera a 5432 so para os IPs de /etc/tccelta/dbeaver-allowlist.txt.
+set -eu
+IF={{ ansible_default_ipv4.interface }}
+ALLOW=/etc/tccelta/dbeaver-allowlist.txt
+iptables -N TCCELTA-DB 2>/dev/null || iptables -F TCCELTA-DB
+while read -r ip _; do
+  case "$ip" in ''|\#*) continue;; esac
+  iptables -A TCCELTA-DB -s "$ip" -j RETURN
+done < "$ALLOW"
+iptables -A TCCELTA-DB -j DROP
+iptables -C DOCKER-USER -i "$IF" -p tcp -m conntrack --ctorigdstport 5432 -j TCCELTA-DB 2>/dev/null || \
+  iptables -I DOCKER-USER 1 -i "$IF" -p tcp -m conntrack --ctorigdstport 5432 -j TCCELTA-DB

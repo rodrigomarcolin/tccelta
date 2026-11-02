@@ -1,0 +1,20 @@
+# Edite estes valores antes de rodar.
+vps_ip: 203.0.113.10
+acme_email: voce@exemplo.com
+api_replicas: 2
+
+# Etapa 1 (so IP): deixe os dois vazios. Etapa 2: preencha com os dominios (secao 7 do roteiro).
+dominio_api: ""
+dominio_db: ""
+
+# IPs (CIDR) que podem usar o DBeaver: alimentam o firewall e o pg_hba.conf.
+dbeaver_ips:
+  - 198.51.100.7/32
+
+# Derivados: sem dominio, o Caddy usa o IP e um certificado interno (Caddyfile.teste).
+api_host: "{{ dominio_api | default(vps_ip, true) }}"
+caddyfile: "{{ 'Caddyfile.prod' if dominio_api else 'Caddyfile.teste' }}"
+
+app_dir: /opt/tccelta
+compose_cmd: >-
+  docker compose -f compose.yaml -f compose.prodlike.yaml -f compose.prod.yaml
