@@ -1,7 +1,9 @@
 # Roteiro de testes: limite de N blocos no log da flash
 
-Valida em placa real o commit `a225f14` (`feat(firmware): limita o log da flash a N blocos`):
+Valida em placa real o commit `d02f091` (`feat(firmware): limita o log da flash a N blocos`):
 `src/storage/LittleFsBlockStore.cpp`, `src/collector/LogLimit.h`, `[block_log]` no `platformio.ini`.
+
+Todos os comandos são para o **Git Bash** e partem da pasta `esp32-firmware` (veja 0.3).
 
 ## 0. Preparação
 
@@ -16,7 +18,7 @@ Valida em placa real o commit `a225f14` (`feat(firmware): limita o log da flash 
 
 ### 0.2 Valores de N com a partição de 2 MB (`partitions_collector.csv`: `spiffs` 0x200000 = 2097152 B)
 
-`maxRecordBytes(tag) = 1024 + 12 (cabeçalho do registro) + tag + 4 (CRC) + 1 (cabeçalho de segmento rateado)` = 1029 / 1061 / 1093 (conferido em `test_log_limit`).
+`maxRecordBytes(tag) = 1024 (bloco, já com o cabeçalho de 12 B) + tag + 4 (CRC) + 1 (cabeçalho de segmento de 8 B rateado por 64 blocos)` = 1029 / 1061 / 1093 (conferido em `test_log_limit`).
 
 | Perfil (env) | tag | registro máx. | N, margem 10% (utilizável 1887437 B) | N, margem 50% (utilizável 1048576 B) |
 |---|---|---|---|---|
@@ -33,11 +35,17 @@ Limiares do aviso de flash (`usage` = `blocos*1000/N`, divisão inteira):
 
 ### 0.3 Ferramentas e comandos
 
-`pio` no Windows (não está no PATH por padrão). Em PowerShell, na pasta `esp32-firmware`:
+Abra o Git Bash e prepare a sessão. O `pio` não está no PATH por padrão. Repita estes comandos a cada janela nova, ou ponha no `~/.bashrc`:
 
-```powershell
-$pio = "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe"
+```bash
+cd ~/Projects/tccelta/tccelta/esp32-firmware        # todos os caminhos do roteiro partem daqui
+PIO_EXE="$HOME/.platformio/penv/Scripts/pio.exe"
+pio() { "$PIO_EXE" "$@"; }
+export PYTHONUTF8=1                                  # acentos certos na saída dos scripts Python
+conda activate tccelta                               # Python 3.13 com pyserial e bleak
 ```
+
+Rode o `conda activate tccelta` em toda janela que for usar Python. O env `tccelta` já tem `pyserial` e `bleak`. Fora dele, `python` no Git Bash é só o atalho da Microsoft Store e não roda nada. Confira com `python --version`, que deve mostrar 3.13.
 
 `platformio_local.ini` (fora do git; copie de `platformio_local.ini.example` se ainda não existe). Ele já deve ter a sua porta:
 
@@ -54,10 +62,12 @@ As seções que cada caso pede (`[block_log]` etc.) vão **neste mesmo arquivo**
 
 Comandos (substitua `<env>`):
 
-```powershell
-& $pio run -e <env> -t upload          # compila e grava o firmware (não mexe na partição LittleFS)
-& $pio device monitor -e <env>         # serial a 921600 baud nos envs *_debug
+```bash
+pio run -e <env> -t upload                   # compila e grava o firmware (não mexe na partição LittleFS)
+winpty "$PIO_EXE" device monitor -e <env>    # serial a 921600 baud nos envs *_debug; sai com Ctrl+C
 ```
+
+O monitor do PlatformIO precisa de um console de verdade. No mintty do Git Bash, sem o `winpty`, ele pode não receber as teclas nem o Ctrl+C. Se o seu Git Bash usa o pseudo-console do Windows (opção "Enable experimental support for pseudo consoles" na instalação), `pio device monitor -e <env>` funciona direto.
 
 Se perder o `BOOT` ao abrir o monitor, aperte EN (reset) com o monitor aberto. O monitor e o `capture.py` não dividem a porta: para rodadas longas use um **ou** outro.
 
@@ -72,17 +82,25 @@ Observação: o log de eventos só existe com `COLLECTOR_EVENTS` (todos os `*_de
 
 ### 0.4 Captura serial e contagem de blocos
 
-**Não existe evento que informe a contagem de blocos nem o `usagePermille`.** Para saber quantos blocos há no log, conte pelos eventos. Capture a serial com o `capture.py` do repositório (grava só as linhas `EV`, com carimbo do PC; requer `pip install pyserial`):
+**Não existe evento que informe a contagem de blocos nem o `usagePermille`.** Para saber quantos blocos há no log, conte pelos eventos. Capture a serial com o `capture.py` do repositório (grava só as linhas `EV`, com carimbo do PC; já no env `tccelta`):
 
-```powershell
-python tools\event-bench\capture.py --port COMx --out logs\limite-caso3.log
+```bash
+python tools/event-bench/capture.py --port COMx --out logs/limite-caso3.log    # Ctrl+C para parar
 ```
 
-`logs/` está no `.gitignore`. Salve também os dois scripts abaixo em `esp32-firmware\logs\` (não vão para o git).
+Deixe a captura numa janela do Git Bash e use uma segunda janela (com a mesma preparação de 0.3) para os comandos `AT#` e para acompanhar o arquivo ao vivo:
 
-`logs\contar_blocos.py` reconstrói os segmentos a partir de `SEG_NEW`, `FLUSH ok=1`, `SEG_DROP` e `SYNC_FREE` e imprime blocos e usage. **Comece a captura logo depois de um wipe** (caso 9), senão o estado inicial é desconhecido. Pode ser mantido pela captura através de vários boots.
+```bash
+tail -f logs/limite-caso3.log | grep --line-buffered -E ' (BOOT|SEG_NEW|SEG_DROP|SYNC_OVERFLOW|SYNC_FREE|SYNC_NOTICE|HS_ACK) '
+grep -c ' FLUSH .*ok=1' logs/limite-caso3.log      # quantos blocos foram gravados até agora
+```
 
-```python
+`logs/` está no `.gitignore`. Os dois scripts abaixo também ficam em `logs/`, fora do git. Cada bloco cria o arquivo direto do Git Bash: cole o bloco inteiro, da linha `cat` até o `EOF`.
+
+`logs/contar_blocos.py` reconstrói os segmentos a partir de `SEG_NEW`, `FLUSH ok=1`, `SEG_DROP` e `SYNC_FREE` e imprime blocos e usage. **Comece a captura logo depois de um wipe** (caso 9), senão o estado inicial é desconhecido. A captura pode seguir aberta através de vários boots.
+
+```bash
+cat > logs/contar_blocos.py <<'EOF'
 import re, sys
 segs, N, flushes = [], None, 0          # segs = [[first, count], ...]
 def kv(line): return dict(re.findall(r'(\w+)=(\S+)', line))
@@ -107,13 +125,15 @@ for raw in open(sys.argv[1], encoding='utf-8'):
     elif name == 'SYNC_FREE':
         for _ in range(int(f['segs'])): segs.pop(0)
         show('SYNC_FREE')
+EOF
 ```
 
-Uso: `python logs\contar_blocos.py logs\limite-caso3.log`. Se aparecer `DIVERGE`, a captura começou fora de um wipe ou perdeu linhas (buraco em `n`).
+Uso: `python logs/contar_blocos.py logs/limite-caso3.log | tail -n 5`. Se aparecer `DIVERGE`, a captura começou fora de um wipe ou perdeu linhas (buraco em `n`).
 
-`logs\nus_at.py` envia um comando `AT#...` pelo BLE (NUS RX `6E400002-...`, resposta no NUS TX `6E400003-...`). **Os `AT#` não entram pela serial**: o firmware não lê a UART. Só funciona no env `*_open` (sem pareamento). Requer `pip install bleak`:
+`logs/nus_at.py` envia um comando `AT#...` pelo BLE (NUS RX `6E400002-...`, resposta no NUS TX `6E400003-...`). **Os `AT#` não entram pela serial**: o firmware não lê a UART. Só funciona no env `*_open` (sem pareamento). Usa o `bleak` do env `tccelta`:
 
-```python
+```bash
+cat > logs/nus_at.py <<'EOF'
 import asyncio, sys
 from bleak import BleakClient, BleakScanner
 RX = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"; TX = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
@@ -126,9 +146,10 @@ async def main(cmd):
         await asyncio.sleep(3)
     print()
 asyncio.run(main(sys.argv[1]))
+EOF
 ```
 
-Uso: `python logs\nus_at.py "AT#SYNC?"`. Deve aparecer `CMD txt="AT#SYNC?"` e `RESP ...` na serial.
+Uso: `python logs/nus_at.py 'AT#SYNC?'`. Deve aparecer `CMD txt="AT#SYNC?"` e `RESP ...` na serial. Ponha o comando **entre aspas** (simples ou duplas). Sem aspas, o bash trata o `#` como começo de comentário em alguns contextos e o `?` como curinga de arquivo.
 
 ### 0.5 Ritmo de produção de blocos (estimativa, leia antes de planejar)
 
@@ -146,13 +167,12 @@ Uso: `python logs\nus_at.py "AT#SYNC?"`. Deve aparecer `CMD txt="AT#SYNC?"` e `R
 
 **Comandos.**
 
-```powershell
-& $pio test -e native -f test_log_limit
-& $pio test -e native
-& $pio run -e collector_mock_debug_open
-& $pio run -e collector_mock_debug_none
-& $pio run -e collector_mock_debug_asym
-& $pio run -e collector_mock
+```bash
+pio test -e native -f test_log_limit
+pio test -e native
+for env in collector_mock_debug_open collector_mock_debug_none collector_mock_debug_asym collector_mock; do
+    pio run -e "$env" || echo "FALHOU: $env"
+done
 ```
 
 **Esperado.**
@@ -170,7 +190,7 @@ Uso: `python logs\nus_at.py "AT#SYNC?"`. Deve aparecer `CMD txt="AT#SYNC?"` e `R
 **Config.** `platformio_local.ini` só com a porta (sem `[block_log]`): margem 10%, sem `MAX_BLOCKS`.
 
 **Passos.**
-1. `& $pio run -e collector_mock_debug_open -t upload`, depois `& $pio device monitor -e collector_mock_debug_open`.
+1. `pio run -e collector_mock_debug_open -t upload`, depois `winpty "$PIO_EXE" device monitor -e collector_mock_debug_open`.
 2. Ache a linha `BOOT` (aparece depois de `FORMAT`, `KEYS`, `MARKER`, `SEG_NEW`, `FLUSH kind=boot`).
 3. Repita com `collector_mock_debug_none` e `collector_mock_debug_asym`.
 
@@ -185,9 +205,6 @@ Uso: `python logs\nus_at.py "AT#SYNC?"`. Deve aparecer `CMD txt="AT#SYNC?"` e `R
 Exemplo da linha: `EV .. .. BOOT boot=.. wiped=0 ... lost=.. log_max=1778`.
 
 **Passa se** `log_max` é o valor da tabela em cada perfil. **Falha** se divergir; se for ligeiramente menor, veja se `LittleFS.totalBytes()` não é 2097152 (nesse caso o desvio é da partição, não do cálculo; reporte).
-
-Obs.: `eventos.md` (esta pasta) ainda não lista `log_max` no `BOOT`; vale `docs/debug-events.md`.
-
 ---
 
 ## Caso 3: transbordo com `BLOCK_LOG_MAX_BLOCKS=200`
@@ -204,10 +221,10 @@ build_flags =
 
 **Passos.**
 1. `upload` do `collector_mock_debug_open`.
-2. Feche o monitor e inicie `capture.py --out logs\limite-caso3.log` (antes do wipe, para o boot de wipe ficar no arquivo).
-3. Wipe: `python logs\nus_at.py "AT#WIPE"` (a placa reinicia; alternativa: `COLLECTOR_WIPE_ON_BOOT`, caso 9).
+2. Feche o monitor e inicie `capture.py --out logs/limite-caso3.log` (antes do wipe, para o boot de wipe ficar no arquivo).
+3. Wipe: `python logs/nus_at.py "AT#WIPE"` (a placa reinicia; alternativa: `COLLECTOR_WIPE_ON_BOOT`, caso 9).
 4. Espere ~22 min (ritmo padrão) até o primeiro `SEG_DROP`, e ~7 min por queda seguinte. Rode `contar_blocos.py` de vez em quando.
-5. Opcional, com `python logs\nus_at.py "AT#LIST"`: a última linha traz `LOST n`.
+5. Opcional, com `python logs/nus_at.py "AT#LIST"`: a última linha traz `LOST n`.
 
 **Esperado.**
 - `BOOT ... wiped=1 ... log_max=200 lost=0`; a contagem começa em 1 (o bloco BOOT).
@@ -232,9 +249,9 @@ build_flags =
 
 **Passos.**
 1. Parta de um log com ~140 blocos (continue o caso 3 após a 1ª queda, ou espere ~15 min após um wipe).
-2. Conecte a central de teste e **inscreva-se no SYNC_TX** (`7A3C0003-9B1E-4F2A-8C5D-2E6F1A0B3C4D`, notify) com um app BLE genérico (nRF Connect), ou rode `python tools\sync-bench\sync_bench.py --scenario handshake` e depois `--scenario stream --duration 120` (pede `pip install bleak`; usa as chaves fixas de bancada, que casam com os envs debug sem `secnvs` provisionada). Na serial: `SYNC_SUB on=1` e `SYNC_NOTICE ... reason=subscribe`.
+2. Conecte a central de teste e **inscreva-se no SYNC_TX** (`7A3C0003-9B1E-4F2A-8C5D-2E6F1A0B3C4D`, notify) com um app BLE genérico (nRF Connect), ou rode `python tools/sync-bench/sync_bench.py --scenario handshake` e depois `--scenario stream --duration 120` (usa o `bleak` do env `tccelta`; usa as chaves fixas de bancada, que casam com os envs debug sem `secnvs` provisionada). Na serial: `SYNC_SUB on=1` e `SYNC_NOTICE ... reason=subscribe`.
 3. Acompanhe os `SYNC_NOTICE` e a contagem do script.
-4. Para ler o estado sem depender de aviso: `python logs\nus_at.py "AT#SYNC?"` imprime `flags=XX` (mesmo campo).
+4. Para ler o estado sem depender de aviso: `python logs/nus_at.py 'AT#SYNC?'` imprime `flags=XX` (mesmo campo).
 5. Parte B (desligar por exclusão): com a flag ligada, `AT#SYNC?` (anote `head=`) e `AT#ACK <head>` (caso 8).
 
 **Esperado.**
@@ -315,10 +332,10 @@ build_flags =
 **Config.** `MAX_BLOCKS=200`, `collector_mock_debug_open`, log com 165-190 blocos (flag de flash ligada).
 
 **Passos (A: ACK injetado).**
-1. `python logs\nus_at.py "AT#SYNC?"`. Resposta `SYNC conn=.. sub=.. open=.. ack=.. ... head=H tail=T ... flags=XX ...`. Anote `H`.
-2. `python logs\nus_at.py "AT#ACK <H>"`. `H` precisa estar em [`ack`, `head`], senão `HS_ACK result=bad_seq`.
+1. `python logs/nus_at.py 'AT#SYNC?'`. Resposta `SYNC conn=.. sub=.. open=.. ack=.. ... head=H tail=T ... flags=XX ...`. Anote `H`.
+2. `python logs/nus_at.py "AT#ACK <H>"`. `H` precisa estar em [`ack`, `head`], senão `HS_ACK result=bad_seq`.
 
-**Passos (B: sync completo).** `python tools\sync-bench\sync_bench.py --scenario stream --duration 120`: faz o handshake, lê os blocos (`SYNC_BLOCK`) e dá ACK a cada 10 s (`--tlat`). Imprime `ACK n`.
+**Passos (B: sync completo).** `python tools/sync-bench/sync_bench.py --scenario stream --duration 120`: faz o handshake, lê os blocos (`SYNC_BLOCK`) e dá ACK a cada 10 s (`--tlat`). Imprime `ACK n`.
 
 **Esperado.**
 - A: `CMD txt="AT#ACK H"`, `HS_ACK ... result=ok advanced=1`, `SYNC_FREE upto=H segs=k oldest=<first do segmento aberto> dur_us=..`. `deleteUpTo` remove todos os segmentos menos o mais novo (o aberto nunca é apagado, mesmo ≤ ACK). Logo, blocos = tamanho do segmento aberto (1 a 64), usage ≤ 320, e `AT#SYNC?` sem o bit `0x04` em até ~1 s. Se estiver inscrito, `SYNC_NOTICE reason=flash` sem `0x04`.
@@ -335,7 +352,7 @@ build_flags =
 **Objetivo.** Zerar log, contagem e usage.
 
 **Parte A: `AT#WIPE`** (qualquer momento, env `*_open`).
-1. `python logs\nus_at.py "AT#WIPE"` → `OK` e a placa reinicia (`requestWipe` grava `wipe_req` na NVS e dá `esp_restart`).
+1. `python logs/nus_at.py "AT#WIPE"` → `OK` e a placa reinicia (`requestWipe` grava `wipe_req` na NVS e dá `esp_restart`).
 2. No boot: `BOOT ... wiped=1 ... log_oldest=.. log_newest=.. lost=0 log_max=<mesmo N>`; `SEG_NEW first=<seq> reason=first` e `FLUSH kind=boot`; o seq reinicia e `boot` continua crescendo (config e `boot_id` preservados; valores exatos de `seq_next` não verifiquei).
 3. Contagem pelo script = 1; usage = 1000/N (5 com N=200).
 4. Um reset (EN) seguinte volta a `wiped=0`.
