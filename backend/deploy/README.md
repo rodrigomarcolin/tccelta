@@ -87,6 +87,7 @@ sh /opt/tccelta/deploy/vault-prod.sh bootstrap   # UMA vez: Transit, políticas,
 | `init` | `vault operator init -key-shares=5 -key-threshold=3`. Imprime as 5 chaves e o token raiz **uma única vez** | Uma vez, na implantação |
 | `unseal` | Pede chaves até o Vault abrir (3) | Após o `init` e **após todo reinício** do Vault ou da VPS |
 | `bootstrap` | Grava o token raiz em `/vault/init/init.json` (600), roda o `vault-bootstrap`, apaga o arquivo e revoga o token raiz | Uma vez, com o Vault aberto |
+| `provisionador` | Gera um token raiz temporário com 3 das 5 chaves, emite um token de provisionamento de 24 h (órfão), grava no volume e revoga o raiz temporário | Antes de provisionar dongles, se `dc run kms-ferramentas ...` der `invalid token` (expira em 24 h) |
 
 Regras:
 

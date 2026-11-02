@@ -48,7 +48,8 @@ POL="-policy=tccelta-provisionador"
 if [ "$PERFIL" = dev ]; then POL="$POL -policy=tccelta-teste-dourado"; fi
 # os arquivos sao 0400: remove o anterior antes de gravar o novo
 rm -f /approle/ferramentas/provisionador_token
-vault token create $POL -no-default-policy -ttl=24h -field=token > /approle/ferramentas/provisionador_token
+# orfao: em producao o token raiz e revogado ao fim do bootstrap, e isso revogaria os filhos dele
+vault token create $POL -no-default-policy -orphan -ttl=24h -field=token > /approle/ferramentas/provisionador_token
 
 if [ "$PERFIL" != dev ]; then
   vault audit list | grep -q '^file/' || vault audit enable file file_path=/vault/logs/auditoria.log

@@ -6,6 +6,7 @@
 #   sh /opt/tccelta/deploy/vault-prod.sh init        # uma unica vez: 5 chaves, limiar 3
 #   sh /opt/tccelta/deploy/vault-prod.sh unseal      # abre com 3 chaves (apos init e apos todo reinicio)
 #   sh /opt/tccelta/deploy/vault-prod.sh bootstrap   # uma unica vez: Transit, politicas, AppRoles, auditoria
+#   sh /opt/tccelta/deploy/vault-prod.sh provisionador  # reemite o token do provisionador (24 h) com 3 chaves
 #
 # As chaves de unseal e o token raiz nunca sao gravados por este script: sao digitados (sem eco) ou impressos
 # no terminal. O unico arquivo temporario e o init.json do bootstrap (permissao 600), apagado ao fim.
@@ -54,8 +55,14 @@ case "${1:-}" in
     echo "Pronto. Proximo passo: bash deploy/ansible/run.sh stack.yml (no PC)."
     ;;
 
+  provisionador)
+    aberto || { echo "Vault selado ou fora do ar: rode 'unseal' antes." >&2; exit 1; }
+    echo "Reemite o token do provisionador (24 h). Pede 3 das 5 chaves de unseal (sem eco)."
+    dc run --rm -it --no-deps --entrypoint sh vault-bootstrap /vault/scripts/provisionador-token.sh
+    ;;
+
   *)
-    echo "uso: sh deploy/vault-prod.sh status|init|unseal|bootstrap" >&2
+    echo "uso: sh deploy/vault-prod.sh status|init|unseal|bootstrap|provisionador" >&2
     exit 2
     ;;
 esac
