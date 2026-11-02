@@ -331,24 +331,19 @@ build_flags =
 
 ---
 
-## Caso 10: margem e clamp (`BLOCK_LOG_MARGIN_PCT`, `BLOCK_LOG_MAX_BLOCKS`)
+## Caso 10: margem (`BLOCK_LOG_MARGIN_PCT`)
 
-**Objetivo.** Conferir a fórmula com outra margem, a precedência e o piso/teto. Cada subcaso é só ler `BOOT log_max`; não precisa encher o log.
+**Objetivo.** Provar que `BLOCK_LOG_MARGIN_PCT` chega ao firmware e entra na conta. Uma só build, sem encher o log: só ler `BOOT log_max`.
 
-| Sub | `[block_log] build_flags` | Env | `log_max` esperado |
-|---|---|---|---|
-| a | `-DBLOCK_LOG_MARGIN_PCT=50` | `collector_mock_debug_open` | **988** (hmac) |
-| a2 | idem | `collector_mock_debug_none` / `_asym` | 1019 / 959 |
-| b | `-DBLOCK_LOG_MARGIN_PCT=50` e `-DBLOCK_LOG_MAX_BLOCKS=200` | `_open` | **200** (MAX_BLOCKS vence) |
-| c | `-DBLOCK_LOG_MAX_BLOCKS=50` | `_open` | **128** (piso, 2 segmentos) |
-| d | `-DBLOCK_LOG_MAX_BLOCKS=100000` | `_open` | **16384** (teto, 256 segmentos) |
-| e | `-DBLOCK_LOG_MARGIN_PCT=0` | `_open` | 1976 pela fórmula (`2097152/1061`) |
+| `[block_log] build_flags` | Env | `log_max` esperado |
+|---|---|---|
+| `-DBLOCK_LOG_MARGIN_PCT=50` | `collector_mock_debug_open` | **988** (hmac) |
 
-Para cada um: `upload`, ler o `BOOT`. Restaure o `[block_log]` ao fim.
+`upload`, ler o `BOOT`, e restaurar o `[block_log]` ao fim.
 
-**Obs. sub e.** Só confira o `log_max`; **não** espere enchê-lo: com margem 0 a rede de segurança por bytes (`livre < bytes + 8 KB`) pode descartar antes de N, pois os arquivos do LittleFS ocupam blocos de 4 KB (segmentos pequenos desperdiçam espaço). Também `-DBLOCK_LOG_MARGIN_PCT=100` deve falhar no build (`static_assert`).
+**Sem build aqui.** As tags 0 e 64, a margem 0, o piso (128) e o teto (16384) da fórmula já são conferidos pelo `test_log_limit` (caso 1). O `BLOCK_LOG_MAX_BLOCKS` fixo é exercitado nos casos 3 (200) e 5 (128). Ficam sem teste: o clamp do `BLOCK_LOG_MAX_BLOCKS` (50 vira 128, 100000 vira 16384), feito dentro do `begin`, e a margem 100, que deve falhar o build no `static_assert`.
 
-**Passa se** todos os `log_max` batem. **Falha** se qualquer um divergir.
+**Passa se** `log_max` = 988. **Falha** se divergir.
 
 ---
 
@@ -365,7 +360,7 @@ Para cada um: `upload`, ler o `BOOT`. Restaure o `[block_log]` ao fim.
 | 7 | Persistência | blocos = B + 1 após reboot; 1ª queda após `200 − B` blocos | [ ] |
 | 8 | ACK libera | `SYNC_FREE segs>0`, blocos = segmento aberto, flag apaga | [ ] |
 | 9 | Wipe | `wiped=1`, `lost=0`, contagem 1, `log_max` igual | [ ] |
-| 10 | Margem e clamp | 988 / 200 / 128 / 16384 / 1976 conforme a tabela | [ ] |
+| 10 | Margem | `log_max` = 988 com `BLOCK_LOG_MARGIN_PCT=50` | [ ] |
 
 ## Limites deste roteiro
 
