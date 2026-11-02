@@ -93,61 +93,17 @@ tail -f logs/limite-caso3.log | grep --line-buffered -E ' (BOOT|SEG_NEW|SEG_DROP
 grep -c ' FLUSH .*ok=1' logs/limite-caso3.log      # quantos blocos foram gravados até agora
 ```
 
-`logs/` está no `.gitignore`. Os dois scripts abaixo também ficam em `logs/`, fora do git. Cada bloco cria o arquivo direto do Git Bash: cole o bloco inteiro, da linha `cat` até o `EOF`.
+`logs/` está no `.gitignore`. Os dois scripts auxiliares estão no repositório:
 
-`logs/contar_blocos.py` reconstrói os segmentos a partir de `SEG_NEW`, `FLUSH ok=1`, `SEG_DROP` e `SYNC_FREE` e imprime blocos e usage. **Comece a captura logo depois de um wipe** (caso 9), senão o estado inicial é desconhecido. A captura pode seguir aberta através de vários boots.
-
-```bash
-cat > logs/contar_blocos.py <<'EOF'
-import re, sys
-segs, N, flushes = [], None, 0          # segs = [[first, count], ...]
-def kv(line): return dict(re.findall(r'(\w+)=(\S+)', line))
-def show(tag):
-    b = sum(c for _, c in segs)
-    print(f"{tag:<12} blocos={b:<5} N={N} usage={b*1000//N if N else '?'} segs={[tuple(s) for s in segs]}")
-for raw in open(sys.argv[1], encoding='utf-8'):
-    line = raw.split('\t', 1)[-1].strip()
-    m = re.match(r'EV \d+ \d+ (\w+)(.*)', line)
-    if not m: continue
-    name, f = m.group(1), kv(m.group(2))
-    if name == 'BOOT':
-        N = int(f['log_max']); show('BOOT')
-    elif name == 'SEG_NEW': segs.append([int(f['first']), 0])
-    elif name == 'FLUSH' and f.get('ok') == '1':
-        segs[-1][1] += 1; flushes += 1
-        if flushes % 10 == 0: show(f"FLUSH#{flushes}")
-    elif name == 'SEG_DROP':
-        d = segs.pop(0)
-        ok = d == [int(f['first']), int(f['count'])]
-        show('SEG_DROP' + ('' if ok else ' DIVERGE'))
-    elif name == 'SYNC_FREE':
-        for _ in range(int(f['segs'])): segs.pop(0)
-        show('SYNC_FREE')
-EOF
-```
-
-Uso: `python logs/contar_blocos.py logs/limite-caso3.log | tail -n 5`. Se aparecer `DIVERGE`, a captura começou fora de um wipe ou perdeu linhas (buraco em `n`).
-
-`logs/nus_at.py` envia um comando `AT#...` pelo BLE (NUS RX `6E400002-...`, resposta no NUS TX `6E400003-...`). **Os `AT#` não entram pela serial**: o firmware não lê a UART. Só funciona no env `*_open` (sem pareamento). Usa o `bleak` do env `tccelta`:
+- `tools/event-bench/contar_blocos.py` reconstrói os segmentos a partir de `SEG_NEW`, `FLUSH ok=1`, `SEG_DROP` e `SYNC_FREE` e imprime blocos, N (`BOOT log_max`) e usage. **Comece a captura logo depois de um wipe** (caso 9), senão o estado inicial é desconhecido. A captura pode seguir aberta através de vários boots. Sai com código 1 se algum `SEG_DROP` não bater com a contagem (`DIVERGE`): a captura começou fora de um wipe ou perdeu linhas (buraco em `n`).
+- `tools/sync-bench/nus_at.py` envia um comando `AT#...` pelo BLE (NUS RX `6E400002-...`, resposta no NUS TX `6E400003-...`). **Os `AT#` não entram pela serial**: o firmware não lê a UART. Só funciona no env `*_open` (sem pareamento). Usa o `bleak` do env `tccelta`.
 
 ```bash
-cat > logs/nus_at.py <<'EOF'
-import asyncio, sys
-from bleak import BleakClient, BleakScanner
-RX = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"; TX = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
-async def main(cmd):
-    dev = await BleakScanner.find_device_by_filter(lambda d, a: d.name == "TCCeltaDongle", timeout=15)
-    if dev is None: raise SystemExit("dongle não encontrado")
-    async with BleakClient(dev) as c:
-        await c.start_notify(TX, lambda _, d: print(d.decode(errors='replace'), end=''))
-        await c.write_gatt_char(RX, (cmd + "\r").encode(), response=False)
-        await asyncio.sleep(3)
-    print()
-asyncio.run(main(sys.argv[1]))
-EOF
+python tools/event-bench/contar_blocos.py logs/limite-caso3.log | tail -n 5
+python tools/sync-bench/nus_at.py 'AT#SYNC?'
 ```
 
-Uso: `python logs/nus_at.py 'AT#SYNC?'`. Deve aparecer `CMD txt="AT#SYNC?"` e `RESP ...` na serial. Ponha o comando **entre aspas** (simples ou duplas). Sem aspas, o bash trata o `#` como começo de comentário em alguns contextos e o `?` como curinga de arquivo.
+No `AT#SYNC?`, deve aparecer `CMD txt="AT#SYNC?"` e `RESP ...` na serial. Ponha o comando **entre aspas** (simples ou duplas). Sem aspas, o bash trata o `#` como começo de comentário em alguns contextos e o `?` como curinga de arquivo.
 
 ### 0.5 Ritmo de produção de blocos (estimativa, leia antes de planejar)
 
@@ -220,9 +176,9 @@ build_flags =
 **Passos.**
 1. `upload` do `collector_mock_debug_open`.
 2. Feche o monitor e inicie `capture.py --out logs/limite-caso3.log` (antes do wipe, para o boot de wipe ficar no arquivo).
-3. Wipe: `python logs/nus_at.py "AT#WIPE"` (a placa reinicia; alternativa: `COLLECTOR_WIPE_ON_BOOT`, caso 9).
+3. Wipe: `python tools/sync-bench/nus_at.py "AT#WIPE"` (a placa reinicia; alternativa: `COLLECTOR_WIPE_ON_BOOT`, caso 9).
 4. Espere ~22 min (ritmo padrão) até o primeiro `SEG_DROP`, e ~7 min por queda seguinte. Rode `contar_blocos.py` de vez em quando.
-5. Opcional, com `python logs/nus_at.py "AT#LIST"`: a última linha traz `LOST n`.
+5. Opcional, com `python tools/sync-bench/nus_at.py "AT#LIST"`: a última linha traz `LOST n`.
 
 **Esperado.**
 - `BOOT ... wiped=1 ... log_max=200 lost=0`; a contagem começa em 1 (o bloco BOOT).
@@ -249,7 +205,7 @@ build_flags =
 1. Parta de um log com ~140 blocos (continue o caso 3 após a 1ª queda, ou espere ~15 min após um wipe).
 2. Conecte a central de teste e **inscreva-se no SYNC_TX** (`7A3C0003-9B1E-4F2A-8C5D-2E6F1A0B3C4D`, notify) com um app BLE genérico (nRF Connect), ou rode `python tools/sync-bench/sync_bench.py --scenario handshake` e depois `--scenario stream --duration 120` (usa o `bleak` do env `tccelta`; usa as chaves fixas de bancada, que casam com os envs debug sem `secnvs` provisionada). Na serial: `SYNC_SUB on=1` e `SYNC_NOTICE ... reason=subscribe`.
 3. Acompanhe os `SYNC_NOTICE` e a contagem do script.
-4. Para ler o estado sem depender de aviso: `python logs/nus_at.py 'AT#SYNC?'` imprime `flags=XX` (mesmo campo).
+4. Para ler o estado sem depender de aviso: `python tools/sync-bench/nus_at.py 'AT#SYNC?'` imprime `flags=XX` (mesmo campo).
 5. Parte B (desligar por exclusão): com a flag ligada, `AT#SYNC?` (anote `head=`) e `AT#ACK <head>` (caso 8).
 
 **Esperado.**
@@ -330,8 +286,8 @@ build_flags =
 **Config.** `MAX_BLOCKS=200`, `collector_mock_debug_open`, log com 165-190 blocos (flag de flash ligada).
 
 **Passos (A: ACK injetado).**
-1. `python logs/nus_at.py 'AT#SYNC?'`. Resposta `SYNC conn=.. sub=.. open=.. ack=.. ... head=H tail=T ... flags=XX ...`. Anote `H`.
-2. `python logs/nus_at.py "AT#ACK <H>"`. `H` precisa estar em [`ack`, `head`], senão `HS_ACK result=bad_seq`.
+1. `python tools/sync-bench/nus_at.py 'AT#SYNC?'`. Resposta `SYNC conn=.. sub=.. open=.. ack=.. ... head=H tail=T ... flags=XX ...`. Anote `H`.
+2. `python tools/sync-bench/nus_at.py "AT#ACK <H>"`. `H` precisa estar em [`ack`, `head`], senão `HS_ACK result=bad_seq`.
 
 **Passos (B: sync completo).** `python tools/sync-bench/sync_bench.py --scenario stream --duration 120`: faz o handshake, lê os blocos (`SYNC_BLOCK`) e dá ACK a cada 10 s (`--tlat`). Imprime `ACK n`.
 
@@ -350,7 +306,7 @@ build_flags =
 **Objetivo.** Zerar log, contagem e usage.
 
 **Parte A: `AT#WIPE`** (qualquer momento, env `*_open`).
-1. `python logs/nus_at.py "AT#WIPE"` → `OK` e a placa reinicia (`requestWipe` grava `wipe_req` na NVS e dá `esp_restart`).
+1. `python tools/sync-bench/nus_at.py "AT#WIPE"` → `OK` e a placa reinicia (`requestWipe` grava `wipe_req` na NVS e dá `esp_restart`).
 2. No boot: `BOOT ... wiped=1 ... log_oldest=.. log_newest=.. lost=0 log_max=<mesmo N>`; `SEG_NEW first=<seq> reason=first` e `FLUSH kind=boot`; o seq reinicia e `boot` continua crescendo (config e `boot_id` preservados; valores exatos de `seq_next` não verifiquei).
 3. Contagem pelo script = 1; usage = 1000/N (5 com N=200).
 4. Um reset (EN) seguinte volta a `wiped=0`.
