@@ -86,7 +86,7 @@ services:
       "-c", "shared_preload_libraries=timescaledb",
       "-c", "max_connections=200", "-c", "log_min_duration_statement=500ms",
       "-c", "timescaledb.telemetry_level=off",
-      "-c", "hba_file=/etc/postgresql/pg_hba.conf",
+      "-c", "hba_file=/etc/postgresql/hba/pg_hba.conf",
       "-c", "ssl=on",
       "-c", "ssl_cert_file=/etc/postgresql/tls/server.pem",
       "-c", "ssl_key_file=/etc/postgresql/tls/server-key.pem",
@@ -96,7 +96,8 @@ services:
     volumes:
       - banco_dados:/home/postgres/pgdata
       - ./deploy/postgres/init/00-roles.sh:/docker-entrypoint-initdb.d/900-roles.sh:ro
-      - ./deploy/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      # pasta, nao arquivo: o Ansible grava trocando o inode, e um bind de arquivo unico ficaria com o antigo
+      - ./deploy/postgres/hba:/etc/postgresql/hba:ro
       - ./deploy/postgres/tls:/etc/postgresql/tls:ro
     # rede propria (nao internal) so para publicar a porta; Caddy e KMS nao entram nela
     ports: ["${BANCO_PUBLICO_IP:?defina o IP publico da VPS}:5432:5432"]

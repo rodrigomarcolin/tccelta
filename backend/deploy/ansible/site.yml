@@ -182,8 +182,10 @@
       no_log: true
       notify: recarregar pg_hba
 
-    - name: pg_hba.conf
-      ansible.builtin.template: { src: pg_hba.conf.j2, dest: "{{ app_dir }}/deploy/postgres/pg_hba.conf", owner: deploy, group: deploy, mode: "0644" }
+    - ansible.builtin.file: { path: "{{ app_dir }}/deploy/postgres/hba", state: directory, owner: deploy, group: deploy, mode: "0755" }
+
+    - name: pg_hba.conf (numa pasta montada inteira no contêiner)
+      ansible.builtin.template: { src: pg_hba.conf.j2, dest: "{{ app_dir }}/deploy/postgres/hba/pg_hba.conf", owner: deploy, group: deploy, mode: "0644" }
       notify: recarregar pg_hba
 
     # --- firewall da 5432 ---
