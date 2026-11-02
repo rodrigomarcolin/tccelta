@@ -131,6 +131,9 @@
     - name: Pasta de segredos
       ansible.builtin.file: { path: "{{ app_dir }}/deploy/segredos", state: directory, owner: deploy, group: deploy, mode: "0700" }
 
+    - name: Pasta saida (registros de dongles; os conteineres de provisionamento rodam como 65532)
+      ansible.builtin.file: { path: "{{ app_dir }}/saida", state: directory, owner: "65532", group: "65532", mode: "0750" }
+
     - name: Senhas geradas na VPS (uma vez; nunca sobrescritas)
       ansible.builtin.shell: umask 077 && openssl rand -hex 24 | tr -d '\n' > "{{ app_dir }}/deploy/segredos/{{ item }}"
       args: { creates: "{{ app_dir }}/deploy/segredos/{{ item }}" }
