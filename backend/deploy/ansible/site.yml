@@ -75,6 +75,7 @@
   tasks:
     - name: Pasta da aplicacao
       ansible.builtin.file: { path: "{{ app_dir }}", state: directory, owner: deploy, group: deploy, mode: "0755" }
+      tags: [codigo]
 
     - name: Codigo (sem segredos nem certificados; nenhuma credencial de git na VPS)
       become: false
