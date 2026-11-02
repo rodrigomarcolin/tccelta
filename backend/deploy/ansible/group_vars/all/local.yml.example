@@ -1,0 +1,12 @@
+# Copie para local.yml (nao versionado) e preencha. Obrigatorios: vps_ip, acme_email, dbeaver_ips.
+#   cp deploy/ansible/group_vars/all/local.yml.example deploy/ansible/group_vars/all/local.yml
+vps_ip: 203.0.113.10
+acme_email: voce@exemplo.com
+
+# IPs (CIDR) que podem usar o DBeaver: alimentam o firewall e o pg_hba.conf. Seu IP publico: https://api.ipify.org
+dbeaver_ips:
+  - 198.51.100.7/32
+
+# Etapa 2 (dominio): descomente e preencha.
+# dominio_api: api.seudominio
+# dominio_db: db.seudominio

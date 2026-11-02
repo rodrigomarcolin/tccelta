@@ -7,7 +7,7 @@ host     all       all                                                          
 # servicos do compose (rede interna `dados`); sem TLS, o trafego nao sai do host
 host     tccelta   tccelta_api,tccelta_worker,tccelta_owner,tccelta_provisioner      172.16.0.0/12    scram-sha-256
 
-# DBeaver: so TLS, so este papel, so estes IPs (dbeaver_ips em group_vars/all.yml)
+# DBeaver: so TLS, so este papel, so estes IPs (dbeaver_ips em group_vars/all/local.yml)
 {% for ip in dbeaver_ips %}
 hostssl  tccelta   dbeaver_ro                                                        {{ ip }}   scram-sha-256
 {% endfor %}

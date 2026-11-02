@@ -12,6 +12,16 @@
       - { nome: kms, cn: kms, uso: serverAuth, san: ["DNS:kms", "DNS:localhost", "IP:127.0.0.1"] }
       - { nome: api-cliente, cn: tccelta-api, uso: clientAuth, san: ["DNS:api"] }
   tasks:
+    - name: Valores locais preenchidos (group_vars/all/local.yml, a partir de local.yml.example)
+      ansible.builtin.assert:
+        that:
+          - vps_ip is defined and vps_ip != '203.0.113.10'
+          - acme_email is defined and acme_email != 'voce@exemplo.com'
+          - dbeaver_ips is defined and dbeaver_ips | length > 0 and '198.51.100.7/32' not in dbeaver_ips
+        fail_msg: "Crie deploy/ansible/group_vars/all/local.yml a partir de local.yml.example e preencha vps_ip, acme_email e dbeaver_ips."
+        quiet: true
+      tags: [always]
+
     - ansible.builtin.file: { path: "{{ pki }}", state: directory, mode: "0700" }
 
     - name: Chaves das duas CAs (KMS e banco) e do servidor Postgres

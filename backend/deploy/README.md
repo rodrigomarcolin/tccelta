@@ -12,8 +12,14 @@ são executados no Git Bash, na pasta `backend/`.
 
 ## Antes do primeiro `site.yml`
 
-1. Edite `deploy/ansible/group_vars/all.yml`: `vps_ip`, `acme_email`, `dbeaver_ips`. Na etapa 1 (só IP),
-   deixe `dominio_api` e `dominio_db` vazios.
+1. Crie `deploy/ansible/group_vars/all/local.yml` (não versionado) a partir do modelo e preencha `vps_ip`,
+   `acme_email` e `dbeaver_ips`. Na etapa 1 (só IP), não defina `dominio_api` nem `dominio_db`:
+
+   ```bash
+   cp deploy/ansible/group_vars/all/local.yml.example deploy/ansible/group_vars/all/local.yml
+   ```
+
+   O playbook para com uma mensagem se esses valores faltarem ou ainda forem os do modelo.
 2. Aponte a chave (o `run.sh` monta a privada e a `.pub` do mesmo caminho). Para valer na sessão toda:
 
    ```bash
