@@ -204,7 +204,7 @@ build_flags =
 
 **Passos.**
 1. Parta de um log com ~140 blocos (continue o caso 3 após a 1ª queda, ou espere ~15 min após um wipe).
-2. Conecte a central de teste e **inscreva-se no SYNC_TX** (`7A3C0003-9B1E-4F2A-8C5D-2E6F1A0B3C4D`, notify) com um app BLE genérico (nRF Connect), ou rode `python tools/sync-bench/sync_bench.py --scenario handshake` e depois `--scenario stream --duration 120` (usa o `bleak` do env `tccelta`; usa as chaves fixas de bancada, que casam com os envs debug sem `secnvs` provisionada). Na serial: `SYNC_SUB on=1` e `SYNC_NOTICE ... reason=subscribe`.
+2. Conecte a central de teste e **inscreva-se no SYNC_TX** (`7A3C0003-9B1E-4F2A-8C5D-2E6F1A0B3C4D`, notify) com um app BLE genérico (nRF Connect), ou rode um único comando, `python tools/sync-bench/sync_bench.py --scenario stream --tlat 99999 --duration 1800` (usa o `bleak` do env `tccelta` e as chaves fixas de bancada; com a `secnvs` provisionada, acrescente `--keys tools/provision/out/$DEV/bench_keys.json`). O `stream` já faz o handshake e fica conectado e inscrito; o `--tlat 99999` evita qualquer ACK, que apagaria segmentos e derrubaria a contagem. O bench não imprime os avisos: eles saem na serial do dongle. O cenário `handshake` sozinho não serve, porque desconecta em milissegundos. Na serial: `SYNC_SUB on=1` e `SYNC_NOTICE ... reason=subscribe`.
 3. Acompanhe os `SYNC_NOTICE` e a contagem do script.
 4. Para ler o estado sem depender de aviso: `python tools/sync-bench/nus_at.py 'AT#SYNC?'` imprime `flags=XX` (mesmo campo).
 5. Parte B (desligar por exclusão): com a flag ligada, `AT#SYNC?` (anote `head=`) e `AT#ACK <head>` (caso 8).
