@@ -50,6 +50,8 @@ class Log:
             if f.get("wiped") == "1":
                 # O log foi apagado neste boot: só valem os segmentos criados depois do FORMAT.
                 self.segs = [s for s in self.segs if any(s is x for x in self.this_boot)]
+                # O rótulo FLUSH#n recomeça junto: conta os blocos gravados desde o wipe (o BOOT é o 1º).
+                self.flushes = self.blocks()
             self.show("BOOT wiped=" + f.get("wiped", "?"))
         elif name == "FORMAT":  # primeiro evento de cada boot
             self.this_boot = []
