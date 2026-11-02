@@ -65,7 +65,7 @@ Cada ataque levantado recebe um identificador rastreável no formato AX.Y, e pos
 
 \subsection{Levantamento de Requisitos}
 
-Os requisitos foram levantados em duas frentes. Os requisitos funcionais foram definidos de modo a capturar o objetivo do sistema: permitir a leitura de códigos de erro (DTCs), a visualização de dados em tempo real, a coleta de leituras de PIDs, o armazenamento e envio de dados ao servidor, e a análise dos dados coletados. Por sua vez, os requisitos não funcionais foram definidos para contemplar a mitigação das ameaças priorizadas na modelagem e para objetivar um desempenho satisfatório, mesmo com as restrições do sistema.
+Os requisitos foram levantados em duas frentes. Os requisitos funcionais foram definidos de modo a capturar o objetivo do sistema: permitir a leitura de códigos de erro (DTCs), a visualização de dados em tempo real, a coleta de leituras de PIDs, o armazenamento e envio de dados ao servidor, e a análise dos dados coletados. Por sua vez, os requisitos não funcionais foram definidos para contemplar a mitigação das ameaças priorizadas na modelagem e para atingir um desempenho satisfatório, mesmo com as restrições do sistema.
 
 Cada requisito recebe um identificador rastreável, no formato RFXY caso seja funcional, ou RNFXY caso seja não funcional. O levantamento é exposto no \autoref{cap:requisitos}.
 
@@ -85,11 +85,11 @@ A codificação foi feita com auxílio de ferramentas de geração de código co
 
 \subsection{Teste e Validação}
 
-A validação acompanhou a implementação e contou com a estratégia de realismo crescente e com o uso extensivo de \textit{mocks}. O comportamento de coleta e upload do \textit{dongle} pôde ser testados de maneira isolada com a simulação do barramento CAN por meio do software. Já a montagem física dos componentes e a interação com o barramento CAN foram testadas com um emulador de ECU baseado em Arduino, que espelha dados recebidos do BeamNG.drive, um simulador de direção executado em um computador. 
+A validação acompanhou a implementação e contou com a estratégia de realismo crescente e com o uso extensivo de \textit{mocks}. O comportamento de coleta e upload do \textit{dongle} pôde ser testado de maneira isolada com a simulação do barramento CAN por meio do software. Já a montagem física dos componentes e a interação com o barramento CAN foram testadas com um emulador de ECU baseado em Arduino, que espelha dados recebidos do BeamNG.drive, um simulador de direção executado em um computador. 
 
 Os testes são funcionais, de desempenho e de segurança, e são definidos e associados aos requisitos que pretendem avaliar, além de receberem um identificador rastreável, utilizado para construir uma matriz de rastreabilidade. 
 
-Para as medições, o \textit{firmware} conta com um modo de depuração que permite a emissão, pela serial, de registros estruturados contendo o momento da ocorrência e o tipo e detalhes do evento (como sincronização, leitura de PID, bloco cheio, \textit{flush} de bloco na flash, upload de bloco, conexão, perda da conexão, entre outros). Isto permite analisar do desempenho e acompanhar a evolução do estado do \textit{dongle}, instante a instante. 
+Para as medições, o \textit{firmware} conta com um modo de depuração que permite a emissão, pela serial, de registros estruturados contendo o momento da ocorrência e o tipo e detalhes do evento (como sincronização, leitura de PID, bloco cheio, \textit{flush} de bloco na flash, upload de bloco, conexão, perda da conexão, entre outros). Isto permite analisar o desempenho e acompanhar a evolução do estado do \textit{dongle}, instante a instante. 
 
 Os testes elencados, o resultado das validações, e as matrizes de rastreabilidade são apresentados no \autoref{cap:validacaotestes}.
 

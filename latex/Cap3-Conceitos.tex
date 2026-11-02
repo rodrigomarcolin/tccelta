@@ -29,7 +29,7 @@ Com isso, estão dispostas todas as camadas que compõem o cenário do projeto, 
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.6\textwidth]{assets/cap2-conceitos/camadas.png}
+    \includegraphics[width=0.6\textwidth]{assets/cap3-conceitos/camadas.png}
     \caption{Camadas que compõem o cenário do projeto}
     \label{fig:camadas}
     \fonte{Os autores (2026)}
@@ -57,7 +57,7 @@ Um quadro de dados possui os campos listados abaixo e explicitados na imagem \au
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/quadro-dados.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/quadro-dados.png}
     \caption{Campos de um quadro de dados CAN.}
     \label{fig:sinalizacao-diferencial}
     \fonte{Adaptado de \cite{csselectronics_can_intro}}
@@ -80,7 +80,7 @@ Uma ECU conectada ao barramento consiste em 3 elementos principais: um microcont
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/diagrama-barramento-can.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/diagrama-barramento-can.png}
     \caption{Diagrama de um barramento CAN com ECUs}
     \label{fig:barramento-can}
     \fonte{Adaptado de \cite{Bozdal2020CAN}}
@@ -119,7 +119,7 @@ O OBD-II define um modelo requisição-resposta. Um equipamento de diagnóstico,
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/quadros-can-campos-obd2.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/quadros-can-campos-obd2.png}
     \caption{Campos CAN especificados pelo OBD-II}
     \fonte{Os Autores}
 \end{figure}
@@ -158,7 +158,7 @@ O protocolo ISO-TP, definido pela ISO 15765-2, permite transmitir mensagens que 
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/isotp-campos.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/isotp-campos.png}
     \caption{Tipos de Mensagem ISO-TP}
     \fonte{CSS Electronics}
     \label{fig:iso-tp-msg-kinds}
@@ -174,7 +174,7 @@ Uma requisição OBD-II sempre cabe em uma mensagem \textit{Single Frame}. Os 8 
 // TODO: ADAPTAR
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/obs2oncan.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/obs2oncan.png}
     \caption{Mensagem OBD-II no CAN}
     \fonte{CSS Electronics}
     \label{fig:mensagem-obd2-can}
@@ -184,7 +184,7 @@ O OBD-II define 10 serviços padronizados, também chamados de "modos". O servi�
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/example-obd2-req.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/example-obd2-req.png}
     \caption{Exemplo de Requisição OBD-II}
     \fonte{Adaptado de CSS Electronics}
     \label{fig:exemplo-obd2-req}
@@ -221,7 +221,7 @@ Com essas informações, é possível ter o seguinte entendimento da resposta na
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/example-obd2-resp.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/example-obd2-resp.png}
     \caption{Exemplo de Resposta OBD-II}
     \fonte{Adaptado de CSS Electronics}
     \label{fig:exemplo-obd2-resp}
@@ -241,7 +241,7 @@ Mas também pode ocorrer de uma resposta não caber em um único quadro, já que
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{assets/cap2-conceitos/isotp-single-ecu.png}
+    \includegraphics[width=0.8\textwidth]{assets/cap3-conceitos/isotp-single-ecu.png}
     \caption{Troca de quadros ISO-TP com uma ECU}
     \fonte{Elaborado pelo autor}
     \label{fig:isotp-seq}
@@ -254,7 +254,7 @@ Se mais de uma ECU responder, o cliente receberá mais de um \textit{First Frame
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{assets/cap2-conceitos/isotp-multi-ecu.png}
+    \includegraphics[width=0.8\textwidth]{assets/cap3-conceitos/isotp-multi-ecu.png}
     \caption{Troca de quadros ISO-TP com múltiplas ECUs}
     \fonte{Elaborado pelo autor}
     \label{fig:isotp-seq-multi}
@@ -350,6 +350,39 @@ RX & \texttt{6E400002-B5A3-F393-E0A9-E50E24DCCA9E} & \textit{Write} & cliente $\
 TX & \texttt{6E400003-B5A3-F393-E0A9-E50E24DCCA9E} & \textit{Notify} & dongle $\rightarrow$ cliente \\ \hline
 \end{tabular}
 \end{table}
+
+
+\subsection{BLE Secure Connections} 
+
+O LE Secure Connections (LESC) é um método de pareamento introduzido no Bluetooth 4.2 para substituir o esquema de chave temporária de baixa entropia no pareamento legado
+do BLE, que era facilmente quebrada por força bruta. Para isso, o LESC estabelece a chave do enlace com uma troca de chaves Diffie-Hellman em curva elíptica (ECDH)
+na curva P-256. Com essa chave de enlace, cada um dos aparelhos deriva uma chave de sessão com a qual o enlace é cifrado e autenticado usando AES-CCM, o que garante 
+confidencialidade e integridade na comunicação. Quando os dois aparelhos são pareados, ou seja, geram a chave de enlace válida, é feito o \textit{bonding}: a chave de sessão
+é salva em cada um dos aparelhos para futuras conexões, de modo que não seja necessário repetir o processo de pareamento.
+
+Esse pareamento é feito com um total de 3 fases. Na primeira fase, os aparelhos declaram suas capacidades e requisitos de autenticação como, por exemplo, se têm capacidade
+de entrada e saída e se suportam LESC. Trocadas as capacidades, os dispositivos decidem se continuam o pareamento e é escolhido um método de associação, os quais estão especificados
+na tabela \ref{lesc:metodos}, na qual considera-se implícita a pré-condição de que ambos os lados suportam LESC.
+
+
+\begin{table}[H] 	\label{lesc:metodos}
+	\centering
+	\caption{Métodos de associação do LESC}
+	\begin{tabular}{|>{\centering\arraybackslash}m{0.2\textwidth}|>{\raggedright\arraybackslash}m{0.25\textwidth}|>{\raggedright\arraybackslash}m{0.45\textwidth}|}
+		\hline
+		\textbf{Método} & \textbf{Pré-condição} & \textbf{Descrição} \\
+		\hline
+		Just Works & - & Não há autenticação do outro lado, apenas a troca de chaves ECDH. Vulnerável a MITM. \\
+		\hline
+		Numeric Comparison & Ambos têm display e entrada & Um número é gerado e exibido em ambos os lados, que devem confirmar se são iguais. \\
+		\hline
+		Passkey Entry & Um tem display e outro tem entrada & Um lado gera um número de 6 dígitos e o outro deve digitá-lo. \\
+		\hline
+		OOB \newline (Out of Band) & Canal seguro externo entre os dispositivos & Dados de autenticação são trocados por um canal seguro externo, como NFC. \\
+		\hline
+	\end{tabular}
+\end{table}
+
 
 \subsection{Implicações para o projeto}
 
