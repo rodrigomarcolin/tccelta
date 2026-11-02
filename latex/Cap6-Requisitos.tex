@@ -1,5 +1,291 @@
 \chapter{Levantamento de Requisitos} \label{cap:requisitos}
 
+% TODO: APONTAR PARA O "OBJETIVO", PRESENTE NA INTRODUÇÃO, COMO ALICERCE DOS REQUISITOS
+Este capítulo apresenta os requisitos definidos para o sistema de coleta de telemetria veicular desenvolvido neste trabalho, composto por três componentes: um \textit{dongle} OBD-II, um aplicativo móvel e um servidor. O \textit{dongle} é responsável pela aquisição, armazenamento e \textit{upload} dos dados do veículo; o aplicativo permite a interação com o usuário e realiza a intermediação da comunicação entre o \textit{dongle} e o servidor; e o servidor recebe, verifica, armazena e disponibiliza os dados coletados.
+
+O sistema contempla duas formas de utilização. No modo diagnóstico, o aplicativo permite consultar parâmetros e códigos de falha do veículo por meio do \textit{dongle}. No modo coletor, o \textit{dongle} adquire dados automaticamente, encaminhando-os ao servidor por intermédio do aplicativo.
+
+A definição dos requisitos se deu à luz dos objetivos a serem cumpridos pelo projeto (\autoref{sec:intro-objs}) e das preocupações de segurança identificadas na modelagem de ameaças do \autoref{cap:modelagemameacas}. Os requisitos são assim divididos em funcionais, que capturam os comportamentos esperados do sistema, e não funcionais, que abarcam propriedades e restrições que devem ser satisfeitas. Cada requisito receberá um identificador único, no formato RFXY, caso funcional, ou RNFXY, caso não funcional.
+
 \section{Requisitos Funcionais}
 
+Esta seção descreve as funcionalidades esperadas do sistema, agrupadas por fluxo de operação.
+
+\subsection{Diagnóstico e interação com o veículo}
+
+O sistema deve permitir que o usuário consulte informações disponibilizadas pelo veículo por meio da interface OBD-II, utilizando o aplicativo móvel como interface de interação.
+
+
+\begin{longtable}{p{0.11\textwidth}p{0.79\textwidth}}
+\caption{Requisitos funcionais de diagnóstico e interação com o veículo}
+\label{tab:rf-diagnostico}\\
+\hline
+\textbf{ID} & \textbf{Requisito} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{ID} & \textbf{Requisito} \\
+\hline
+\endhead
+
+RF01 & O sistema deve permitir a consulta de parâmetros
+padronizados do veículo por meio de requisições OBD-II sobre CAN. \\
+
+RF02 & O sistema deve permitir a leitura de códigos de
+diagnóstico de falhas (DTCs) disponibilizados pelo veículo. \\
+
+RF03 & O aplicativo deve permitir a visualização dos parâmetros
+consultados e dos resultados das operações de diagnóstico. \\
+
+RF04 & O sistema deve permitir a alternância entre os modos
+de operação Coletor e Diagnóstico. \\
+
+\hline
+\end{longtable}
+
+\subsection{Coleta e Armazenamento de Dados}
+
+Além das consultas ad-hoc realizadas pelo usuário no modo Diagnóstico, o sistema, no modo Coletor, deve realizar a aquisição automática de parâmetros veiculares previamente configurados. A coleta deve ocorrer independentemente da disponibilidade de conexão com o aplicativo ou o servidor.
+
+
+\begin{longtable}{p{0.11\textwidth}p{0.79\textwidth}}
+\caption{Requisitos funcionais de aquisição e armazenamento}
+\label{tab:rf-coleta}\\
+\hline
+\textbf{ID} & \textbf{Requisito} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{ID} & \textbf{Requisito} \\
+\hline
+\endhead
+
+RF05 & O sistema deve permitir a configuração do protocolo CAN,
+dos PIDs coletados, de seus períodos de aquisição e do prazo
+máximo de resposta das requisições. \\
+
+RF06 & No modo Coletor, o \textit{dongle} deve consultar automaticamente
+os PIDs configurados, registrando individualmente os valores
+obtidos e seus instantes relativos de aquisição. \\
+
+RF07 & O \textit{dongle} deve disponibilizar ao aplicativo os valores
+mais recentes dos PIDs coletados, sem exigir novas requisições
+ao barramento CAN. \\
+
+RF08 & O sistema deve permitir o recebimento e o registro de
+informações de localização fornecidas pelo aplicativo móvel. \\
+
+RF09 & O \textit{dongle} deve armazenar os dados coletados em memória
+não volátil, permitindo sua posterior transmissão ao servidor. \\
+
+RF10 & O \textit{dongle} deve organizar os registros em blocos
+identificados sequencialmente, preservando as informações
+necessárias à recuperação da ordem e da referência temporal
+das leituras. \\
+
+\hline
+\end{longtable}
+
+
+\subsection{Comunicação e Sincronização}
+
+A transmissão de telemetria para o servidor depende da comunicação entre os três componentes. O aplicativo atua como intermediário, enquanto o \textit{dongle} e o servidor mantêm os mecanismos necessários para autenticar mensagens e controlar o progresso da sincronização.
+
+
+\begin{longtable}{p{0.11\textwidth}p{0.79\textwidth}}
+\caption{Requisitos funcionais de comunicação e sincronização}
+\label{tab:rf-sincronizacao}\\
+\hline
+\textbf{ID} & \textbf{Requisito} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{ID} & \textbf{Requisito} \\
+\hline
+\endhead
+
+RF11 & O sistema deve permitir a comunicação entre \textit{dongle} e
+aplicativo por Bluetooth Low Energy (BLE), contemplando
+comandos de diagnóstico, configuração e transferência
+de dados. \\
+
+RF12 & O aplicativo deve encaminhar ao servidor os blocos
+coletados pelo \textit{dongle} e retransmitir os blocos pendentes
+em caso de falha de comunicação. \\
+
+RF13 & O sistema deve permitir a autenticação e a sincronização
+entre \textit{dongle} e servidor mediante a troca de mensagens
+intermediadas pelo aplicativo. \\
+
+RF14 & O servidor deve verificar os blocos recebidos e emitir
+confirmações autenticadas dos dados aceitos. \\
+
+RF15 & O \textit{dongle} deve manter os blocos ainda não confirmados
+pelo servidor e permitir a retomada de seu envio após
+interrupções de conectividade. \\
+
+RF16 & O sistema deve identificar e registrar perdas de blocos
+decorrentes de reinicializações, corrupção de dados ou
+esgotamento do armazenamento local. \\
+
+RF17 & O sistema deve permitir a obtenção de referências
+temporais entre o \textit{dongle} e o servidor, possibilitando
+estimar os horários das leituras coletadas. \\
+
+\hline
+\end{longtable}
+
+
+\subsection{Processamento e Consulta de Dados}
+
+Após receber os dados, o servidor deve manter os registros necessários à verificação das informações recebidas e disponibilizar os dados de telemetria para análise.
+
+
+\begin{longtable}{p{0.11\textwidth}p{0.79\textwidth}}
+\caption{Requisitos funcionais de processamento e consulta}
+\label{tab:rf-processamento}\\
+\hline
+\textbf{ID} & \textbf{Requisito} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{ID} & \textbf{Requisito} \\
+\hline
+\endhead
+
+RF18 & O servidor deve armazenar os blocos recebidos em seu
+formato original e manter as informações necessárias ao
+acompanhamento do estado de cada \textit{dongle}. \\
+
+RF19 & O servidor deve decodificar as leituras recebidas
+e disponibilizar os dados de telemetria e localização
+para consulta e análise. \\
+
+\hline
+\end{longtable}
+
+
 \section{Requisitos Não Funcionais}
+
+Esta seção descreve as propriedades esperadas do sistema nos quesitos de segurança, de confiabilidade e de desempenho. 
+
+\subsection{Segurança}
+
+A principal preocupação de segurança é impedir que o aplicativo intermediário consiga produzir ou modificar registros aceitos como autênticos pelo servidor, alterar sua ordem ou ocultar silenciosamente dados.
+
+
+\begin{longtable}{
+    p{0.10\textwidth}
+    p{0.64\textwidth}
+    p{0.16\textwidth}
+}
+\caption{Requisitos não funcionais de segurança}
+\label{tab:rnf-seguranca}\\
+\hline
+\textbf{ID} & \textbf{Requisito} & \textbf{Ameaças} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{ID} & \textbf{Requisito} & \textbf{Ameaças} \\
+\hline
+\endhead
+
+RNF01 & O servidor deve verificar criptograficamente a origem
+dos blocos de telemetria, aceitando apenas aqueles autenticados
+pelo \textit{dongle} correspondente. & A3.3 \\
+
+RNF02 & Alterações no conteúdo autenticado de um bloco devem
+ser detectadas, impedindo sua aceitação pelo servidor.
+& A3.3 \\
+
+RNF03 & A retransmissão de blocos já aceitos não deve produzir
+duplicação dos registros armazenados. & A3.4 \\
+
+RNF04 & O servidor deve preservar a ordem de geração dos
+blocos, impedindo que sua transmissão fora de ordem altere
+a sequência dos registros aceitos. & A3.5 \\
+
+RNF05 & O sistema deve permitir detectar lacunas na sequência
+conhecida de blocos e reconhecer perdas declaradas pelo \textit{dongle},
+sem depender da confiabilidade do aplicativo.
+& A3.2, A3.6, A3.7 \\
+
+RNF06 & As mensagens de controle entre \textit{dongle} e servidor
+devem ter autenticidade e proteção contra reutilização
+indevida de desafios e confirmações anteriores.
+& A1.2, A3.2 \\
+
+RNF07 & A comunicação entre \textit{dongle} e aplicativo deve utilizar
+LE Secure Connections, com mecanismos de pareamento
+e restrição de acesso ao dispositivo.
+& A1.1, A1.2, A1.4 \\
+
+RNF08 & A comunicação entre aplicativo e servidor deve
+utilizar HTTPS/TLS.
+& AD4 \\
+
+RNF09 & O \textit{dongle} deve utilizar mecanismos de proteção das
+credenciais criptográficas armazenadas e de verificação
+da integridade do firmware.
+& P1, P3 \\
+
+\hline
+\end{longtable}
+
+
+\subsection{Confiabilidade e Desempenho}
+
+A operação do sistema está sujeita à indisponibilidade de conexão, à capacidade limitada de armazenamento e à variação do tempo de resposta das ECUs. 
+
+\begin{longtable}{p{0.11\textwidth}p{0.79\textwidth}}
+\caption{Requisitos não funcionais de confiabilidade e desempenho}
+\label{tab:rnf-desempenho}\\
+\hline
+\textbf{ID} & \textbf{Requisito} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{ID} & \textbf{Requisito} \\
+\hline
+\endhead
+
+RNF10 & A aquisição e o armazenamento local da telemetria
+devem continuar durante a indisponibilidade do aplicativo
+ou do servidor, enquanto o \textit{dongle} estiver operacional
+e houver capacidade de armazenamento. \\
+
+RNF11 & A retomada da sincronização após falhas de comunicação
+ou reinicializações não deve comprometer a consistência
+dos registros anteriormente confirmados pelo servidor. \\
+
+RNF12 & As configurações de aquisição devem respeitar o
+limite de utilização de 80\% do canal de requisições,
+calculado a partir dos períodos dos PIDs e do prazo
+máximo de resposta configurado. \\
+
+RNF13 & Os registros devem preservar a ordem e os intervalos
+temporais relativos das leituras dentro de cada inicialização
+do \textit{dongle}, mesmo na ausência de uma referência confiável
+de tempo absoluto. \\
+
+RNF14 & O aplicativo deve permitir configurar o intervalo
+de espera para envio dos blocos ao servidor, possibilitando
+ajustar a latência de disponibilização da telemetria. \\
+
+\hline
+\end{longtable}
+
+
+\subsection{Limitações}
+
+Os requisitos não funcionais possuem, como condição de validade, as premissas da modelagem de ameaças (\autoref{sec:premissas}). 
+
+\section{Verificação dos Requisitos}
+
+O atendimento aos requisitos será examinado no \autoref{cap:validacaotestes} por meio de testes funcionais, de desempenho e de segurança. Matrizes de rastreabilidade relacionarão os identificadores aos mecanismos implementados e aos testes executados.
