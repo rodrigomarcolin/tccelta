@@ -35,12 +35,10 @@ Limiares do aviso de flash (`usage` = `blocos*1000/N`, divisão inteira):
 
 ### 0.3 Ferramentas e comandos
 
-Abra o Git Bash e prepare a sessão. O `pio` não está no PATH por padrão. Repita estes comandos a cada janela nova, ou ponha no `~/.bashrc`:
+Abra o Git Bash e prepare a sessão (o `pio` já está no PATH). Repita estes comandos a cada janela nova, ou ponha no `~/.bashrc`:
 
 ```bash
 cd ~/Projects/tccelta/tccelta/esp32-firmware        # todos os caminhos do roteiro partem daqui
-PIO_EXE="$HOME/.platformio/penv/Scripts/pio.exe"
-pio() { "$PIO_EXE" "$@"; }
 export PYTHONUTF8=1                                  # acentos certos na saída dos scripts Python
 conda activate tccelta                               # Python 3.13 com pyserial e bleak
 ```
@@ -64,7 +62,7 @@ Comandos (substitua `<env>`):
 
 ```bash
 pio run -e <env> -t upload                   # compila e grava o firmware (não mexe na partição LittleFS)
-winpty "$PIO_EXE" device monitor -e <env>    # serial a 921600 baud nos envs *_debug; sai com Ctrl+C
+winpty pio device monitor -e <env>    # serial a 921600 baud nos envs *_debug; sai com Ctrl+C
 ```
 
 O monitor do PlatformIO precisa de um console de verdade. No mintty do Git Bash, sem o `winpty`, ele pode não receber as teclas nem o Ctrl+C. Se o seu Git Bash usa o pseudo-console do Windows (opção "Enable experimental support for pseudo consoles" na instalação), `pio device monitor -e <env>` funciona direto.
@@ -190,7 +188,7 @@ done
 **Config.** `platformio_local.ini` só com a porta (sem `[block_log]`): margem 10%, sem `MAX_BLOCKS`.
 
 **Passos.**
-1. `pio run -e collector_mock_debug_open -t upload`, depois `winpty "$PIO_EXE" device monitor -e collector_mock_debug_open`.
+1. `pio run -e collector_mock_debug_open -t upload`, depois `winpty pio device monitor -e collector_mock_debug_open`.
 2. Ache a linha `BOOT` (aparece depois de `FORMAT`, `KEYS`, `MARKER`, `SEG_NEW`, `FLUSH kind=boot`).
 3. Repita com `collector_mock_debug_none` e `collector_mock_debug_asym`.
 
