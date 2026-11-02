@@ -60,6 +60,22 @@ Comandos aceitos no prompt:
         captura.
         Ex.: ENGINE_LOAD=40;COOLANT_TEMP=95;RPM=2500;SPEED=60;INTAKE_AIR_TEMP=30;THROTTLE=25;FREEZE=P0301
 
+    LAT.ALL=baseline[:modo:a[:b]]
+        Latência de resposta (ms) padrão, valendo para todos os PIDs sem
+        override (e para os serviços que não são Mode 01). Latência =
+        baseline + offset aleatório. Modos: F (fixo, padrão), U:min:max
+        (uniforme), N:média:desvio (normal, truncada em >=0), E:média
+        (exponencial). Todos os valores em ms (0-65535).
+        Ex.: LAT.ALL=20  |  LAT.ALL=20:U:0:10  |  LAT.ALL=15:N:5:2  |  LAT.ALL=10:E:8
+
+    LAT.NOME=baseline[:modo:a[:b]]
+        Override de latência para um PID (nome como em "list"; até 16
+        overrides). Em requisições Mode 01 com vários PIDs vale o máximo.
+        Ex.: LAT.RPM=50:E:10
+
+    LAT.CLEAR=NOME|ALL
+        Remove o override de um PID, ou (ALL) zera o padrão e todos os overrides.
+
     list
         Lista todos os PIDs suportados, o catálogo de DTCs conhecidos e os
         PIDs capturados no freeze frame.
@@ -246,6 +262,64 @@ def resolve_dtc_command(name, value):
 DTC_COMMAND_NAMES = ("DTC", "DTC.CLEAR", "DTC.CLEARALL", "MIL", "FREEZE")
 
 
+# ── Canal de latência (LatencyControl.ino) ────────────────────────────────────
+# Mensagem de 16 caracteres + LF (LATENCY_SERIAL_MSG_LENGTH = 17):
+#   Y M PP BBBB AAAA CCCC   M=F/U/N/E (define) ou C (limpa), PP=PID hex ou FF
+#   (padrão), BBBB=baseline ms, AAAA/CCCC=parâmetros da distribuição (hex, ms)
+
+LATENCY_MODES = ("F", "U", "N", "E")
+LATENCY_PID_DEFAULT = 0xFF
+
+
+def build_latency_payload(mode, pid, base=0, a=0, b=0):
+    return "Y{}{:02X}{:04X}{:04X}{:04X}".format(mode, pid, base, a, b)
+
+
+def _latency_int(text):
+    value = int(text.strip())
+    if not 0 <= value <= 65535:
+        raise ValueError(f"valor {value} fora da faixa 0-65535 ms")
+    return value
+
+
+def resolve_latency_command(name, value):
+    """Trata LAT.ALL=, LAT.<PID>= e LAT.CLEAR=. Retorna lista de payloads ou None."""
+    target = name[len("LAT."):]
+    try:
+        if target == "CLEAR":
+            token = value.strip().upper()
+            if token == "ALL":
+                return [build_latency_payload("C", LATENCY_PID_DEFAULT)]
+            if token not in PIDS:
+                raise ValueError(f"PID desconhecido '{token}'")
+            return [build_latency_payload("C", PIDS[token][0])]
+
+        if target == "ALL":
+            pid = LATENCY_PID_DEFAULT
+        elif target in PIDS:
+            pid = PIDS[target][0]
+        else:
+            raise ValueError(f"PID desconhecido '{target}'")
+
+        parts = value.split(":")
+        base = _latency_int(parts[0])
+        mode = parts[1].strip().upper() if len(parts) > 1 else "F"
+        if mode not in LATENCY_MODES:
+            raise ValueError(f"modo '{mode}' inválido (use F, U, N ou E)")
+        a = _latency_int(parts[2]) if len(parts) > 2 else 0
+        b = _latency_int(parts[3]) if len(parts) > 3 else 0
+        if mode in ("U", "N") and len(parts) < 4:
+            raise ValueError("modos U e N exigem dois parâmetros (U:min:max, N:média:desvio)")
+        if mode == "E" and len(parts) < 3:
+            raise ValueError("modo E exige a média (E:média)")
+        if mode == "U" and a > b:
+            raise ValueError("modo U exige min <= max")
+        return [build_latency_payload(mode, pid, base, a, b)]
+    except (ValueError, IndexError) as e:
+        print(f"Comando {name} inválido: {e}")
+        return None
+
+
 def resolve_payload(line):
     """Converte um comando digitado numa lista de payloads a enviar (sem LF —
     quem chama adiciona), ou None se não reconhecido/erro (já reportado).
@@ -258,6 +332,9 @@ def resolve_payload(line):
 
         if name in DTC_COMMAND_NAMES:
             return resolve_dtc_command(name, value)
+
+        if name.startswith("LAT."):
+            return resolve_latency_command(name, value)
 
         if name not in PIDS:
             print(
@@ -315,6 +392,9 @@ def main():
                 print("  DTC.CLEARALL=[ECU[:LISTA|ALL]]  ex.: DTC.CLEARALL=T:ALL")
                 print("  MIL=ON|OFF[:ECU]        ex.: MIL=ON  |  MIL=OFF:T")
                 print("  FREEZE=codigo[:ECU]     ex.: FREEZE=P0301 (usa os PIDs já setados)")
+                print("  LAT.ALL=base[:modo:a[:b]]   latência padrão (ms): LAT.ALL=20:U:0:10 | 15:N:5:2 | 10:E:8")
+                print("  LAT.NOME=base[:modo:a[:b]]  override por PID: LAT.RPM=50:E:10")
+                print("  LAT.CLEAR=NOME|ALL      remove override / zera tudo")
                 print("  list                    lista PIDs, catálogo de DTCs e PIDs do freeze frame")
                 print("  close                   fecha a porta serial e encerra")
                 continue

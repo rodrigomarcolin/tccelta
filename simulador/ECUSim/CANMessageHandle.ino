@@ -2,6 +2,7 @@
 #include "PIDMessageBuilder.h"
 #include "OBDDispatcher.h"
 #include "AVRFreeRAM.h"
+#include "LatencyControl.h"
 
 IsoTp isotp(&CAN, 0);
 
@@ -13,6 +14,8 @@ struct EcuConfig_t
   unsigned long responseId;
   EcuState_t*   state;
 };
+
+static unsigned long canRxTimeMs = 0; // millis() when the current request was read
 
 constexpr uint8_t ECU_COUNT = 2;
 EcuConfig_t ECU_CONFIGS[ECU_COUNT] =
@@ -95,9 +98,7 @@ void handleCANMessage()
     }
   }
 
-  // Wait time
-  if(ECU_WAIT > 0)
-    delay(ECU_WAIT);
+  canRxTimeMs = millis();
 
   // Match the request against every simulated ECU (0x7DF is a functional broadcast: all ECUs answer).
   bool matchedAnyEcu = false;
@@ -159,6 +160,12 @@ void respondToObdRequest(const EcuConfig_t& ecuConfig, const byte* receivedCANBu
       Serial.println(F("ERROR: CAN query PID is not supported."));
     return;
   }
+
+  // Simulated ECU latency, counted from the request reception. Keeps serving the
+  // serial port meanwhile so the 64 B RX buffer does not overflow.
+  const uint16_t latencyMs = computeResponseLatencyMs(&receivedCANBuf[1], queryMessageLength);
+  while (millis() - canRxTimeMs < latencyMs)
+    pollSerial();
 
   // Send CAN return message.
   struct Message_t txMsg;
