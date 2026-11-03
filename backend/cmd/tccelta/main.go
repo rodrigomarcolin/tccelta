@@ -27,6 +27,7 @@ uso: tccelta <subcomando> [opções]
   migrate [up|down-to N|status] migrations
   provision register --file record.json  cadastra no banco um dongle provisionado pelo KMS
   simulator                    dongles virtuais e cenários
+  visitantes                   contador de visitantes do site (em memória)
   health --url <url>           healthcheck (sai 0/1)
 `
 
@@ -50,6 +51,8 @@ func main() {
 		err = cmdProvision(ctx, args)
 	case "simulator":
 		err = cmdSimulator(ctx, args)
+	case "visitantes":
+		err = cmdVisitantes(ctx)
 	case "health":
 		err = cmdHealth(args)
 	case "help", "-h", "--help":

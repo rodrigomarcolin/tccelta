@@ -68,6 +68,8 @@ services:
     profiles: !reset []
     volumes:
       - ./deploy/caddy/${CADDYFILE:-Caddyfile.prod}:/etc/caddy/Caddyfile:ro
+      # site estatico servido na raiz, fora da arvore do backend (o Ansible copia tccelta-site/ para ca)
+      - /opt/tccelta-site:/srv/site:ro
       - caddy_dados:/data
     ports: !override
       - "80:80"
@@ -78,6 +80,13 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:?defina o e-mail do Let's Encrypt}
       # faixas da Cloudflare (modo cloudflare_proxy; o Ansible preenche no .env). Vazio nos demais modos.
       CF_IPS: ${CF_IPS:-}
+
+  visitantes:
+    restart: unless-stopped
+    profiles: !reset []
+    environment:
+      # contagem na hora da migracao para volume (so vale ate o arquivo existir)
+      VISITANTES_INICIAL: ${VISITANTES_INICIAL:-14}
 
   # --- Banco: acesso externo SO pelo DBeaver (TLS + hba + firewall) ---
   redis:

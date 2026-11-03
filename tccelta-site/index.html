@@ -4,12 +4,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>tccelta</title>
+  <title>TCCelta | Site Oficial</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Comic+Neue:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap" rel="stylesheet">
   <style>
     body {
       margin: 0;
       padding: 24px 16px;
-      font-family: "Comic Sans MS", "Comic Sans", "Chalkboard SE", "Comic Neue", cursive;
+      font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", "Chalkboard SE", cursive;
       color: #000080;
       background-color: #00ffff;
       background-image:
@@ -50,7 +54,7 @@
     h1 {
       margin: 0;
       font-size: 72px;
-      font-family: Impact, "Comic Sans MS", sans-serif;
+      font-family: Impact, "Comic Neue", "Comic Sans MS", sans-serif;
       letter-spacing: 4px;
       text-shadow: 4px 4px 0 #000;
       animation: girar 0.7s linear infinite, arcoiris 0.4s steps(1) infinite;
@@ -469,7 +473,7 @@
       Esse sistema <span class="grita">existe</span> graças ao <span class="destaque d3">TCCELTA</span>!
 
     </p>
-    
+
     <hr>
 
     <h2 id="o-que-faz">O que faz</h2>
@@ -497,7 +501,7 @@
 
     <hr>
 
-    <p>Você é o visitante nº <span class="contador">000427</span></p>
+    <p>Você é o visitante nº <span class="contador">000000</span></p>
 
     <p class="rodape">
       Escola Politécnica da USP · 2026<br>
@@ -508,6 +512,22 @@
 
 
   </div>
+  <script>
+    // Contador de visitantes: conta uma vez por navegador (localStorage); nas demais visitas so le o total.
+    (function () {
+      var el = document.querySelector('.contador');
+      if (!el) return;
+      var jaContou = false;
+      try { jaContou = !!localStorage.getItem('tccelta_visitou'); } catch (e) { }
+      fetch('/api/visitantes', { method: jaContou ? 'GET' : 'POST' })
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (d) {
+          el.textContent = String(d.total).padStart(6, '0');
+          if (!jaContou) { try { localStorage.setItem('tccelta_visitou', '1'); } catch (e) { } }
+        })
+        .catch(function () { });
+    })();
+  </script>
 </body>
 
 </html>

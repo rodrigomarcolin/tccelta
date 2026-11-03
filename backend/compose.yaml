@@ -161,6 +161,23 @@ services:
     stop_grace_period: 30s
     networks: [dados]
 
+  # Contador de visitantes do site: em memoria, SEMPRE uma unica instancia (nao ha replicas aqui).
+  visitantes:
+    <<: *backend
+    command: ["visitantes"]
+    environment:
+      # valor de partida; so vale enquanto nao existe o arquivo no volume (depois dele, o arquivo manda)
+      VISITANTES_INICIAL: ${VISITANTES_INICIAL:-0}
+      VISITANTES_ARQUIVO: /dados/total
+    volumes: [visitantes_dados:/dados]
+    healthcheck:
+      test: ["CMD", "/tccelta", "health", "--url", "http://127.0.0.1:8082/saude/viva"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks: [borda]
+    profiles: [tls, tunel]
+
   redis:
     image: redis:7.4-alpine
     command: ["/bin/sh", "-c",
@@ -185,9 +202,10 @@ services:
       CADDY_TLS: ${CADDY_TLS:-internal}
     volumes:
       - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../tccelta-site:/srv/site:ro
       - caddy_dados:/data
     ports: ["${API_PORTA_TLS:-8443}:8443"]
-    depends_on: { api: { condition: service_healthy } }
+    depends_on: { api: { condition: service_healthy }, visitantes: { condition: service_healthy } }
     networks: [borda]
 
   cloudflared:
@@ -307,5 +325,6 @@ volumes:
   vault_approle_rotacao: {}
   vault_auditoria: {}
   caddy_dados: {}
+  visitantes_dados: {}
   prometheus_dados: {}
   grafana_dados: {}
