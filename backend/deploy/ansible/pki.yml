@@ -23,24 +23,15 @@
         quiet: true
       tags: [always]
 
-    - name: Certificado de origem da Cloudflare (so se cloudflare_proxy)
-      ansible.builtin.stat: { path: "{{ pki }}/{{ item }}" }
-      loop: [cloudflare-origin.pem, cloudflare-origin-key.pem]
-      register: cf_origem
-      when: cloudflare_proxy | bool
-      tags: [always]
-
-    - name: Modo proxy da Cloudflare exige dominios distintos e o certificado de origem
+    - name: Modo proxy da Cloudflare exige dominios distintos
       ansible.builtin.assert:
         that:
           - dominio_api | default('', true) | length > 0
           - dominio_db | default('', true) | length > 0
           - dominio_db != dominio_api
-          - cf_origem.results | map(attribute='stat.exists') | min
         fail_msg: >-
-          cloudflare_proxy: true precisa de dominio_api e dominio_db DIFERENTES (o banco fica fora do proxy)
-          e dos arquivos .pki-local/cloudflare-origin.pem e cloudflare-origin-key.pem
-          (Cloudflare > SSL/TLS > Origin Server > Create Certificate). Veja deploy/README.md.
+          cloudflare_proxy: true precisa de dominio_api e dominio_db DIFERENTES: o banco (porta 5432) fica
+          em um nome sem proxy. Veja deploy/README.md, "Proxy da Cloudflare".
         quiet: true
       when: cloudflare_proxy | bool
       tags: [always]

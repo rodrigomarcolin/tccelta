@@ -68,8 +68,6 @@ services:
     profiles: !reset []
     volumes:
       - ./deploy/caddy/${CADDYFILE:-Caddyfile.prod}:/etc/caddy/Caddyfile:ro
-      # pasta (nao arquivo, pelo mesmo motivo do pg_hba): certificado de origem da Cloudflare, so no modo proxy
-      - ./deploy/caddy/certs:/etc/caddy/certs:ro
       - caddy_dados:/data
     ports: !override
       - "80:80"
@@ -78,6 +76,8 @@ services:
     environment:
       API_HOST: ${API_HOST:?defina o dominio da API}
       ACME_EMAIL: ${ACME_EMAIL:?defina o e-mail do Let's Encrypt}
+      # faixas da Cloudflare (modo cloudflare_proxy; o Ansible preenche no .env). Vazio nos demais modos.
+      CF_IPS: ${CF_IPS:-}
 
   # --- Banco: acesso externo SO pelo DBeaver (TLS + hba + firewall) ---
   redis:

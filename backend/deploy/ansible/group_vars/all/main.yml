@@ -8,9 +8,10 @@ api_replicas: 2
 dominio_api: "tccelta.malcong.com.br"
 dominio_db: "tccelta.malcong.com.br"
 
-# Proxy da Cloudflare (nuvem laranja) no nome da API. false = DNS apenas (Caddyfile.prod, Let's Encrypt).
-# true exige: dominio_db DIFERENTE de dominio_api (o banco, na 5432, so funciona sem proxy) e o
-# certificado de origem da Cloudflare em .pki-local/ (ver deploy/README.md, "Proxy da Cloudflare").
+# Proxy da Cloudflare (nuvem laranja) no nome da API. false = DNS apenas (Caddyfile.prod).
+# true usa o Caddyfile.cloudflare (mesmo Let's Encrypt, mais a restauracao do IP do cliente) e exige
+# dominio_db DIFERENTE de dominio_api: o banco (porta 5432) so funciona em um nome sem proxy.
+# Ver deploy/README.md, "Proxy da Cloudflare".
 cloudflare_proxy: false
 
 # Derivados: sem dominio, o Caddy usa o IP e um certificado interno (Caddyfile.teste).

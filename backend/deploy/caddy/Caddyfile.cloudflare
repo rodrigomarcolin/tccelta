@@ -1,18 +1,18 @@
 {
 	admin off
+	email {$ACME_EMAIL}
 	servers {
 		protocols h1 h2
-		# So confia nos cabecalhos de IP de quem vem da Cloudflare (faixas de https://www.cloudflare.com/ips).
-		# Qualquer outra origem tem o CF-Connecting-IP ignorado, entao ninguem forja o IP do cliente.
-		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		# Faixas da Cloudflare (https://www.cloudflare.com/ips): o Ansible as baixa a cada deploy e grava em CF_IPS.
+		# So conexoes vindas delas tem o CF-Connecting-IP aceito; de qualquer outra origem ele e ignorado.
+		trusted_proxies static {$CF_IPS}
 		client_ip_headers CF-Connecting-IP
 	}
 }
 
-# Atras do proxy da Cloudflare (modo SSL "Full (strict)"): o certificado e o de origem da Cloudflare,
-# gravado em deploy/caddy/certs/ pelo Ansible. Nao ha pedido ao Let's Encrypt.
+# Atras do proxy da Cloudflare (modo SSL "Full (strict)"). O certificado e o do Let's Encrypt, como no
+# Caddyfile.prod; a Cloudflare aceita um certificado publico valido na origem.
 {$API_HOST} {
-	tls /etc/caddy/certs/cloudflare-origin.pem /etc/caddy/certs/cloudflare-origin-key.pem
 	encode zstd gzip
 	request_body {
 		max_size 64KB

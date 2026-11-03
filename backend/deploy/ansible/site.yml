@@ -117,6 +117,34 @@
         - { k: ACME_EMAIL, v: "{{ acme_email }}" }
         - { k: BANCO_PUBLICO_IP, v: "{{ vps_ip }}" }
 
+    # Modo proxy da Cloudflare: o Caddy so confia no CF-Connecting-IP vindo destas faixas (Caddyfile.cloudflare).
+    # Baixadas a cada execucao, entao nao ha lista fixa para ficar velha. Se o download falhar, o play falha.
+    - name: Faixas de IP da Cloudflare no .env (so se cloudflare_proxy)
+      when: cloudflare_proxy | bool
+      vars:
+        cf_lista: "{{ (cf_faixas.results | map(attribute='content') | join('\n')).split() }}"
+      block:
+        - name: Baixa as faixas oficiais (IPv4 e IPv6)
+          ansible.builtin.uri:
+            url: "https://www.cloudflare.com/{{ item }}"
+            return_content: true
+          loop: [ips-v4, ips-v6]
+          register: cf_faixas
+          changed_when: false
+
+        - name: Confere que tudo e CIDR (nada alem disso entra no .env)
+          ansible.builtin.assert:
+            that:
+              - cf_lista | length > 0
+              - cf_lista | reject('match', '^[0-9a-fA-F:.]+/[0-9]{1,3}$') | list | length == 0
+            quiet: true
+
+        - name: CF_IPS no .env
+          ansible.builtin.lineinfile:
+            path: "{{ app_dir }}/.env"
+            regexp: '^CF_IPS='
+            line: "CF_IPS={{ cf_lista | join(' ') }}"
+
     - name: Pasta de segredos
       ansible.builtin.file: { path: "{{ app_dir }}/deploy/segredos", state: directory, owner: deploy, group: deploy, mode: "0700" }
 
@@ -163,23 +191,6 @@
         - { dir: api, src: api-cliente.pem }
         - { dir: api, src: api-cliente-key.pem, owner: "65532", mode: "0600" }
       loop_control: { label: "{{ item.dir }}/{{ item.src }}" }
-      no_log: true
-
-    # Pasta montada no Caddy (compose.prod.yaml). Existe sempre; so tem arquivos no modo proxy da Cloudflare.
-    - ansible.builtin.file: { path: "{{ app_dir }}/deploy/caddy/certs", state: directory, owner: deploy, group: deploy, mode: "0755" }
-
-    - name: Certificado de origem da Cloudflare para o Caddy (so se cloudflare_proxy)
-      ansible.builtin.copy:
-        src: "{{ pki }}/{{ item.src }}"
-        dest: "{{ app_dir }}/deploy/caddy/certs/{{ item.src }}"
-        owner: deploy
-        group: deploy
-        mode: "{{ item.mode }}"
-      loop:
-        - { src: cloudflare-origin.pem, mode: "0644" }
-        - { src: cloudflare-origin-key.pem, mode: "0600" }
-      loop_control: { label: "{{ item.src }}" }
-      when: cloudflare_proxy | bool
       no_log: true
 
     - ansible.builtin.file: { path: "{{ app_dir }}/deploy/postgres/tls", state: directory, owner: deploy, group: deploy, mode: "0755" }
