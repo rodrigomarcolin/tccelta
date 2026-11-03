@@ -84,6 +84,9 @@ services:
   visitantes:
     restart: unless-stopped
     profiles: !reset []
+    environment:
+      # contagem na hora da migracao para volume (so vale ate o arquivo existir)
+      VISITANTES_INICIAL: ${VISITANTES_INICIAL:-14}
 
   # --- Banco: acesso externo SO pelo DBeaver (TLS + hba + firewall) ---
   redis:

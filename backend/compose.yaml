@@ -166,7 +166,10 @@ services:
     <<: *backend
     command: ["visitantes"]
     environment:
+      # valor de partida; so vale enquanto nao existe o arquivo no volume (depois dele, o arquivo manda)
       VISITANTES_INICIAL: ${VISITANTES_INICIAL:-0}
+      VISITANTES_ARQUIVO: /dados/total
+    volumes: [visitantes_dados:/dados]
     healthcheck:
       test: ["CMD", "/tccelta", "health", "--url", "http://127.0.0.1:8082/saude/viva"]
       interval: 10s
@@ -322,5 +325,6 @@ volumes:
   vault_approle_rotacao: {}
   vault_auditoria: {}
   caddy_dados: {}
+  visitantes_dados: {}
   prometheus_dados: {}
   grafana_dados: {}

@@ -1,6 +1,9 @@
 package visitantes
 
 import (
+	"context"
+	"path/filepath"
+	"time"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,5 +42,27 @@ func TestHandler(t *testing.T) {
 	}
 	if c := do("GET", "/saude/viva").Code; c != http.StatusOK {
 		t.Fatalf("saude: %d", c)
+	}
+}
+
+func TestPersistenciaSobreviveARestart(t *testing.T) {
+	arq := filepath.Join(t.TempDir(), "total")
+	ctx, cancel := context.WithCancel(context.Background())
+	c := Novo(14)
+	c.Carrega(arq) // sem arquivo: mantem o inicial
+	if c.Total() != 14 {
+		t.Fatalf("inicial = %d", c.Total())
+	}
+	done := make(chan struct{})
+	go func() { c.Persiste(ctx, arq, time.Millisecond); close(done) }()
+	c.Incrementa()
+	c.Incrementa()
+	cancel()
+	<-done
+
+	novo := Novo(0) // o arquivo vence o valor inicial
+	novo.Carrega(arq)
+	if novo.Total() != 16 {
+		t.Fatalf("apos restart = %d, esperado 16", novo.Total())
 	}
 }
