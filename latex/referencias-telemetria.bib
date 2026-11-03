@@ -1,0 +1,521 @@
+% Bibliografia da pesquisa sobre telemetria veicular, PIDs OBD-II e consumo.
+% Cada entrada tem, na faixa de comentário acima, o ano, o assunto e o nível de leitura.
+% Ano principal = ano do volume/edição; a data de publicação online, quando difere, vem entre parênteses.
+% Metadados (autores, volume, páginas, DOI) conferidos na OpenAlex e na Crossref em 03/11/2026.
+% "Nível de leitura" descreve o que foi de fato lido; os metadados nunca substituem a leitura.
+% Para itens [n] do documento docs/referencias-telemetria-pids.md, o número está no comentário.
+
+% ===================== A) Referências numeradas [1] a [14] =====================
+
+% 2024. [1] Revisão sistemática de 45 estudos sobre telemática embarcada no monitoramento do comportamento de condução;
+% aceleração, frenagem e velocidade são as variáveis mais frequentes. Serve de base para velocidade, aceleração e frenagem.
+% Nível de leitura: metadados e resumo.
+@article{boylan2024telematics,
+  author  = {Boylan, James and Meyer, Denny and Chen, Won Sun},
+  title   = {A systematic review of the use of in-vehicle telematics in monitoring driving behaviours},
+  journal = {Accident Analysis \& Prevention},
+  year    = {2024},
+  volume  = {199},
+  pages   = {107519},
+  doi     = {10.1016/j.aap.2024.107519},
+  url     = {https://doi.org/10.1016/j.aap.2024.107519}
+}
+
+% 2024. [2] Precificação semanal de seguro auto com telemática comportamental e contextual (19.214 motoristas, 55 semanas,
+% 181,4 milhões de km); excesso de velocidade, tipo de via e horário ajudam. Serve de base para velocidade, via e horário.
+% Nível de leitura: metadados e resumo.
+@article{guillen2024pricing,
+  author  = {Guillén, Montserrat and Pérez-Marín, Ana María and Nielsen, Jens Perch},
+  title   = {Pricing weekly motor insurance drivers' with behavioral and contextual telematics data},
+  journal = {Heliyon},
+  year    = {2024},
+  volume  = {10},
+  number  = {16},
+  pages   = {e36501},
+  doi     = {10.1016/j.heliyon.2024.e36501},
+  url     = {https://doi.org/10.1016/j.heliyon.2024.e36501}
+}
+
+% 2025 (online em 2025; a OpenAlex indica 19/07/2024, divergência não resolvida). [3] Previsão de risco de acidente por aprendizado de máquina
+% em seguro por uso (quase 100 mil veículos); registra que o UBI costuma usar regras simples baseadas em distância.
+% Serve de base para "quanto rodou". Nível de leitura: metadados e resumo.
+@article{strada2025ubi,
+  author  = {Strada, Silvia Carla and Costantini, Emanuele and Formentin, Simone and Savaresi, Sergio M.},
+  title   = {Machine learning based car accident risk prediction for usage-based insurance},
+  journal = {Intelligent Data Analysis},
+  year    = {2025},
+  volume  = {29},
+  number  = {1},
+  pages   = {156--170},
+  doi     = {10.3233/ida-230971},
+  url     = {https://doi.org/10.3233/ida-230971},
+  note    = {Publicado online em 2024 ou 2025 conforme a base (OpenAlex: 19/07/2024; Crossref: 28/03/2025)}
+}
+
+% 2021 (online em 2021). [4] Telemática de quase-acidentes no seguro auto: frenagem e aceleração bruscas e uso do celular
+% aumentam o custo. Serve de base para eventos de condução e para a lacuna do celular. Nível de leitura: metadados e resumo.
+@article{guillen2021nearmiss,
+  author  = {Guillén, Montserrat and Nielsen, Jens Perch and Pérez-Marín, Ana María},
+  title   = {Near-miss telematics in motor insurance},
+  journal = {Journal of Risk \& Insurance},
+  year    = {2021},
+  volume  = {88},
+  number  = {3},
+  pages   = {569--589},
+  doi     = {10.1111/jori.12340},
+  url     = {https://doi.org/10.1111/jori.12340}
+}
+
+% 2026. [5] Ineficiência de transferência de energia em veículos diesel de uso pessoal com telemática; análise comportamental
+% e espacial com mapa de calor de ineficiência. Serve de base para a análise espacial (mapa). Nível de leitura: metadados e resumo.
+@article{florea2026diesel,
+  author  = {Florea, Adrian-Gheorghe and Perțicaș, Diana Claudia and Juma, Hillary Wafula},
+  title   = {Managing Energy Transfer Inefficiency in Personal Diesel Vehicles Using Telematics: A Behavioral and Spatial Analysis},
+  journal = {Sustainability},
+  year    = {2026},
+  volume  = {18},
+  number  = {12},
+  pages   = {6212},
+  doi     = {10.3390/su18126212},
+  url     = {https://doi.org/10.3390/su18126212}
+}
+
+% 2023 (online em 11/10/2023). [6] Comportamento de motoristas de frete e efeito no consumo e nas emissões de CO2e (mais de 4.000 registros);
+% aceleração/frenagem/curvas bruscas, rotação excessiva e limites legais. Recorte: frete. Serve de base para consumo e rotação.
+% Nível de leitura: metadados e resumo.
+@article{zhang2023freight,
+  author  = {Zhang, Zhuowu and Demir, Emrah and Mason, Robert and Di Cairano-Gilfedder, Carla},
+  title   = {Understanding freight drivers' behavior and the impact on vehicles' fuel consumption and {CO2e} emissions},
+  journal = {Operational Research},
+  year    = {2023},
+  volume  = {23},
+  number  = {4},
+  doi     = {10.1007/s12351-023-00798-2},
+  url     = {https://doi.org/10.1007/s12351-023-00798-2},
+  note    = {Publicado online em 11/10/2023}
+}
+
+% 2025. [7] Revisão de aplicações de aprendizado de máquina baseadas em OBD-II; mapeia parâmetros OBD por aplicação,
+% sem ranquear por frequência. Serve de base para a escolha dos PIDs. Nível de leitura: parcial (seções 1 a 5.1 e início da 5.2).
+% Observação: o repositório já tem esta obra em abntex2-modelo-references.bib com a chave michailidis2025mlobd; esta entrada
+% traz o nome completo dos autores e pode ser unificada à existente.
+@article{michailidis2025review,
+  author  = {Michailidis, Emmanouel T. and Panagiotopoulou, Antigoni and Papadakis, Andreas E.},
+  title   = {A Review of {OBD-II}-Based Machine Learning Applications for Sustainable, Efficient, Secure, and Safe Vehicle Driving},
+  journal = {Sensors},
+  year    = {2025},
+  volume  = {25},
+  number  = {13},
+  pages   = {4057},
+  doi     = {10.3390/s25134057},
+  url     = {https://doi.org/10.3390/s25134057}
+}
+
+% 2020 (online em 01/10/2020). [8] Manutenção preditiva de frota de ônibus com placa eletrônica inteligente e IA;
+% correlaciona comportamento do motorista e esforço do motor. Recorte: ônibus. Serve de base para carga e uso do motor.
+% Nível de leitura: metadados e resumo.
+@article{massaro2020bus,
+  author  = {Massaro, Alessandro S. and Selicato, Sergio and Galiano, Angelo Maurizio},
+  title   = {Predictive Maintenance of Bus Fleet by Intelligent Smart Electronic Board Implementing Artificial Intelligence},
+  journal = {IoT},
+  year    = {2020},
+  volume  = {1},
+  number  = {2},
+  pages   = {180--197},
+  doi     = {10.3390/iot1020012},
+  url     = {https://doi.org/10.3390/iot1020012}
+}
+
+% 2025 (online em 28/06/2025). [9] Padrões de condução, classificação de marchas e eficiência com GPS e PIDs OBD-II (VSS, RPM, MAP, MAF, IAT, ECT, TPS; GPS a 1 Hz);
+% a razão VSS/RPM sozinha não basta para identificar a marcha; três veículos em uma cidade. Serve de base para a marcha estimada.
+% Nível de leitura: texto completo ou quase (informado pelo coordenador; não relido nesta sessão).
+@article{molinacampoverde2025gears,
+  author  = {Molina-Campoverde, Juan José and Zurita-Jara, Juan and Molina-Campoverde, Paúl Andrés},
+  title   = {Driving Pattern Analysis, Gear Shift Classification, and Fuel Efficiency in Light-Duty Vehicles: A Machine Learning Approach Using {GPS} and {OBD II} {PID} Signals},
+  journal = {Sensors},
+  year    = {2025},
+  volume  = {25},
+  number  = {13},
+  pages   = {4043},
+  doi     = {10.3390/s25134043},
+  url     = {https://doi.org/10.3390/s25134043}
+}
+
+% 2024 (online em 08/10/2024). [10] Classificação de comportamento do motorista com dados OBD-II (Kaggle) e rótulos de K-Means;
+% a acurácia de 99% não comprova desempenho em campo. Serve de base com ressalva. Nível de leitura: metadados e resumo.
+@article{fadzil2024behaviour,
+  author  = {Fadzil, Nur Farisya Aqilah Muhamad and Fadzir, Hilda Mohd and Mansor, Hafizah and Rahardja, Untung},
+  title   = {Driver Behaviour Classification: A Research using {OBD-II} Data and Machine Learning},
+  journal = {Journal of Advanced Research in Applied Sciences and Engineering Technology},
+  year    = {2024},
+  volume  = {56},
+  number  = {3},
+  pages   = {147--157},
+  doi     = {10.37934/araset.56.3.147157},
+  url     = {https://doi.org/10.37934/araset.56.3.147157}
+}
+
+% 2022 (volume 23, n. 4; versão online antecipada em 2020: a OpenAlex indica 17/11/2020). [11] Vehicle Energy Dataset: 383 veículos;
+% estimativa de combustível com correction = (1 + STFT/100 + LTFT/100)/AFR; início e fim de GPS revelam dados privados.
+% Serve de base para MAF, trims e privacidade. Nível de leitura: texto completo ou quase no trecho sobre consumo e privacidade (informado pelo coordenador; não relido nesta sessão).
+@article{oh2022ved,
+  author  = {Oh, Geunseob and LeBlanc, David J. and Peng, Huei},
+  title   = {Vehicle Energy Dataset ({VED}), A Large-Scale Dataset for Vehicle Energy Consumption Research},
+  journal = {IEEE Transactions on Intelligent Transportation Systems},
+  year    = {2022},
+  volume  = {23},
+  number  = {4},
+  pages   = {3302--3312},
+  doi     = {10.1109/tits.2020.3035596},
+  url     = {https://doi.org/10.1109/tits.2020.3035596},
+  note    = {Versão online antecipada em 2020}
+}
+
+% 2023 (volume 14, n. 1 da Atmosphere; publicado online em 24/12/2022). [12] Contribuição das partidas a frio nas emissões da viagem
+% (37 veículos leves a gasolina); partida a frio dirigindo representa cerca de 4,5% do CO2 da viagem. Serve de base para o PID de temperatura.
+% O ano do volume (2023) segue a convenção do periódico: a Crossref não traz data de impressão. Nível de leitura: metadados e resumo.
+@article{hu2023coldstart,
+  author  = {Hu, Jiangchuan and Frey, H. Christopher and Boroujeni, Behdad Yazdani},
+  title   = {Contribution of Cold Starts to Real-World Trip Emissions for Light-Duty Gasoline Vehicles},
+  journal = {Atmosphere},
+  year    = {2023},
+  volume  = {14},
+  number  = {1},
+  pages   = {35},
+  doi     = {10.3390/atmos14010035},
+  url     = {https://doi.org/10.3390/atmos14010035},
+  note    = {Publicado online em 24/12/2022}
+}
+
+% 2026. [13] Sistema IoT de nível de combustível e geolocalização. Fonte fraca, usada por falta de base melhor para o nível do tanque.
+% Páginas não confirmadas (a OpenAlex traz só a primeira, 289). Nível de leitura: metadados e resumo.
+@article{ogidan2026fuellevel,
+  author  = {Ogidan, Olugbenga Kayode and Joseph, O. I. and Onofeghara, F. O.},
+  title   = {Development of an {IoT}-Based Fuel Level and Geolocation Monitoring System},
+  journal = {Arid Zone Journal of Engineering, Technology and Environment (AZOJETE)},
+  year    = {2026},
+  volume  = {22},
+  number  = {2},
+  doi     = {10.63958/azojete/2026/22/02/008},
+  url     = {https://doi.org/10.63958/azojete/2026/22/02/008}
+}
+
+% 2025. [14] eVED (Extended Vehicle Energy Dataset): enriquece o VED com limite de velocidade e dados de mapa. Serve de base para a lacuna
+% "limite de velocidade". Esta é a versão de conferência (IEEE VTC2025-Spring); a versão arXiv está em zhang2022evedarxiv.
+% A OpenAlex lista 5 autores. Nível de leitura: metadados e resumo.
+@inproceedings{zhang2025eved,
+  author    = {Zhang, Shiliang and Fatih, Dyako and Ahmed, Fahmi Abdulqadir and Schwarz, Tobias and Ma, Xuehui},
+  title     = {Extended Vehicle Energy Dataset ({eVED}): An Enhanced Large-Scale Dataset for Vehicle Energy Consumption Analysis},
+  booktitle = {IEEE Vehicular Technology Conference (VTC2025-Spring)},
+  year      = {2025},
+  pages     = {1--7},
+  doi       = {10.1109/vtc2025-spring65109.2025.11174415},
+  url       = {https://doi.org/10.1109/vtc2025-spring65109.2025.11174415}
+}
+
+% ===================== B) Fontes consultadas, sem número de referência =====================
+
+% 2025. Desafios e limitações da telemática em seguros (revisão). Contexto geral do seguro por uso. Nível de leitura: metadados e resumo.
+@article{qi2025limits,
+  author  = {Qi, Jing and Woolway, Matthew and Kyropoulou, Maria and Kanellopoulos, Panagiotis and Steele, David},
+  title   = {Telematics in Insurance: Challenges and Limitations},
+  journal = {IEEE Access},
+  year    = {2025},
+  volume  = {13},
+  pages   = {147449--147466},
+  doi     = {10.1109/access.2025.3600095},
+  url     = {https://doi.org/10.1109/access.2025.3600095}
+}
+
+% 2023 (online em 19/05/2023). Análise e classificação do comportamento de condução com dados OBD e aprendizado de máquina.
+% Contexto para classificação de estilo. Nível de leitura: metadados e resumo.
+@article{kumar2023obd,
+  author  = {Kumar, Raman and Jain, Anuj},
+  title   = {Driving behavior analysis and classification by vehicle {OBD} data using machine learning},
+  journal = {The Journal of Supercomputing},
+  year    = {2023},
+  volume  = {79},
+  number  = {16},
+  pages   = {18800--18819},
+  doi     = {10.1007/s11227-023-05364-3},
+  url     = {https://doi.org/10.1007/s11227-023-05364-3}
+}
+
+% 2025. Classificação de dados OBD II e análise do comportamento por métricas de força g (aprendizado de máquina).
+% Contexto para eventos de aceleração. Nível de leitura: metadados e resumo.
+@article{singh2025revving,
+  author  = {Singh, Siddhanta Kumar and Sharma, Anand},
+  title   = {Revving up insights: machine learning-based classification of {OBD II} data and driving behavior analysis using g-force metrics},
+  journal = {Bulletin of Electrical Engineering and Informatics},
+  year    = {2025},
+  volume  = {14},
+  number  = {3},
+  pages   = {2188--2197},
+  doi     = {10.11591/eei.v14i3.9398},
+  url     = {https://doi.org/10.11591/eei.v14i3.9398}
+}
+
+% 2024 (online em 28/08/2024). Previsão de sinistros e precificação de prêmio com telemática (Poisson com regularização Lasso).
+% Contexto de seguro. Nível de leitura: metadados e título.
+@article{usman2024claim,
+  author  = {Usman, Farha and Chan, Jennifer and Makov, Udi E. and Wang, Y. X. Rachel and Dong, Alice X. D.},
+  title   = {Claim Prediction and Premium Pricing for Telematics Auto Insurance Data Using Poisson Regression with Lasso Regularisation},
+  journal = {Risks},
+  year    = {2024},
+  volume  = {12},
+  number  = {9},
+  pages   = {137},
+  doi     = {10.3390/risks12090137},
+  url     = {https://doi.org/10.3390/risks12090137}
+}
+
+% 2022 (online em 07/12/2022). Revisão de telemática veicular para transporte urbano mais seguro, limpo e sustentável.
+% Contexto geral. Nível de leitura: metadados e título.
+@article{ghaffarpasand2022review,
+  author  = {Ghaffarpasand, Omid and Burke, Mark J. and Osei, Louisa K. and Ursell, Helen and Chapman, Sam and Pope, Francis D.},
+  title   = {Vehicle Telematics for Safer, Cleaner and More Sustainable Urban Transport: A Review},
+  journal = {Sustainability},
+  year    = {2022},
+  volume  = {14},
+  number  = {24},
+  pages   = {16386},
+  doi     = {10.3390/su142416386},
+  url     = {https://doi.org/10.3390/su142416386}
+}
+
+% 2023 (online em 26/10/2023). Modelagem do consumo de combustível com interface OBD-II de baixo custo.
+% Possível comparação para a estimativa de consumo por MAF. Nível de leitura: metadados e título.
+@article{rykala2023lowcost,
+  author  = {Rykała, Magdalena and Grzelak, Małgorzata and Rykała, Łukasz and Voicu, Daniela and Stoica, Ramona-Monica},
+  title   = {Modeling Vehicle Fuel Consumption Using a Low-Cost {OBD-II} Interface},
+  journal = {Energies},
+  year    = {2023},
+  volume  = {16},
+  number  = {21},
+  pages   = {7266},
+  doi     = {10.3390/en16217266},
+  url     = {https://doi.org/10.3390/en16217266}
+}
+
+% 2025 (online em 15/07/2025). Revisão de técnicas de aprendizado de máquina (agrupamento e classificação) para análise do comportamento de condução.
+% Contexto. Nível de leitura: metadados e título.
+@article{mobiniseraji2025review,
+  author  = {Mobini Seraji, Mohammad Hassan and Shaffiee Haghshenas, Sami and Shaffiee Haghshenas, Sina and Šimić, Vladimir and Pamucar, Dragan and Guido, Giuseppe and Astarita, Vittorio},
+  title   = {A state-of-the-art review on machine learning techniques for driving behavior analysis: clustering and classification approaches},
+  journal = {Complex \& Intelligent Systems},
+  year    = {2025},
+  volume  = {11},
+  number  = {9},
+  pages   = {386},
+  doi     = {10.1007/s40747-025-01988-5},
+  url     = {https://doi.org/10.1007/s40747-025-01988-5}
+}
+
+% 2025 (online em 29/08/2025). A telemática melhora o estilo de condução? Uso de dados comportamentais em seguro auto.
+% Contexto sobre retorno ao motorista. Nível de leitura: metadados e título.
+@article{cevolini2025style,
+  author  = {Cevolini, Alberto and Morotti, Elena and Esposito, Elena and Romanelli, Lorenzo and Tisseur, Riccardo and Misani, Cristiano},
+  title   = {Can Telematics Improve Driving Style? The Use of Behavioral Data in Motor Insurance},
+  journal = {Big Data and Cognitive Computing},
+  year    = {2025},
+  volume  = {9},
+  number  = {9},
+  pages   = {225},
+  doi     = {10.3390/bdcc9090225},
+  url     = {https://doi.org/10.3390/bdcc9090225}
+}
+
+% 2021 (volume 90, jan/2021; online em 21/12/2020). Precisão da medição de consumo de combustível em operação real.
+% Referência para o erro de métodos de medição. Nível de leitura: metadados e título.
+@article{pavlovic2021accuracy,
+  author  = {Pavlovic, Jelica and Fontaras, Georgios and Broekaert, Stijn and Ciuffo, Biagio and Ktistakis, Markos Alexandros and Grigoratos, Theodoros},
+  title   = {How accurately can we measure vehicle fuel consumption in real world operation?},
+  journal = {Transportation Research Part D: Transport and Environment},
+  year    = {2021},
+  volume  = {90},
+  pages   = {102666},
+  doi     = {10.1016/j.trd.2020.102666},
+  url     = {https://doi.org/10.1016/j.trd.2020.102666},
+  note    = {Publicado online em 21/12/2020}
+}
+
+% 2024 (online em 08/10/2024). Influência de estratégias de precificação com telemática sobre fatores tradicionais de tarifação em seguro auto.
+% Contexto de seguro. Nível de leitura: metadados e título.
+@article{xie2024pricing,
+  author  = {Xie, Shengkun},
+  title   = {Analyzing the Influence of Telematics-Based Pricing Strategies on Traditional Rating Factors in Auto Insurance Rate Regulation},
+  journal = {Mathematics},
+  year    = {2024},
+  volume  = {12},
+  number  = {19},
+  pages   = {3150},
+  doi     = {10.3390/math12193150},
+  url     = {https://doi.org/10.3390/math12193150}
+}
+
+% 2025 (volume 17, n. 2, fev/2025; online em 16/05/2024). Uso de dispositivos móveis na avaliação de exame de direção, com dados de aceleração e GPS.
+% Referência para aceleração e GPS do celular. Nível de leitura: metadados e título.
+@article{driessen2025mobile,
+  author  = {Driessen, Tom and Stefan, David and Heikoop, Daniël D. and Dodou, Dimitra and de Winter, Joost},
+  title   = {Using mobile devices for driving test assessment: a study of acceleration and {GPS} data},
+  journal = {Transportation Letters},
+  year    = {2025},
+  volume  = {17},
+  number  = {2},
+  pages   = {384--394},
+  doi     = {10.1080/19427867.2024.2352198},
+  url     = {https://doi.org/10.1080/19427867.2024.2352198},
+  note    = {Publicado online em 16/05/2024}
+}
+
+% 2022. Versão arXiv 2203.08630 do eVED (março de 2022): conjunto de dados estendido com coordenadas de GPS calibradas e atributos de mapa
+% (elevação, limite de velocidade, interseções). Resumo lido via API do arXiv. A versão de conferência é zhang2025eved.
+@misc{zhang2022evedarxiv,
+  author       = {Zhang, Shiliang and Fatih, Dyako and Abdulqadir, Fahmi and Schwarz, Tobias and Ma, Xuehui},
+  title        = {Extended vehicle energy dataset ({eVED}): an enhanced large-scale dataset for deep learning on vehicle trip energy consumption},
+  year         = {2022},
+  howpublished = {arXiv:2203.08630},
+  url          = {https://arxiv.org/abs/2203.08630},
+  note         = {Preprint}
+}
+
+% 2025. Dissertação sobre framework de telemática adaptativo para seguro por uso no Quênia (frota; XGBoost). Contexto regional.
+% Nível de leitura: resumo no repositório. O grau (mestrado) foi inferido pela coleção "MSc. DSA Theses and Dissertations (2025)"; a página não o declara.
+@mastersthesis{kiruki2025kenya,
+  author = {Kiruki, R. W.},
+  title  = {An Adaptive telematics framework for usage-based insurance in {Kenya}},
+  school = {Strathmore University},
+  year   = {2025},
+  url    = {https://hdl.handle.net/11071/16379},
+  note   = {Repositório SU+; o prenome completo não foi confirmado}
+}
+
+% 2022. Estimativa de consumo instantâneo por aprendizado de máquina e dados OBD (Ford Escape PHEV e F-350, rota de 100 km, sensor de vazão de combustível).
+% Calcula a relação de mistura pelos trims (curto e longo prazo) em vez do valor comandado; cita que a estimativa só pelo MAF é aceitável na estequiometria e imprecisa fora dela.
+% Nível de leitura: parcial (resumo, introdução, trecho sobre a relação de mistura e conclusões; PDF de 6 páginas). Citado no documento docs/pids-candidatos-consumo.md.
+@inproceedings{ansari2022csme,
+  author    = {Ansari, Amir and Abediasl, Hamidreza and Patel, Parth Rakeshkumar and Hosseini, Vahid and Koch, Charles Robert and Shahbakhti, Mahdi},
+  title     = {Estimating Instantaneous Fuel Consumption of Vehicles by Using Machine Learning and Real-Time On-Board Diagnostics ({OBD}) Data},
+  booktitle = {Proceedings of the Canadian Society for Mechanical Engineering International Congress 2022 (CSME Congress 2022)},
+  address   = {Edmonton, AB, Canadá},
+  year      = {2022},
+  url       = {https://sites.ualberta.ca/~mahdi/Docs/CSME-2022_Vehicle%20Fuel%20Consumption%20Modeling_UAlberta.pdf},
+  note      = {Realizado em 5--8 de junho de 2022; DOI não localizado}
+}
+
+% 2020 (arXiv, set/2020; a versão em periódico é de 2021: Transportation Research Part C, v. 130, art. 103168, DOI 10.1016/j.trc.2021.103168, título coincidente na OpenAlex).
+% Experimento com veículo em laço (vehicle-in-the-loop) para condução automatizada; o resumo cita redução de uso de energia em veículos a gasolina e elétricos.
+% Citado em docs/pids-candidatos-consumo.md pela faixa de lambda de 0,85 a 0,91 (visto apenas em trecho de busca, não confirmado no texto). Nível de leitura: resumo no arXiv.
+@misc{ard2020vilarxiv,
+  author       = {Ard, Tyler and Guo, Longxiang and Dollar, Robert Austin and Fayazi, Alireza and Goulet, Nathan and Jia, Yunyi and Ayalew, Beshah and Vahidi, Ardalan},
+  title        = {Energy and Flow Effects of Optimal Automated Driving in Mixed Traffic: Vehicle-in-the-Loop Experimental Results},
+  year         = {2020},
+  howpublished = {arXiv:2009.07872},
+  url          = {https://arxiv.org/abs/2009.07872},
+  note         = {Preprint}
+}
+
+% 2010 (concessão em 10/08/2010; depósito em 31/03/2006; publicação do pedido em 07/06/2007). Patente US 7774130 B2 (inventor Gary Thomas Pepper): consumo e eficiência de combustível a partir de dados do veículo, com trims de combustível.
+% Dados de inventor e datas vêm do Google Patents. Nível de leitura: parcial, via ferramenta de resumo de página. Um ensaio no ciclo US06 relata erro de −2,91% sem trims e −0,56% com trims em relação ao laboratório (8,51 e 8,71 contra 8,76 L/100 km); conferir no original.
+@misc{pepper2010patent,
+  author       = {Pepper, Gary Thomas},
+  title        = {Methods and system for determining consumption and fuel efficiency in vehicles},
+  year         = {2010},
+  howpublished = {Patente US 7774130 B2},
+  url          = {https://patents.google.com/patent/US7774130B2/en},
+  note         = {Concedida em 10/08/2010}
+}
+
+% 2014 (online em 01/04/2014). DeFries et al.: economia de combustível e emissões de CO2 em uso a partir de dados OBD em veículos leves nos EUA (SAE 2014-01-1623).
+% Citada pelo estudo CSME 2022 como comparação da estimativa por MAF com balanço de carbono. Nível de leitura: só metadados; autores confirmados pela OpenAlex, Crossref e lista de referências do estudo CSME.
+@article{defries2014inuse,
+  author  = {DeFries, Timothy H. and Sabisch, Michael and Kishan, Sandeep and Posada, Francisco and German, John and Bandivadekar, Anup P.},
+  title   = {In-Use Fuel Economy and {CO2} Emissions Measurement using {OBD} Data on {US} Light-Duty Vehicles},
+  journal = {SAE International Journal of Engines},
+  year    = {2014},
+  volume  = {7},
+  number  = {3},
+  pages   = {1382--1396},
+  doi     = {10.4271/2014-01-1623},
+  url     = {https://doi.org/10.4271/2014-01-1623}
+}
+
+% 2023 (online em 09/03/2023). Condições climáticas e dados de painel de telemática em modelos mensais de frequência de sinistros. Contexto de seguro.
+% Nível de leitura: metadados e título.
+@article{reigtorra2023weather,
+  author  = {Reig Torra, Jan and Guillén, Montserrat and Pérez Marín, Ana María and Rey, Lorena and Aguer, Giselle},
+  title   = {Weather Conditions and Telematics Panel Data in Monthly Motor Insurance Claim Frequency Models},
+  journal = {Risks},
+  year    = {2023},
+  volume  = {11},
+  number  = {3},
+  pages   = {57},
+  doi     = {10.3390/risks11030057},
+  url     = {https://doi.org/10.3390/risks11030057}
+}
+
+% 2019. Estudo caso-controle com dados de telemática (GPS e velocidade a 1 Hz) para encontrar comportamento de risco; o excesso de velocidade aparece como principal preditor de colisão. Nível de leitura: só trecho de busca.
+% Nível de leitura: só metadados.
+@article{winlaw2019risky,
+  author  = {Winlaw, Manda and Steiner, Stefan H. and MacKay, Robert J. and Hilal, Allaa R.},
+  title   = {Using telematics data to find risky driver behaviour},
+  journal = {Accident Analysis \& Prevention},
+  year    = {2019},
+  volume  = {131},
+  pages   = {131--136},
+  doi     = {10.1016/j.aap.2019.06.003},
+  url     = {https://doi.org/10.1016/j.aap.2019.06.003}
+}
+
+% 2013 (volume 14, n. 2, jun/2013). Ensaio de campo no Reino Unido com 15 veículos comerciais leves (autores da Universidade de Bath e da Ashwoods Automotive) de um sistema de apoio ao motorista para condução econômica:
+% reduz taxas de aceleração e incentiva troca de marcha antecipada; economia média de 7,6% (até 12%) em 39.300 km. Relevante para rotação nas trocas de marcha. Nível de leitura: resumo (OpenAlex).
+@article{vagg2013ecodriving,
+  author  = {Vagg, Christopher and Brace, Chris J. and Hari, Deepak and Akehurst, Sam and Poxon, John and Ash, Lloyd},
+  title   = {Development and Field Trial of a Driver Assistance System to Encourage Eco-Driving in Light Commercial Vehicle Fleets},
+  journal = {IEEE Transactions on Intelligent Transportation Systems},
+  year    = {2013},
+  volume  = {14},
+  number  = {2},
+  pages   = {796--805},
+  doi     = {10.1109/tits.2013.2239642},
+  url     = {https://doi.org/10.1109/tits.2013.2239642}
+}
+
+% ===================== C) Normas e fontes técnicas (não verificadas nesta pesquisa) =====================
+
+% Ano não confirmado (a norma tem edições). SAE J1979, serviços de diagnóstico OBD e definição dos PIDs. Não foi consultada nesta pesquisa;
+% fatores de decodificação e números de PID citados nos documentos vêm de memória e devem ser conferidos nela. Nível de leitura: nenhum.
+@misc{sae_j1979,
+  author       = {{SAE International}},
+  title        = {{SAE J1979}: E/E Diagnostic Test Modes},
+  howpublished = {Norma técnica},
+  note         = {Não verificada nesta pesquisa; conferir edição e ano antes de citar}
+}
+
+% 1997. Lei n. 9.503, de 23 de setembro de 1997 (Código de Trânsito Brasileiro), art. 61 (velocidade). O texto não foi consultado; conferir antes de citar.
+% Nível de leitura: nenhum.
+@misc{ctb1997,
+  author       = {{Brasil}},
+  title        = {Lei n. 9.503, de 23 de setembro de 1997: Institui o Código de Trânsito Brasileiro},
+  year         = {1997},
+  howpublished = {Diário Oficial da União},
+  note         = {Não verificada nesta pesquisa; conferir o art. 61 e a data da lei}
+}
+
+% 2018. Lei n. 13.709/2018 (Lei Geral de Proteção de Dados Pessoais). O texto não foi consultado; conferir antes de citar.
+% Nível de leitura: nenhum.
+@misc{lgpd2018,
+  author       = {{Brasil}},
+  title        = {Lei n. 13.709: Lei Geral de Proteção de Dados Pessoais ({LGPD})},
+  year         = {2018},
+  howpublished = {Diário Oficial da União},
+  note         = {Não verificada nesta pesquisa; conferir a data de publicação e o texto vigente}
+}
+
+% Ano não confirmado (página editável, sem edição fixa). Página "OBD-II PIDs" da Wikipédia em inglês: serve só para consulta rápida das tabelas de PIDs.
+% No TCC deve-se citar a norma (SAE J1979), não esta página. Não foi acessada nesta pesquisa. Nível de leitura: nenhum.
+@misc{wikipedia_obd2_pids,
+  title        = {{OBD-II} {PID}s},
+  howpublished = {\url{https://en.wikipedia.org/wiki/OBD-II_PIDs}},
+  note         = {Consulta rápida apenas; não verificada nesta pesquisa}
+}
