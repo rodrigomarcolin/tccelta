@@ -8,9 +8,14 @@ api_replicas: 2
 dominio_api: "tccelta.malcong.com.br"
 dominio_db: "tccelta.malcong.com.br"
 
+# Proxy da Cloudflare (nuvem laranja) no nome da API. false = DNS apenas (Caddyfile.prod, Let's Encrypt).
+# true exige: dominio_db DIFERENTE de dominio_api (o banco, na 5432, so funciona sem proxy) e o
+# certificado de origem da Cloudflare em .pki-local/ (ver deploy/README.md, "Proxy da Cloudflare").
+cloudflare_proxy: false
+
 # Derivados: sem dominio, o Caddy usa o IP e um certificado interno (Caddyfile.teste).
 api_host: "{{ dominio_api | default(vps_ip, true) }}"
-caddyfile: "{{ 'Caddyfile.prod' if dominio_api else 'Caddyfile.teste' }}"
+caddyfile: "{{ 'Caddyfile.cloudflare' if cloudflare_proxy | bool else ('Caddyfile.prod' if dominio_api else 'Caddyfile.teste') }}"
 
 # Conexoes simultaneas do papel dbeaver_ro (o DBeaver abre varias por sessao: principal, metadados, editores)
 dbeaver_conexoes_max: 50

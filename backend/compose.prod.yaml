@@ -68,6 +68,8 @@ services:
     profiles: !reset []
     volumes:
       - ./deploy/caddy/${CADDYFILE:-Caddyfile.prod}:/etc/caddy/Caddyfile:ro
+      # pasta (nao arquivo, pelo mesmo motivo do pg_hba): certificado de origem da Cloudflare, so no modo proxy
+      - ./deploy/caddy/certs:/etc/caddy/certs:ro
       - caddy_dados:/data
     ports: !override
       - "80:80"

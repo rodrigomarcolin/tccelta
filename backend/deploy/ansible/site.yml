@@ -165,6 +165,23 @@
       loop_control: { label: "{{ item.dir }}/{{ item.src }}" }
       no_log: true
 
+    # Pasta montada no Caddy (compose.prod.yaml). Existe sempre; so tem arquivos no modo proxy da Cloudflare.
+    - ansible.builtin.file: { path: "{{ app_dir }}/deploy/caddy/certs", state: directory, owner: deploy, group: deploy, mode: "0755" }
+
+    - name: Certificado de origem da Cloudflare para o Caddy (so se cloudflare_proxy)
+      ansible.builtin.copy:
+        src: "{{ pki }}/{{ item.src }}"
+        dest: "{{ app_dir }}/deploy/caddy/certs/{{ item.src }}"
+        owner: deploy
+        group: deploy
+        mode: "{{ item.mode }}"
+      loop:
+        - { src: cloudflare-origin.pem, mode: "0644" }
+        - { src: cloudflare-origin-key.pem, mode: "0600" }
+      loop_control: { label: "{{ item.src }}" }
+      when: cloudflare_proxy | bool
+      no_log: true
+
     - ansible.builtin.file: { path: "{{ app_dir }}/deploy/postgres/tls", state: directory, owner: deploy, group: deploy, mode: "0755" }
 
     - name: Certificado do Postgres (1000 = usuario postgres da imagem)

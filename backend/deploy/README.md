@@ -119,3 +119,63 @@ playbook confere o firewall (um `RETURN` por IP e `DROP` no fim) e o `pg_hba.con
 item de `dbeaver_ips` precisa ser IPv4 em CIDR (ex.: `203.0.113.5/32`).
 
 Sem `--tags`, roda tudo.
+
+## Proxy da Cloudflare (opcional)
+
+Por padrão o domínio fica em **só DNS** (nuvem cinza) e o Caddy pede o certificado ao Let's Encrypt
+(`Caddyfile.prod`). Para manter o **proxy ligado** (nuvem laranja) no nome da API, use o modo
+`cloudflare_proxy`, que troca o Caddyfile por `Caddyfile.cloudflare`:
+
+- O certificado é o **de origem da Cloudflare** (arquivos em `deploy/caddy/certs/`, montados no Caddy). Não há pedido
+  ao Let's Encrypt, então o desafio ACME deixa de atravessar o proxy.
+- O Caddy só confia no `CF-Connecting-IP` quando a conexão vem das faixas da Cloudflare (`trusted_proxies`) e grava esse
+  IP em `X-Real-IP`. Conexões de outra origem não conseguem forjar o IP do cliente.
+- HTTP/3 fica de fora (a Cloudflare fala h1/h2 com a origem).
+
+### Passo a passo
+
+1. **DNS, com dois nomes.** O banco (porta 5432) não passa pelo proxy: ele precisa de um nome só DNS.
+
+   | Nome | Tipo | Valor | Proxy |
+   |---|---|---|---|
+   | `tccelta` (API) | `A` | IP da VPS | **ligado** (laranja) |
+   | `tccelta-db` (banco) | `A` | IP da VPS | **desligado** (cinza) |
+
+2. **Modo SSL:** Cloudflare > SSL/TLS > Overview > **Full (strict)**. "Flexible" manda HTTP puro à VPS e gera loop de
+   redirecionamento.
+3. **Certificado de origem:** SSL/TLS > Origin Server > Create Certificate (hostname da API). Salve o certificado e a
+   chave privada (que a Cloudflare mostra uma única vez) como `deploy/ansible/.pki-local/cloudflare-origin.pem` e
+   `deploy/ansible/.pki-local/cloudflare-origin-key.pem`. A pasta `.pki-local/` não é versionada.
+4. **Variáveis** em `deploy/ansible/group_vars/all/main.yml`:
+
+   ```yaml
+   dominio_api: "tccelta.malcong.com.br"
+   dominio_db: "tccelta-db.malcong.com.br"   # DIFERENTE de dominio_api
+   cloudflare_proxy: true
+   ```
+
+   O playbook para com mensagem se `dominio_db` for igual a `dominio_api` ou se faltar um dos arquivos do passo 3.
+5. **Aplicar:**
+
+   ```bash
+   bash deploy/ansible/run.sh site.yml --tags pki,app
+   bash deploy/ansible/run.sh stack.yml
+   ```
+
+   O `stack.yml` recria o Caddy porque o Caddyfile mudou. O certificado do Postgres ganha `DNS:<dominio_db>`.
+6. **Conferir:** `curl -sS -o /dev/null -w "%{http_code} %{ssl_verify_result}\n" https://<dominio_api>/saude/pronta`
+   deve dar `200 0`. O certificado que o cliente vê é o da Cloudflare, então o app não precisa de `CA_ASSET`.
+   No DBeaver, use o nome do banco (`dominio_db`), nunca o da API.
+
+### Limites e cuidados
+
+- Acessar o IP da VPS direto não passa pelo proxy; como o certificado de origem só a Cloudflare aceita, o cliente
+  vê erro de certificado. As portas 80 e 443 continuam abertas ao mundo (restringi-las às faixas da Cloudflare não foi
+  implementado; o UFW não protege portas publicadas pelo Docker).
+- As faixas de IP da Cloudflare estão escritas em `deploy/caddy/Caddyfile.cloudflare` (https://www.cloudflare.com/ips).
+  Se a Cloudflare as alterar, atualize a lista.
+- Para trocar o certificado de origem: substitua os arquivos em `.pki-local/`, rode `site.yml --tags app` e reinicie o
+  Caddy (`docker restart tccelta-caddy-1`); o `stack.yml` só recria o Caddy quando o Caddyfile muda.
+- Para voltar ao modo só DNS: `cloudflare_proxy: false`, desligue o proxy no painel e rode os mesmos dois comandos.
+- **Não foi testado numa VPS.** Foram verificados o Caddyfile (`caddy validate` com a imagem do Caddy), o tratamento do
+  `CF-Connecting-IP` (confiável e não confiável), as validações do Ansible e o `docker compose config`.
