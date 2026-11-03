@@ -2,13 +2,13 @@ package visitantes
 
 import (
 	"context"
-	"path/filepath"
-	"time"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestIncrementaConcorrente(t *testing.T) {

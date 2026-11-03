@@ -16,8 +16,8 @@ import (
 
 // Contador e seguro para uso concorrente.
 type Contador struct {
-	n     atomic.Uint64
-	sujo  chan struct{} // sinaliza que ha valor novo a gravar
+	n    atomic.Uint64
+	sujo chan struct{} // sinaliza que ha valor novo a gravar
 }
 
 // Novo cria um contador comecando em inicial.
