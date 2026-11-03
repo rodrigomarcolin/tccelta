@@ -1,0 +1,113 @@
+# compose.prod.yaml - sobrepoe compose.yaml + compose.prodlike.yaml numa VPS unica.
+services:
+  # --- Vault: nunca inicializar/abrir automaticamente em producao ---
+  vault-unseal:
+    profiles: ["lab-nunca-em-producao"]
+  # Bootstrap so a mao (deploy/vault-prod.sh bootstrap = `run --rm vault-bootstrap`, que ignora o perfil).
+  # Fora do `up`: depois do bootstrap o token raiz e revogado, e uma nova execucao sairia com codigo 1.
+  vault-bootstrap:
+    profiles: ["so-manual"]
+    depends_on: !reset {}
+    environment:
+      VAULT_ADDR: https://vault:8200
+      VAULT_CACERT: /vault/certs/ca.pem
+      PERFIL: producao
+    volumes:
+      - ./deploy/kms/certs/vault/ca.pem:/vault/certs/ca.pem:ro
+  vault:
+    restart: unless-stopped
+    volumes:
+      - ./deploy/kms/vault/config:/vault/config:ro
+      - ./deploy/kms/certs/vault:/vault/certs:ro
+      - vault_dados:/vault/data
+      - vault_init:/vault/init
+      - vault_auditoria:/vault/logs
+
+  # --- KMS: so enxerga o proprio certificado e a CA publica ---
+  kms:
+    environment:
+      AMBIENTE: producao
+    volumes:
+      - ./deploy/kms/certs/kms:/run/certs:ro
+    depends_on: !override
+      vault: { condition: service_started }
+  jwt-rotacao:
+    environment:
+      AMBIENTE: producao
+    volumes:
+      - ./deploy/kms/certs/vault/ca.pem:/run/certs/ca.pem:ro
+    depends_on: !override
+      vault: { condition: service_started }
+
+  # --- Provisionamento de dongles (tccelta-kms provision ...), com o Vault em TLS e AMBIENTE=producao ---
+  # Uso: dc run --rm kms-ferramentas provision import-record --file /saida/<devid>/kms_record.json --out /saida
+  kms-ferramentas:
+    environment:
+      AMBIENTE: producao
+      VAULT_ADDR: https://vault:8200
+      VAULT_CACERT: /run/certs/ca.pem
+    volumes:
+      - ./deploy/kms/certs/vault/ca.pem:/run/certs/ca.pem:ro
+
+  # --- API ---
+  api:
+    environment:
+      AMBIENTE: producao
+      KMS_URL: https://kms:8300
+      KMS_CACERT: /run/secrets/kms_ca
+      KMS_CLIENT_CERT: /run/secrets/kms_api_cert
+      KMS_CLIENT_KEY: /run/secrets/kms_api_key
+    networks: [borda, dados, kms]
+  worker:
+    environment:
+      AMBIENTE: producao
+
+  # --- Caddy: unico servico com portas publicas de HTTP(S) ---
+  caddy:
+    restart: unless-stopped
+    profiles: !reset []
+    volumes:
+      - ./deploy/caddy/${CADDYFILE:-Caddyfile.prod}:/etc/caddy/Caddyfile:ro
+      - caddy_dados:/data
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      API_HOST: ${API_HOST:?defina o dominio da API}
+      ACME_EMAIL: ${ACME_EMAIL:?defina o e-mail do Let's Encrypt}
+
+  # --- Banco: acesso externo SO pelo DBeaver (TLS + hba + firewall) ---
+  redis:
+    restart: unless-stopped
+  banco:
+    restart: unless-stopped
+    command: ["postgres",
+      "-c", "shared_preload_libraries=timescaledb",
+      "-c", "max_connections=200", "-c", "log_min_duration_statement=500ms",
+      "-c", "timescaledb.telemetry_level=off",
+      "-c", "hba_file=/etc/postgresql/hba/pg_hba.conf",
+      "-c", "ssl=on",
+      "-c", "ssl_cert_file=/etc/postgresql/tls/server.pem",
+      "-c", "ssl_key_file=/etc/postgresql/tls/server-key.pem",
+      "-c", "ssl_min_protocol_version=TLSv1.3",
+      "-c", "password_encryption=scram-sha-256",
+      "-c", "log_connections=on", "-c", "log_disconnections=on"]
+    volumes:
+      - banco_dados:/home/postgres/pgdata
+      - ./deploy/postgres/init/00-roles.sh:/docker-entrypoint-initdb.d/900-roles.sh:ro
+      # pasta, nao arquivo: o Ansible grava trocando o inode, e um bind de arquivo unico ficaria com o antigo
+      - ./deploy/postgres/hba:/etc/postgresql/hba:ro
+      - ./deploy/postgres/tls:/etc/postgresql/tls:ro
+    # rede propria (nao internal) so para publicar a porta; Caddy e KMS nao entram nela
+    ports: ["${BANCO_PUBLICO_IP:?defina o IP publico da VPS}:5432:5432"]
+    networks: [dados, acesso_db]
+
+networks:
+  acesso_db: {}
+
+# mTLS API -> KMS: a API so recebe a CA publica e o proprio par de chaves
+secrets:
+  kms_ca:       { file: ./deploy/kms/certs/api/ca.pem }
+  kms_api_cert: { file: ./deploy/kms/certs/api/api-cliente.pem }
+  kms_api_key:  { file: ./deploy/kms/certs/api/api-cliente-key.pem }

@@ -1,0 +1,12 @@
+[Unit]
+Description=Firewall da porta 5432 (allowlist do DBeaver)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/tccelta-db-fw.sh
+
+[Install]
+WantedBy=multi-user.target

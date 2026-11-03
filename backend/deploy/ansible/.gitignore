@@ -1,0 +1,3 @@
+.pki-local/
+.known_hosts
+group_vars/all/local.yml

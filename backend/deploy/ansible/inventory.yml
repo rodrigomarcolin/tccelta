@@ -1,0 +1,7 @@
+all:
+  children:
+    vps:
+      hosts:
+        tccelta:
+          ansible_host: "{{ vps_ip }}"
+          ansible_user: deploy

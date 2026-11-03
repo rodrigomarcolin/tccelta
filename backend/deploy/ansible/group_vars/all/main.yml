@@ -1,0 +1,19 @@
+# Valores comuns e derivados. NAO coloque aqui IP, e-mail nem dominio: esses ficam em local.yml
+# (nao versionado; modelo em local.yml.example). O Ansible carrega os arquivos desta pasta em ordem
+# alfabetica, entao local.yml vem depois e prevalece.
+api_replicas: 2
+
+# Etapa 1 (so IP): vazios. Etapa 2: defina em local.yml.
+dominio_api: ""
+dominio_db: ""
+
+# Derivados: sem dominio, o Caddy usa o IP e um certificado interno (Caddyfile.teste).
+api_host: "{{ dominio_api | default(vps_ip, true) }}"
+caddyfile: "{{ 'Caddyfile.prod' if dominio_api else 'Caddyfile.teste' }}"
+
+# Conexoes simultaneas do papel dbeaver_ro (o DBeaver abre varias por sessao: principal, metadados, editores)
+dbeaver_conexoes_max: 50
+
+app_dir: /opt/tccelta
+compose_cmd: >-
+  docker compose -f compose.yaml -f compose.prodlike.yaml -f compose.prod.yaml

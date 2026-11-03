@@ -1,0 +1,60 @@
+# Depois do init/unseal/bootstrap do Vault:  run.sh stack.yml   (-e recriar=true apos trocar certificados)
+- name: Sobe a stack
+  hosts: vps
+  become: true
+  become_user: deploy
+  vars:
+    senha_dbeaver: "{{ lookup('file', playbook_dir + '/.pki-local/dbeaver_ro.senha') }}"
+  tasks:
+    - name: O Vault precisa estar aberto (rc 2 significa selado, volte a secao 6 do roteiro)
+      ansible.builtin.command: "{{ compose_cmd }} exec -T vault vault status"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: false
+
+    - name: Sobe tudo (migracoes, KMS, API, worker, Caddy)
+      ansible.builtin.command: "{{ compose_cmd }} up -d --build --wait {{ '--force-recreate vault kms api' if (recriar | default(false) | bool) else '' }}"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: true
+
+    # O Caddy monta o Caddyfile como arquivo unico (o rsync troca o inode) e roda com `admin off` (sem recarga):
+    # o contêiner pode ficar com o arquivo antigo e o compose nao nota. Sem arquivo de estado: compara o que o
+    # contêiner ENXERGA com o arquivo do host, e recria so o Caddy (nao toca no Vault nem na API) se diferirem.
+    - name: Checksum do Caddyfile no host
+      ansible.builtin.stat: { path: "{{ app_dir }}/deploy/caddy/{{ caddyfile }}", checksum_algorithm: sha256 }
+      register: cf
+
+    - name: Checksum do Caddyfile dentro do conteiner do Caddy
+      ansible.builtin.command: "{{ compose_cmd }} exec -T caddy sha256sum /etc/caddy/Caddyfile"
+      args: { chdir: "{{ app_dir }}" }
+      register: cf_conteiner
+      changed_when: false
+      failed_when: false
+
+    - name: Recria so o Caddy, se ele nao esta com o Caddyfile atual
+      ansible.builtin.command: "{{ compose_cmd }} up -d --force-recreate --no-deps --wait caddy"
+      args: { chdir: "{{ app_dir }}" }
+      when: cf_conteiner.rc != 0 or (cf_conteiner.stdout.split() | first | default('')) != cf.stat.checksum
+      changed_when: true
+
+    - name: Papel de leitura do DBeaver (a senha vai por stdin, nao aparece em ps)
+      ansible.builtin.command: "{{ compose_cmd }} exec -T banco psql -U postgres -d tccelta -v ON_ERROR_STOP=1"
+      args:
+        chdir: "{{ app_dir }}"
+        stdin: |
+          SELECT 'CREATE ROLE dbeaver_ro LOGIN IN ROLE tccelta_reader'
+            WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'dbeaver_ro')\gexec
+          ALTER ROLE dbeaver_ro CONNECTION LIMIT {{ dbeaver_conexoes_max }};
+          \set pw '{{ senha_dbeaver }}'
+          ALTER ROLE dbeaver_ro PASSWORD :'pw';
+          ALTER ROLE dbeaver_ro SET default_transaction_read_only = on;
+          ALTER ROLE dbeaver_ro SET statement_timeout = '30s';
+      changed_when: false
+      no_log: true
+
+    - name: Estado
+      ansible.builtin.command: "{{ compose_cmd }} ps"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: false
+      register: ps
+
+    - ansible.builtin.debug: { var: ps.stdout_lines }

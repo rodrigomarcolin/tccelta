@@ -1,0 +1,13 @@
+# Gerado pelo Ansible
+# TYPE   DATABASE  USER                                                              ADDRESS          METHOD
+local    all       all                                                                                trust
+host     all       all                                                               127.0.0.1/32     scram-sha-256
+host     all       all                                                               ::1/128          scram-sha-256
+
+# servicos do compose (rede interna `dados`); sem TLS, o trafego nao sai do host
+host     tccelta   tccelta_api,tccelta_worker,tccelta_owner,tccelta_provisioner      172.16.0.0/12    scram-sha-256
+
+# DBeaver: so TLS, so este papel, so estes IPs (dbeaver_ips em group_vars/all/local.yml)
+{% for ip in dbeaver_ips %}
+hostssl  tccelta   dbeaver_ro                                                        {{ ip }}   scram-sha-256
+{% endfor %}
