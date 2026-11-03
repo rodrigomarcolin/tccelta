@@ -27,11 +27,16 @@ Future<void> main() async {
   );
 }
 
-/// CA local do servidor de desenvolvimento, se `assets/dev/caddy-root.crt`
-/// existir. Só em debug; no release o app confia apenas no sistema.
+/// CA do servidor de desenvolvimento, se o asset existir. O caminho vem de
+/// `--dart-define=CA_ASSET=...` (padrão `assets/dev/caddy-root.crt`), o que
+/// permite alternar entre a CA do Caddy local e a da VPS pelo arquivo de
+/// definições. Só em debug; no release o app confia apenas no sistema.
 Future<Uint8List?> _loadDevCa() async {
   if (!kDebugMode) return null;
-  const path = 'assets/dev/caddy-root.crt';
+  const path = String.fromEnvironment(
+    'CA_ASSET',
+    defaultValue: 'assets/dev/caddy-root.crt',
+  );
   final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
   if (!manifest.listAssets().contains(path)) return null;
   final data = await rootBundle.load(path);
