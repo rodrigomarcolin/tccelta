@@ -8,6 +8,5 @@ acme_email: voce@exemplo.com
 dbeaver_ips:
   - 198.51.100.7/32
 
-# Etapa 2 (dominio): descomente e preencha.
-# dominio_api: api.seudominio
-# dominio_db: db.seudominio
+# Dominios (etapa 2): ficam em group_vars/all/main.yml (dominio_api, dominio_db), NAO aqui: o main.yml e carregado
+# depois deste arquivo e sobrescreveria qualquer valor definido nos dois.

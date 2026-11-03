@@ -13,7 +13,7 @@ são executados no Git Bash, na pasta `backend/`.
 ## Antes do primeiro `site.yml`
 
 1. Crie `deploy/ansible/group_vars/all/local.yml` (não versionado) a partir do modelo e preencha `vps_ip`,
-   `acme_email` e `dbeaver_ips`. Na etapa 1 (só IP), não defina `dominio_api` nem `dominio_db`:
+   `acme_email` e `dbeaver_ips`. Os domínios (`dominio_api`, `dominio_db`) ficam em `group_vars/all/main.yml`; na etapa 1 (só IP) deixe-os `""`:
 
    ```bash
    cp deploy/ansible/group_vars/all/local.yml.example deploy/ansible/group_vars/all/local.yml
