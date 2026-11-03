@@ -4,6 +4,9 @@ services:
   banco:
     ports: !reset []
   vault:
+    # PID 1 proprio (tini) para recolher zumbis: o healthcheck (wget -> ssl_client) deixa orfaos que o `vault server`,
+    # como PID 1, nao recolhe; ao bater o pids.max do cgroup, `docker exec` falha com "procReady not received".
+    init: true
     entrypoint: ["vault", "server", "-config=/vault/config/vault.hcl"]
     environment:
       VAULT_ADDR: https://127.0.0.1:8200
