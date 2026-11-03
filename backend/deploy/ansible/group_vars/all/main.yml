@@ -6,13 +6,13 @@ api_replicas: 2
 
 # Dominios (nao sao segredo). Etapa 2: preenchidos. Para voltar a etapa 1 (so IP), troque por "".
 dominio_api: "tccelta.malcong.com.br"
-dominio_db: "tccelta.malcong.com.br"
+dominio_db: "tccelta-db.malcong.com.br"
 
 # Proxy da Cloudflare (nuvem laranja) no nome da API. false = DNS apenas (Caddyfile.prod).
 # true usa o Caddyfile.cloudflare (mesmo Let's Encrypt, mais a restauracao do IP do cliente) e exige
 # dominio_db DIFERENTE de dominio_api: o banco (porta 5432) so funciona em um nome sem proxy.
 # Ver deploy/README.md, "Proxy da Cloudflare".
-cloudflare_proxy: false
+cloudflare_proxy: true
 
 # Derivados: sem dominio, o Caddy usa o IP e um certificado interno (Caddyfile.teste).
 api_host: "{{ dominio_api | default(vps_ip, true) }}"
