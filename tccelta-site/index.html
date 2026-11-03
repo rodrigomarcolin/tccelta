@@ -497,7 +497,7 @@
 
     <hr>
 
-    <p>Você é o visitante nº <span class="contador">000427</span></p>
+    <p>Você é o visitante nº <span class="contador">000000</span></p>
 
     <p class="rodape">
       Escola Politécnica da USP · 2026<br>
@@ -508,6 +508,22 @@
 
 
   </div>
+  <script>
+    // Contador de visitantes: conta uma vez por navegador (localStorage); nas demais visitas so le o total.
+    (function () {
+      var el = document.querySelector('.contador');
+      if (!el) return;
+      var jaContou = false;
+      try { jaContou = !!localStorage.getItem('tccelta_visitou'); } catch (e) {}
+      fetch('/api/visitantes', { method: jaContou ? 'GET' : 'POST' })
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (d) {
+          el.textContent = String(d.total).padStart(6, '0');
+          if (!jaContou) { try { localStorage.setItem('tccelta_visitou', '1'); } catch (e) {} }
+        })
+        .catch(function () {});
+    })();
+  </script>
 </body>
 
 </html>

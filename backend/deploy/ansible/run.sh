@@ -14,5 +14,5 @@ fi
 docker build -q -t tccelta-ansible deploy/ansible >/dev/null
 exec docker run --rm -it \
   -v "$KEY:/ssh/key:ro" -v "$KEY.pub:/ssh/key.pub:ro" \
-  -v "$PWD:/work" -w /work/deploy/ansible \
+  -v "$PWD:/work" -v "$PWD/../tccelta-site:/tccelta-site:ro" -w /work/deploy/ansible \
   tccelta-ansible ansible-playbook "$@"

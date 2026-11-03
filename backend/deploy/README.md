@@ -165,7 +165,7 @@ limite. Por isso o `Caddyfile.cloudflare`:
    ```
 
    O `stack.yml` recria o Caddy (o Caddyfile e o `CF_IPS` mudaram). O certificado do Postgres ganha `DNS:<dominio_db>`.
-5. **Conferir:** `curl -sS -o /dev/null -w "%{http_code} %{ssl_verify_result}\n" https://<dominio_api>/saude/pronta`
+5. **Conferir:** `curl -sS -o /dev/null -w "%{http_code} %{ssl_verify_result}\n" https://<dominio_api>/api/saude/pronta`
    deve dar `200 0`. O app não precisa de `CA_ASSET`. No DBeaver, use o nome do banco (`dominio_db`), nunca o da API.
 
 ### Limites e cuidados
