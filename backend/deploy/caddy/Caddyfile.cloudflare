@@ -1,0 +1,36 @@
+{
+	admin off
+	email {$ACME_EMAIL}
+	servers {
+		protocols h1 h2
+		# Faixas da Cloudflare (https://www.cloudflare.com/ips): o Ansible as baixa a cada deploy e grava em CF_IPS.
+		# So conexoes vindas delas tem o CF-Connecting-IP aceito; de qualquer outra origem ele e ignorado.
+		trusted_proxies static {$CF_IPS}
+		client_ip_headers CF-Connecting-IP
+	}
+}
+
+# Atras do proxy da Cloudflare (modo SSL "Full (strict)"). O certificado e o do Let's Encrypt, como no
+# Caddyfile.prod; a Cloudflare aceita um certificado publico valido na origem.
+{$API_HOST} {
+	encode zstd gzip
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy {
+		dynamic a {
+			name api
+			port 8080
+			refresh 5s
+		}
+		lb_policy round_robin
+		health_uri /saude/pronta
+		health_interval 10s
+		# IP do cliente (CF-Connecting-IP, validado por trusted_proxies), nao o da Cloudflare.
+		header_up X-Real-IP {client_ip}
+	}
+	log {
+		output stdout
+		format json
+	}
+}

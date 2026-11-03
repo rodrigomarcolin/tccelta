@@ -76,6 +76,8 @@ services:
     environment:
       API_HOST: ${API_HOST:?defina o dominio da API}
       ACME_EMAIL: ${ACME_EMAIL:?defina o e-mail do Let's Encrypt}
+      # faixas da Cloudflare (modo cloudflare_proxy; o Ansible preenche no .env). Vazio nos demais modos.
+      CF_IPS: ${CF_IPS:-}
 
   # --- Banco: acesso externo SO pelo DBeaver (TLS + hba + firewall) ---
   redis:
