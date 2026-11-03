@@ -1,11 +1,12 @@
-# Valores comuns e derivados. NAO coloque aqui IP, e-mail nem dominio: esses ficam em local.yml
-# (nao versionado; modelo em local.yml.example). O Ansible carrega os arquivos desta pasta em ordem
-# alfabetica, entao local.yml vem depois e prevalece.
+# Valores comuns e derivados. IP, e-mail e IPs do DBeaver NAO ficam aqui: ficam em local.yml
+# (nao versionado; modelo em local.yml.example).
+# ATENCAO: o Ansible carrega os arquivos desta pasta em ordem alfabetica e o ULTIMO vence. local.yml
+# vem ANTES de main.yml, entao uma variavel definida nos dois fica com o valor DESTE arquivo.
 api_replicas: 2
 
-# Etapa 1 (so IP): vazios. Etapa 2: defina em local.yml.
-dominio_api: ""
-dominio_db: ""
+# Dominios (nao sao segredo). Etapa 2: preenchidos. Para voltar a etapa 1 (so IP), troque por "".
+dominio_api: "tccelta.malcong.com.br"
+dominio_db: "tccelta.malcong.com.br"
 
 # Derivados: sem dominio, o Caddy usa o IP e um certificado interno (Caddyfile.teste).
 api_host: "{{ dominio_api | default(vps_ip, true) }}"
