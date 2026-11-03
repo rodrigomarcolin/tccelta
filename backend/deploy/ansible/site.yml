@@ -105,7 +105,7 @@
         dest: /opt/tccelta-site/
         delete: true
         use_ssh_args: true
-        rsync_opts: [--chmod=D755,F644]
+        rsync_opts: ["--chmod=D755,F644"]
       tags: [codigo]
 
     - name: .env a partir do exemplo (so se nao existir)
