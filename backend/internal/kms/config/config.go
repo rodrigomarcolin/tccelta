@@ -24,19 +24,22 @@ type HTTPConfig struct {
 
 // VaultConfig é a conexão com o Vault (Transit).
 type VaultConfig struct {
-	Addr          string
-	CACert        string
-	ClientCert    string
-	ClientKey     string
-	RoleIDFile    string
-	SecretIDFile  string
-	TokenFile     string
-	Timeout       time.Duration
-	Retries       int
-	MountAuth     string
-	MountRec      string
-	MountJWT      string
-	JWTKey        string
+	Addr         string
+	CACert       string
+	ClientCert   string
+	ClientKey    string
+	RoleIDFile   string
+	SecretIDFile string
+	TokenFile    string
+	Timeout      time.Duration
+	Retries      int
+	MountAuth    string
+	MountRec     string
+	MountJWT     string
+	JWTKey       string
+	// MountClients é o KV v2 com o hash dos segredos dos clientes; ClientJWTKey, a chave Ed25519 `cli` (no mount do JWT).
+	MountClients  string
+	ClientJWTKey  string
 	MaxConcurrent int
 }
 
@@ -44,6 +47,12 @@ type VaultConfig struct {
 type JWTConfig struct {
 	Validity time.Duration
 	Leeway   time.Duration
+}
+
+// ClientJWTConfig é o JWT dos clientes (client credentials): a validade e o período de rotação da chave `cli`.
+type ClientJWTConfig struct {
+	Validity       time.Duration
+	RotationPeriod time.Duration
 }
 
 // RotationConfig é o ciclo de vida da chave do JWT.
@@ -60,6 +69,7 @@ type Config struct {
 	HTTP        HTTPConfig
 	Vault       VaultConfig
 	JWT         JWTConfig
+	ClientJWT   ClientJWTConfig
 	Rotation    RotationConfig
 }
 
@@ -137,11 +147,17 @@ func LoadFrom(env func(string) string) (Config, error) {
 		MountRec:      l.str("VAULT_MOUNT_REC", "transit-rec"),
 		MountJWT:      l.str("VAULT_MOUNT_JWT", "transit-jwt"),
 		JWTKey:        l.str("VAULT_CHAVE_JWT", "jwt"),
+		MountClients:  l.str("VAULT_MOUNT_CLIENTES", "kv-clientes"),
+		ClientJWTKey:  l.str("VAULT_CHAVE_CLI", "cli"),
 		MaxConcurrent: l.integer("VAULT_MAX_SIMULTANEAS", 32),
 	}
 	c.JWT = JWTConfig{
 		Validity: l.dur("JWT_VALIDADE", time.Hour),
 		Leeway:   l.dur("JWT_FOLGA", 30*time.Second),
+	}
+	c.ClientJWT = ClientJWTConfig{
+		Validity:       l.dur("CLI_JWT_VALIDADE", 30*time.Minute),
+		RotationPeriod: l.dur("CLI_JWT_ROTACAO_PERIODO", 720*time.Hour),
 	}
 	c.Rotation = RotationConfig{
 		Period:        l.dur("JWT_ROTACAO_PERIODO", 720*time.Hour),

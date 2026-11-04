@@ -22,9 +22,15 @@ garantir_secret_id() {
 
 montar() { vault secrets list | grep -q "^$1/" || vault secrets enable -path="$1" transit; }
 montar transit-auth; montar transit-rec; montar transit-jwt
+# KV v2 com o hash dos segredos dos clientes (client credentials); o Transit nao guarda dados arbitrarios.
+montar_kv() { vault secrets list | grep -q "^$1/" || vault secrets enable -path="$1" -version=2 kv; }
+montar_kv kv-clientes
 
 vault read transit-jwt/keys/jwt >/dev/null 2>&1 || \
   vault write -f transit-jwt/keys/jwt type=ed25519 exportable=false allow_plaintext_backup=false
+# chave propria dos tokens de cliente (rotacao propria); no mesmo mount, o nome separa as politicas
+vault read transit-jwt/keys/cli >/dev/null 2>&1 || \
+  vault write -f transit-jwt/keys/cli type=ed25519 exportable=false allow_plaintext_backup=false
 
 vault policy write tccelta-kms           /vault/policies/tccelta-kms.hcl
 vault policy write tccelta-provisionador /vault/policies/tccelta-provisioner.hcl

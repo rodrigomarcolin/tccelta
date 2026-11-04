@@ -39,6 +39,14 @@ services:
     depends_on: !override
       vault: { condition: service_started }
 
+  jwt-cli-rotacao:
+    environment:
+      AMBIENTE: producao
+    volumes:
+      - ./deploy/kms/certs/vault/ca.pem:/run/certs/ca.pem:ro
+    depends_on: !override
+      vault: { condition: service_started }
+
   # --- Provisionamento de dongles (tccelta-kms provision ...), com o Vault em TLS e AMBIENTE=producao ---
   # Uso: dc run --rm kms-ferramentas provision import-record --file /saida/<devid>/kms_record.json --out /saida
   kms-ferramentas:
