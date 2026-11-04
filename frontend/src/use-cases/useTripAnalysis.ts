@@ -16,10 +16,8 @@ export function useTripAnalysis(
   id: string,
   calculatedAt: string | null,
   enabled: boolean,
-  hasAnalysis?: RefObject<boolean>,
+  hasAnalysis: RefObject<boolean>,
 ) {
-  const own = useRef(false);
-  const shown = hasAnalysis ?? own;
   const enabledRef = useRef(enabled);
   useEffect(() => {
     enabledRef.current = enabled;
@@ -33,7 +31,8 @@ export function useTripAnalysis(
       previousQuery?.queryKey[1] === id ? keepPreviousData(previous) : undefined,
     retry: (_failures, error) =>
       enabledRef.current &&
-      ((error instanceof ApiError && error.status === 409) || shouldRetry(error, shown.current)),
+      ((error instanceof ApiError && error.status === 409) ||
+        shouldRetry(error, hasAnalysis.current, false)),
     retryDelay,
   });
 }

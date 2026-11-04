@@ -330,6 +330,22 @@ describe("network and backoff", () => {
     expect(screen.queryByRole("button", { name: "Tentar de novo" })).toBeNull();
   });
 
+  it("a 404 on the analysis of a new version keeps the analysis on screen and retries", async () => {
+    let newVersion = false;
+    install({
+      status: () => ({ status: 200, body: status("pronta", true, newVersion ? "c2" : "c1") }),
+      analysis: () => (newVersion ? { status: 404 } : { status: 200, body: analysisFor("normal") }),
+    });
+    await mount();
+    expect(screen.getByTestId("map")).toBeInTheDocument();
+    newVersion = true;
+    await advance(5000);
+    await advance(5000);
+    expect(screen.getByTestId("map")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tentar de novo" })).toBeNull();
+    expect(count("analysis")).toBeGreaterThan(2);
+  });
+
   it("the online event forces an immediate attempt", async () => {
     install({ status: () => new Error("network"), analysis: () => ({ status: 409 }) });
     await mount();

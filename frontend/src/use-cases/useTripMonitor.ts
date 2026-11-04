@@ -11,7 +11,7 @@ import {
 import { ApiError } from "@/domain/trip/apiError";
 import type { TripAnalysis } from "@/domain/trip/types";
 import { apiCode } from "./retryPolicy";
-import { usePolling } from "./usePolling";
+import { useResumePolling } from "./useResumePolling";
 import { tripStatusKey, useTripStatus } from "./useTripStatus";
 import { useTripAnalysis } from "./useTripAnalysis";
 
@@ -98,7 +98,10 @@ export function useTripMonitor(id: string, goTo: (url: string) => void): TripMon
   const hasAnalysis = useRef(false);
   const [session, setSession] = useState<Session>(() => fresh(id));
 
-  const statusQuery = useTripStatus(id, hasAnalysis);
+  // Decided below from the last response; the render that changes it runs again before commit.
+  const [delay, setDelay] = useState<number | false>(POLL_WAITING_MS);
+
+  const statusQuery = useTripStatus(id, hasAnalysis, delay);
   const status = statusQuery.data;
   const ready = !statusQuery.isError && status?.status === "pronta";
   const analysisQuery = useTripAnalysis(id, status?.calculada_em ?? null, ready, hasAnalysis);
@@ -145,12 +148,13 @@ export function useTripMonitor(id: string, goTo: (url: string) => void): TripMon
   const statusFailed = statusQuery.isError;
   const analysisFailed = analysisQuery.isError && analysis === undefined;
 
-  let delay: number | false;
-  if (statusFailed || analysisFailed || waitLimit) delay = false;
-  else if (!status || waiting) delay = POLL_WAITING_MS;
-  else if (status.status === "falhou") delay = false;
-  else if (analysis === undefined) delay = POLL_WAITING_MS;
-  else delay = provisional && !provisionalExpired ? POLL_PROVISIONAL_MS : false;
+  let nextDelay: number | false;
+  if (statusFailed || analysisFailed || waitLimit) nextDelay = false;
+  else if (!status || waiting) nextDelay = POLL_WAITING_MS;
+  else if (status.status === "falhou") nextDelay = false;
+  else if (analysis === undefined) nextDelay = POLL_WAITING_MS;
+  else nextDelay = provisional && !provisionalExpired ? POLL_PROVISIONAL_MS : false;
+  if (nextDelay !== delay) setDelay(nextDelay);
 
   const refetchStatus = statusQuery.refetch;
   const refetch = useCallback(() => void refetchStatus({ cancelRefetch: false }), [refetchStatus]);
@@ -158,17 +162,13 @@ export function useTripMonitor(id: string, goTo: (url: string) => void): TripMon
     void queryClient.cancelQueries({ queryKey: tripStatusKey(id), exact: true });
     void refetchStatus();
   }, [queryClient, id, refetchStatus]);
-  usePolling(
-    {
-      fetchStatus: statusQuery.fetchStatus,
-      failureCount: statusQuery.failureCount,
-      dataUpdatedAt: statusQuery.dataUpdatedAt,
-      errorUpdatedAt: statusQuery.errorUpdatedAt,
-      refetch,
-      restart,
-    },
+  useResumePolling({
     delay,
-  );
+    fetchStatus: statusQuery.fetchStatus,
+    failureCount: statusQuery.failureCount,
+    refetch,
+    restart,
+  });
 
   const sessionExpired = isStatus(statusQuery.error, 401) || isStatus(analysisQuery.error, 401);
   const goToRef = useRef(goTo);

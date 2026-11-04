@@ -25,10 +25,16 @@ export function isTransient(error: unknown): boolean {
 /**
  * Retry decision of the polled queries. With a result already on screen, an unexpected
  * response is handled as a failure instead of replacing the screen with an error.
+ * `notFoundIsFinal`: a 404 means the trip does not exist (status route), not a missing version.
  */
-export function shouldRetry(error: unknown, hasResult: boolean): boolean {
+export function shouldRetry(error: unknown, hasResult: boolean, notFoundIsFinal: boolean): boolean {
   if (isTransient(error)) return true;
-  return hasResult && error instanceof ApiError && error.status !== 401 && error.status !== 404;
+  return (
+    hasResult &&
+    error instanceof ApiError &&
+    error.status !== 401 &&
+    !(notFoundIsFinal && error.status === 404)
+  );
 }
 
 /**
