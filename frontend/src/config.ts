@@ -41,9 +41,9 @@ export function temaValido(valor: string | undefined | null): Tema {
 }
 
 export const TILES = {
-  claro: "/api/mapa/claro/{z}/{x}/{y}",
-  escuro: "/api/mapa/escuro/{z}/{x}/{y}",
+  claro: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  escuro: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
 } as const;
 
 export const ATRIBUICAO_TILES =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
