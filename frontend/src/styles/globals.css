@@ -1,775 +1,179 @@
-/* Global styles for the trip analysis. No shadows: hairlines only. */
+/* Tailwind entry point. No shadows: hairlines only.
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+   Tailwind's preflight is deliberately not imported: the interface was designed against the
+   browser's default styles (paragraph margins, list markers, inline SVG, native fieldset and
+   table behaviour), and preflight would change all of them. Only the theme and the utilities
+   are loaded. To adopt preflight later, import it into the base layer and restore these defaults.
 
-html {
-  color-scheme: dark;
-}
-html[data-theme="light"] {
-  color-scheme: light;
-}
+   Layer order matters: the vendor layer (Leaflet, uPlot) sits below the utilities, so a utility
+   always beats the third-party stylesheet. Unlayered CSS would beat every utility. */
+@layer theme, base, vendor, utilities;
 
-body {
-  margin: 0;
-  background: var(--bg-screen);
-  color: var(--text-primary);
-  font: var(--type-body);
-  -webkit-font-smoothing: antialiased;
-}
+@import "tailwindcss/theme.css" layer(theme);
+@import "leaflet/dist/leaflet.css" layer(vendor);
+@import "uplot/dist/uPlot.min.css" layer(vendor);
+@import "tailwindcss/utilities.css" layer(utilities);
 
-h1,
-h2,
-h3 {
-  margin: 0;
-  font-family: var(--font-ui);
-}
-h1 {
-  font: var(--type-heading);
-  letter-spacing: -0.5px;
-}
-h2 {
-  font: var(--type-title);
-  margin-bottom: var(--space-4);
-}
+/* Tests and fixtures mention class names in strings; they must not generate utilities. */
+@source not "../**/*.test.*";
+@source not "../tests";
 
-a {
-  color: var(--accent);
-}
+/* The breakpoints of the old stylesheet. They are `max-width` queries, which include the exact
+   width (Tailwind's own `max-*` variants stop one pixel earlier). */
+@custom-variant tablet (@media (max-width: 900px));
+@custom-variant phone (@media (max-width: 640px));
 
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+/* Values that do not change with the theme. The colors, which do, are mapped below from the
+   variables in tokens/colors.css, so `data-theme` and the print overrides keep working. */
+@theme static {
+  --color-*: initial;
+  --radius-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --ease-*: initial;
+  --animate-*: initial;
+  --tracking-*: initial;
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --font-ui: var(--typeface-ui), "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-mono: var(--typeface-mono), "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+
+  --ease-value: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  --tracking-overline: 1.5px;
 }
 
-/* Data always in mono, with tabular digits. */
-.data-value {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.unit {
-  margin-left: 4px;
-  color: var(--text-secondary);
-  font-size: 0.85em;
-}
-.note,
-.text-secondary {
-  color: var(--text-secondary);
-}
-.note {
-  margin: var(--space-2) 0 0;
-  font-size: 13px;
-}
-.overline {
-  margin: var(--space-5) 0 var(--space-2);
-  font: var(--type-overline);
-  letter-spacing: var(--tracking-overline);
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
+@theme {
+  --animate-breathe: breathe var(--dur-pulse) ease-in-out infinite;
 
-/* ---------- Pages ---------- */
-.page-wide {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: var(--space-7);
-}
-.page-narrow {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: var(--space-7);
-}
-.card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-}
-.login-card {
-  display: grid;
-  gap: var(--space-4);
-  margin-top: 12vh;
-  justify-items: start;
-}
-
-/* ---------- Buttons ---------- */
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  height: 40px;
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  font: var(--type-label);
-  font-size: 14px;
-  cursor: pointer;
-  text-decoration: none;
-  transition:
-    background var(--dur-color) var(--ease-value),
-    border-color var(--dur-color) var(--ease-value);
-}
-.button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.button-primary {
-  background: var(--accent);
-  color: var(--accent-on);
-}
-.button-secondary {
-  background: transparent;
-  color: var(--text-primary);
-  border-color: var(--border-strong);
-}
-.button-tonal {
-  background: var(--accent-wash);
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.button-link {
-  background: transparent;
-  color: var(--accent);
-  padding: 0 var(--space-2);
-  height: 32px;
-}
-.button-block {
-  width: 100%;
-}
-.button-small {
-  height: 30px;
-  padding: 0 var(--space-3);
-  font-size: 13px;
-}
-.button[aria-pressed="true"] {
-  border-color: var(--accent);
-}
-
-/* ---------- Badge ---------- */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  font: var(--type-overline);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-.badge-live {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.badge-warning {
-  background: var(--warning-wash);
-  color: var(--warning);
-}
-.badge-alert {
-  background: var(--danger-wash);
-  color: var(--danger);
-}
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
-  background: currentColor;
-}
-.badge-live .dot {
-  box-shadow: var(--glow-cyan);
-}
-.dot-pulse {
-  animation: respirar var(--dur-pulse) ease-in-out infinite;
-}
-@keyframes respirar {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dot-pulse {
-    animation: none;
-  }
-  * {
-    transition-duration: 0.01ms !important;
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
   }
 }
 
-/* ---------- Header ---------- */
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-7);
-  margin-bottom: var(--space-7);
-}
-.header-title {
-  display: grid;
-  gap: 4px;
-}
-.header-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-  margin: 0;
-  color: var(--text-secondary);
-}
-.header-driver {
-  color: var(--text-primary);
-}
-.header-driver .text-secondary {
-  color: var(--text-secondary);
+/* The scale of tokens/spacing.css: `p-7` is 20px. Numbers not listed here use Tailwind's
+   multiplier (4px), so `gap-1` is 4px and `h-10` is 40px. This also applies to widths and
+   heights, so those use arbitrary values wherever the scale value is not what is meant. */
+@theme inline {
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-7: var(--space-7);
+  --spacing-9: var(--space-9);
+
+  --color-screen: var(--bg-screen);
+  --color-card: var(--surface-card);
+  --color-list: var(--surface-list);
+  --color-sunken: var(--surface-sunken);
+  --color-track: var(--track);
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-tertiary: var(--text-tertiary);
+  --color-hairline: var(--border-hairline);
+  --color-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-on: var(--accent-on);
+  --color-accent-wash: var(--accent-wash);
+  --color-warning: var(--warning);
+  --color-warning-wash: var(--warning-wash);
+  --color-danger: var(--danger);
+  --color-danger-wash: var(--danger-wash);
+  --color-route-outline: var(--route-outline);
 }
 
-/* ---------- Notices and states ---------- */
-.notice-bar {
-  list-style: none;
-  margin: 0 0 var(--space-5);
-  padding: 0;
-  display: grid;
-  gap: var(--space-2);
-}
-.notice {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-5);
-  background: var(--warning-wash);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-}
-.notice svg {
-  flex: none;
-  color: var(--warning);
-}
-.provisional-banner {
-  margin: 0 0 var(--space-5);
-  padding: var(--space-3) var(--space-5);
-  background: var(--accent-wash);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
-}
-.state {
-  display: grid;
-  justify-items: start;
-  gap: var(--space-4);
-  padding: var(--space-9);
-  background: var(--surface-card);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-lg);
-}
-.state-title {
-  margin: 0;
+/* The `font` shorthand tokens (size, weight, line height and family in one). */
+@utility type-title {
   font: var(--type-title);
 }
-.skeleton {
-  gap: var(--space-4);
-}
-.skeleton-block {
-  width: 100%;
-  height: 120px;
-  border-radius: var(--radius-md);
-  background: var(--track);
-}
-
-/* ---------- Summary ---------- */
-.summary {
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-  gap: var(--space-7);
-  margin-bottom: var(--space-9);
-}
-.summary-total {
-  grid-template-columns: minmax(0, 1fr);
-}
-.summary-map {
-  display: grid;
-  gap: var(--space-4);
-  align-content: start;
-}
-.map-frame {
-  position: relative;
-}
-.map {
-  position: relative;
-  height: 420px;
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--surface-sunken);
-}
-.leaflet-map {
-  width: 100%;
-  height: 100%;
-  background: var(--surface-sunken);
-}
-.map-no-base .leaflet-map {
-  background: var(--track);
-}
-.map-notice {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  z-index: 500;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-card);
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-.map-tooltip {
-  position: absolute;
-  top: 8px;
-  left: 56px;
-  z-index: 500;
-  pointer-events: none;
-}
-.ab-marker {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-card);
-  color: var(--text-primary);
-  border: 2px solid var(--text-primary);
-  font: 700 12px var(--font-mono);
-}
-.ab-marker-wrap,
-.event-marker {
-  background: transparent;
-  border: 0;
-}
-.leaflet-container {
-  font-family: var(--font-ui);
-}
-.tile-dark,
-.tile-light {
-  transition: opacity var(--dur-color) var(--ease-value);
-}
-/* OpenStreetMap only has a light style: in the dark theme, invert and darken the tiles. */
-.tile-dark {
-  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) saturate(0.6);
-}
-
-.legend-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--space-2);
-}
-.legend-item {
-  display: grid;
-  grid-template-columns: 14px 1fr;
-  grid-template-rows: auto auto;
-  column-gap: var(--space-2);
-  align-items: center;
-  font-size: 13px;
-}
-.legend-value {
-  grid-column: 2;
-  font-size: 15px;
-}
-.swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  border: 1px solid var(--border-strong);
-}
-
-.summary-groups {
-  display: grid;
-  gap: var(--space-5);
-}
-.group {
-  background: var(--surface-card);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-}
-.group .overline {
-  margin-top: 0;
-}
-.group-items {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: var(--space-4);
-}
-.indicator-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.indicator-value {
-  font-size: 20px;
-}
-.indicator-note {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.indicators-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: var(--space-4);
-  background: var(--surface-card);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  margin-bottom: var(--space-5);
-}
-
-/* ---------- Sections ---------- */
-.section {
-  margin-bottom: var(--space-9);
-}
-.grid-2 {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-5);
-}
-.chart-title {
+@utility type-label {
   font: var(--type-label);
-  margin-bottom: var(--space-2);
 }
-.chart-panel {
-  background: var(--surface-card);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  margin-bottom: var(--space-3);
-}
-.chart {
-  width: 100%;
-  min-height: 40px;
-}
-.chart-empty {
-  display: grid;
-  place-items: center;
-  color: var(--text-secondary);
-  background: var(--surface-list);
-  border-radius: var(--radius-md);
-}
-.legend-markers {
-  margin: var(--space-2) 0 0;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.instant-tooltip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-5);
-  margin: 0 0 var(--space-3);
-  padding: var(--space-2) var(--space-5);
-  background: var(--surface-card);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-}
-.tooltip-empty {
-  color: var(--text-secondary);
-}
-.uplot,
-.u-over {
-  font-family: var(--font-mono);
-}
-
-/* Custom SVG */
-.scatter {
-  width: 100%;
-  height: auto;
-}
-.scatter .grid {
-  stroke: var(--border-hairline);
-}
-.axis-text {
-  font: 11px var(--font-mono);
-  fill: var(--text-secondary);
-}
-.axis-title {
-  font: 11px var(--font-ui);
-  fill: var(--text-secondary);
-}
-.median-line {
-  stroke: var(--text-primary);
-  stroke-width: 2;
-}
-.dot-clickable {
-  cursor: pointer;
-}
-.bars {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--space-2);
-}
-.bar-row {
-  display: grid;
-  grid-template-columns: minmax(90px, 1.4fr) 2fr minmax(110px, 1.3fr);
-  align-items: center;
-  gap: var(--space-3);
-  font-size: 13px;
-}
-.bar-track {
-  height: 10px;
-  background: var(--track);
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-}
-.bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: var(--radius-pill);
-  transition: width var(--dur-value) var(--ease-value);
-}
-.bar-value {
-  text-align: right;
-}
-.heat svg {
-  width: 100%;
-  height: auto;
-}
-.heat-scale {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font: 11px var(--font-mono);
-  color: var(--text-secondary);
-}
-.heat-scale-bar {
-  flex: 1;
-  height: 8px;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(to right, rgba(var(--heat), 0.12), rgba(var(--heat), 1));
-}
-
-/* ---------- Tables ---------- */
-.table-scroll {
-  overflow-x: auto;
-}
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.table th,
-.table td {
-  padding: var(--space-2) var(--space-3);
-  text-align: left;
-  border-bottom: 1px solid var(--border-hairline);
-  font-weight: 400;
-}
-.table thead th {
-  color: var(--text-secondary);
+@utility type-overline {
   font: var(--type-overline);
-  letter-spacing: 0.5px;
-}
-.table .num {
-  text-align: right;
 }
 
-/* ---------- Quality ---------- */
-.quality {
-  background: var(--surface-card);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-}
-.quality summary {
-  cursor: pointer;
-  font: var(--type-title);
-}
-.quality-body {
-  margin-top: var(--space-4);
-}
-.definitions {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr);
-  gap: 4px var(--space-5);
-  margin: 0;
-}
-.definitions dt {
-  color: var(--text-secondary);
-}
-.definitions dd {
-  margin: 0;
-}
-.definition-row {
-  display: contents;
-}
-.definitions-compact {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  font-size: 12px;
-}
-.plain-list {
-  margin: 0;
-  padding-left: var(--space-7);
-  color: var(--text-secondary);
-}
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
 
-/* ---------- Form ---------- */
-.form {
-  display: grid;
-  gap: var(--space-5);
-}
-.field {
-  display: grid;
-  gap: 6px;
-  border: 0;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-.field label,
-.field legend {
-  font: var(--type-label);
-  color: var(--text-secondary);
-  padding: 0;
-}
-.field input,
-.field select {
-  height: 40px;
-  padding: 0 var(--space-4);
-  background: var(--surface-list);
-  color: var(--text-primary);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  font: 15px var(--font-ui);
-}
-.field input[type="number"],
-.field input[type="datetime-local"] {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.field input[aria-invalid="true"] {
-  border-color: var(--danger);
-}
-.field-error {
-  margin: 0;
-  color: var(--danger);
-  font-size: 13px;
-}
-.form-error {
-  padding: var(--space-3) var(--space-4);
-  background: var(--danger-wash);
-  border-radius: var(--radius-md);
-}
-.field-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-}
-.options {
-  display: flex;
-  gap: var(--space-7);
-}
-.option {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text-primary);
-}
-.option input {
-  height: auto;
-}
+  html {
+    color-scheme: dark;
+  }
+  html[data-theme="light"] {
+    color-scheme: light;
+  }
 
-/* ---------- Narrow screen ---------- */
-@media (max-width: 900px) {
-  .summary,
-  .grid-2 {
-    grid-template-columns: minmax(0, 1fr);
+  body {
+    margin: 0;
+    background: var(--bg-screen);
+    color: var(--text-primary);
+    font: var(--type-body);
+    -webkit-font-smoothing: antialiased;
   }
-  .page-wide {
-    padding: var(--space-5);
+
+  h1,
+  h2,
+  h3 {
+    margin: 0;
+    font-family: var(--font-ui);
   }
-}
-@media (max-width: 640px) {
-  .button {
-    height: 44px;
+  h1 {
+    font: var(--type-heading);
+    letter-spacing: -0.5px;
   }
-  .bar-row {
-    grid-template-columns: 1fr;
+  h2 {
+    font: var(--type-title);
+    margin-bottom: var(--space-4);
   }
-  .bar-value {
-    text-align: left;
+
+  a {
+    color: var(--accent);
   }
-  .field-row,
-  .definitions,
-  .definitions-compact {
-    grid-template-columns: minmax(0, 1fr);
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
-  .header {
-    flex-direction: column;
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  @media print {
+    html {
+      color-scheme: light;
+    }
+    body {
+      background: #fff;
+      font-size: 11px;
+    }
+    * {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
   }
 }
 
-/* ---------- Print ---------- */
 @page {
   size: A4 landscape;
   margin: 10mm;
-}
-@media print {
-  html {
-    color-scheme: light;
-  }
-  body {
-    background: #fff;
-    font-size: 11px;
-  }
-  .no-print {
-    display: none !important;
-  }
-  .page-wide {
-    padding: 0;
-    max-width: none;
-  }
-  .map {
-    height: 300px;
-  }
-  .summary {
-    break-inside: avoid;
-    margin-bottom: 8mm;
-  }
-  .section,
-  .card,
-  .chart-panel {
-    break-inside: avoid;
-  }
-  .quality {
-    break-before: page;
-  }
-  .leaflet-control-zoom {
-    display: none;
-  }
-  .instant-tooltip {
-    display: none;
-  }
-  * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
 }

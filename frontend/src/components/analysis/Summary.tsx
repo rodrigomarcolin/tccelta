@@ -3,7 +3,13 @@
 import { useState, type ReactNode } from "react";
 import type { TripAnalysis } from "@/domain/trip/types";
 import { fuelName } from "@/config";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { DataValue } from "@/components/ui/DataValue";
 import { Indicator } from "@/components/ui/Indicator";
+import { Note } from "@/components/ui/Note";
+import { Overline } from "@/components/ui/Overline";
+import { Table, Td, Th } from "@/components/ui/Table";
 import { formatDuration, formatTime, formatNumber, formatPercent, DASH } from "@/format/numbers";
 import { BAND_ORDER, BAND_LABEL } from "@/format/bands";
 
@@ -14,55 +20,60 @@ export function Legend({ analysis }: { analysis: TripAnalysis }) {
   );
   if (bands.length === 0) return null;
   return (
-    <div className="legenda">
-      <ul className="legend-list" aria-label="Faixas de velocidade">
+    <div>
+      <ul
+        className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2 p-0"
+        aria-label="Faixas de velocidade"
+      >
         {bands.map((f) => (
-          <li key={f.id} className="legend-item">
+          <li
+            key={f.id}
+            className="grid grid-cols-[14px_1fr] grid-rows-[auto_auto] items-center gap-x-2 text-[13px]"
+          >
             <span
-              className="swatch"
+              className="size-[14px] rounded-[4px] border border-strong"
               style={{ background: `var(--band-${f.id})` }}
               aria-hidden="true"
             />
-            <span className="legend-name">{BAND_LABEL[f.id]}</span>
-            <span className="data-value legend-value">
+            <span>{BAND_LABEL[f.id]}</span>
+            <DataValue className="col-start-2 text-[15px]">
               {f.id === "parado" ? formatDuration(f.tempo_s) : formatPercent(f.distancia_pct, 0)}
-            </span>
+            </DataValue>
           </li>
         ))}
       </ul>
-      <p className="note">% da distância percorrida em movimento. Parado mostra o tempo.</p>
-      <button
-        type="button"
-        className="button button-link"
-        aria-expanded={showTable}
-        onClick={() => setShowTable((v) => !v)}
-      >
+      <Note>% da distância percorrida em movimento. Parado mostra o tempo.</Note>
+      <Button variant="link" aria-expanded={showTable} onClick={() => setShowTable((v) => !v)}>
         {showTable ? "Ocultar tabela das faixas" : "Ver tabela das faixas"}
-      </button>
+      </Button>
       {showTable ? (
-        <table className="table">
+        <Table>
           <caption className="sr-only">Faixas de velocidade</caption>
           <thead>
             <tr>
-              <th scope="col">Faixa</th>
-              <th scope="col" className="num">
+              <Th scope="col">Faixa</Th>
+              <Th scope="col" num>
                 % da distância
-              </th>
-              <th scope="col" className="num">
+              </Th>
+              <Th scope="col" num>
                 Tempo
-              </th>
+              </Th>
             </tr>
           </thead>
           <tbody>
             {bands.map((f) => (
               <tr key={f.id}>
-                <th scope="row">{BAND_LABEL[f.id]}</th>
-                <td className="num data-value">{formatPercent(f.distancia_pct, 1)}</td>
-                <td className="num data-value">{formatDuration(f.tempo_s)}</td>
+                <Th scope="row">{BAND_LABEL[f.id]}</Th>
+                <Td num mono>
+                  {formatPercent(f.distancia_pct, 1)}
+                </Td>
+                <Td num mono>
+                  {formatDuration(f.tempo_s)}
+                </Td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       ) : null}
     </div>
   );
@@ -70,10 +81,10 @@ export function Legend({ analysis }: { analysis: TripAnalysis }) {
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="group" aria-label={title}>
-      <h3 className="overline">{title}</h3>
-      <div className="group-items">{children}</div>
-    </section>
+    <Card as="section" aria-label={title}>
+      <Overline flush>{title}</Overline>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">{children}</div>
+    </Card>
   );
 }
 
@@ -93,7 +104,7 @@ export function Summary({ analysis }: { analysis: TripAnalysis }) {
       : `${formatNumber(r.marcha_lenta_pct, 0)}% (${formatDuration(r.marcha_lenta_s)})`;
 
   return (
-    <div className="summary-groups">
+    <div className="grid gap-5">
       <Group title="Uso">
         <Indicator label="Distância" value={formatNumber(r.distancia_km, 1)} unit="km" />
         <Indicator label="Duração" value={formatDuration(r.duracao_s)} />

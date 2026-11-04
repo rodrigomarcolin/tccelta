@@ -6,6 +6,17 @@ import { ApiError } from "@/domain/trip/apiError";
 import type { CreateTripRequest, Problem } from "@/domain/trip/types";
 import { useCreateTrip } from "@/use-cases/useCreateTrip";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import {
+  Field,
+  FieldError,
+  FieldLabel,
+  FieldRow,
+  FieldSet,
+  Input,
+  Radio,
+  Select,
+} from "@/components/ui/Field";
 
 type Fields = {
   driver: string;
@@ -194,25 +205,21 @@ export function ProcessForm({
   }
 
   const field = (id: keyof Errors, label: string, input: React.ReactNode) => (
-    <div className="field">
-      <label htmlFor={`f-${id}`}>{label}</label>
+    <Field>
+      <FieldLabel htmlFor={`f-${id}`}>{label}</FieldLabel>
       {input}
-      {errors[id] ? (
-        <p className="field-error" id={`error-${id}`} role="alert">
-          {errors[id]}
-        </p>
-      ) : null}
-    </div>
+      {errors[id] ? <FieldError id={`error-${id}`}>{errors[id]}</FieldError> : null}
+    </Field>
   );
   const ariaError = (id: keyof Errors) =>
     errors[id] ? { "aria-invalid": true as const, "aria-describedby": `error-${id}` } : {};
 
   return (
-    <form className="form card" onSubmit={(e) => void submit(e)} noValidate>
+    <Card as="form" avoidBreak className="grid gap-5" onSubmit={(e) => void submit(e)} noValidate>
       {field(
         "driver",
         "Motorista",
-        <input
+        <Input
           id="f-driver"
           ref={driverRef}
           value={c.driver}
@@ -225,7 +232,7 @@ export function ProcessForm({
       {field(
         "category",
         "Categoria",
-        <input
+        <Input
           id="f-category"
           value={c.category}
           maxLength={40}
@@ -234,20 +241,21 @@ export function ProcessForm({
           {...ariaError("category")}
         />,
       )}
-      <div className="field">
-        <label htmlFor="f-fuel">Combustível</label>
-        <select id="f-fuel" value={c.fuel} onChange={(e) => change("fuel")(e.target.value)}>
+      <Field>
+        <FieldLabel htmlFor="f-fuel">Combustível</FieldLabel>
+        <Select id="f-fuel" value={c.fuel} onChange={(e) => change("fuel")(e.target.value)}>
           {FUELS.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}
             </option>
           ))}
-        </select>
-      </div>
+        </Select>
+      </Field>
       {field(
         "dongle",
         "Dongle",
-        <input
+        <Input
+          mono
           id="f-dongle"
           type="number"
           min={1}
@@ -258,36 +266,30 @@ export function ProcessForm({
         />,
       )}
 
-      <fieldset className="field">
-        <legend>Viagem definida por</legend>
-        <div className="options">
-          <label className="option">
-            <input
-              type="radio"
-              name="mode"
-              checked={c.mode === "boot"}
-              onChange={() => change("mode")("boot")}
-            />
-            Boot
-          </label>
-          <label className="option">
-            <input
-              type="radio"
-              name="mode"
-              checked={c.mode === "interval"}
-              onChange={() => change("mode")("interval")}
-            />
-            Intervalo de tempo
-          </label>
+      <FieldSet legend="Viagem definida por">
+        <div className="flex gap-7">
+          <Radio
+            label="Boot"
+            name="mode"
+            checked={c.mode === "boot"}
+            onChange={() => change("mode")("boot")}
+          />
+          <Radio
+            label="Intervalo de tempo"
+            name="mode"
+            checked={c.mode === "interval"}
+            onChange={() => change("mode")("interval")}
+          />
         </div>
-      </fieldset>
+      </FieldSet>
 
       {c.mode === "boot" ? (
-        <div className="field-row">
+        <FieldRow>
           {field(
             "bootId",
             "Boot",
-            <input
+            <Input
+              mono
               id="f-bootId"
               type="number"
               min={1}
@@ -300,7 +302,8 @@ export function ProcessForm({
           {field(
             "bootGeneration",
             "Geração do boot (opcional)",
-            <input
+            <Input
+              mono
               id="f-bootGeneration"
               type="number"
               min={0}
@@ -310,13 +313,14 @@ export function ProcessForm({
               {...ariaError("bootGeneration")}
             />,
           )}
-        </div>
+        </FieldRow>
       ) : (
-        <div className="field-row">
+        <FieldRow>
           {field(
             "t0",
             "Início",
-            <input
+            <Input
+              mono
               id="f-t0"
               type="datetime-local"
               value={c.t0}
@@ -327,7 +331,8 @@ export function ProcessForm({
           {field(
             "t1",
             "Fim",
-            <input
+            <Input
+              mono
               id="f-t1"
               type="datetime-local"
               value={c.t1}
@@ -335,11 +340,11 @@ export function ProcessForm({
               {...ariaError("t1")}
             />,
           )}
-        </div>
+        </FieldRow>
       )}
 
       {errors.general ? (
-        <p className="field-error form-error" role="alert">
+        <FieldError box>
           {errors.general}
           {errors.sessionExpired ? (
             <>
@@ -354,11 +359,11 @@ export function ProcessForm({
               {" (abre em outra aba; depois envie de novo)."}
             </>
           ) : null}
-        </p>
+        </FieldError>
       ) : null}
       <Button type="submit" fullWidth disabled={submitting}>
         {submitting ? "Enviando…" : errors.retry ? "Tentar de novo" : "Processar viagem"}
       </Button>
-    </form>
+    </Card>
   );
 }

@@ -15,7 +15,9 @@ describe("Button", () => {
     );
     const b = screen.getByRole("button", { name: "Ok" });
     expect(b).toHaveAttribute("type", "button");
-    expect(b).toHaveClass("button-secondary", "button-block");
+    // Secondary variant (strong border, transparent background) and full width.
+    expect(b).toHaveClass("border-strong", "bg-transparent", "w-full");
+    expect(b).not.toHaveClass("bg-accent");
     expect(screen.getByTestId("i")).toBeInTheDocument();
   });
 });
@@ -23,14 +25,14 @@ describe("Button", () => {
 describe("Badge", () => {
   it("pulses only when requested", () => {
     const { container, rerender } = render(<Badge tone="live">Ao vivo</Badge>);
-    expect(container.querySelector(".dot-pulse")).toBeNull();
+    expect(container.querySelector(".animate-breathe")).toBeNull();
     rerender(
       <Badge tone="alert" pulse>
         Ao vivo
       </Badge>,
     );
-    expect(container.querySelector(".dot-pulse")).not.toBeNull();
-    expect(container.firstChild).toHaveClass("badge-alert");
+    expect(container.querySelector(".animate-breathe")).not.toBeNull();
+    expect(container.firstChild).toHaveClass("bg-danger-wash", "text-danger");
   });
 });
 
@@ -38,14 +40,15 @@ describe("Indicator", () => {
   it("shows label, mono value, unit and note", () => {
     render(<Indicator label="Distância" value="3,5" unit="km" note="estimado" />);
     expect(screen.getByText("Distância")).toBeInTheDocument();
-    expect(screen.getByText("3,5")).toHaveClass("data-value");
-    expect(screen.getByText("km")).toHaveClass("unit");
+    expect(screen.getByText("3,5")).toHaveClass("font-mono", "tabular-nums");
+    expect(screen.getByText("km")).toHaveClass("text-secondary", "ml-1");
     expect(screen.getByText("estimado")).toBeInTheDocument();
   });
   it("omits unit and note when absent", () => {
     const { container } = render(<Indicator label="X" value="1" />);
-    expect(container.querySelector(".unit")).toBeNull();
-    expect(container.querySelector(".indicator-note")).toBeNull();
+    // Only the label and the value remain: no unit span, no note row.
+    expect(container.querySelectorAll("span")).toHaveLength(1);
+    expect(container.firstElementChild?.children).toHaveLength(2);
   });
 });
 

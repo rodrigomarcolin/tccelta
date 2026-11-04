@@ -108,7 +108,7 @@ describe("waiting and 1 s polling", () => {
     });
     await mount();
     expect(screen.getByText("Processando a viagem de «Maria»")).toBeInTheDocument();
-    expect(document.body.querySelector(".dot-pulse")).not.toBeNull();
+    expect(document.body.querySelector(".animate-breathe")).not.toBeNull();
     expect(screen.queryByTestId("map")).toBeNull();
     expect(count("analysis")).toBe(0);
 

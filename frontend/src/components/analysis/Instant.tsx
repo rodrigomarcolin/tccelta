@@ -1,6 +1,7 @@
 import type { Instant as InstantData } from "@/domain/trip/analysis";
 import { gearLabel } from "@/domain/trip/analysis";
 import { formatNumber, DASH } from "@/format/numbers";
+import { DataValue, Unit } from "@/components/ui/DataValue";
 
 type Props = {
   instant: InstantData | null;
@@ -11,33 +12,35 @@ type Props = {
 };
 
 /** Fixed tooltip: time, speed, RPM, gear and pedal of the nearest instant. */
+const TOOLTIP =
+  "m-0 mb-3 flex flex-wrap gap-5 rounded-md border border-hairline bg-card px-5 py-2 text-[13px] print:hidden";
+
 export function InstantTooltip({ instant, formatT, className, hideEmpty }: Props) {
   if (!instant) {
     if (hideEmpty) return null;
     return (
-      <p className={`instant-tooltip tooltip-empty ${className ?? ""}`} role="status">
+      <p className={`${TOOLTIP} text-secondary ${className ?? ""}`} role="status">
         Passe o mouse sobre a rota ou os gráficos para ver o instante.
       </p>
     );
   }
   return (
-    <p className={`instant-tooltip ${className ?? ""}`} role="status">
-      <span className="data-value">{formatT(instant.t)}</span>
+    <p className={`${TOOLTIP} ${className ?? ""}`} role="status">
+      <DataValue>{formatT(instant.t)}</DataValue>
       <span>
-        <span className="data-value">{formatNumber(instant.speed, 0)}</span>
-        <span className="unit">km/h</span>
+        <DataValue>{formatNumber(instant.speed, 0)}</DataValue>
+        <Unit>km/h</Unit>
       </span>
       <span>
-        <span className="data-value">{formatNumber(instant.rpm, 0)}</span>
-        <span className="unit">rpm</span>
+        <DataValue>{formatNumber(instant.rpm, 0)}</DataValue>
+        <Unit>rpm</Unit>
       </span>
       <span>
-        Marcha{" "}
-        <span className="data-value">{instant.gear === null ? DASH : gearLabel(instant.gear)}</span>
+        Marcha <DataValue>{instant.gear === null ? DASH : gearLabel(instant.gear)}</DataValue>
       </span>
       <span>
-        Pedal <span className="data-value">{formatNumber(instant.pedal, 0)}</span>
-        <span className="unit">%</span>
+        Pedal <DataValue>{formatNumber(instant.pedal, 0)}</DataValue>
+        <Unit>%</Unit>
       </span>
     </p>
   );

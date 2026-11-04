@@ -11,6 +11,9 @@ import {
   pauseText,
 } from "@/domain/trip/analysis";
 import { formatNumber } from "@/format/numbers";
+import { Card } from "@/components/ui/Card";
+import { ChartTitle } from "@/components/ui/ChartTitle";
+import { Unit } from "@/components/ui/DataValue";
 import { Chart } from "./Chart";
 import type { Marker, Pause } from "./UPlotChart";
 import { InstantTooltip } from "./Instant";
@@ -26,6 +29,7 @@ type Props = {
 };
 
 const SYNC = "timeline";
+const MARKERS = "m-0 mt-2 text-[12px] text-secondary";
 
 function labelY(v: number): string {
   return formatNumber(v, 0);
@@ -81,12 +85,12 @@ export function Timeline({ analysis, axis, formatX, cursor, onCursor }: Props) {
   };
 
   return (
-    <div className="timeline">
+    <div>
       <InstantTooltip instant={instant} formatT={formatT} />
-      <div className="chart-panel">
-        <h3 className="chart-title">
-          Velocidade <span className="unit">km/h</span>
-        </h3>
+      <Card avoidBreak className="mb-3">
+        <ChartTitle>
+          Velocidade <Unit>km/h</Unit>
+        </ChartTitle>
         <Chart
           {...common}
           title="Velocidade ao longo da viagem"
@@ -95,15 +99,15 @@ export function Timeline({ analysis, axis, formatX, cursor, onCursor }: Props) {
           formatY={labelY}
           noReadings={!hasAnyValue(s.velocidade_kmh)}
         />
-        <p className="legend-markers">
+        <p className={MARKERS}>
           <span aria-hidden="true">▼</span> Frenagem brusca · <span aria-hidden="true">▲</span>{" "}
           Aceleração brusca
         </p>
-      </div>
-      <div className="chart-panel">
-        <h3 className="chart-title">
-          Rotação <span className="unit">rpm</span>
-        </h3>
+      </Card>
+      <Card avoidBreak className="mb-3">
+        <ChartTitle>
+          Rotação <Unit>rpm</Unit>
+        </ChartTitle>
         <Chart
           {...common}
           title="Rotação do motor ao longo da viagem"
@@ -112,13 +116,13 @@ export function Timeline({ analysis, axis, formatX, cursor, onCursor }: Props) {
           formatY={labelY}
           noReadings={!hasAnyValue(s.rpm)}
         />
-        <p className="legend-markers">
+        <p className={MARKERS}>
           <span aria-hidden="true">●</span> Subida de marcha · <span aria-hidden="true">○</span>{" "}
           Redução de marcha
         </p>
-      </div>
-      <div className="chart-panel">
-        <h3 className="chart-title">Marcha estimada</h3>
+      </Card>
+      <Card avoidBreak className="mb-3">
+        <ChartTitle>Marcha estimada</ChartTitle>
         <Chart
           {...common}
           title="Marcha estimada ao longo da viagem"
@@ -129,14 +133,12 @@ export function Timeline({ analysis, axis, formatX, cursor, onCursor }: Props) {
           formatY={(v) => (v === 0 ? "N/E" : `${v}ª`)}
           noReadings={!hasAnyValue(s.marcha)}
         />
-        <p className="legend-markers">
-          N/E: ponto morto ou embreagem. Marcha indefinida fica vazia.
-        </p>
-      </div>
-      <div className="chart-panel">
-        <h3 className="chart-title">
-          Pedal <span className="unit">%</span>
-        </h3>
+        <p className={MARKERS}>N/E: ponto morto ou embreagem. Marcha indefinida fica vazia.</p>
+      </Card>
+      <Card avoidBreak className="mb-3">
+        <ChartTitle>
+          Pedal <Unit>%</Unit>
+        </ChartTitle>
         <Chart
           {...common}
           title="Posição do pedal ao longo da viagem"
@@ -146,7 +148,7 @@ export function Timeline({ analysis, axis, formatX, cursor, onCursor }: Props) {
           formatY={labelY}
           noReadings={!hasAnyValue(s.pedal_pct)}
         />
-      </div>
+      </Card>
     </div>
   );
 }

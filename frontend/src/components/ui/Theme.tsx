@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { THEME_COOKIE, type Theme } from "@/config";
 import { IconMoon, IconSun } from "@/components/icons/Icons";
+import { Button } from "./Button";
 
 const ThemeContext = createContext<Theme>("dark");
 
@@ -39,16 +40,15 @@ export function ThemeToggle() {
   const toggle = useContext(ToggleContext);
   const isLight = theme === "light";
   return (
-    <button
-      type="button"
-      className="button button-secondary button-icon"
+    <Button
+      variant="secondary"
+      icon={isLight ? <IconSun /> : <IconMoon />}
       aria-pressed={isLight}
       aria-label="Tema claro"
       title={isLight ? "Voltar ao tema escuro" : "Usar tema claro"}
       onClick={() => toggle(isLight ? "dark" : "light")}
     >
-      {isLight ? <IconSun /> : <IconMoon />}
-      <span className="theme-button-text">Tema claro</span>
-    </button>
+      <span>Tema claro</span>
+    </Button>
   );
 }

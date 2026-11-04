@@ -11,6 +11,7 @@ import {
   seriesTimes,
 } from "@/domain/trip/analysis";
 import { useTheme } from "@/components/ui/Theme";
+import { Note } from "@/components/ui/Note";
 import { Header } from "./Header";
 import { FuelEngine } from "./FuelEngine";
 import { AwaitingDataState, NoDataState, ConnectionBanner, ProvisionalBanner } from "./States";
@@ -33,6 +34,9 @@ type Props = {
   /** Time (HH:MM) of the latest version that replaced the screen. */
   updatedAt?: string | null;
 };
+
+const SECTION = "mb-9 print:break-inside-avoid";
+const SUMMARY = "mb-9 grid gap-7 print:mb-[8mm] print:break-inside-avoid";
 
 export function AnalysisView({
   analysis,
@@ -76,15 +80,11 @@ export function AnalysisView({
   const hasMap = route !== null && route.lat.some((v) => v !== null);
 
   return (
-    <div className="analysis">
+    <div>
       <Header analysis={analysis} />
       {notice ? <ConnectionBanner text={notice} /> : null}
       {provisional ? <ProvisionalBanner expired={provisionalExpired} /> : null}
-      {updatedAt ? (
-        <p className="note" role="status">
-          Resultado atualizado às {updatedAt}
-        </p>
-      ) : null}
+      {updatedAt ? <Note role="status">Resultado atualizado às {updatedAt}</Note> : null}
       <NoticeBar warnings={analysis.avisos} />
 
       {empty ? (
@@ -96,15 +96,19 @@ export function AnalysisView({
       ) : (
         <>
           <section
-            className={`summary${hasMap ? "" : " summary-total"}`}
+            className={`${SUMMARY} ${
+              hasMap
+                ? "grid-cols-[minmax(0,7fr)_minmax(0,5fr)] tablet:grid-cols-[minmax(0,1fr)]"
+                : "grid-cols-[minmax(0,1fr)]"
+            }`}
             aria-labelledby="t-summary"
           >
             <h2 id="t-summary" className="sr-only">
               Resumo
             </h2>
             {hasMap && route ? (
-              <div className="summary-map" ref={mapRef}>
-                <div className="map-frame">
+              <div className="grid content-start gap-4" ref={mapRef}>
+                <div className="relative">
                   <RouteMap
                     route={route}
                     events={analysis.eventos}
@@ -116,7 +120,7 @@ export function AnalysisView({
                     formatT={fmtFull}
                   />
                   <InstantTooltip
-                    className="map-tooltip"
+                    className="pointer-events-none absolute top-2 left-14 z-[500]"
                     hideEmpty
                     instant={cursor.source === "map" ? instant : null}
                     formatT={fmtFull}
@@ -125,13 +129,13 @@ export function AnalysisView({
                 <Legend analysis={analysis} />
               </div>
             ) : null}
-            <div className="summary-indicators">
+            <div>
               <Summary analysis={analysis} />
               {!hasMap ? <Legend analysis={analysis} /> : null}
             </div>
           </section>
 
-          <section className="section" aria-labelledby="t-timeline">
+          <section className={SECTION} aria-labelledby="t-timeline">
             <h2 id="t-timeline">Linha do tempo</h2>
             <Timeline
               analysis={analysis}
@@ -142,24 +146,24 @@ export function AnalysisView({
             />
           </section>
 
-          <section className="section" aria-labelledby="t-gears">
+          <section className={SECTION} aria-labelledby="t-gears">
             <h2 id="t-gears">Marchas e rotação</h2>
             <GearsRpm analysis={analysis} formatT={fmtFull} onMarkInstant={markInstant} />
           </section>
 
-          <section className="section" aria-labelledby="t-fuel">
+          <section className={SECTION} aria-labelledby="t-fuel">
             <h2 id="t-fuel">Combustível e motor</h2>
             <FuelEngine analysis={analysis} axis={axis} formatX={formatX} />
           </section>
 
-          <section className="section" aria-labelledby="t-events">
+          <section className={SECTION} aria-labelledby="t-events">
             <h2 id="t-events">Eventos</h2>
             <EventsTable events={analysis.eventos} formatT={fmtFull} onViewOnMap={viewOnMap} />
           </section>
         </>
       )}
 
-      <section className="section" aria-label="Qualidade dos dados e metodologia">
+      <section className={SECTION} aria-label="Qualidade dos dados e metodologia">
         <Quality analysis={analysis} />
       </section>
     </div>

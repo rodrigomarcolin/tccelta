@@ -3,6 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { useTripMonitor } from "@/use-cases/useTripMonitor";
 import { ThemeToggle } from "@/components/ui/Theme";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { AnalysisView } from "./AnalysisView";
 import {
   LoadingState,
@@ -26,11 +27,11 @@ function defaultGoTo(url: string) {
 
 function SimplePage({ children, text }: { children: ReactNode; text?: string | null }) {
   return (
-    <div className="analysis">
-      <header className="header">
+    <div>
+      <PageHeader>
         <h1>Análise de viagem</h1>
         <ThemeToggle />
-      </header>
+      </PageHeader>
       {text ? <ConnectionBanner text={text} /> : null}
       {children}
     </div>

@@ -1,16 +1,24 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClass } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import { Note } from "@/components/ui/Note";
 import { IconReload, IconBack } from "@/components/icons/Icons";
 
 function State({ children, role = "status" }: { children: ReactNode; role?: "status" | "alert" }) {
   return (
-    <div className="state" role={role}>
+    <Card roomy className="grid justify-items-start gap-4" role={role}>
       {children}
-    </div>
+    </Card>
   );
 }
+
+function StateTitle({ children }: { children: ReactNode }) {
+  return <p className="m-0 type-title">{children}</p>;
+}
+
+const BANNER = "m-0 mb-5 rounded-md border border-hairline px-5 py-3";
 
 export function WaitingState({ driverName }: { driverName: string | null }) {
   return (
@@ -18,31 +26,36 @@ export function WaitingState({ driverName }: { driverName: string | null }) {
       <Badge tone="live" pulse>
         Ao vivo
       </Badge>
-      <p className="state-title">
+      <StateTitle>
         {driverName ? `Processando a viagem de «${driverName}»` : "Processando a viagem"}
-      </p>
-      <p className="note">A análise aparece aqui quando os dados chegarem.</p>
+      </StateTitle>
+      <Note>A análise aparece aqui quando os dados chegarem.</Note>
     </State>
   );
 }
 
 export function LoadingState() {
   return (
-    <div className="state skeleton" aria-busy="true" aria-label="Carregando a análise">
-      <div className="skeleton-block" />
-      <div className="skeleton-block" />
-      <div className="skeleton-block" />
-    </div>
+    <Card
+      roomy
+      className="grid justify-items-start gap-4"
+      aria-busy="true"
+      aria-label="Carregando a análise"
+    >
+      <div className="h-[120px] w-full rounded-md bg-track" />
+      <div className="h-[120px] w-full rounded-md bg-track" />
+      <div className="h-[120px] w-full rounded-md bg-track" />
+    </Card>
   );
 }
 
 export function FailedState() {
   return (
     <State role="alert">
-      <p className="state-title">
+      <StateTitle>
         Não foi possível calcular esta viagem. O nome do motorista foi liberado.
-      </p>
-      <Link href="/processar" className="button button-primary">
+      </StateTitle>
+      <Link href="/processar" className={buttonClass()}>
         <IconBack />
         Processar outra viagem
       </Link>
@@ -53,8 +66,8 @@ export function FailedState() {
 export function NotFoundState() {
   return (
     <State role="alert">
-      <p className="state-title">Viagem não encontrada</p>
-      <Link href="/processar" className="button button-primary">
+      <StateTitle>Viagem não encontrada</StateTitle>
+      <Link href="/processar" className={buttonClass()}>
         <IconBack />
         Voltar para processar
       </Link>
@@ -65,7 +78,7 @@ export function NotFoundState() {
 export function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <State role="alert">
-      <p className="state-title">Não foi possível carregar a viagem.</p>
+      <StateTitle>Não foi possível carregar a viagem.</StateTitle>
       <Button icon={<IconReload />} onClick={onRetry}>
         Tentar de novo
       </Button>
@@ -76,7 +89,7 @@ export function ErrorState({ onRetry }: { onRetry: () => void }) {
 export function NoDataState() {
   return (
     <State>
-      <p className="state-title">Sem dados para esta viagem</p>
+      <StateTitle>Sem dados para esta viagem</StateTitle>
     </State>
   );
 }
@@ -87,15 +100,15 @@ export function AwaitingDataState() {
       <Badge tone="warning" pulse>
         Provisório
       </Badge>
-      <p className="state-title">Aguardando dados</p>
-      <p className="note">A tela atualiza sozinha quando os dados chegarem.</p>
+      <StateTitle>Aguardando dados</StateTitle>
+      <Note>A tela atualiza sozinha quando os dados chegarem.</Note>
     </State>
   );
 }
 
 export function ProvisionalBanner({ expired = false }: { expired?: boolean }) {
   return (
-    <p className="provisional-banner" role="status">
+    <p className={`${BANNER} bg-accent-wash`} role="status">
       {expired
         ? "Resultado provisório. Recarregue para verificar"
         : "Resultado provisório: ainda podem chegar dados"}
@@ -106,7 +119,7 @@ export function ProvisionalBanner({ expired = false }: { expired?: boolean }) {
 /** Discreet notice for connection or busy-server problems; the screen is not cleared. */
 export function ConnectionBanner({ text }: { text: string }) {
   return (
-    <p className="provisional-banner" role="status">
+    <p className={`${BANNER} bg-accent-wash`} role="status">
       {text}
     </p>
   );
@@ -115,14 +128,14 @@ export function ConnectionBanner({ text }: { text: string }) {
 export function WaitLimitState({ onContinue }: { onContinue: () => void }) {
   return (
     <State role="alert">
-      <p className="state-title">
+      <StateTitle>
         A viagem ainda não foi processada. O processamento no servidor pode estar parado.
-      </p>
-      <div className="actions">
+      </StateTitle>
+      <div className="flex flex-wrap gap-3">
         <Button icon={<IconReload />} onClick={onContinue}>
           Continuar esperando
         </Button>
-        <Link href="/processar" className="button button-secondary">
+        <Link href="/processar" className={buttonClass({ variant: "secondary" })}>
           <IconBack />
           Voltar
         </Link>

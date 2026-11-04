@@ -1,3 +1,4 @@
+/* The scale. Tailwind reads it through `--spacing-N` in `globals.css`. */
 :root {
   --space-2: 8px;
   --space-3: 10px;
@@ -5,9 +6,4 @@
   --space-5: 14px;
   --space-7: 20px;
   --space-9: 28px;
-
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-pill: 999px;
 }

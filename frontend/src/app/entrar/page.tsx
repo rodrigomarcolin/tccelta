@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
 import { safeReturnPath } from "@/auth/operators";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { FieldError } from "@/components/ui/Field";
+import { Page } from "@/components/ui/Page";
 import { IconDongle } from "@/components/icons/Icons";
 
 export const dynamic = "force-dynamic";
@@ -33,22 +36,18 @@ export default async function SignInPage({
   }
 
   return (
-    <main className="page-narrow">
-      <div className="card login-card">
+    <Page>
+      <Card avoidBreak className="mt-[12vh] grid justify-items-start gap-4">
         <IconDongle size={28} />
         <h1>Análise de viagem</h1>
         <p className="text-secondary">Acesso restrito a operadores com e-mail USP autorizado.</p>
-        {message ? (
-          <p className="field-error" role="alert">
-            {message}
-          </p>
-        ) : null}
+        {message ? <FieldError>{message}</FieldError> : null}
         <form action={signInWithGoogle}>
           <Button type="submit" fullWidth>
             Entrar com Google
           </Button>
         </form>
-      </div>
-    </main>
+      </Card>
+    </Page>
   );
 }

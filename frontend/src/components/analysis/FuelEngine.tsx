@@ -6,7 +6,11 @@ import type { Axis } from "@/domain/trip/axis";
 import { hasAnyValue, seriesTimes, pauseText } from "@/domain/trip/analysis";
 import { fillTimes } from "@/domain/trip/search";
 import { fuelName } from "@/config";
-import { Indicator } from "@/components/ui/Indicator";
+import { Indicator, IndicatorRow } from "@/components/ui/Indicator";
+import { Card } from "@/components/ui/Card";
+import { ChartTitle } from "@/components/ui/ChartTitle";
+import { TwoColumns } from "@/components/ui/TwoColumns";
+import { Unit } from "@/components/ui/DataValue";
 import { formatDuration, formatNumber } from "@/format/numbers";
 import { Chart } from "./Chart";
 import type { Pause } from "./UPlotChart";
@@ -34,8 +38,8 @@ export function FuelEngine({ analysis, axis, formatX }: Props) {
 
   const base = { formatX, pauses, height: 140 };
   return (
-    <div className="section-content">
-      <div className="indicators-row">
+    <div>
+      <IndicatorRow>
         <Indicator label="Tempo até aquecer" value={formatDuration(m.aquecimento_s)} />
         <Indicator
           label="Temperatura máxima"
@@ -43,12 +47,12 @@ export function FuelEngine({ analysis, axis, formatX }: Props) {
           unit="°C"
         />
         <Indicator label="Esforço com motor frio" value={formatDuration(m.esforco_frio_s)} />
-      </div>
-      <div className="grid-2">
-        <section className="card" aria-label="Consumo instantâneo">
-          <h3 className="chart-title">
-            Consumo instantâneo <span className="unit">L/h · estimado · {fuel}</span>
-          </h3>
+      </IndicatorRow>
+      <TwoColumns>
+        <Card as="section" avoidBreak aria-label="Consumo instantâneo">
+          <ChartTitle>
+            Consumo instantâneo <Unit>L/h · estimado · {fuel}</Unit>
+          </ChartTitle>
           <Chart
             {...base}
             x={x}
@@ -57,11 +61,11 @@ export function FuelEngine({ analysis, axis, formatX }: Props) {
             formatY={(v) => formatNumber(v, 1)}
             noReadings={!hasAnyValue(s.consumo_l_h)}
           />
-        </section>
-        <section className="card" aria-label="Combustível acumulado">
-          <h3 className="chart-title">
-            Combustível acumulado <span className="unit">L · estimado · {fuel}</span>
-          </h3>
+        </Card>
+        <Card as="section" avoidBreak aria-label="Combustível acumulado">
+          <ChartTitle>
+            Combustível acumulado <Unit>L · estimado · {fuel}</Unit>
+          </ChartTitle>
           <Chart
             {...base}
             x={x}
@@ -70,11 +74,11 @@ export function FuelEngine({ analysis, axis, formatX }: Props) {
             formatY={(v) => formatNumber(v, 2)}
             noReadings={!hasAnyValue(s.combustivel_acumulado_l)}
           />
-        </section>
-        <section className="card" aria-label="Carga do motor">
-          <h3 className="chart-title">
-            Carga do motor <span className="unit">%</span>
-          </h3>
+        </Card>
+        <Card as="section" avoidBreak aria-label="Carga do motor">
+          <ChartTitle>
+            Carga do motor <Unit>%</Unit>
+          </ChartTitle>
           <Chart
             {...base}
             x={x}
@@ -84,11 +88,11 @@ export function FuelEngine({ analysis, axis, formatX }: Props) {
             formatY={(v) => formatNumber(v, 0)}
             noReadings={!hasAnyValue(s.carga_pct)}
           />
-        </section>
-        <section className="card" aria-label="Temperatura do líquido">
-          <h3 className="chart-title">
-            Temperatura do líquido <span className="unit">°C</span>
-          </h3>
+        </Card>
+        <Card as="section" avoidBreak aria-label="Temperatura do líquido">
+          <ChartTitle>
+            Temperatura do líquido <Unit>°C</Unit>
+          </ChartTitle>
           <Chart
             {...base}
             x={xTemp}
@@ -98,11 +102,11 @@ export function FuelEngine({ analysis, axis, formatX }: Props) {
             formatY={(v) => formatNumber(v, 0)}
             noReadings={!hasAnyValue(l.temperatura.c)}
           />
-        </section>
-        <section className="card" aria-label="Nível do tanque">
-          <h3 className="chart-title">
-            Nível do tanque <span className="unit">% · leitura e mediana móvel</span>
-          </h3>
+        </Card>
+        <Card as="section" avoidBreak aria-label="Nível do tanque">
+          <ChartTitle>
+            Nível do tanque <Unit>% · leitura e mediana móvel</Unit>
+          </ChartTitle>
           <Chart
             {...base}
             x={xTank}
@@ -119,8 +123,8 @@ export function FuelEngine({ analysis, axis, formatX }: Props) {
             formatY={(v) => formatNumber(v, 0)}
             noReadings={!hasAnyValue(l.nivel_tanque.pct)}
           />
-        </section>
-      </div>
+        </Card>
+      </TwoColumns>
     </div>
   );
 }

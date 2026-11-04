@@ -3,6 +3,9 @@
 import type { TripEvent } from "@/domain/trip/types";
 import { EVENT_LABEL } from "@/domain/trip/analysis";
 import { formatDuration, formatNumber } from "@/format/numbers";
+import { Button } from "@/components/ui/Button";
+import { Note } from "@/components/ui/Note";
+import { Table, Td, Th } from "@/components/ui/Table";
 
 type Props = {
   events: TripEvent[];
@@ -15,25 +18,25 @@ export function peakText(e: TripEvent): string {
 }
 
 export function EventsTable({ events, formatT, onViewOnMap }: Props) {
-  if (events.length === 0) return <p className="note">Nenhum evento nesta viagem.</p>;
+  if (events.length === 0) return <Note>Nenhum evento nesta viagem.</Note>;
   return (
-    <div className="table-scroll">
-      <table className="table events-table">
+    <div className="overflow-x-auto">
+      <Table>
         <caption className="sr-only">Eventos da viagem</caption>
         <thead>
           <tr>
-            <th scope="col">Tipo</th>
-            <th scope="col">Hora</th>
-            <th scope="col" className="num">
+            <Th scope="col">Tipo</Th>
+            <Th scope="col">Hora</Th>
+            <Th scope="col" num>
               Duração
-            </th>
-            <th scope="col" className="num">
+            </Th>
+            <Th scope="col" num>
               Pico
-            </th>
-            <th scope="col" className="num">
+            </Th>
+            <Th scope="col" num>
               Velocidade
-            </th>
-            <th scope="col">Ação</th>
+            </Th>
+            <Th scope="col">Ação</Th>
           </tr>
         </thead>
         <tbody>
@@ -41,32 +44,36 @@ export function EventsTable({ events, formatT, onViewOnMap }: Props) {
             const noPosition = e.lat === null || e.lon === null;
             return (
               <tr key={`${e.tipo}-${e.t_inicio_ms}`}>
-                <th scope="row">{EVENT_LABEL[e.tipo]}</th>
-                <td className="data-value">{formatT(e.t_inicio_ms)}</td>
-                <td className="num data-value">{formatDuration(e.duracao_s)}</td>
-                <td className="num data-value">{peakText(e)}</td>
-                <td className="num data-value">
+                <Th scope="row">{EVENT_LABEL[e.tipo]}</Th>
+                <Td mono>{formatT(e.t_inicio_ms)}</Td>
+                <Td num mono>
+                  {formatDuration(e.duracao_s)}
+                </Td>
+                <Td num mono>
+                  {peakText(e)}
+                </Td>
+                <Td num mono>
                   {formatNumber(e.velocidade_inicial_kmh, 0)} →{" "}
                   {formatNumber(e.velocidade_final_kmh, 0)} km/h
-                </td>
-                <td>
+                </Td>
+                <Td>
                   <span title={noPosition ? "Sem posição de GPS" : undefined}>
-                    <button
-                      type="button"
-                      className="button button-secondary button-small"
+                    <Button
+                      variant="secondary"
+                      size="small"
                       disabled={noPosition}
                       aria-label={`Ver no mapa: ${EVENT_LABEL[e.tipo]} às ${formatT(e.t_inicio_ms)}`}
                       onClick={() => onViewOnMap(e)}
                     >
                       Ver no mapa
-                    </button>
+                    </Button>
                   </span>
-                </td>
+                </Td>
               </tr>
             );
           })}
         </tbody>
-      </table>
+      </Table>
     </div>
   );
 }

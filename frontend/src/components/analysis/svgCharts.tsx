@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
 import { formatDuration, formatNumber } from "@/format/numbers";
+import { DataValue } from "@/components/ui/DataValue";
+import { Note } from "@/components/ui/Note";
 
 /* Custom charts in HTML and SVG: few elements, no library. */
+
+// SVG text and strokes take their look from classes, so they follow the theme variables.
+const AXIS_TEXT = "fill-secondary font-mono text-[11px]";
+const MONO_11 = "font-mono text-[11px]";
+const AXIS_TITLE = "fill-secondary font-ui text-[11px]";
 
 export type BarItem = {
   label: string;
@@ -16,7 +23,7 @@ export type BarItem = {
 export function HorizontalBars({ items, title }: { items: BarItem[]; title: string }) {
   const max = Math.max(1, ...items.map((i) => i.pct ?? 0));
   return (
-    <ul className="bars" aria-label={title}>
+    <ul className="m-0 grid list-none gap-2 p-0" aria-label={title}>
       {items.map((i) => {
         const barColor = i.color
           ? i.color.startsWith("--")
@@ -24,17 +31,20 @@ export function HorizontalBars({ items, title }: { items: BarItem[]; title: stri
             : i.color
           : "var(--text-secondary)";
         return (
-          <li key={i.label} className="bar-row">
-            <span className="bar-label">{i.label}</span>
-            <span className="bar-track" aria-hidden="true">
+          <li
+            key={i.label}
+            className="grid grid-cols-[minmax(90px,1.4fr)_2fr_minmax(110px,1.3fr)] items-center gap-3 text-[13px] phone:grid-cols-[1fr]"
+          >
+            <span>{i.label}</span>
+            <span className="h-2.5 overflow-hidden rounded-pill bg-track" aria-hidden="true">
               <span
-                className="bar-fill"
+                className="block h-full rounded-pill transition-[width] duration-(--dur-value) ease-value"
                 style={{ width: `${((i.pct ?? 0) / max) * 100}%`, background: barColor }}
               />
             </span>
-            <span className="data-value bar-value">
+            <DataValue className="text-right phone:text-left">
               {i.pct === null ? "—" : `${formatNumber(i.pct, 0)}%`} · {formatDuration(i.timeS)}
-            </span>
+            </DataValue>
           </li>
         );
       })}
@@ -95,32 +105,44 @@ export function Scatter(p: ScatterProps) {
   const ticksX = p.ticksX ?? [];
   const ticksY = p.ticksY ?? [];
   return (
-    <svg className="scatter" viewBox={`0 0 ${L} ${A}`} role="group" aria-label={p.title}>
+    <svg className="h-auto w-full" viewBox={`0 0 ${L} ${A}`} role="group" aria-label={p.title}>
       <title>{p.title}</title>
       {ticksY.map((t) => (
         <g key={`y${t.v}`}>
-          <line x1={MARGIN.l} x2={MARGIN.l + w} y1={py(t.v)} y2={py(t.v)} className="grid" />
-          <text x={MARGIN.l - 6} y={py(t.v) + 4} textAnchor="end" className="axis-text">
+          <line
+            x1={MARGIN.l}
+            x2={MARGIN.l + w}
+            y1={py(t.v)}
+            y2={py(t.v)}
+            className="stroke-hairline"
+          />
+          <text x={MARGIN.l - 6} y={py(t.v) + 4} textAnchor="end" className={AXIS_TEXT}>
             {t.label}
           </text>
         </g>
       ))}
       {ticksX.map((t) => (
         <g key={`x${t.v}`}>
-          <line x1={px(t.v)} x2={px(t.v)} y1={MARGIN.t} y2={MARGIN.t + h} className="grid" />
-          <text x={px(t.v)} y={MARGIN.t + h + 14} textAnchor="middle" className="axis-text">
+          <line
+            x1={px(t.v)}
+            x2={px(t.v)}
+            y1={MARGIN.t}
+            y2={MARGIN.t + h}
+            className="stroke-hairline"
+          />
+          <text x={px(t.v)} y={MARGIN.t + h + 14} textAnchor="middle" className={AXIS_TEXT}>
             {t.label}
           </text>
         </g>
       ))}
-      <text x={MARGIN.l + w / 2} y={A - 4} textAnchor="middle" className="axis-title">
+      <text x={MARGIN.l + w / 2} y={A - 4} textAnchor="middle" className={AXIS_TITLE}>
         {p.labelX}
       </text>
       <text
         x={12}
         y={MARGIN.t + h / 2}
         textAnchor="middle"
-        className="axis-title"
+        className={AXIS_TITLE}
         transform={`rotate(-90 12 ${MARGIN.t + h / 2})`}
       >
         {p.labelY}
@@ -141,7 +163,7 @@ export function Scatter(p: ScatterProps) {
               x={px(l.x2) - 4}
               y={py(l.y2) - 4}
               textAnchor="end"
-              className="axis-text"
+              className={AXIS_TEXT}
               fill={cssColorValue(l.color)}
               style={{ fill: cssColorValue(l.color) }}
             >
@@ -152,9 +174,15 @@ export function Scatter(p: ScatterProps) {
       ))}
       {(p.dashes ?? []).map((t, i) => (
         <g key={`t${i}`}>
-          <line x1={px(t.x1)} x2={px(t.x2)} y1={py(t.y)} y2={py(t.y)} className="median-line" />
+          <line
+            x1={px(t.x1)}
+            x2={px(t.x2)}
+            y1={py(t.y)}
+            y2={py(t.y)}
+            className="stroke-primary stroke-2"
+          />
           {t.label ? (
-            <text x={px(t.x2) + 3} y={py(t.y) + 4} className="axis-text">
+            <text x={px(t.x2) + 3} y={py(t.y) + 4} className={AXIS_TEXT}>
               {t.label}
             </text>
           ) : null}
@@ -174,7 +202,7 @@ export function Scatter(p: ScatterProps) {
             key={i}
             {...common}
             r={5}
-            className="dot-clickable"
+            className="cursor-pointer"
             role="button"
             tabIndex={0}
             aria-label={pt.label}
@@ -206,7 +234,7 @@ export function Heatmap({ timeS, rpmBin, pedalBin }: HeatmapProps): ReactNode {
   const rows = timeS.length;
   const cols = Math.max(...timeS.map((l) => l.length), 0);
   const max = Math.max(0, ...timeS.flat());
-  if (rows === 0 || max === 0) return <p className="note">Sem leituras</p>;
+  if (rows === 0 || max === 0) return <Note>Sem leituras</Note>;
   // Only shows from the first to the last RPM bin that has time.
   const withTimeb = timeS.map((l) => l.some((v) => v > 0));
   const firstRow = withTimeb.indexOf(true);
@@ -219,7 +247,7 @@ export function Heatmap({ timeS, rpmBin, pedalBin }: HeatmapProps): ReactNode {
   const width = ml + cols * C + 8;
   const height = shown * L + mb + 6;
   return (
-    <figure className="heat">
+    <figure className="[&_svg]:h-auto [&_svg]:w-full">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
@@ -230,7 +258,7 @@ export function Heatmap({ timeS, rpmBin, pedalBin }: HeatmapProps): ReactNode {
           const row = timeS[i] ?? [];
           return (
             <g key={i}>
-              <text x={ml - 6} y={k * L + L / 2 + 4} textAnchor="end" className="axis-text">
+              <text x={ml - 6} y={k * L + L / 2 + 4} textAnchor="end" className={AXIS_TEXT}>
                 {i * rpmBin}
               </text>
               {Array.from({ length: cols }, (_, j) => {
@@ -245,7 +273,6 @@ export function Heatmap({ timeS, rpmBin, pedalBin }: HeatmapProps): ReactNode {
                     height={L - 2}
                     rx={3}
                     style={{ fill: `rgba(var(--heat), ${alpha.toFixed(3)})` }}
-                    className="heat-cell"
                   >
                     <title>{`${i * rpmBin}–${(i + 1) * rpmBin} rpm, pedal ${j * pedalBin}–${(j + 1) * pedalBin}%: ${formatDuration(v)}`}</title>
                   </rect>
@@ -260,22 +287,22 @@ export function Heatmap({ timeS, rpmBin, pedalBin }: HeatmapProps): ReactNode {
             x={ml + j * C + (C - 2) / 2}
             y={shown * L + 14}
             textAnchor="middle"
-            className="axis-text"
+            className={AXIS_TEXT}
           >
             {j * pedalBin}
           </text>
         ))}
-        <text x={ml + (cols * C) / 2} y={shown * L + 30} textAnchor="middle" className="axis-title">
+        <text x={ml + (cols * C) / 2} y={shown * L + 30} textAnchor="middle" className={AXIS_TITLE}>
           Pedal (%)
         </text>
       </svg>
-      <figcaption className="note">
+      <Note as="figcaption">
         Linhas: rotação (rpm, início de cada faixa). Cor: tempo, de 0 s a{" "}
-        <span className="data-value">{formatDuration(max)}</span>.
-      </figcaption>
-      <div className="heat-scale" aria-hidden="true">
+        <DataValue>{formatDuration(max)}</DataValue>.
+      </Note>
+      <div className={`flex items-center gap-2 text-secondary ${MONO_11}`} aria-hidden="true">
         <span>0 s</span>
-        <span className="heat-scale-bar" />
+        <span className="h-2 flex-1 rounded-pill bg-[linear-gradient(to_right,rgba(var(--heat),0.12),rgba(var(--heat),1))]" />
         <span>{formatDuration(max)}</span>
       </div>
     </figure>

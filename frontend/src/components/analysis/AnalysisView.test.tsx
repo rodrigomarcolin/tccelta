@@ -191,11 +191,12 @@ describe("normal boot (scenario boot 8)", () => {
 
 describe("no GPS (boot 9)", () => {
   it("no map, full-width summary, notice and sections 3 to 7 working", () => {
-    const { container } = renderWithTheme(
-      <AnalysisView analysis={analysisFor("sem_gps")} provisional={false} />,
-    );
+    renderWithTheme(<AnalysisView analysis={analysisFor("sem_gps")} provisional={false} />);
     expect(screen.queryByTestId("map")).toBeNull();
-    expect(container.querySelector(".summary-total")).not.toBeNull();
+    // A single full-width column, not the 7fr/5fr split of the map layout.
+    const summary = screen.getByRole("region", { name: "Resumo" });
+    expect(summary).toHaveClass("grid-cols-[minmax(0,1fr)]");
+    expect(summary).not.toHaveClass("grid-cols-[minmax(0,7fr)_minmax(0,5fr)]");
     expect(
       screen.getByText("Sem posições de GPS nesta viagem: a rota não pode ser mostrada"),
     ).toBeInTheDocument();

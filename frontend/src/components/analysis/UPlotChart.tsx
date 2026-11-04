@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import uPlot from "uplot";
-import "uplot/dist/uPlot.min.css";
 import { useTheme } from "@/components/ui/Theme";
 import { cssColor } from "./colors";
 
@@ -248,7 +247,7 @@ export default function UPlotChart(props: ChartProps) {
   if (noReadings) {
     return (
       <div
-        className="chart chart-empty"
+        className="grid min-h-10 w-full place-items-center rounded-md bg-list text-secondary"
         role="img"
         aria-label={`${title}: sem leituras`}
         style={{ height }}
@@ -257,5 +256,12 @@ export default function UPlotChart(props: ChartProps) {
       </div>
     );
   }
-  return <div className="chart" ref={root} role="img" aria-label={title} />;
+  return (
+    <div
+      className="min-h-10 w-full [&_.u-over]:font-mono [&_.uplot]:font-mono"
+      ref={root}
+      role="img"
+      aria-label={title}
+    />
+  );
 }

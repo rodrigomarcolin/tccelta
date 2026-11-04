@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from "react";
 import type { TripAnalysis, DistributionBin } from "@/domain/trip/types";
-import { Indicator } from "@/components/ui/Indicator";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ChartTitle } from "@/components/ui/ChartTitle";
+import { Indicator, IndicatorRow } from "@/components/ui/Indicator";
+import { Note } from "@/components/ui/Note";
+import { Table, Td, Th } from "@/components/ui/Table";
+import { TwoColumns } from "@/components/ui/TwoColumns";
 import { hasAnyValue, gearLabel } from "@/domain/trip/analysis";
 import { formatDuration, formatNumber, DASH } from "@/format/numbers";
 import { HorizontalBars, Scatter, Heatmap, type BarItem } from "./svgCharts";
@@ -94,8 +100,8 @@ export function GearsRpm({ analysis, formatT, onMarkInstant }: Props) {
   ];
 
   return (
-    <div className="section-content">
-      <div className="indicators-row">
+    <div>
+      <IndicatorRow>
         <Indicator
           label="Rotação mediana ao subir"
           value={formatNumber(m.subida_rpm.mediana, 0)}
@@ -119,13 +125,13 @@ export function GearsRpm({ analysis, formatT, onMarkInstant }: Props) {
           value={formatNumber(c.pedal_variacao_p95_pct_s, 0)}
           unit="%/s"
         />
-      </div>
+      </IndicatorRow>
 
-      <div className="grid-2">
-        <section className="card" aria-label="Rotação por velocidade">
-          <h3 className="chart-title">Rotação × velocidade</h3>
+      <TwoColumns>
+        <Card as="section" avoidBreak aria-label="Rotação por velocidade">
+          <ChartTitle>Rotação × velocidade</ChartTitle>
           {noRpm || scatter.points.length === 0 ? (
-            <p className="note">Sem leituras</p>
+            <Note>Sem leituras</Note>
           ) : (
             <Scatter
               title="Rotação por velocidade, colorida por marcha"
@@ -154,25 +160,23 @@ export function GearsRpm({ analysis, formatT, onMarkInstant }: Props) {
               labelY="Rotação (rpm)"
             />
           )}
-          <p className="note">Pontos de ponto morto ou embreagem ficam fora, sem reta.</p>
-        </section>
+          <Note>Pontos de ponto morto ou embreagem ficam fora, sem reta.</Note>
+        </Card>
 
-        <section className="card" aria-label="Tempo em cada marcha">
-          <h3 className="chart-title">Tempo em cada marcha</h3>
+        <Card as="section" avoidBreak aria-label="Tempo em cada marcha">
+          <ChartTitle>Tempo em cada marcha</ChartTitle>
           {gearBars.length === 0 ? (
-            <p className="note">Sem leituras</p>
+            <Note>Sem leituras</Note>
           ) : (
             <HorizontalBars title="Tempo em cada marcha" items={gearBars} />
           )}
-          <p className="note">
-            A numeração é relativa ao que foi observado, não às marchas reais do veículo.
-          </p>
-        </section>
+          <Note>A numeração é relativa ao que foi observado, não às marchas reais do veículo.</Note>
+        </Card>
 
-        <section className="card" aria-label="Rotação nas trocas">
-          <h3 className="chart-title">Rotação nas trocas</h3>
+        <Card as="section" avoidBreak aria-label="Rotação nas trocas">
+          <ChartTitle>Rotação nas trocas</ChartTitle>
           {shifts.length === 0 ? (
-            <p className="note">Sem trocas de marcha identificadas</p>
+            <Note>Sem trocas de marcha identificadas</Note>
           ) : (
             <Scatter
               title="Rotação antes de cada troca, separada em subidas e reduções"
@@ -200,62 +204,63 @@ export function GearsRpm({ analysis, formatT, onMarkInstant }: Props) {
               height={260}
             />
           )}
-          <button
-            type="button"
-            className="button button-link"
-            aria-expanded={tableOpen}
-            onClick={() => setTableOpen((v) => !v)}
-          >
+          <Button variant="link" aria-expanded={tableOpen} onClick={() => setTableOpen((v) => !v)}>
             {tableOpen ? "Ocultar tabela de trocas" : "Ver tabela de trocas"}
-          </button>
+          </Button>
           {tableOpen ? (
-            <table className="table">
+            <Table>
               <caption className="sr-only">Trocas de marcha</caption>
               <thead>
                 <tr>
-                  <th scope="col">Hora</th>
-                  <th scope="col">Tipo</th>
-                  <th scope="col">Marchas</th>
-                  <th scope="col" className="num">
+                  <Th scope="col">Hora</Th>
+                  <Th scope="col">Tipo</Th>
+                  <Th scope="col">Marchas</Th>
+                  <Th scope="col" num>
                     Rotação antes
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" num>
                     Rotação depois
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" num>
                     Velocidade
-                  </th>
+                  </Th>
                 </tr>
               </thead>
               <tbody>
                 {shifts.map((t) => (
                   <tr key={t.t_ms}>
-                    <td className="data-value">{formatT(t.t_ms)}</td>
-                    <td>{t.direcao === "subida" ? "Subida" : "Redução"}</td>
-                    <td className="data-value">{`${t.de}ª → ${t.para}ª`}</td>
-                    <td className="num data-value">{formatNumber(t.rpm_antes, 0)}</td>
-                    <td className="num data-value">{formatNumber(t.rpm_depois, 0)}</td>
-                    <td className="num data-value">{formatNumber(t.velocidade_kmh, 0)}</td>
+                    <Td mono>{formatT(t.t_ms)}</Td>
+                    <Td>{t.direcao === "subida" ? "Subida" : "Redução"}</Td>
+                    <Td mono>{`${t.de}ª → ${t.para}ª`}</Td>
+                    <Td num mono>
+                      {formatNumber(t.rpm_antes, 0)}
+                    </Td>
+                    <Td num mono>
+                      {formatNumber(t.rpm_depois, 0)}
+                    </Td>
+                    <Td num mono>
+                      {formatNumber(t.velocidade_kmh, 0)}
+                    </Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           ) : null}
-        </section>
+        </Card>
 
-        <section className="card" aria-label="Rotação por pedal">
-          <h3 className="chart-title">Rotação × pedal</h3>
+        <Card as="section" avoidBreak aria-label="Rotação por pedal">
+          <ChartTitle>Rotação × pedal</ChartTitle>
           <Heatmap
             timeS={d.rotacao_pedal.tempo_s}
             rpmBin={d.rotacao_pedal.rpm_bin}
             pedalBin={d.rotacao_pedal.pedal_bin}
           />
-        </section>
+        </Card>
 
-        <section className="card" aria-label="Posição do pedal">
-          <h3 className="chart-title">Posição do pedal</h3>
+        <Card as="section" avoidBreak aria-label="Posição do pedal">
+          <ChartTitle>Posição do pedal</ChartTitle>
           {d.pedal.length === 0 ? (
-            <p className="note">Sem leituras</p>
+            <Note>Sem leituras</Note>
           ) : (
             <HorizontalBars
               title="Tempo por posição do pedal"
@@ -266,12 +271,12 @@ export function GearsRpm({ analysis, formatT, onMarkInstant }: Props) {
               }))}
             />
           )}
-        </section>
+        </Card>
 
-        <section className="card" aria-label="Faixas de rotação">
-          <h3 className="chart-title">Faixas de rotação</h3>
+        <Card as="section" avoidBreak aria-label="Faixas de rotação">
+          <ChartTitle>Faixas de rotação</ChartTitle>
           {d.rotacao.length === 0 ? (
-            <p className="note">Sem leituras</p>
+            <Note>Sem leituras</Note>
           ) : (
             <HorizontalBars
               title="Tempo por faixa de rotação"
@@ -282,15 +287,15 @@ export function GearsRpm({ analysis, formatT, onMarkInstant }: Props) {
               }))}
             />
           )}
-        </section>
-      </div>
-      <p className="note">
+        </Card>
+      </TwoColumns>
+      <Note>
         Marcha lenta:{" "}
         {m.marcha_lenta
           ? `${formatNumber(m.marcha_lenta.rpm, 0)} rpm (${m.marcha_lenta.origem})`
           : DASH}
         . Tempo parado: {formatDuration(r.parado_s)}.
-      </p>
+      </Note>
     </div>
   );
 }

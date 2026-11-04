@@ -1,4 +1,5 @@
 import { TripPage } from "@/components/analysis/TripPage";
+import { Page } from "@/components/ui/Page";
 import { requireSession } from "@/server/session";
 
 export const dynamic = "force-dynamic";
@@ -7,8 +8,8 @@ export default async function TripRoute({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   await requireSession(`/viagem/${id}`);
   return (
-    <main className="page-wide">
+    <Page wide>
       <TripPage id={id} />
-    </main>
+    </Page>
   );
 }

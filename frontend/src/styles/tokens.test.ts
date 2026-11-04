@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { contrast, mix } from "./contrast";
@@ -98,10 +98,26 @@ describe("tokens", () => {
     expect(css).not.toMatch(/green/i);
   });
 
-  it("uses no shadow in the global styles", () => {
-    const globals = readFileSync(join(__dirname, "globals.css"), "utf8");
-    const shadows = globals.match(/box-shadow:[^;]*;/g) ?? [];
-    expect(shadows).toEqual(["box-shadow: var(--glow-cyan);"]);
+  it("uses no shadow: only the glow of the live dot", () => {
+    const sources = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) return sources(path);
+        return /\.tsx$/.test(name) && !/\.test\./.test(name) ? [path] : [];
+      });
+    // Shadow utilities in the components (any class that has `shadow-` in it).
+    const utilities = sources(join(__dirname, "../components")).flatMap(
+      (file) => readFileSync(file, "utf8").match(/[\w-]*shadow-[\w()-]+/g) ?? [],
+    );
+    expect(utilities).toEqual(["shadow-(--glow-cyan)"]);
+    // The stylesheets declare no shadow at all.
+    for (const file of [
+      "globals.css",
+      ...readdirSync(join(__dirname, "tokens")).map((f) => `tokens/${f}`),
+    ]) {
+      const text = readFileSync(join(__dirname, file), "utf8");
+      expect(text.match(/box-shadow\s*:/g) ?? [], file).toEqual([]);
+    }
   });
 });
 

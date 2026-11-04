@@ -72,7 +72,6 @@ vi.mock("leaflet", () => {
   };
   return { default: lib, ...lib };
 });
-vi.mock("leaflet/dist/leaflet.css", () => ({}));
 
 import LeafletRouteMap from "./LeafletRouteMap";
 

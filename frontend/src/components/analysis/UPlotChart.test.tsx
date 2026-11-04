@@ -47,7 +47,6 @@ const { Fake } = vi.hoisted(() => {
 type Fake = InstanceType<typeof Fake>;
 
 vi.mock("uplot", () => ({ default: Fake }));
-vi.mock("uplot/dist/uPlot.min.css", () => ({}));
 
 class RO {
   static last: RO;

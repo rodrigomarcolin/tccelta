@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import type * as Leaflet from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { TILES_ATTRIBUTION, TILES, type Theme } from "@/config";
 import { routePointAtPlace, routePointAtTime } from "@/domain/trip/search";
 import { EVENT_LABEL } from "@/domain/trip/analysis";
 import type { TripEvent, Stop, Route } from "@/domain/trip/types";
 import { formatDuration } from "@/format/numbers";
+import { MapBox } from "@/components/ui/MapBox";
 import { cssColor } from "./colors";
 
 export type MapProps = {
@@ -23,13 +23,21 @@ export type MapProps = {
 
 const TILE_ERROR_LIMIT = 3;
 
+// Markers are Leaflet DOM, so their classes are plain strings (Tailwind finds them here).
+const AB_MARKER =
+  "grid size-6 place-items-center rounded-pill border-2 border-primary bg-card font-mono text-[12px] leading-[normal] font-bold text-primary";
+// OpenStreetMap only has a light style: in the dark theme, invert and darken the tiles.
+const TILE_LIGHT = "transition-opacity duration-(--dur-color) ease-value";
+const TILE_DARK =
+  "transition-opacity duration-(--dur-color) ease-value [filter:invert(1)_hue-rotate(180deg)_brightness(0.9)_contrast(0.9)_saturate(0.6)]";
+
 function eventIcon(L: typeof Leaflet, tipo: TripEvent["tipo"]): Leaflet.DivIcon | null {
   if (tipo === "marcha_lenta_longa") return null;
   const outline = cssColor("--text-primary");
   const fillColor = cssColor("--surface-card");
   const polygonPoints = tipo === "frenagem_brusca" ? "2,3 16,3 9,16" : "2,15 16,15 9,2";
   return L.divIcon({
-    className: "event-marker",
+    className: "border-0 bg-transparent",
     html: `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><polygon points="${polygonPoints}" fill="${fillColor}" stroke="${outline}" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
     iconSize: [18, 18],
     iconAnchor: [9, 9],
@@ -38,8 +46,8 @@ function eventIcon(L: typeof Leaflet, tipo: TripEvent["tipo"]): Leaflet.DivIcon 
 
 function abIcon(L: typeof Leaflet, letter: "A" | "B"): Leaflet.DivIcon {
   return L.divIcon({
-    className: "ab-marker-wrap",
-    html: `<span class="ab-marker">${letter}</span>`,
+    className: "border-0 bg-transparent",
+    html: `<span class="${AB_MARKER}">${letter}</span>`,
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
@@ -81,8 +89,8 @@ export default function LeafletRouteMap(props: MapProps) {
       let loaded = 0;
       let errors = 0;
       const tileOptions = { attribution: TILES_ATTRIBUTION, maxZoom: 19 };
-      const light = lib.tileLayer(TILES.light, { ...tileOptions, className: "tile-light" });
-      const dark = lib.tileLayer(TILES.dark, { ...tileOptions, className: "tile-dark" });
+      const light = lib.tileLayer(TILES.light, { ...tileOptions, className: TILE_LIGHT });
+      const dark = lib.tileLayer(TILES.dark, { ...tileOptions, className: TILE_DARK });
       for (const t of [light, dark]) {
         t.on("tileload", () => (loaded += 1));
         t.on("tileerror", () => {
@@ -301,14 +309,18 @@ export default function LeafletRouteMap(props: MapProps) {
   }, [ready, theme, printing]);
 
   return (
-    <div className={`map${noBase ? " map-no-base" : ""}`}>
+    <MapBox>
       <div
         ref={el}
-        className="leaflet-map"
+        className={`h-full w-full font-ui ${noBase ? "bg-track" : "bg-sunken"}`}
         role="application"
         aria-label="Mapa da rota colorida por velocidade"
       />
-      {noBase ? <span className="map-notice">Mapa-base indisponível</span> : null}
-    </div>
+      {noBase ? (
+        <span className="absolute right-2 bottom-2 z-[500] rounded-sm bg-card px-2 py-0.5 text-[11px] text-secondary">
+          Mapa-base indisponível
+        </span>
+      ) : null}
+    </MapBox>
   );
 }
