@@ -34,6 +34,12 @@ type Options struct {
 	Ramp        time.Duration
 	Speedup     float64
 	Drift       float64
+	// Clients são os clientes de client credentials dos cenários trip-http e client-auth (--client id:arquivo:ok|invalido).
+	Clients []ClientCred
+	// TokenFile guarda o token emitido pela fase client-auth, que a client-auth-rotation relê.
+	TokenFile string
+	// MetricsURL é o /metricas da API, para conferir as séries tccelta_auth_*.
+	MetricsURL string
 }
 
 type verifier struct {
@@ -89,6 +95,10 @@ func Run(ctx context.Context, name string, o Options) error {
 		return tripScenario(ctx, o)
 	case "trip-http":
 		return tripHTTPScenario(ctx, o)
+	case "client-auth":
+		return clientAuthScenario(ctx, o)
+	case "client-auth-rotation":
+		return clientAuthRotationScenario(ctx, o)
 	case "knee":
 		return knee(ctx, o)
 	}

@@ -17,9 +17,18 @@ E2E_NEW_DONGLES = ( rm -rf saida/e2e-$(1) saida/dongles-$(1).csv || true ) \
 	&& $(COMPOSE_T) --profile ferramentas $(KMS_TOOLS) provision new --no-material --profile $(or $(2),hmac) --count 3 --out /saida/e2e-$(1) --csv-out /saida/dongles-$(1).csv \
 	&& $(COMPOSE_T) --profile ferramentas $(TOOLS) provision register --file /saida/e2e-$(1)
 E2E_SIMULATE    = $(COMPOSE_T) --profile ferramentas $(TOOLS) simulator --keys /saida/dongles-$(1).csv --api http://api:8080 $(SIM_DB) --scenario $(1)
+# Clientes de client credentials (tccelta-kms client ...): o segredo vai para saida/ (modo 0400), onde o simulador o lê.
+E2E_CLIENT      = $(COMPOSE_T) --profile ferramentas $(KMS_TOOLS) client
+E2E_CLIENTS     = ( rm -f saida/e2e-*.secret saida/e2e-*.antigo saida/e2e-*.token || true ) \
+	&& $(E2E_CLIENT) create --id e2e-cli --out /saida/e2e-cli.secret \
+	&& $(E2E_CLIENT) create --id e2e-rot --out /saida/e2e-rot.antigo \
+	&& $(E2E_CLIENT) rotate --id e2e-rot --out /saida/e2e-rot.secret \
+	&& $(E2E_CLIENT) create --id e2e-rev --out /saida/e2e-rev.secret \
+	&& $(E2E_CLIENT) revoke --id e2e-rev
+E2E_CLIENT_ARGS = --client e2e-cli:/saida/e2e-cli.secret:ok
 
 .PHONY: env secrets certs build up up-tls up-tunnel up-prodlike down clean logs ps migrate new-migration sqlc sqlc-check \
-	vault-bootstrap vault-unseal vault-unseal-manual output-dir seed-dev provision kms-wrapping kms-import reprocess ca-export psql \
+	vault-bootstrap vault-unseal vault-unseal-manual output-dir seed-dev seed-client provision kms-wrapping kms-import reprocess ca-export psql \
 	test test-integration vectors lint e2e load-test scenario build-tools build-kms docker-kms down-all clean-all
 
 env:             ; [ -f .env ] || cp .env.example .env
@@ -44,6 +53,18 @@ vault-unseal-manual: ; $(COMPOSE_PL) exec -it vault vault operator unseal
 seed-dev:        output-dir
 	$(COMPOSE) --profile ferramentas $(KMS_TOOLS) provision import --file /testdata/test-dongles.csv --out /saida/registros
 	$(COMPOSE) --profile ferramentas $(TOOLS) provision register --file /saida/registros
+# Cliente de client credentials do dev (next-dev): sobe o bootstrap (cria o KV e as politicas; idempotente), cria o cliente e grava o
+# segredo em deploy/segredos/analise_cliente_secret (fora do git). Idempotente: se o arquivo existe, não recria. Se o cliente já existe
+# no Vault e o arquivo sumiu, troca o segredo (client rotate).
+seed-client:     env secrets
+	@if [ -s deploy/segredos/analise_cliente_secret ]; then echo "deploy/segredos/analise_cliente_secret já existe: nada a fazer"; else \
+	  $(COMPOSE) run --rm vault-bootstrap \
+	  && ( $(COMPOSE) --profile ferramentas run --rm -T kms-ferramentas client create --id next-dev > deploy/segredos/analise_cliente_secret.tmp \
+	       || $(COMPOSE) --profile ferramentas run --rm -T kms-ferramentas client rotate --id next-dev > deploy/segredos/analise_cliente_secret.tmp ) \
+	  && mv deploy/segredos/analise_cliente_secret.tmp deploy/segredos/analise_cliente_secret \
+	  && chmod 600 deploy/segredos/analise_cliente_secret \
+	  && echo "segredo do cliente next-dev em deploy/segredos/analise_cliente_secret"; \
+	fi
 provision:       output-dir
 	$(COMPOSE) --profile ferramentas $(KMS_TOOLS) provision new --out /saida --profile $(or $(PROFILE),hmac) --count $(or $(N),1) --hw $(or $(HW),dev)
 	$(COMPOSE) --profile ferramentas $(TOOLS) provision register --file /saida
@@ -73,14 +94,21 @@ scenario:        output-dir build-tools
 e2e:             env secrets output-dir
 	chmod a+r deploy/segredos/*
 	$(COMPOSE_T) up -d --build --wait
-	$(COMPOSE_T) --profile ferramentas build ferramentas kms-ferramentas
+	$(COMPOSE_T) --profile ferramentas build ferramentas kms-ferramentas kms-rotacao
 	$(call E2E_NEW_DONGLES,e2e) && $(call E2E_SIMULATE,e2e) \
 	 && $(call E2E_NEW_DONGLES,negative-protocol) && $(call E2E_SIMULATE,negative-protocol) \
 	 && $(call E2E_NEW_DONGLES,time) && $(call E2E_SIMULATE,time) --speedup 120 \
 	 && $(call E2E_NEW_DONGLES,generation) && $(call E2E_SIMULATE,generation) \
 	 && $(call E2E_NEW_DONGLES,asym,asym) && $(call E2E_SIMULATE,asym) \
 	 && $(call E2E_NEW_DONGLES,trip) && $(call E2E_SIMULATE,trip) \
-	 && $(call E2E_NEW_DONGLES,trip-http) && $(call E2E_SIMULATE,trip-http); \
+	 && $(E2E_CLIENTS) \
+	 && $(call E2E_NEW_DONGLES,client-auth) && $(call E2E_SIMULATE,client-auth) $(E2E_CLIENT_ARGS) \
+	      --client e2e-rot:/saida/e2e-rot.secret:ok --client e2e-rot:/saida/e2e-rot.antigo:invalido --client e2e-rev:/saida/e2e-rev.secret:invalido \
+	      --token-file /saida/e2e-cli.token \
+	 && $(COMPOSE_T) --profile ferramentas run --rm kms-rotacao clientjwt rotate --now \
+	 && $(call E2E_NEW_DONGLES,client-auth-rotation) && $(call E2E_SIMULATE,client-auth-rotation) $(E2E_CLIENT_ARGS) --token-file /saida/e2e-cli.token \
+	 && $(COMPOSE_T) --profile ferramentas run --rm vault-politicas \
+	 && $(call E2E_NEW_DONGLES,trip-http) && $(call E2E_SIMULATE,trip-http) $(E2E_CLIENT_ARGS); \
 	 st=$$?; $(COMPOSE_T) down -v; exit $$st
 load-test:       output-dir
 	rm -f saida/dongles-carga.csv

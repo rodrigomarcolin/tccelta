@@ -101,7 +101,12 @@ services:
     environment:
       AMBIENTE: dev
       PERMITIR_PERFIL_NONE: "true"
-      ANALISE_SEM_AUTH: "true"
+      # as rotas de viagem exigem o Bearer de client credentials; o false explícito vale mesmo que o .env local ligue o modo aberto
+      ANALISE_SEM_AUTH: "false"
+      # bloqueio progressivo curto, para o cenário client-auth percorrer a progressão em segundos
+      TOKEN_BLOQUEIO_INICIAL: 2s
+      TOKEN_BLOQUEIO_TETO: 8s
+      TOKEN_BLOQUEIO_ESQUECER: 6s
       BANCO_URL: postgres://tccelta_api@banco:5432/tccelta?sslmode=disable
       BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_api
       KMS_URL: http://kms:8300
@@ -164,6 +169,36 @@ services:
       - vault_approle_ferramentas:/run/approle:ro
       - ./testdata:/testdata:ro
       - ./saida:/saida
+    networks: [cofre]
+
+  # Rotacao da chave cli (AppRole de rotacao): `run --rm kms-rotacao clientjwt rotate --now`.
+  kms-rotacao:
+    <<: *kms
+    profiles: [ferramentas]
+    entrypoint: ["/tccelta-kms"]
+    command: ["help"]
+    environment:
+      AMBIENTE: dev
+      VAULT_ADDR: http://vault:8200
+      VAULT_APPROLE_ROLE_ID_ARQUIVO: /run/approle/rotacao_role_id
+      VAULT_APPROLE_SECRET_ID_ARQUIVO: /run/approle/rotacao_secret_id
+    volumes: [vault_approle_rotacao:/run/approle:ro]
+    restart: "no"
+    networks: [cofre]
+  # Testes negativos de politica no Vault real: o papel kms nao escreve em kv-clientes, nao le metadata, nao rotaciona a cli.
+  vault-politicas:
+    image: hashicorp/vault:${VAULT_VERSAO:-1.18}
+    profiles: [ferramentas]
+    user: "65532:65532"
+    tmpfs: [/tmp]
+    environment: { VAULT_ADDR: "http://vault:8200" }
+    volumes:
+      - ./deploy/kms/vault/scripts:/vault/scripts:ro
+      - vault_approle_kms:/approle/kms:ro
+      - vault_approle_rotacao:/approle/rotacao:ro
+      - vault_approle_ferramentas:/approle/ferramentas:ro
+    entrypoint: ["/bin/sh", "/vault/scripts/politicas-negativas.sh"]
+    restart: "no"
     networks: [cofre]
 
 networks: { dados: {}, kms: {}, cofre: {} }
