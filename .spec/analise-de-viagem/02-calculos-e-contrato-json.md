@@ -513,24 +513,22 @@ Os testes usam viagens de exemplo com resultado conhecido.
 5. **Segmento sem leitura:** usa a última leitura com até 2 s; com mais de 2 s, gera `sem_velocidade`.
 6. **Janela da viagem:** leituras com motor desligado antes da partida não entram na duração, mas entram em `viagem.partes[].dados_inicio_t_ms`.
 7. **Combustível:** para um total de 0,74 L com gasolina pura, os presets E30 e E32 dão cerca de 0,83 L (0,74 × 14,7 × 745 / (13,0 × 750)). `gasolina_pura` mantém 0,74 L.
-8. **Marcha lenta:** a viagem do PDF não gera a falsa "6ª" nem trocas com ela; esse tempo aparece em `ponto_morto_embreagem_s`.
-9. **Parâmetro da marcha lenta:** alterar `marcha_lenta_rpm` ou `marcha_lenta_margem_rpm` altera a classificação, e o valor usado volta em `marchas.marcha_lenta`.
-10. **Pico sem filtro:** um evento com pico de −10,5 m/s² é exposto com esse valor, sem marcação adicional.
-11. **Taxa curta:** com 3,5 km, as taxas por 100 km vêm `null`; com 25 km, vêm preenchidas.
-12. **Aviso:** com 23% do tempo em pedal alto, o aviso `consumo_pode_estar_subestimado` aparece.
-13. **Trecho:** um trecho recalcula `resumo` e `distribuicoes` sem mudar a numeração das marchas.
-14. **Regressão:** com `combustivel = gasolina_pura`, a viagem do PDF mantém 3,5 km, 131 km/h, 0,74 L, 4,7 km/L, 2 acelerações e 6 frenagens bruscas.
-15. **Reprodutibilidade:** a mesma entrada, com os mesmos parâmetros e a mesma `versao_calculo`, gera o mesmo resultado.
-16. **Entrada inválida:** uma requisição com as duas entradas, sem nenhuma, ou com `t1 ≤ t0` é rejeitada.
-17. **Intervalo em um boot:** um intervalo dentro de um boot gera uma parte só com os dados de dentro dele, e `t_ms` conta a partir de `t0`.
-18. **Intervalo com dois boots:** gera duas partes em ordem cronológica. A distância e os litros somam as duas, `duracao_s` não inclui o tempo entre elas, e esse tempo aparece em `sem_dados_s`.
-19. **Sem cruzar partes:** a aceleração, os eventos e as trocas não usam pontos de partes diferentes, e o segmento de rota entre elas tem faixa `falha_gps`.
-20. **Boot sem hora:** na entrada `intervalo`, o boot fica de fora com o aviso `boot_sem_hora`. Na entrada `boot`, a análise funciona normalmente com o aviso `sem_hora_absoluta`.
-21. **Marchas na viagem:** em uma viagem com duas partes, a mesma marcha tem o mesmo número nas duas.
-22. **Aceleração RMS:** acelerações de +1, −1, +1 e −1 m/s² dão 1,00 m/s²; de 0, 0, +3 e −3 m/s² dão cerca de 2,12 m/s². Pontos parados não entram no cálculo.
-23. **Cruzeiro:** 60 s a 80 ± 3 km/h somam 60 s. Trechos de 25 s, ou de 60 s a 30 km/h, somam 0 s.
-24. **Cruzeiro sem dados:** sem leituras de velocidade, `cruzeiro_s` vem `null`. Com leituras e nenhum trecho, vem `0`.
-25. **Cruzeiro entre partes:** 20 s no fim de uma parte e 20 s no início da seguinte, na mesma velocidade, não formam um trecho de cruzeiro.
+8. **Parâmetro da marcha lenta:** alterar `marcha_lenta_rpm` ou `marcha_lenta_margem_rpm` altera a classificação, e o valor usado volta em `marchas.marcha_lenta`.
+9. **Pico sem filtro:** um evento com pico de −10,5 m/s² é exposto com esse valor, sem marcação adicional.
+10. **Taxa curta:** com 3,5 km, as taxas por 100 km vêm `null`; com 25 km, vêm preenchidas.
+11. **Aviso:** com 23% do tempo em pedal alto, o aviso `consumo_pode_estar_subestimado` aparece.
+12. **Trecho:** um trecho recalcula `resumo` e `distribuicoes` sem mudar a numeração das marchas.
+13. **Reprodutibilidade:** a mesma entrada, com os mesmos parâmetros e a mesma `versao_calculo`, gera o mesmo resultado.
+14. **Entrada inválida:** uma requisição com as duas entradas, sem nenhuma, ou com `t1 ≤ t0` é rejeitada.
+15. **Intervalo em um boot:** um intervalo dentro de um boot gera uma parte só com os dados de dentro dele, e `t_ms` conta a partir de `t0`.
+16. **Intervalo com dois boots:** gera duas partes em ordem cronológica. A distância e os litros somam as duas, `duracao_s` não inclui o tempo entre elas, e esse tempo aparece em `sem_dados_s`.
+17. **Sem cruzar partes:** a aceleração, os eventos e as trocas não usam pontos de partes diferentes, e o segmento de rota entre elas tem faixa `falha_gps`.
+18. **Boot sem hora:** na entrada `intervalo`, o boot fica de fora com o aviso `boot_sem_hora`. Na entrada `boot`, a análise funciona normalmente com o aviso `sem_hora_absoluta`.
+19. **Marchas na viagem:** em uma viagem com duas partes, a mesma marcha tem o mesmo número nas duas.
+20. **Aceleração RMS:** acelerações de +1, −1, +1 e −1 m/s² dão 1,00 m/s²; de 0, 0, +3 e −3 m/s² dão cerca de 2,12 m/s². Pontos parados não entram no cálculo.
+21. **Cruzeiro:** 60 s a 80 ± 3 km/h somam 60 s. Trechos de 25 s, ou de 60 s a 30 km/h, somam 0 s.
+22. **Cruzeiro sem dados:** sem leituras de velocidade, `cruzeiro_s` vem `null`. Com leituras e nenhum trecho, vem `0`.
+23. **Cruzeiro entre partes:** 20 s no fim de uma parte e 20 s no início da seguinte, na mesma velocidade, não formam um trecho de cruzeiro.
 
 ## Follow-ups
 
