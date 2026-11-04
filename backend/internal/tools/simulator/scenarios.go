@@ -23,6 +23,7 @@ type Options struct {
 	Inspect     port.Inspector    // leitura de verificação (papel com SELECT; tccelta_owner em dev/teste)
 	Repos       port.Repositories // catálogo de PIDs e reprocessamento (o cenário generation)
 	Tx          port.Transactor   // transações do reprocessamento
+	Seeder      port.TripSeeder   // cria viagens em gold.trip (cenário trip; papel dono das tabelas)
 	Keys        []Keys
 	Report      *Report
 	Log         *slog.Logger
@@ -84,6 +85,8 @@ func Run(ctx context.Context, name string, o Options) error {
 		return load(ctx, o)
 	case "reconnection":
 		return reconnection(ctx, o)
+	case "trip":
+		return tripScenario(ctx, o)
 	case "knee":
 		return knee(ctx, o)
 	}

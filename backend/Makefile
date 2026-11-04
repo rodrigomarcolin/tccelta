@@ -65,7 +65,7 @@ lint:            ; docker run --rm -v "$(CURDIR)":/src -w /src $(LINT_IMG) golan
 build-tools:
 	$(COMPOSE) --profile ferramentas build ferramentas kms-ferramentas
 scenario:        output-dir build-tools
-	@[ -n "$(C)" ] || { echo "uso: make scenario C=<e2e|negative-protocol|time|generation|asym|reconnection|...> [N=3] [PROFILE=hmac|asym|none] [ARGS='--speedup 120']"; exit 1; }
+	@[ -n "$(C)" ] || { echo "uso: make scenario C=<e2e|negative-protocol|time|generation|asym|reconnection|trip|...> [N=3] [PROFILE=hmac|asym|none] [ARGS='--speedup 120']"; exit 1; }
 	-rm -rf saida/cenario-$(C) saida/dongles-$(C).csv
 	$(COMPOSE) --profile ferramentas $(KMS_TOOLS) provision new --no-material --profile $(or $(PROFILE),$(if $(filter asym,$(C)),asym,hmac)) --count $(or $(N),3) --out /saida/cenario-$(C) --csv-out /saida/dongles-$(C).csv
 	$(COMPOSE) --profile ferramentas $(TOOLS) provision register --file /saida/cenario-$(C)
@@ -78,7 +78,8 @@ e2e:             env secrets output-dir
 	 && $(call E2E_NEW_DONGLES,negative-protocol) && $(call E2E_SIMULATE,negative-protocol) \
 	 && $(call E2E_NEW_DONGLES,time) && $(call E2E_SIMULATE,time) --speedup 120 \
 	 && $(call E2E_NEW_DONGLES,generation) && $(call E2E_SIMULATE,generation) \
-	 && $(call E2E_NEW_DONGLES,asym,asym) && $(call E2E_SIMULATE,asym); \
+	 && $(call E2E_NEW_DONGLES,asym,asym) && $(call E2E_SIMULATE,asym) \
+	 && $(call E2E_NEW_DONGLES,trip) && $(call E2E_SIMULATE,trip); \
 	 st=$$?; $(COMPOSE_T) down -v; exit $$st
 load-test:       output-dir
 	rm -f saida/dongles-carga.csv
