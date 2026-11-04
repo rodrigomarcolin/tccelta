@@ -87,6 +87,8 @@ func Run(ctx context.Context, name string, o Options) error {
 		return reconnection(ctx, o)
 	case "trip":
 		return tripScenario(ctx, o)
+	case "trip-http":
+		return tripHTTPScenario(ctx, o)
 	case "knee":
 		return knee(ctx, o)
 	}

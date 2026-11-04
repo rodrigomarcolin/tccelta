@@ -308,3 +308,6 @@ func (d *DongleVirtual) LastSeqBoot() uint32 {
 	}
 	return s
 }
+
+// bootIDNow é o boot_id do boot corrente.
+func (d *DongleVirtual) bootIDNow() uint16 { d.mu.Lock(); defer d.mu.Unlock(); return d.bootID }

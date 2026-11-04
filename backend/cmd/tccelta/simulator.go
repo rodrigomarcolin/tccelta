@@ -14,7 +14,7 @@ import (
 
 func cmdSimulator(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("simulator", flag.ContinueOnError)
-	scenario := fs.String("scenario", "e2e", "e2e|negative-protocol|time|generation|load|reconnection|knee")
+	scenario := fs.String("scenario", "e2e", "e2e|negative-protocol|time|generation|load|reconnection|trip|trip-http|knee")
 	api := fs.String("api", "http://api:8080", "URL base da API")
 	keys := fs.String("keys", "", "CSV de dongles de teste")
 	dongles := fs.Int("dongles", 0, "número de dongles virtuais")

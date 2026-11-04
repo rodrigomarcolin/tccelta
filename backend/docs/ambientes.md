@@ -31,6 +31,7 @@ uma stack isolada para o `make e2e`. Ela é descrita no [README](../README.md#st
 | Dongles de teste (`seed-dev`, `provision new`, `scenario`) | Funcionam | O KMS os permite, mas o `kms-ferramentas` não foi ajustado ao Vault em TLS: **na prática não funcionam** | **Recusados** pelo KMS (`provision new` e `importar` do CSV) |
 | Registro de chave com `alg none` | Aceito | Aceito | **Recusado** |
 | Perfil de bloco `none` (`PERMITIR_PERFIL_NONE`) | Pode ser ligado | Pode ser ligado | **Proibido**: configuração inválida |
+| Rotas de viagem sem autenticação (`ANALISE_SEM_AUTH`) | Desligadas por padrão; podem ser ligadas | Podem ser ligadas | **Proibido**: configuração inválida (até a API3) |
 
 Na coluna **prod**, as linhas "Identidade do cliente do KMS", "Dongles de teste", "`alg none`" e "Perfil de bloco
 `none`" são regras **do código**, que valem com `AMBIENTE=producao`. As demais descrevem o desenho do deploy e

@@ -170,7 +170,7 @@ cadastrá-lo, monte um CSV com o mesmo formato (`dev_id_hex,k_auth_hex,k_rec_hex
 | Alvo | O que faz | Observações |
 |---|---|---|
 | `test` | `go test -race ./...` em contêiner | Todo o módulo, inclusive o KMS |
-| `test-integration` | `go test -p 1 -tags integration -race ./...`, com o socket do Docker montado para o testcontainers | Hoje **nenhum arquivo** tem a tag `integration`, então o alvo só reexecuta os testes de unidade |
+| `test-integration` | `go test -p 1 -tags integration -race ./...`, com o socket do Docker montado para o testcontainers | Os testes com a tag `integration` (`internal/adapter/postgres/trips_integration_test.go`) precisam de um banco migrado e leem `TEST_BANCO_DONO_URL` e `TEST_BANCO_API_URL` (URL completa dos papéis `tccelta_owner` e `tccelta_api`); sem elas são ignorados. Rode-os na rede da pilha de teste (`docker compose -f compose.test.yaml up -d --wait`, rede `tccelta-teste_dados`, host `banco`) |
 | `vectors` | Roda `scripts/gerar_vetores.py`, que gera `internal/domain/protocol/testdata/vetores.json` e o copia para `../mobile-app/test/fixtures/protocolo_vetores.json` | O script foi escrito de forma independente do código Go, a partir da spec, para servir de referência cruzada. Os vetores do firmware (`vetores_firmware.json`) vêm de outro gerador, o `vectors.py` |
 | `lint` | `golangci-lint run` (v2.15.0) com `.golangci.yml` | Inclui a regra `depguard` que impede a API e o KMS de importarem um ao outro. Ainda não foi executado |
 | `build-tools` | Reconstrói as imagens `ferramentas` e `kms-ferramentas` | O `docker compose run` só constrói uma imagem que **não existe**; depois de mudar o código, uma imagem antiga continua rodando o binário antigo. O `scenario` e o `e2e` já chamam este passo |
@@ -316,7 +316,7 @@ binário `tccelta`.
 ## Lacunas conhecidas
 
 - Nenhum alvo foi reexecutado depois do refactor (veja o aviso no topo).
-- `test-integration` não tem testes com a tag `integration`.
+- Os testes `integration` só rodam com as variáveis `TEST_BANCO_*`; o CI (`go test -tags integration`) não sobe banco, então eles são ignorados lá.
 - `lint` e a regra de `depguard` nunca rodaram.
 - `load-test` e as metas M1 a M6 não foram medidas.
 - O túnel, o perfil `observabilidade` e o `prodlike` nunca foram exercitados.

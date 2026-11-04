@@ -79,7 +79,8 @@ e2e:             env secrets output-dir
 	 && $(call E2E_NEW_DONGLES,time) && $(call E2E_SIMULATE,time) --speedup 120 \
 	 && $(call E2E_NEW_DONGLES,generation) && $(call E2E_SIMULATE,generation) \
 	 && $(call E2E_NEW_DONGLES,asym,asym) && $(call E2E_SIMULATE,asym) \
-	 && $(call E2E_NEW_DONGLES,trip) && $(call E2E_SIMULATE,trip); \
+	 && $(call E2E_NEW_DONGLES,trip) && $(call E2E_SIMULATE,trip) \
+	 && $(call E2E_NEW_DONGLES,trip-http) && $(call E2E_SIMULATE,trip-http); \
 	 st=$$?; $(COMPOSE_T) down -v; exit $$st
 load-test:       output-dir
 	rm -f saida/dongles-carga.csv

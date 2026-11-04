@@ -25,6 +25,7 @@ Veja o [README do backend](../README.md) para os alvos do Makefile.
 | `generation` | 1 (o primeiro) | O `boot_id` de 16 bits volta a 1 e o servidor avança a "geração" do boot; o reprocessamento preserva as leituras | Qualquer uma das 4 verificações falha |
 | `asym` | todos do CSV, um por vez (todos `asym`, com `k_sig`) | Blocos assinados com ECDSA P-256 são aceitos; uma tag com 1 bit trocado é rejeitada como `invalid_tag` e o ACK não avança | Qualquer uma das 7 verificações por dongle falha |
 | `trip` | 1 (o primeiro) | O worker calcula as viagens da gold (entrada `boot` e entrada `intervalo`) a partir da silver, com o papel `tccelta_worker` | Qualquer uma das 7 verificações falha |
+| `trip-http` | 1 (o primeiro) | As rotas de viagem da API (`POST`, status e análise), com o worker calculando; exige `ANALISE_SEM_AUTH=true` | Qualquer verificação falha |
 | `reconnection` | `N` do CSV | Um volume grande de blocos acumulados offline é drenado por inteiro | Algum dongle termina com `contiguous_seq` diferente do HEAD |
 | `load` | `N` do CSV | Mede latências por rota com muitos dongles em regime | Só se houver alguma resposta 5xx |
 | `knee` | `N` do CSV (cicla) | Sobe a carga em degraus até achar o limite | Nunca falha: só reporta a capacidade |
@@ -171,13 +172,27 @@ O que o cenário não olha é o KMS: no perfil `asym` a verificação é local, 
 Prova o worker de viagens (API1) de ponta a ponta, sobre o primeiro dongle do CSV:
 
 1. Faz o handshake, gera e envia 200 blocos (PIDs `0x0C`, `0x0D` e `0x04`, mais GPS) e espera o worker dar hora ao boot.
-2. Cria duas viagens em `gold.trip` com o papel dono das tabelas (a API de viagens é a API2, ainda sem rota): uma com entrada
+2. Cria duas viagens em `gold.trip` com o papel dono das tabelas (a API de viagens é coberta pelo cenário `trip-http`): uma com entrada
    `boot` (o boot do dongle) e outra com entrada `intervalo`, de poucos segundos antes do início até 5 s depois do fim.
 3. Espera até 30 s que cada uma chegue a `ready` (o `compose.test.yaml` usa `VIAGEM_ESPERA_SEM_LOTE=3s` e `VIAGEM_LIMITE_FINAL=8s`).
 
 Verificações: o boot tem hora absoluta; e, para cada viagem, o estado `ready`, ao menos uma linha em `trip_part`, `distance_km > 0`
 e `engine_on_s > 0`. Como o cálculo roda no `worker` (papel `tccelta_worker`), estar `ready` também prova que ele leu `reading` e
 `position` sem erro de permissão.
+
+## `trip-http`
+
+Prova as rotas de viagem (API2) de ponta a ponta, sem inserir em `gold.trip`: tudo passa por `POST /v1/viagens`, `GET /v1/viagens/{id}` e
+`GET /v1/viagens/{id}/analise`. Exige a API com `ANALISE_SEM_AUTH=true` (o `compose.test.yaml` já liga). Usa o primeiro dongle do CSV
+e uma categoria nova por execução (o nome do motorista é único por categoria).
+
+1. Erros de contrato: dongle sem estado (`404 dongle_desconhecido`), combustível `personalizado` (`400 entrada_invalida`), id que não é UUID (`404`).
+2. Boot já enviado: `202` com `Location`; o mesmo motorista com outra caixa dá `409 motorista_repetido`; o status chega a `pronta` (limite
+   de 40 s) e a análise traz `viagem.motorista`, `viagem.categoria_viagem`, distância, séries e rota.
+3. Boot ainda não enviado: a viagem nasce com `boot_generation` nula; o dongle faz o boot novo, o handshake e o envio, e a viagem fica
+   `pronta` com a geração resolvida e dados.
+4. Boot que nunca chega: a análise antes da hora dá `409 analise_indisponivel`; depois a viagem fica `pronta` e provisória, com o aviso
+   `sem_leituras`, distância e rota nulas e listas vazias.
 
 ## `reconnection`
 
@@ -215,7 +230,7 @@ está sujeito ao limite por IP.
 ## O `make e2e`
 
 É um encadeamento, não um cenário: sobe a stack **isolada** (`compose.test.yaml`, projeto `tccelta-teste`),
-reconstrói as imagens de ferramentas e roda **`e2e`, `negative-protocol`, `time`, `generation`, `asym` e `trip`**, cada um com 3
+reconstrói as imagens de ferramentas e roda **`e2e`, `negative-protocol`, `time`, `generation`, `asym`, `trip` e `trip-http`**, cada um com 3
 dongles recém-criados (KMS, depois banco; o `asym` com `--profile asym`). Se um falhar, os seguintes não rodam. No fim, com sucesso ou não,
 derruba a stack com `down -v` e devolve o código de saída do cenário que falhou. Não cobre `reconnection`, `load`
 nem `knee`.
