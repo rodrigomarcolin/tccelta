@@ -2,16 +2,16 @@ import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
-import { TEMA_COOKIE, temaValido } from "@/config";
-import { TemaProvider } from "@/componentes/ui/Tema";
-import "@/estilos/tokens/colors.css";
-import "@/estilos/tokens/typography.css";
-import "@/estilos/tokens/spacing.css";
-import "@/estilos/tokens/effects.css";
-import "@/estilos/globais.css";
+import { THEME_COOKIE, validTheme } from "@/config";
+import { ThemeProvider } from "@/components/ui/Theme";
+import "@/styles/tokens/colors.css";
+import "@/styles/tokens/typography.css";
+import "@/styles/tokens/spacing.css";
+import "@/styles/tokens/effects.css";
+import "@/styles/globals.css";
 
-const ui = Space_Grotesk({ subsets: ["latin"], variable: "--fonte-ui", display: "swap" });
-const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--fonte-mono", display: "swap" });
+const ui = Space_Grotesk({ subsets: ["latin"], variable: "--typeface-ui", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--typeface-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Análise de viagem",
@@ -21,15 +21,15 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 
-// Lê o cookie de tema a cada requisição, para não piscar.
+// Reads the theme cookie on every request, to avoid flashing.
 export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const tema = temaValido((await cookies()).get(TEMA_COOKIE)?.value);
+  const initial = validTheme((await cookies()).get(THEME_COOKIE)?.value);
   return (
-    <html lang="pt-BR" data-theme={tema} className={`${ui.variable} ${mono.variable}`}>
+    <html lang="pt-BR" data-theme={initial} className={`${ui.variable} ${mono.variable}`}>
       <body>
-        <TemaProvider inicial={tema}>{children}</TemaProvider>
+        <ThemeProvider initial={initial}>{children}</ThemeProvider>
       </body>
     </html>
   );

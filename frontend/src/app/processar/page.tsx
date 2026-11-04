@@ -1,22 +1,22 @@
-import { FormularioProcessar } from "@/componentes/processar/FormularioProcessar";
-import { AlternarTema } from "@/componentes/ui/Tema";
-import { exigirSessao } from "@/servidor/sessao";
-import { dongleInicial } from "@/servidor/viagens/cliente";
+import { ProcessForm } from "@/components/process/ProcessForm";
+import { ThemeToggle } from "@/components/ui/Theme";
+import { requireSession } from "@/server/session";
+import { initialDongle } from "@/server/trips/datasource";
 
 export const dynamic = "force-dynamic";
 
-export default async function Processar() {
-  await exigirSessao("/processar");
+export default async function ProcessPage() {
+  await requireSession("/processar");
   return (
-    <main className="pagina-estreita">
-      <header className="cabecalho">
-        <div className="cabecalho-titulo">
+    <main className="page-narrow">
+      <header className="header">
+        <div className="header-title">
           <h1>Processar viagem</h1>
-          <p className="texto-secundario">Informe o motorista, o combustível e a viagem.</p>
+          <p className="text-secondary">Informe o motorista, o combustível e a viagem.</p>
         </div>
-        <AlternarTema />
+        <ThemeToggle />
       </header>
-      <FormularioProcessar dongleInicial={dongleInicial()} />
+      <ProcessForm initialDongle={initialDongle()} />
     </main>
   );
 }

@@ -1,0 +1,14 @@
+/* Two families: Space Grotesk for the interface; JetBrains Mono for all data.
+   The --typeface-* variables come from next/font (bundled at build time). */
+:root {
+  --font-ui: var(--typeface-ui), "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-mono: var(--typeface-mono), "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+
+  --type-heading: 700 26px/1.1 var(--font-ui);
+  --type-title: 700 18px/1.2 var(--font-ui);
+  --type-body: 400 15px/1.55 var(--font-ui);
+  --type-label: 600 13px/1.3 var(--font-ui);
+  --type-overline: 600 11px/1.3 var(--font-ui);
+
+  --tracking-overline: 1.5px;
+}

@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { exigirSessao } from "@/servidor/sessao";
+import { requireSession } from "@/server/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function Raiz() {
-  await exigirSessao("/");
+export default async function RootPage() {
+  await requireSession("/");
   redirect("/processar");
 }

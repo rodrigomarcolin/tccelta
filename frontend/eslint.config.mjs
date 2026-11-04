@@ -9,9 +9,9 @@ export default defineConfig([
   {
     files: ["src/**/*.{ts,tsx}"],
     ignores: [
-      "src/servidor/viagens/cliente.ts",
-      "src/servidor/viagens/mock/**",
-      "src/testes/**",
+      "src/server/trips/datasource.ts",
+      "src/server/trips/mock/**",
+      "src/tests/**",
       "**/*.test.*",
     ],
     rules: {
@@ -21,7 +21,7 @@ export default defineConfig([
           patterns: [
             {
               group: ["**/mock/*", "**/mock"],
-              message: "Só servidor/viagens/cliente.ts importa o mock.",
+              message: "Only server/trips/datasource.ts imports the mock.",
             },
           ],
         },

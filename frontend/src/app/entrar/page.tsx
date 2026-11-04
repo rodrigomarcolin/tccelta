@@ -1,52 +1,52 @@
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
-import { retornoSeguro } from "@/auth/operadores";
-import { Botao } from "@/componentes/ui/Botao";
-import { IconeDongle } from "@/componentes/icones/Icones";
+import { safeReturnPath } from "@/auth/operators";
+import { Button } from "@/components/ui/Button";
+import { IconDongle } from "@/components/icons/Icons";
 
 export const dynamic = "force-dynamic";
 
-const MENSAGENS: Record<string, string> = {
+const MESSAGES: Record<string, string> = {
   conta_nao_liberada:
     "Esta conta não está liberada para processar viagens. Use um e-mail USP autorizado.",
 };
 
-export default async function Entrar({
+export default async function SignInPage({
   searchParams,
 }: {
   searchParams: Promise<{ erro?: string; retorno?: string; error?: string }>;
 }) {
-  const { erro, retorno, error } = await searchParams;
-  const destino = retornoSeguro(retorno);
-  const sessao = await auth();
-  if (sessao?.user) redirect(destino);
+  const { erro: errorCode, retorno: returnTo, error } = await searchParams;
+  const destination = safeReturnPath(returnTo);
+  const session = await auth();
+  if (session?.user) redirect(destination);
 
-  const mensagem = erro
-    ? (MENSAGENS[erro] ?? "Não foi possível entrar. Tente de novo.")
+  const message = errorCode
+    ? (MESSAGES[errorCode] ?? "Não foi possível entrar. Tente de novo.")
     : error
       ? "Não foi possível entrar. Tente de novo."
       : null;
 
-  async function entrarComGoogle() {
+  async function signInWithGoogle() {
     "use server";
-    await signIn("google", { redirectTo: destino });
+    await signIn("google", { redirectTo: destination });
   }
 
   return (
-    <main className="pagina-estreita">
-      <div className="cartao cartao-login">
-        <IconeDongle tamanho={28} />
+    <main className="page-narrow">
+      <div className="card login-card">
+        <IconDongle size={28} />
         <h1>Análise de viagem</h1>
-        <p className="texto-secundario">Acesso restrito a operadores com e-mail USP autorizado.</p>
-        {mensagem ? (
-          <p className="campo-erro" role="alert">
-            {mensagem}
+        <p className="text-secondary">Acesso restrito a operadores com e-mail USP autorizado.</p>
+        {message ? (
+          <p className="field-error" role="alert">
+            {message}
           </p>
         ) : null}
-        <form action={entrarComGoogle}>
-          <Botao type="submit" larguraTotal>
+        <form action={signInWithGoogle}>
+          <Button type="submit" fullWidth>
             Entrar com Google
-          </Botao>
+          </Button>
         </form>
       </div>
     </main>

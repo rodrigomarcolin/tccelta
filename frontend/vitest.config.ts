@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
-      { find: "server-only", replacement: `${src}/testes/server-only.ts` },
+      { find: "server-only", replacement: `${src}/tests/server-only.ts` },
       { find: /^@\//, replacement: `${src}/` },
     ],
   },
@@ -20,7 +20,12 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["src/**/*.test.*", "src/testes/**", "src/contrato/tipos.ts", "src/app/layout.tsx"],
+      exclude: [
+        "src/**/*.test.*",
+        "src/tests/**",
+        "src/domain/trip/types.ts",
+        "src/app/layout.tsx",
+      ],
     },
   },
 });

@@ -1,0 +1,8 @@
+/* No shadow: hairline only. The cyan glow marks the "live" dot while waiting. */
+:root {
+  --glow-cyan: 0 0 8px var(--accent);
+  --ease-value: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --dur-value: 0.55s;
+  --dur-color: 0.4s;
+  --dur-pulse: 2s;
+}
