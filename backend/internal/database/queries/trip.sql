@@ -213,3 +213,45 @@ WHERE rb.dongle_id = @dongle_id AND rb.marker IS NULL AND rb.seq >= @from_seq AN
   AND b.time_source IS NOT NULL
 ORDER BY 1 DESC
 LIMIT 1;
+
+-- API2: criação e leitura da viagem (papel tccelta_api: INSERT em gold.trip e SELECT nas tabelas da gold).
+
+-- name: InsertTrip :one
+INSERT INTO gold.trip (trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, boot_generation, boot_id,
+                       interval_start, interval_end, status, target_seq)
+VALUES (@trip_category, @driver_name, @driver_name_normalized, @fuel, @dongle_id, @entry_type, @boot_generation, @boot_id,
+        @interval_start, @interval_end, 'pending', @target_seq)
+RETURNING *;
+
+-- name: NotifyTripCreated :exec
+SELECT pg_notify('trip_pending', @payload::text);
+
+-- name: FindTrip :one
+SELECT * FROM gold.trip WHERE trip_id = @trip_id AND excluded_at IS NULL;
+
+-- name: LatestBootGeneration :one
+SELECT boot_generation FROM boot WHERE dongle_id = @dongle_id AND boot_id = @boot_id ORDER BY boot_generation DESC LIMIT 1;
+
+-- name: GetTripSummary :one
+SELECT * FROM gold.trip_summary WHERE trip_id = @trip_id;
+
+-- name: ListTripParts :many
+SELECT * FROM gold.trip_part WHERE trip_id = @trip_id ORDER BY part_no;
+
+-- name: ListTripSpeedBands :many
+SELECT * FROM gold.trip_speed_band WHERE trip_id = @trip_id ORDER BY from_kmh;
+
+-- name: ListTripEvents :many
+SELECT * FROM gold.trip_event WHERE trip_id = @trip_id ORDER BY event_no;
+
+-- name: ListTripStops :many
+SELECT * FROM gold.trip_stop WHERE trip_id = @trip_id ORDER BY stop_no;
+
+-- name: ListTripGears :many
+SELECT * FROM gold.trip_gear WHERE trip_id = @trip_id ORDER BY gear;
+
+-- name: ListTripGearShifts :many
+SELECT * FROM gold.trip_gear_shift WHERE trip_id = @trip_id ORDER BY shift_no;
+
+-- name: GetTripSeries :one
+SELECT * FROM gold.trip_series WHERE trip_id = @trip_id;

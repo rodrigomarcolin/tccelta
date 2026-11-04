@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"sort"
 	"time"
@@ -382,4 +383,64 @@ func (r *tripSources) MaxBlockTime(_ context.Context, dongleID int32, fromSeq, t
 		}
 	}
 	return best, found, nil
+}
+
+// Insert imita gold.trip: a viagem entra em pending e o índice único (categoria, motorista normalizado) vale para as que não
+// falharam. Como no banco, o id e created_at são definidos aqui.
+func (r *trips) Insert(_ context.Context, d trip.Draft) (trip.Trip, error) {
+	for _, x := range r.Trips {
+		if x.Status != trip.StatusFailed && x.Category == d.Category && trip.NormalizeName(x.DriverName) == d.DriverNameNormalized {
+			return trip.Trip{}, trip.ErrDriverRepeated
+		}
+	}
+	row := (*Database)(r).AddTrip(trip.Trip{Category: d.Category, DriverName: d.DriverName, Fuel: d.Fuel, DongleID: d.DongleID,
+		EntryType: d.EntryType, BootGeneration: d.BootGeneration, BootID: d.BootID, IntervalStart: d.IntervalStart,
+		IntervalEnd: d.IntervalEnd, TargetSeq: d.TargetSeq, CreatedAt: time.Now().UTC()})
+	return row.Trip, nil
+}
+
+func (r *trips) NotifyTrip(_ context.Context, id uuid.UUID) error {
+	r.TripNotifications++
+	r.TripNotified = append(r.TripNotified, id)
+	return nil
+}
+
+func (r *trips) Find(_ context.Context, id uuid.UUID) (trip.Trip, error) {
+	if x := (*Database)(r).TripByID(id); x != nil {
+		return x.Trip, nil
+	}
+	return trip.Trip{}, trip.ErrNotFound
+}
+
+// Analysis monta a leitura a partir do resultado guardado por Save.
+func (r *trips) Analysis(_ context.Context, id uuid.UUID) (trip.Analysis, error) {
+	x := (*Database)(r).TripByID(id)
+	if x == nil {
+		return trip.Analysis{}, trip.ErrNotFound
+	}
+	a := trip.Analysis{Trip: x.Trip}
+	if x.Status != trip.StatusReady || x.Calc == nil {
+		return a, nil
+	}
+	res := x.Calc.Result
+	raw := func(v any) trip.RawJSON {
+		b, _ := json.Marshal(v)
+		return b
+	}
+	list := func(v any) trip.RawJSON {
+		if b := raw(v); string(b) != "null" {
+			return b
+		}
+		return trip.RawJSON("[]")
+	}
+	a.Parts, a.Summary, a.SpeedBands, a.Events, a.Stops, a.Gears, a.GearShifts = res.Parts, res.Summary, res.SpeedBands,
+		res.Events, res.Stops, res.Gears, res.GearShifts
+	a.Warnings, a.Params = list(res.Warnings), raw(res.Params)
+	s := res.Series
+	a.Series = trip.AnalysisSeries{StepMs: s.StepMs, ExposureStepMs: s.ExposureStepMs, Series: raw(s.Series), Slow: raw(s.Slow),
+		RPMDistribution: list(s.RPMDistribution), PedalDistribution: list(s.PedalDistribution), RPMPedalGrid: raw(s.RPMPedal)}
+	if len(s.Route.TMs) > 0 {
+		a.Series.Route = raw(s.Route)
+	}
+	return a, nil
 }

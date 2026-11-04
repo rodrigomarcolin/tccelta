@@ -25,7 +25,7 @@ func Repositories(q dbgen.Querier) port.Repositories {
 		Occurrences:  &occurrences{q},
 		AnchorGroups: &anchorGroups{q},
 		Pids:         &pids{q},
-		Trips:        &trips{q},
+		Trips:        &trips{q: q},
 		TripSources:  &tripSources{q},
 	}
 }

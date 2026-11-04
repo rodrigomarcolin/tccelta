@@ -222,6 +222,194 @@ func (q *Queries) FindBootForTrip(ctx context.Context, dongleID int32, bootGener
 	return i, err
 }
 
+const findTrip = `-- name: FindTrip :one
+SELECT trip_id, trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, boot_generation, boot_id, interval_start, interval_end, status, target_seq, first_seq, last_seq, calculated_through_seq, provisional, recalc_pending, calculation_version, created_at, calculated_at, excluded_at FROM gold.trip WHERE trip_id = $1 AND excluded_at IS NULL
+`
+
+func (q *Queries) FindTrip(ctx context.Context, tripID uuid.UUID) (GoldTrip, error) {
+	row := q.db.QueryRow(ctx, findTrip, tripID)
+	var i GoldTrip
+	err := row.Scan(
+		&i.TripID,
+		&i.TripCategory,
+		&i.DriverName,
+		&i.DriverNameNormalized,
+		&i.Fuel,
+		&i.DongleID,
+		&i.EntryType,
+		&i.BootGeneration,
+		&i.BootID,
+		&i.IntervalStart,
+		&i.IntervalEnd,
+		&i.Status,
+		&i.TargetSeq,
+		&i.FirstSeq,
+		&i.LastSeq,
+		&i.CalculatedThroughSeq,
+		&i.Provisional,
+		&i.RecalcPending,
+		&i.CalculationVersion,
+		&i.CreatedAt,
+		&i.CalculatedAt,
+		&i.ExcludedAt,
+	)
+	return i, err
+}
+
+const getTripSeries = `-- name: GetTripSeries :one
+SELECT trip_id, step_ms, exposure_step_ms, series, slow_series, route, rpm_distribution, pedal_distribution, rpm_pedal_matrix FROM gold.trip_series WHERE trip_id = $1
+`
+
+func (q *Queries) GetTripSeries(ctx context.Context, tripID uuid.UUID) (GoldTripSeries, error) {
+	row := q.db.QueryRow(ctx, getTripSeries, tripID)
+	var i GoldTripSeries
+	err := row.Scan(
+		&i.TripID,
+		&i.StepMs,
+		&i.ExposureStepMs,
+		&i.Series,
+		&i.SlowSeries,
+		&i.Route,
+		&i.RpmDistribution,
+		&i.PedalDistribution,
+		&i.RpmPedalMatrix,
+	)
+	return i, err
+}
+
+const getTripSummary = `-- name: GetTripSummary :one
+SELECT trip_id, start_t_ms, end_t_ms, started_at, ended_at, clock_offset_ms, clock_uncertainty_ms, warnings, parameters, distance_km, duration_s, no_data_s, moving_s, stopped_s, avg_speed_kmh, max_speed_kmh, engine_on_s, idle_s, idle_pct, fuel_l, km_per_l, intake_air_g, n_hard_accel, n_hard_brake, hard_accel_per_100km, hard_brake_per_100km, pedal_mean_pct, pedal_high_s, pedal_rate_p95_pct_s, engine_brake_pct, accel_rms_ms2, cruise_s, warmup_s, max_coolant_c, cold_load_s, idle_rpm, idle_rpm_origin, idle_margin_rpm, neutral_clutch_s, upshift_rpm_median, upshift_rpm_p25, upshift_rpm_p75, upshift_rpm_n, downshift_rpm_median, downshift_rpm_n, n_readings, readings_per_s, pid_periods_ms, fuel_coverage_pct, gps_period_s, gps_coverage_pct, gps_n_gaps, gps_max_gap_s, gps_distance_km, gps_distance_diff_pct FROM gold.trip_summary WHERE trip_id = $1
+`
+
+func (q *Queries) GetTripSummary(ctx context.Context, tripID uuid.UUID) (GoldTripSummary, error) {
+	row := q.db.QueryRow(ctx, getTripSummary, tripID)
+	var i GoldTripSummary
+	err := row.Scan(
+		&i.TripID,
+		&i.StartTMs,
+		&i.EndTMs,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClockOffsetMs,
+		&i.ClockUncertaintyMs,
+		&i.Warnings,
+		&i.Parameters,
+		&i.DistanceKm,
+		&i.DurationS,
+		&i.NoDataS,
+		&i.MovingS,
+		&i.StoppedS,
+		&i.AvgSpeedKmh,
+		&i.MaxSpeedKmh,
+		&i.EngineOnS,
+		&i.IdleS,
+		&i.IdlePct,
+		&i.FuelL,
+		&i.KmPerL,
+		&i.IntakeAirG,
+		&i.NHardAccel,
+		&i.NHardBrake,
+		&i.HardAccelPer100km,
+		&i.HardBrakePer100km,
+		&i.PedalMeanPct,
+		&i.PedalHighS,
+		&i.PedalRateP95PctS,
+		&i.EngineBrakePct,
+		&i.AccelRmsMs2,
+		&i.CruiseS,
+		&i.WarmupS,
+		&i.MaxCoolantC,
+		&i.ColdLoadS,
+		&i.IdleRpm,
+		&i.IdleRpmOrigin,
+		&i.IdleMarginRpm,
+		&i.NeutralClutchS,
+		&i.UpshiftRpmMedian,
+		&i.UpshiftRpmP25,
+		&i.UpshiftRpmP75,
+		&i.UpshiftRpmN,
+		&i.DownshiftRpmMedian,
+		&i.DownshiftRpmN,
+		&i.NReadings,
+		&i.ReadingsPerS,
+		&i.PidPeriodsMs,
+		&i.FuelCoveragePct,
+		&i.GpsPeriodS,
+		&i.GpsCoveragePct,
+		&i.GpsNGaps,
+		&i.GpsMaxGapS,
+		&i.GpsDistanceKm,
+		&i.GpsDistanceDiffPct,
+	)
+	return i, err
+}
+
+const insertTrip = `-- name: InsertTrip :one
+
+INSERT INTO gold.trip (trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, boot_generation, boot_id,
+                       interval_start, interval_end, status, target_seq)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+        $9, $10, 'pending', $11)
+RETURNING trip_id, trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, boot_generation, boot_id, interval_start, interval_end, status, target_seq, first_seq, last_seq, calculated_through_seq, provisional, recalc_pending, calculation_version, created_at, calculated_at, excluded_at
+`
+
+type InsertTripParams struct {
+	TripCategory         string
+	DriverName           string
+	DriverNameNormalized string
+	Fuel                 string
+	DongleID             int32
+	EntryType            string
+	BootGeneration       *int32
+	BootID               *int32
+	IntervalStart        *time.Time
+	IntervalEnd          *time.Time
+	TargetSeq            int64
+}
+
+// API2: criação e leitura da viagem (papel tccelta_api: INSERT em gold.trip e SELECT nas tabelas da gold).
+func (q *Queries) InsertTrip(ctx context.Context, arg InsertTripParams) (GoldTrip, error) {
+	row := q.db.QueryRow(ctx, insertTrip,
+		arg.TripCategory,
+		arg.DriverName,
+		arg.DriverNameNormalized,
+		arg.Fuel,
+		arg.DongleID,
+		arg.EntryType,
+		arg.BootGeneration,
+		arg.BootID,
+		arg.IntervalStart,
+		arg.IntervalEnd,
+		arg.TargetSeq,
+	)
+	var i GoldTrip
+	err := row.Scan(
+		&i.TripID,
+		&i.TripCategory,
+		&i.DriverName,
+		&i.DriverNameNormalized,
+		&i.Fuel,
+		&i.DongleID,
+		&i.EntryType,
+		&i.BootGeneration,
+		&i.BootID,
+		&i.IntervalStart,
+		&i.IntervalEnd,
+		&i.Status,
+		&i.TargetSeq,
+		&i.FirstSeq,
+		&i.LastSeq,
+		&i.CalculatedThroughSeq,
+		&i.Provisional,
+		&i.RecalcPending,
+		&i.CalculationVersion,
+		&i.CreatedAt,
+		&i.CalculatedAt,
+		&i.ExcludedAt,
+	)
+	return i, err
+}
+
 const insertTripEvent = `-- name: InsertTripEvent :exec
 INSERT INTO gold.trip_event (trip_id, event_no, type, start_t_ms, duration_s, peak, peak_unit, start_speed_kmh, end_speed_kmh, lat, lon)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -582,6 +770,17 @@ func (q *Queries) InsertTripSummary(ctx context.Context, arg InsertTripSummaryPa
 	return err
 }
 
+const latestBootGeneration = `-- name: LatestBootGeneration :one
+SELECT boot_generation FROM boot WHERE dongle_id = $1 AND boot_id = $2 ORDER BY boot_generation DESC LIMIT 1
+`
+
+func (q *Queries) LatestBootGeneration(ctx context.Context, dongleID int32, bootID int32) (int32, error) {
+	row := q.db.QueryRow(ctx, latestBootGeneration, dongleID, bootID)
+	var boot_generation int32
+	err := row.Scan(&boot_generation)
+	return boot_generation, err
+}
+
 const listIntervalBoots = `-- name: ListIntervalBoots :many
 SELECT boot_generation, boot_id, first_seq, last_seq, first_t_ms, last_t_ms, max_offset_ms, a_ms, b, base_uncertainty_ms, time_source
 FROM boot
@@ -704,6 +903,206 @@ func (q *Queries) ListProvisionalTrips(ctx context.Context) ([]ListProvisionalTr
 			&i.CalculatedAt,
 			&i.ExcludedAt,
 			&i.SummaryWarnings,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTripEvents = `-- name: ListTripEvents :many
+SELECT trip_id, event_no, type, start_t_ms, duration_s, peak, peak_unit, start_speed_kmh, end_speed_kmh, lat, lon FROM gold.trip_event WHERE trip_id = $1 ORDER BY event_no
+`
+
+func (q *Queries) ListTripEvents(ctx context.Context, tripID uuid.UUID) ([]GoldTripEvent, error) {
+	rows, err := q.db.Query(ctx, listTripEvents, tripID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GoldTripEvent{}
+	for rows.Next() {
+		var i GoldTripEvent
+		if err := rows.Scan(
+			&i.TripID,
+			&i.EventNo,
+			&i.Type,
+			&i.StartTMs,
+			&i.DurationS,
+			&i.Peak,
+			&i.PeakUnit,
+			&i.StartSpeedKmh,
+			&i.EndSpeedKmh,
+			&i.Lat,
+			&i.Lon,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTripGearShifts = `-- name: ListTripGearShifts :many
+SELECT trip_id, shift_no, t_ms, direction, from_gear, to_gear, rpm_before, rpm_after, speed_kmh FROM gold.trip_gear_shift WHERE trip_id = $1 ORDER BY shift_no
+`
+
+func (q *Queries) ListTripGearShifts(ctx context.Context, tripID uuid.UUID) ([]GoldTripGearShift, error) {
+	rows, err := q.db.Query(ctx, listTripGearShifts, tripID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GoldTripGearShift{}
+	for rows.Next() {
+		var i GoldTripGearShift
+		if err := rows.Scan(
+			&i.TripID,
+			&i.ShiftNo,
+			&i.TMs,
+			&i.Direction,
+			&i.FromGear,
+			&i.ToGear,
+			&i.RpmBefore,
+			&i.RpmAfter,
+			&i.SpeedKmh,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTripGears = `-- name: ListTripGears :many
+SELECT trip_id, gear, rpm_per_kmh, time_s, time_pct FROM gold.trip_gear WHERE trip_id = $1 ORDER BY gear
+`
+
+func (q *Queries) ListTripGears(ctx context.Context, tripID uuid.UUID) ([]GoldTripGear, error) {
+	rows, err := q.db.Query(ctx, listTripGears, tripID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GoldTripGear{}
+	for rows.Next() {
+		var i GoldTripGear
+		if err := rows.Scan(
+			&i.TripID,
+			&i.Gear,
+			&i.RpmPerKmh,
+			&i.TimeS,
+			&i.TimePct,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTripParts = `-- name: ListTripParts :many
+SELECT trip_id, part_no, boot_generation, boot_id, data_start_t_ms, data_end_t_ms, start_t_ms, end_t_ms, clock_a_ms, clock_b, clock_uncertainty_ms FROM gold.trip_part WHERE trip_id = $1 ORDER BY part_no
+`
+
+func (q *Queries) ListTripParts(ctx context.Context, tripID uuid.UUID) ([]GoldTripPart, error) {
+	rows, err := q.db.Query(ctx, listTripParts, tripID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GoldTripPart{}
+	for rows.Next() {
+		var i GoldTripPart
+		if err := rows.Scan(
+			&i.TripID,
+			&i.PartNo,
+			&i.BootGeneration,
+			&i.BootID,
+			&i.DataStartTMs,
+			&i.DataEndTMs,
+			&i.StartTMs,
+			&i.EndTMs,
+			&i.ClockAMs,
+			&i.ClockB,
+			&i.ClockUncertaintyMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTripSpeedBands = `-- name: ListTripSpeedBands :many
+SELECT trip_id, band_id, from_kmh, to_kmh, time_s, distance_km, distance_pct FROM gold.trip_speed_band WHERE trip_id = $1 ORDER BY from_kmh
+`
+
+func (q *Queries) ListTripSpeedBands(ctx context.Context, tripID uuid.UUID) ([]GoldTripSpeedBand, error) {
+	rows, err := q.db.Query(ctx, listTripSpeedBands, tripID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GoldTripSpeedBand{}
+	for rows.Next() {
+		var i GoldTripSpeedBand
+		if err := rows.Scan(
+			&i.TripID,
+			&i.BandID,
+			&i.FromKmh,
+			&i.ToKmh,
+			&i.TimeS,
+			&i.DistanceKm,
+			&i.DistancePct,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTripStops = `-- name: ListTripStops :many
+SELECT trip_id, stop_no, start_t_ms, duration_s, engine_on, lat, lon FROM gold.trip_stop WHERE trip_id = $1 ORDER BY stop_no
+`
+
+func (q *Queries) ListTripStops(ctx context.Context, tripID uuid.UUID) ([]GoldTripStop, error) {
+	rows, err := q.db.Query(ctx, listTripStops, tripID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GoldTripStop{}
+	for rows.Next() {
+		var i GoldTripStop
+		if err := rows.Scan(
+			&i.TripID,
+			&i.StopNo,
+			&i.StartTMs,
+			&i.DurationS,
+			&i.EngineOn,
+			&i.Lat,
+			&i.Lon,
 		); err != nil {
 			return nil, err
 		}
@@ -991,6 +1390,15 @@ func (q *Queries) NextBootFirstSeq(ctx context.Context, dongleID int32, afterSeq
 	var first_seq *int64
 	err := row.Scan(&first_seq)
 	return first_seq, err
+}
+
+const notifyTripCreated = `-- name: NotifyTripCreated :exec
+SELECT pg_notify('trip_pending', $1::text)
+`
+
+func (q *Queries) NotifyTripCreated(ctx context.Context, payload string) error {
+	_, err := q.db.Exec(ctx, notifyTripCreated, payload)
+	return err
 }
 
 const notifyTripPending = `-- name: NotifyTripPending :exec

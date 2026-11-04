@@ -68,6 +68,8 @@ type Boots interface {
 	// MarkAnchorlessNeighbors recoloca na fila os boots sem âncora entre os boots ancorados vizinhos de firstSeq.
 	MarkAnchorlessNeighbors(ctx context.Context, dongleID int32, firstSeq int64, now time.Time) (int64, error)
 	CountPending(ctx context.Context) (int64, error)
+	// LatestGeneration devolve a maior boot_generation que tem o boot_id; found=false se o boot nunca chegou.
+	LatestGeneration(ctx context.Context, dongleID, bootID int32) (generation int32, found bool, err error)
 }
 
 // Blocks é bronze.raw_block, os rejeitados e as linhas derivadas (silver).

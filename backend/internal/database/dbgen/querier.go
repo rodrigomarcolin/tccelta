@@ -45,6 +45,9 @@ type Querier interface {
 	FindBootForTrip(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32) (FindBootForTripRow, error)
 	FindChallenge(ctx context.Context, dongleID int32, cS int64) (FindChallengeRow, error)
 	FindDongleByDevID(ctx context.Context, devID []byte) (FindDongleByDevIDRow, error)
+	FindTrip(ctx context.Context, tripID uuid.UUID) (GoldTrip, error)
+	GetTripSeries(ctx context.Context, tripID uuid.UUID) (GoldTripSeries, error)
+	GetTripSummary(ctx context.Context, tripID uuid.UUID) (GoldTripSummary, error)
 	InsertAlert(ctx context.Context, arg InsertAlertParams) error
 	// Evita repetir o mesmo alerta a cada recalculo (janela de 24 h por boot e tipo).
 	InsertAlertIfNew(ctx context.Context, arg InsertAlertIfNewParams) error
@@ -55,6 +58,8 @@ type Querier interface {
 	// context.sql
 	InsertGap(ctx context.Context, arg InsertGapParams) error
 	InsertRawBlocks(ctx context.Context, arg InsertRawBlocksParams) ([]int64, error)
+	// API2: criação e leitura da viagem (papel tccelta_api: INSERT em gold.trip e SELECT nas tabelas da gold).
+	InsertTrip(ctx context.Context, arg InsertTripParams) (GoldTrip, error)
 	InsertTripEvent(ctx context.Context, arg InsertTripEventParams) error
 	InsertTripGear(ctx context.Context, arg InsertTripGearParams) error
 	InsertTripGearShift(ctx context.Context, arg InsertTripGearShiftParams) error
@@ -66,6 +71,7 @@ type Querier interface {
 	// Incrementa c_S (lock de linha curto em dongle_state) e insere o desafio,
 	// só se o dongle tiver menos de @max_pending desafios pendentes no prazo.
 	IssueChallenge(ctx context.Context, arg IssueChallengeParams) (IssueChallengeRow, error)
+	LatestBootGeneration(ctx context.Context, dongleID int32, bootID int32) (int32, error)
 	ListBootAnchorGroups(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32) ([]ListBootAnchorGroupsRow, error)
 	ListBootAnchors(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32) ([]ListBootAnchorsRow, error)
 	ListDataBlocks(ctx context.Context, dongleID int32, fromSeq int64, toSeq int64, rowLimit int32) ([]ListDataBlocksRow, error)
@@ -73,6 +79,12 @@ type Querier interface {
 	ListIntervalBoots(ctx context.Context, dongleID int32, fromMs float64, toMs float64) ([]ListIntervalBootsRow, error)
 	ListPids(ctx context.Context) ([]Pid, error)
 	ListProvisionalTrips(ctx context.Context) ([]ListProvisionalTripsRow, error)
+	ListTripEvents(ctx context.Context, tripID uuid.UUID) ([]GoldTripEvent, error)
+	ListTripGearShifts(ctx context.Context, tripID uuid.UUID) ([]GoldTripGearShift, error)
+	ListTripGears(ctx context.Context, tripID uuid.UUID) ([]GoldTripGear, error)
+	ListTripParts(ctx context.Context, tripID uuid.UUID) ([]GoldTripPart, error)
+	ListTripSpeedBands(ctx context.Context, tripID uuid.UUID) ([]GoldTripSpeedBand, error)
+	ListTripStops(ctx context.Context, tripID uuid.UUID) ([]GoldTripStop, error)
 	// Boots sem hora que podem cair no intervalo: a hora real é no máximo o recebimento (max_offset_ms) e a posição por
 	// seq fica entre o último boot convertido que termina antes de t0 e o primeiro que começa em ou depois de t1.
 	ListUnconvertedBoots(ctx context.Context, dongleID int32, t0Ms float64, t1Ms float64) ([]ListUnconvertedBootsRow, error)
@@ -95,6 +107,7 @@ type Querier interface {
 	NextAnchoredBoot(ctx context.Context, dongleID int32, firstSeq *int64) (NextAnchoredBootRow, error)
 	NextBootFirstSeq(ctx context.Context, dongleID int32, afterSeq *int64) (*int64, error)
 	NotifyPendingBoot(ctx context.Context, payload string) error
+	NotifyTripCreated(ctx context.Context, payload string) error
 	NotifyTripPending(ctx context.Context) error
 	PreviousAnchoredBoot(ctx context.Context, dongleID int32, firstSeq *int64) (PreviousAnchoredBootRow, error)
 	ReadLastAck(ctx context.Context, dongleID int32) ([]byte, error)

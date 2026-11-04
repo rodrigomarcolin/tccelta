@@ -34,6 +34,16 @@ type Trips interface {
 	// Notify acorda o worker (trip_pending). Em transação, o sinal só sai no commit.
 	Notify(ctx context.Context) error
 	CountQueue(ctx context.Context) (trip.Queue, error)
+
+	// Insert grava a viagem nova em pending (a API2). trip.ErrDriverRepeated se já há viagem do motorista na categoria.
+	Insert(ctx context.Context, d trip.Draft) (trip.Trip, error)
+	// NotifyTrip acorda o worker com o id da viagem criada (trip_pending). Em transação, o sinal só sai no commit.
+	NotifyTrip(ctx context.Context, id uuid.UUID) error
+	// Find devolve trip.ErrNotFound se a viagem não existe ou foi excluída.
+	Find(ctx context.Context, id uuid.UUID) (trip.Trip, error)
+	// Analysis lê a viagem e suas tabelas filhas numa transação própria REPEATABLE READ somente leitura, sem misturar linhas de
+	// antes e depois de um recálculo. Com a viagem fora de ready devolve só Analysis.Trip. trip.ErrNotFound se não existe.
+	Analysis(ctx context.Context, id uuid.UUID) (trip.Analysis, error)
 }
 
 // TripSources é a leitura da silver (boot, bronze.raw_block, reading, position) para o cálculo da viagem.

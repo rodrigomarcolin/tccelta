@@ -2,6 +2,9 @@ package postgres
 
 import (
 	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
 
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/dongle"
@@ -13,6 +16,9 @@ type states struct{ q dbgen.Querier }
 
 func (r *states) Read(ctx context.Context, dongleID int32) (dongle.State, error) {
 	e, err := r.q.ReadState(ctx, dongleID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dongle.State{}, dongle.ErrUnknown
+	}
 	if err != nil {
 		return dongle.State{}, err
 	}

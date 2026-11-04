@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"tccelta/backend/internal/domain/dongle"
 	"tccelta/backend/internal/domain/handshake"
 	"tccelta/backend/internal/domain/ingestion"
@@ -60,6 +62,7 @@ type Database struct {
 	// Trips é gold.trip (com o resultado gravado); TripNotifications conta os trip_pending; os Source* são a silver lida pelo cálculo.
 	Trips             []*TripRow
 	TripNotifications int
+	TripNotified      []uuid.UUID // ids enviados por NotifyTrip, na ordem
 	SourceBlocks      []SourceBlock
 	SourceReadings    []SourceReading
 	SourcePositions   []SourcePosition
@@ -135,7 +138,7 @@ func (b *Database) clone() *Database {
 	c.Gaps, c.Alerts = b.Gaps[:len(b.Gaps):len(b.Gaps)], b.Alerts[:len(b.Alerts):len(b.Alerts)]
 	c.Anchors, c.Notifications = b.Anchors[:len(b.Anchors):len(b.Anchors)], b.Notifications[:len(b.Notifications):len(b.Notifications)]
 	c.BootRows, c.DataBlocks = b.cloneBootRows(), b.DataBlocks
-	c.Trips, c.TripNotifications = b.cloneTrips(), b.TripNotifications
+	c.Trips, c.TripNotifications, c.TripNotified = b.cloneTrips(), b.TripNotifications, b.TripNotified[:len(b.TripNotified):len(b.TripNotified)]
 	c.SourceBlocks, c.SourceReadings, c.SourcePositions = b.SourceBlocks, b.SourceReadings, b.SourcePositions
 	for k, v := range b.lastAckAt {
 		c.lastAckAt[k] = v
@@ -151,7 +154,7 @@ func (b *Database) restore(c *Database) {
 	b.RawBlocks, b.Rejected, b.Readings, b.Positions = c.RawBlocks, c.Rejected, c.Readings, c.Positions
 	b.Gaps, b.Alerts, b.Anchors, b.Notifications = c.Gaps, c.Alerts, c.Anchors, c.Notifications
 	b.BootRows, b.Groups, b.DataBlocks = c.BootRows, c.Groups, c.DataBlocks
-	b.Trips, b.TripNotifications, b.lastAckAt = c.Trips, c.TripNotifications, c.lastAckAt
+	b.Trips, b.TripNotifications, b.TripNotified, b.lastAckAt = c.Trips, c.TripNotifications, c.TripNotified, c.lastAckAt
 }
 
 type dongles Database
@@ -224,7 +227,10 @@ func (r *challenges) MarkInvalidTag(_ context.Context, id int32, cs int64, nonce
 type states Database
 
 func (r *states) Read(_ context.Context, id int32) (dongle.State, error) {
-	e := r.states[id]
+	e, ok := r.states[id]
+	if !ok {
+		return dongle.State{}, dongle.ErrUnknown
+	}
 	e.LastAck = nil
 	return e, nil
 }

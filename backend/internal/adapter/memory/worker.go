@@ -250,3 +250,13 @@ func (r *blocks) DeletePositions(_ context.Context, _ int32, fromSeq, toSeq int6
 	r.Positions = keep
 	return n, nil
 }
+
+func (r *boots) LatestGeneration(_ context.Context, dongleID, bootID int32) (int32, bool, error) {
+	found, gen := false, int32(0)
+	for _, b := range r.BootRows {
+		if b.DongleID == dongleID && b.BootID == bootID && (!found || b.Generation > gen) {
+			found, gen = true, b.Generation
+		}
+	}
+	return gen, found, nil
+}
