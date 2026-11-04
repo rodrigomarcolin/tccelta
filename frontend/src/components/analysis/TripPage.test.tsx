@@ -86,6 +86,11 @@ beforeEach(() => {
   vi.useFakeTimers();
   hidden = false;
   Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+  // React Query reads `visibilityState`, not `hidden`.
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => (hidden ? "hidden" : "visible"),
+  });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -410,7 +415,8 @@ describe("network and backoff", () => {
     await mount();
     expect(screen.getByText("Servidor ocupado. Tentando de novo em 2 s.")).toBeInTheDocument();
     await advance(2000);
-    expect(count("status")).toBe(2);
+    // Only the analysis is requested again after the 429.
+    expect(count("analysis")).toBe(2);
   });
 });
 
@@ -675,5 +681,44 @@ describe("cancellation", () => {
     fail(new Error("aborted"));
     await advance(10_000);
     expect(count("status")).toBe(1);
+  });
+});
+
+describe("navigation and restarts", () => {
+  it("a navigation between trips does not show the previous trip's data", async () => {
+    const OTHER = "7d1f3a10-0001-4c5e-9b1a-000000000009";
+    install({
+      status: () => ({ status: 200, body: status("pronta", true, "c1") }),
+      analysis: () => ({ status: 200, body: analysisFor("normal") }),
+    });
+    const { rerender } = renderWithTheme(<TripPage id={ID} goTo={vi.fn()} />);
+    await advance(0);
+    expect(screen.getByTestId("map")).toBeInTheDocument();
+
+    install({
+      status: () => new Promise(() => undefined),
+      analysis: () => new Promise(() => undefined),
+    });
+    rerender(<TripPage id={OTHER} goTo={vi.fn()} />);
+    await advance(0);
+    expect(screen.queryByTestId("map")).toBeNull();
+    expect(screen.getByLabelText("Carregando a análise")).toBeInTheDocument();
+    expect(calls).toEqual([`/api/trips/${OTHER}`]);
+  });
+
+  it("an online event during the backoff restarts the failure count", async () => {
+    install({ status: () => new Error("network"), analysis: () => ({ status: 409 }) });
+    await mount();
+    await advance(1000);
+    await advance(2000);
+    expect(screen.getByText(NETWORK_NOTICE)).toBeInTheDocument();
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.queryByText(NETWORK_NOTICE)).toBeNull();
+    await advance(1000);
+    await advance(2000);
+    expect(screen.getByText(NETWORK_NOTICE)).toBeInTheDocument();
   });
 });

@@ -2,7 +2,9 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { FUELS, INITIAL_DONGLE } from "@/config";
-import type { CreateTripResponse, Problem } from "@/domain/trip/types";
+import { ApiError } from "@/domain/trip/apiError";
+import type { CreateTripRequest, Problem } from "@/domain/trip/types";
+import { useCreateTrip } from "@/use-cases/useCreateTrip";
 import { Button } from "@/components/ui/Button";
 
 type Fields = {
@@ -72,7 +74,7 @@ export function validateFields(c: Fields): Errors {
   return e;
 }
 
-export function buildBody(c: Fields) {
+export function buildBody(c: Fields): CreateTripRequest {
   const dongle = Number(c.dongle);
   return {
     motorista: { nome: c.driver.trim() },
@@ -100,7 +102,7 @@ type Props = {
 export function creationError(
   status: number,
   p: Problem | null,
-  retryAfter: string | null,
+  retryAfter: number | null,
   driver: string,
   category: string,
 ): Errors {
@@ -123,7 +125,7 @@ export function creationError(
     return { general: "O servidor não aceitou a credencial do sistema. Chame a organização." };
   }
   if (code === "bloqueado") {
-    const s = Number(retryAfter);
+    const s = retryAfter ?? 0;
     return {
       general: `Acesso temporariamente bloqueado. Tente de novo em ${Number.isFinite(s) && s > 0 ? `${Math.ceil(s)} s` : "instantes"}.`,
       retry: true,
@@ -132,7 +134,7 @@ export function creationError(
   if (status === 401) return { general: "Sessão expirada.", sessionExpired: true };
   if (status === 403) return { general: "Esta conta não tem permissão de operador." };
   if (status === 429) {
-    const s = Number(retryAfter);
+    const s = retryAfter ?? 0;
     return {
       general:
         Number.isFinite(s) && s > 0
@@ -155,7 +157,9 @@ export function ProcessForm({
   const driverRef = useRef<HTMLInputElement>(null);
   const [c, setC] = useState<Fields>(() => initialFields(initialDongle));
   const [errors, setErrors] = useState<Errors>({});
-  const [submitting, setSubmitting] = useState(false);
+  const createTrip = useCreateTrip();
+  // Stays disabled after a 202, during navigation.
+  const submitting = createTrip.isPending || createTrip.isSuccess;
 
   const change =
     <K extends keyof Fields>(field: K) =>
@@ -169,32 +173,24 @@ export function ProcessForm({
     setErrors(localErrors);
     if (Object.keys(localErrors).length > 0) return;
 
-    setSubmitting(true);
     try {
-      const r = await fetch("/api/trips", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody(c)),
-      });
-      if (r.status === 202) {
-        const created = (await r.json()) as CreateTripResponse;
-        goTo(`/viagem/${created.viagem_id}`);
-        return; // keeps the button disabled during navigation
+      const created = await createTrip.mutateAsync(buildBody(c));
+      goTo(`/viagem/${created.viagem_id}`);
+    } catch (error) {
+      if (!(error instanceof ApiError)) {
+        setErrors({ general: "Não foi possível falar com o servidor.", retry: true });
+        return;
       }
-      const p = (await r.json().catch(() => null)) as Problem | null;
       const next = creationError(
-        r.status,
-        p,
-        r.headers?.get("Retry-After") ?? null,
+        error.status,
+        error.problem,
+        error.retryAfter ?? null,
         c.driver.trim(),
         c.category.trim(),
       );
       setErrors(next);
       if (next.driver) driverRef.current?.focus();
-    } catch {
-      setErrors({ general: "Não foi possível falar com o servidor.", retry: true });
     }
-    setSubmitting(false);
   }
 
   const field = (id: keyof Errors, label: string, input: React.ReactNode) => (

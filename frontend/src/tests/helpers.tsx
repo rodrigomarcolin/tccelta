@@ -1,13 +1,24 @@
 import { render } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement, ReactNode } from "react";
 import type { TripAnalysis } from "@/domain/trip/types";
 import type { Theme } from "@/config";
 import { ThemeProvider } from "@/components/ui/Theme";
+import { createQueryClient } from "@/app/providers";
 import { buildAnalysis } from "@/server/trips/mock/analyses";
 import type { ScenarioId } from "@/server/trips/mock/scenarios";
 
 export function renderWithTheme(ui: ReactElement, initial: Theme = "dark") {
-  return render(<ThemeProvider initial={initial}>{ui}</ThemeProvider>);
+  // A new client per test: no cache shared between them.
+  const client = createQueryClient();
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>
+        <ThemeProvider initial={initial}>{children}</ThemeProvider>
+      </QueryClientProvider>
+    );
+  }
+  return render(ui, { wrapper: Wrapper });
 }
 
 const cache = new Map<string, TripAnalysis>();

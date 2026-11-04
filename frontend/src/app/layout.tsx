@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { THEME_COOKIE, validTheme } from "@/config";
 import { ThemeProvider } from "@/components/ui/Theme";
+import { Providers } from "./providers";
 import "@/styles/tokens/colors.css";
 import "@/styles/tokens/typography.css";
 import "@/styles/tokens/spacing.css";
@@ -29,7 +30,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="pt-BR" data-theme={initial} className={`${ui.variable} ${mono.variable}`}>
       <body>
-        <ThemeProvider initial={initial}>{children}</ThemeProvider>
+        <Providers>
+          <ThemeProvider initial={initial}>{children}</ThemeProvider>
+        </Providers>
       </body>
     </html>
   );
