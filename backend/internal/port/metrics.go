@@ -40,6 +40,16 @@ type MetricsWorker interface {
 	Expired(n int64)
 	Queue(n int64)
 	Reconnection()
+	// Trip conta uma viagem calculada: ready, recalculated ou failed.
+	Trip(result string)
+	// TripPartial conta uma viagem calculada com dados_parciais.
+	TripPartial()
+	// TripProvisional conta a ação do ticker de provisórias: recalc_marked ou completed.
+	TripProvisional(action string)
+	TripDuration(d time.Duration)
+	// TripWait é o tempo de created_at até calculated_at.
+	TripWait(d time.Duration)
+	TripQueue(waiting, recalc int64)
 }
 
 // MetricsReprocess são os eventos do reprocessamento.

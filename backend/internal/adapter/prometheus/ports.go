@@ -81,6 +81,15 @@ func (p workerPort) BootDuration(d time.Duration) { p.m.WorkerDur.Observe(d.Seco
 func (p workerPort) Expired(n int64)              { p.m.WorkerExpired.Add(float64(n)) }
 func (p workerPort) Queue(n int64)                { p.m.WorkerQueue.Set(float64(n)) }
 func (p workerPort) Reconnection()                { p.m.WorkerReconnect.Inc() }
+func (p workerPort) Trip(result string)           { p.m.WorkerTrips.WithLabelValues(result).Inc() }
+func (p workerPort) TripPartial()                 { p.m.WorkerTripPartial.Inc() }
+func (p workerPort) TripProvisional(a string)     { p.m.WorkerTripProvisional.WithLabelValues(a).Inc() }
+func (p workerPort) TripDuration(d time.Duration) { p.m.WorkerTripDur.Observe(d.Seconds()) }
+func (p workerPort) TripWait(d time.Duration)     { p.m.WorkerTripWait.Observe(d.Seconds()) }
+func (p workerPort) TripQueue(waiting, recalc int64) {
+	p.m.WorkerTripQueue.WithLabelValues("waiting").Set(float64(waiting))
+	p.m.WorkerTripQueue.WithLabelValues("recalc").Set(float64(recalc))
+}
 
 type reprocessPort struct{ m *M }
 

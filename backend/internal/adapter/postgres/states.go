@@ -45,3 +45,11 @@ func (r *states) UpdateIngestion(ctx context.Context, a ingestion.StateUpdate) e
 		ContiguousSeq: a.ContiguousSeq, MaxSeen: a.MaxSeen, LastAck: a.LastAck, Now: &now,
 		BootGeneration: a.BootGeneration, LastBootID: a.LastBootID, DongleID: a.DongleID})
 }
+
+func (r *states) ReadProgress(ctx context.Context, dongleID int32) (dongle.Progress, error) {
+	e, err := r.q.ReadProgress(ctx, dongleID)
+	if err != nil {
+		return dongle.Progress{}, err
+	}
+	return dongle.Progress{ContiguousSeq: e.ContiguousSeq, HeadSeq: e.HeadSeq, LastAckAt: e.LastAckAt}, nil
+}

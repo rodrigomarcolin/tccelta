@@ -3,6 +3,7 @@ package dongle
 
 import (
 	"errors"
+	"time"
 
 	"tccelta/backend/internal/domain/protocol"
 )
@@ -52,4 +53,11 @@ type Registration struct {
 	RecKey      string
 	PublicKey   []byte
 	Description string
+}
+
+// Progress é o avanço da ingestão do dongle, lido pelo worker de viagens (dongle_state).
+type Progress struct {
+	ContiguousSeq, HeadSeq int64
+	// LastAckAt é nulo se nenhum lote ou handshake foi confirmado ainda.
+	LastAckAt *time.Time
 }

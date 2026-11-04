@@ -124,13 +124,3 @@ func (q *Queries) ListDataBlocks(ctx context.Context, dongleID int32, fromSeq in
 	}
 	return items, nil
 }
-
-const markGoldBoots = `-- name: MarkGoldBoots :exec
-UPDATE boot SET gold_pending = true
-WHERE dongle_id = $1 AND first_seq <= $2 AND last_seq >= $3
-`
-
-func (q *Queries) MarkGoldBoots(ctx context.Context, dongleID int32, toSeq *int64, fromSeq *int64) error {
-	_, err := q.db.Exec(ctx, markGoldBoots, dongleID, toSeq, fromSeq)
-	return err
-}

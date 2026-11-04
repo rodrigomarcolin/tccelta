@@ -127,10 +127,6 @@ func (r *boots) MarkAnchorlessNeighbors(ctx context.Context, dongleID int32, fir
 	return r.q.MarkAnchorlessNeighbors(ctx, now, dongleID, &firstSeq)
 }
 
-func (r *boots) MarkGold(ctx context.Context, dongleID int32, fromSeq, toSeq int64) error {
-	return r.q.MarkGoldBoots(ctx, dongleID, &toSeq, &fromSeq)
-}
-
 func (r *boots) CountPending(ctx context.Context) (int64, error) {
 	return r.q.CountPendingBoots(ctx)
 }

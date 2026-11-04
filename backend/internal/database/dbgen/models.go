@@ -50,7 +50,6 @@ type Boot struct {
 	TimeSource        *string
 	TimeUpdatedAt     *time.Time
 	TimePending       bool
-	GoldPending       bool
 	PendingSince      time.Time
 	CreatedAt         time.Time
 }
@@ -119,6 +118,169 @@ type Gap struct {
 	RegisteredAt time.Time
 	CS           *int64
 	BlockSeq     *int64
+}
+
+type GoldTrip struct {
+	TripID               uuid.UUID
+	TripCategory         string
+	DriverName           string
+	DriverNameNormalized string
+	Fuel                 string
+	DongleID             int32
+	EntryType            string
+	BootGeneration       *int32
+	BootID               *int32
+	IntervalStart        *time.Time
+	IntervalEnd          *time.Time
+	Status               string
+	TargetSeq            int64
+	FirstSeq             *int64
+	LastSeq              *int64
+	CalculatedThroughSeq *int64
+	Provisional          bool
+	RecalcPending        bool
+	CalculationVersion   *string
+	CreatedAt            time.Time
+	CalculatedAt         *time.Time
+	ExcludedAt           *time.Time
+}
+
+type GoldTripEvent struct {
+	TripID        uuid.UUID
+	EventNo       int32
+	Type          string
+	StartTMs      int64
+	DurationS     float64
+	Peak          *float64
+	PeakUnit      string
+	StartSpeedKmh *float64
+	EndSpeedKmh   *float64
+	Lat           *float64
+	Lon           *float64
+}
+
+type GoldTripGear struct {
+	TripID    uuid.UUID
+	Gear      int16
+	RpmPerKmh float64
+	TimeS     float64
+	TimePct   float64
+}
+
+type GoldTripGearShift struct {
+	TripID    uuid.UUID
+	ShiftNo   int32
+	TMs       int64
+	Direction string
+	FromGear  int16
+	ToGear    int16
+	RpmBefore float64
+	RpmAfter  float64
+	SpeedKmh  float64
+}
+
+type GoldTripPart struct {
+	TripID             uuid.UUID
+	PartNo             int16
+	BootGeneration     int32
+	BootID             int32
+	DataStartTMs       int64
+	DataEndTMs         int64
+	StartTMs           *int64
+	EndTMs             *int64
+	ClockAMs           *float64
+	ClockB             *float64
+	ClockUncertaintyMs *int32
+}
+
+type GoldTripSeries struct {
+	TripID            uuid.UUID
+	StepMs            int32
+	ExposureStepMs    int32
+	Series            []byte
+	SlowSeries        []byte
+	Route             []byte
+	RpmDistribution   []byte
+	PedalDistribution []byte
+	RpmPedalMatrix    []byte
+}
+
+type GoldTripSpeedBand struct {
+	TripID      uuid.UUID
+	BandID      string
+	FromKmh     float64
+	ToKmh       *float64
+	TimeS       float64
+	DistanceKm  float64
+	DistancePct *float64
+}
+
+type GoldTripStop struct {
+	TripID    uuid.UUID
+	StopNo    int32
+	StartTMs  int64
+	DurationS float64
+	EngineOn  bool
+	Lat       *float64
+	Lon       *float64
+}
+
+type GoldTripSummary struct {
+	TripID             uuid.UUID
+	StartTMs           *int64
+	EndTMs             *int64
+	StartedAt          *time.Time
+	EndedAt            *time.Time
+	ClockOffsetMs      *int64
+	ClockUncertaintyMs *int32
+	Warnings           []byte
+	Parameters         []byte
+	DistanceKm         *float64
+	DurationS          *float64
+	NoDataS            *float64
+	MovingS            *float64
+	StoppedS           *float64
+	AvgSpeedKmh        *float64
+	MaxSpeedKmh        *float64
+	EngineOnS          *float64
+	IdleS              *float64
+	IdlePct            *float64
+	FuelL              *float64
+	KmPerL             *float64
+	IntakeAirG         *float64
+	NHardAccel         *int32
+	NHardBrake         *int32
+	HardAccelPer100km  *float64
+	HardBrakePer100km  *float64
+	PedalMeanPct       *float64
+	PedalHighS         *float64
+	PedalRateP95PctS   *float64
+	EngineBrakePct     *float64
+	AccelRmsMs2        *float64
+	CruiseS            *float64
+	WarmupS            *float64
+	MaxCoolantC        *float64
+	ColdLoadS          *float64
+	IdleRpm            *float64
+	IdleRpmOrigin      *string
+	IdleMarginRpm      *float64
+	NeutralClutchS     *float64
+	UpshiftRpmMedian   *float64
+	UpshiftRpmP25      *float64
+	UpshiftRpmP75      *float64
+	UpshiftRpmN        *int32
+	DownshiftRpmMedian *float64
+	DownshiftRpmN      *int32
+	NReadings          *int64
+	ReadingsPerS       *float64
+	PidPeriodsMs       []byte
+	FuelCoveragePct    *float64
+	GpsPeriodS         *float64
+	GpsCoveragePct     *float64
+	GpsNGaps           *int32
+	GpsMaxGapS         *float64
+	GpsDistanceKm      *float64
+	GpsDistanceDiffPct *float64
 }
 
 type Pid struct {

@@ -44,6 +44,8 @@ type States interface {
 	ReadLastAck(ctx context.Context, dongleID int32) ([]byte, error)
 	UpdateHandshake(ctx context.Context, a handshake.Update) error
 	UpdateIngestion(ctx context.Context, a ingestion.StateUpdate) error
+	// ReadProgress lê contiguous_seq, head_seq e last_ack_at (o worker de viagens espera por eles).
+	ReadProgress(ctx context.Context, dongleID int32) (dongle.Progress, error)
 }
 
 // Boots é a tabela de boots (tempo por boot_id e âncoras).
@@ -65,8 +67,6 @@ type Boots interface {
 	UpdateTime(ctx context.Context, k timeline.BootKey, est *timeline.Estimate, now time.Time) error
 	// MarkAnchorlessNeighbors recoloca na fila os boots sem âncora entre os boots ancorados vizinhos de firstSeq.
 	MarkAnchorlessNeighbors(ctx context.Context, dongleID int32, firstSeq int64, now time.Time) (int64, error)
-	// MarkGold marca para o gold os boots que cobrem a faixa de seq.
-	MarkGold(ctx context.Context, dongleID int32, fromSeq, toSeq int64) error
 	CountPending(ctx context.Context) (int64, error)
 }
 
@@ -101,6 +101,8 @@ type AnchorGroups interface {
 	Delete(ctx context.Context, k timeline.BootKey) error
 	// Copy grava os grupos na ordem, numerados de 1.
 	Copy(ctx context.Context, k timeline.BootKey, computedAt time.Time, groups []timeline.Group) error
+	// List devolve os grupos do boot em ordem (vazio se o boot não tem âncoras).
+	List(ctx context.Context, k timeline.BootKey) ([]timeline.Group, error)
 }
 
 // Pids é o catálogo de PIDs.
@@ -130,6 +132,8 @@ type Repositories struct {
 	Occurrences  Occurrences
 	AnchorGroups AnchorGroups
 	Pids         Pids
+	Trips        Trips
+	TripSources  TripSources
 }
 
 // Transactor executa fn numa transação READ COMMITTED com timeouts locais. Deadlock e falha de

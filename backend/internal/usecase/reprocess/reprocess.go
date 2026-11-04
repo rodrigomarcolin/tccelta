@@ -133,7 +133,10 @@ func (c *Reprocessor) Run(ctx context.Context, o Options) (Summary, error) {
 						}
 					}
 					rem = n1
-					return r.Boots.MarkGold(ctx, o.DongleID, a, b)
+					if err := r.Trips.MarkRecalcByRange(ctx, o.DongleID, a, b); err != nil {
+						return err
+					}
+					return r.Trips.Notify(ctx)
 				})
 				if !errors.Is(err, port.ErrDatabaseBusy) {
 					break

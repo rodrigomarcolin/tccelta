@@ -187,9 +187,9 @@ func (q *Queries) RegisterRejected(ctx context.Context, arg RegisterRejectedPara
 
 const updateIngestionBoots = `-- name: UpdateIngestionBoots :exec
 INSERT INTO boot (dongle_id, boot_generation, boot_id, first_seq, last_seq, first_t_ms, last_t_ms,
-                  max_offset_ms, time_pending, gold_pending, pending_since)
+                  max_offset_ms, time_pending, pending_since)
 SELECT $1::int, u.boot_generation::int, u.boot_id::int, u.from_seq::bigint, u.to_seq::bigint, u.t_start::bigint,
-       u.t_end::bigint, u.max_offset::float8, true, true, $2::timestamptz
+       u.t_end::bigint, u.max_offset::float8, true, $2::timestamptz
 FROM ROWS FROM (unnest($3::int[]), unnest($4::int[]), unnest($5::bigint[]), unnest($6::bigint[]),
                 unnest($7::bigint[]), unnest($8::bigint[]), unnest($9::float8[]))
      AS u(boot_generation, boot_id, from_seq, to_seq, t_start, t_end, max_offset)
@@ -200,7 +200,6 @@ ON CONFLICT (dongle_id, boot_generation, boot_id) DO UPDATE SET
   first_t_ms       = LEAST(boot.first_t_ms, EXCLUDED.first_t_ms),
   last_t_ms         = GREATEST(boot.last_t_ms, EXCLUDED.last_t_ms),
   max_offset_ms = LEAST(boot.max_offset_ms, EXCLUDED.max_offset_ms),
-  gold_pending       = true,
   time_pending      = boot.time_pending OR boot.time_source IS DISTINCT FROM 'anchors',
   pending_since      = CASE WHEN boot.time_pending THEN boot.pending_since ELSE EXCLUDED.pending_since END
 `

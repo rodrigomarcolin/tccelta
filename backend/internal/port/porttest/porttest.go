@@ -29,6 +29,12 @@ func (Nop) BootDuration(time.Duration)                    {}
 func (Nop) Expired(int64)                                 {}
 func (Nop) Queue(int64)                                   {}
 func (Nop) Reconnection()                                 {}
+func (Nop) Trip(string)                                   {}
+func (Nop) TripPartial()                                  {}
+func (Nop) TripProvisional(string)                        {}
+func (Nop) TripDuration(time.Duration)                    {}
+func (Nop) TripWait(time.Duration)                        {}
+func (Nop) TripQueue(int64, int64)                        {}
 func (Nop) Reprocessed(int)                               {}
 
 var (
