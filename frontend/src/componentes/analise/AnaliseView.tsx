@@ -13,7 +13,7 @@ import {
 import { useTema } from "@/componentes/ui/Tema";
 import { Cabecalho } from "./Cabecalho";
 import { CombustivelMotor } from "./CombustivelMotor";
-import { EstadoAguardandoDados, EstadoSemDados, FaixaProvisoria } from "./Estados";
+import { EstadoAguardandoDados, EstadoSemDados, FaixaConexao, FaixaProvisoria } from "./Estados";
 import { FaixaAvisos } from "./FaixaAvisos";
 import { TooltipInstante } from "./Instante";
 import { LinhaDoTempo, type Cursor } from "./LinhaDoTempo";
@@ -23,9 +23,24 @@ import { Qualidade } from "./Qualidade";
 import { Legenda, Resumo } from "./Resumo";
 import { TabelaEventos } from "./TabelaEventos";
 
-type Props = { analise: Analise; provisoria: boolean };
+type Props = {
+  analise: Analise;
+  provisoria: boolean;
+  /** Passou o tempo de acompanhar a viagem provisória. */
+  provisoriaExpirada?: boolean;
+  /** Aviso de conexão ou de servidor ocupado. */
+  aviso?: string | null;
+  /** Hora (HH:MM) da última versão que substituiu a tela. */
+  atualizadoEm?: string | null;
+};
 
-export function AnaliseView({ analise, provisoria }: Props) {
+export function AnaliseView({
+  analise,
+  provisoria,
+  provisoriaExpirada = false,
+  aviso = null,
+  atualizadoEm = null,
+}: Props) {
   const tema = useTema();
   const [cursor, setCursorEstado] = useState<Cursor>({ t: null, origem: "grafico" });
   const [foco, setFoco] = useState<{ lat: number; lon: number; nonce: number } | null>(null);
@@ -63,7 +78,13 @@ export function AnaliseView({ analise, provisoria }: Props) {
   return (
     <div className="analise">
       <Cabecalho analise={analise} />
-      {provisoria ? <FaixaProvisoria /> : null}
+      {aviso ? <FaixaConexao texto={aviso} /> : null}
+      {provisoria ? <FaixaProvisoria expirada={provisoriaExpirada} /> : null}
+      {atualizadoEm ? (
+        <p className="nota" role="status">
+          Resultado atualizado às {atualizadoEm}
+        </p>
+      ) : null}
       <FaixaAvisos avisos={analise.avisos} />
 
       {vazia ? (

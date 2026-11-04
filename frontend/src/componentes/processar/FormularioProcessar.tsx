@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { COMBUSTIVEIS, DONGLE_INICIAL } from "@/config";
 import type { CriarViagemResposta, Problema } from "@/contrato/tipos";
 import { Botao } from "@/componentes/ui/Botao";
@@ -21,19 +21,23 @@ type Erros = Partial<
   Record<"motorista" | "categoria" | "dongle" | "bootId" | "bootGeneration" | "t0" | "t1", string>
 > & {
   geral?: string;
+  /** A sessão caiu: o formulário fica e o login abre em outra aba. */
+  sessaoExpirada?: boolean;
+  /** O próximo envio é uma nova tentativa (o `POST` nunca se repete sozinho). */
+  repetir?: boolean;
 };
 
-const INICIAL: Campos = {
+const iniciais = (dongle: number): Campos => ({
   motorista: "",
   categoria: "feira",
   combustivel: "gasolina_e30",
-  dongle: String(DONGLE_INICIAL),
+  dongle: String(dongle),
   tipo: "boot",
   bootId: "",
   bootGeneration: "",
   t0: "",
   t1: "",
-};
+});
 
 /** `datetime-local` vira RFC 3339 com o fuso fixo da feira (-03:00). */
 export function paraRfc3339(valor: string): string {
@@ -86,10 +90,57 @@ export function montarCorpo(c: Campos) {
   };
 }
 
-type Props = { irPara?: (url: string) => void };
+type Props = {
+  /** Valor inicial do campo dongle (`ANALISE_DONGLE_ID` no servidor). */
+  dongleInicial?: number;
+  irPara?: (url: string) => void;
+};
 
-export function FormularioProcessar({ irPara = (u) => window.location.assign(u) }: Props) {
-  const [c, setC] = useState<Campos>(INICIAL);
+/** Traduz a resposta de erro do `POST` (pelo `codigo`, nunca por `title` ou `detail`). */
+export function erroDaCriacao(
+  status: number,
+  p: Problema | null,
+  retryAfter: string | null,
+  motorista: string,
+  categoria: string,
+): Erros {
+  const codigo = p?.codigo;
+  if (status === 409 && codigo === "motorista_repetido") {
+    return {
+      motorista: `Já existe uma viagem de «${motorista}» na categoria «${categoria.toLowerCase()}». Use outro nome.`,
+    };
+  }
+  if (status === 400 && codigo === "entrada_invalida") {
+    return { geral: p?.detail ?? "Entrada inválida." };
+  }
+  if (status === 404 && codigo === "dongle_desconhecido") {
+    return { dongle: "Dongle não cadastrado." };
+  }
+  if (status === 401) return { geral: "Sessão expirada.", sessaoExpirada: true };
+  if (status === 403) return { geral: "Esta conta não tem permissão de operador." };
+  if (status === 429) {
+    const s = Number(retryAfter);
+    return {
+      geral:
+        Number.isFinite(s) && s > 0
+          ? `Servidor ocupado. Tente de novo em ${Math.ceil(s)} s.`
+          : "Servidor ocupado. Tente de novo em instantes.",
+      repetir: true,
+    };
+  }
+  if (status === 503 && codigo === "api_indisponivel") {
+    return { geral: "Não foi possível falar com o servidor.", repetir: true };
+  }
+  if (status === 503) return { geral: "Servidor sobrecarregado.", repetir: true };
+  return { geral: "Erro inesperado no servidor.", repetir: true };
+}
+
+export function FormularioProcessar({
+  dongleInicial = DONGLE_INICIAL,
+  irPara = (u) => window.location.assign(u),
+}: Props) {
+  const motoristaRef = useRef<HTMLInputElement>(null);
+  const [c, setC] = useState<Campos>(() => iniciais(dongleInicial));
   const [erros, setErros] = useState<Erros>({});
   const [enviando, setEnviando] = useState(false);
 
@@ -117,24 +168,18 @@ export function FormularioProcessar({ irPara = (u) => window.location.assign(u) 
         irPara(`/viagem/${corpo.viagem_id}`);
         return; // mantém o botão desativado durante a navegação
       }
-      if (r.status === 401) {
-        irPara(`/entrar?retorno=${encodeURIComponent("/processar")}`);
-        return;
-      }
       const p = (await r.json().catch(() => null)) as Problema | null;
-      if (r.status === 409 && p?.codigo === "motorista_repetido") {
-        setErros({
-          motorista: `Já existe uma viagem de «${c.motorista.trim()}» na categoria «${c.categoria.trim().toLowerCase()}». Use outro nome.`,
-        });
-      } else if (r.status === 400 && p?.codigo === "entrada_invalida") {
-        setErros({ geral: p.detail ?? "Entrada inválida." });
-      } else if (r.status === 404 && p?.codigo === "dongle_desconhecido") {
-        setErros({ dongle: "Dongle desconhecido." });
-      } else {
-        setErros({ geral: "Não foi possível criar a viagem. Tente de novo." });
-      }
+      const novos = erroDaCriacao(
+        r.status,
+        p,
+        r.headers?.get("Retry-After") ?? null,
+        c.motorista.trim(),
+        c.categoria.trim(),
+      );
+      setErros(novos);
+      if (novos.motorista) motoristaRef.current?.focus();
     } catch {
-      setErros({ geral: "Não foi possível criar a viagem. Tente de novo." });
+      setErros({ geral: "Não foi possível falar com o servidor.", repetir: true });
     }
     setEnviando(false);
   }
@@ -160,6 +205,7 @@ export function FormularioProcessar({ irPara = (u) => window.location.assign(u) 
         "Motorista",
         <input
           id="f-motorista"
+          ref={motoristaRef}
           value={c.motorista}
           maxLength={60}
           autoComplete="off"
@@ -290,10 +336,23 @@ export function FormularioProcessar({ irPara = (u) => window.location.assign(u) 
       {erros.geral ? (
         <p className="campo-erro erro-geral" role="alert">
           {erros.geral}
+          {erros.sessaoExpirada ? (
+            <>
+              {" "}
+              <a
+                href={`/entrar?retorno=${encodeURIComponent("/processar")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Entrar de novo
+              </a>
+              {" (abre em outra aba; depois envie de novo)."}
+            </>
+          ) : null}
         </p>
       ) : null}
       <Botao type="submit" larguraTotal disabled={enviando}>
-        {enviando ? "Enviando…" : "Processar viagem"}
+        {enviando ? "Enviando…" : erros.repetir ? "Tentar de novo" : "Processar viagem"}
       </Botao>
     </form>
   );

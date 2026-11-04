@@ -99,10 +99,40 @@ export function EstadoAguardandoDados() {
   );
 }
 
-export function FaixaProvisoria() {
+export function FaixaProvisoria({ expirada = false }: { expirada?: boolean }) {
   return (
     <p className="faixa-provisoria" role="status">
-      Resultado provisório: ainda podem chegar dados
+      {expirada
+        ? "Resultado provisório. Recarregue para verificar"
+        : "Resultado provisório: ainda podem chegar dados"}
     </p>
+  );
+}
+
+/** Aviso discreto de conexão ou de servidor ocupado; a tela não é esvaziada. */
+export function FaixaConexao({ texto }: { texto: string }) {
+  return (
+    <p className="faixa-provisoria" role="status">
+      {texto}
+    </p>
+  );
+}
+
+export function EstadoLimiteEspera({ onContinuar }: { onContinuar: () => void }) {
+  return (
+    <Estado papel="alert">
+      <p className="estado-titulo">
+        A viagem ainda não foi processada. O processamento no servidor pode estar parado.
+      </p>
+      <div className="acoes">
+        <Botao icone={<IconeRecarregar />} onClick={onContinuar}>
+          Continuar esperando
+        </Botao>
+        <Link href="/processar" className="botao botao-secundario">
+          <IconeVoltar />
+          Voltar
+        </Link>
+      </div>
+    </Estado>
   );
 }

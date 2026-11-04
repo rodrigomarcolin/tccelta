@@ -3,18 +3,24 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderComTema } from "@/testes/helpers";
 import {
+  erroDaCriacao,
   FormularioProcessar,
   montarCorpo,
   paraRfc3339,
   validarCampos,
 } from "./FormularioProcessar";
 
-type Resp = { status: number; corpo?: unknown };
+type Resp = { status: number; corpo?: unknown; retryAfter?: string };
 
 function fetchCom(resp: Resp | (() => Promise<Resp>)) {
   const f = vi.fn(async () => {
     const r = typeof resp === "function" ? await resp() : resp;
-    return { status: r.status, ok: r.status < 300, json: async () => r.corpo };
+    return {
+      status: r.status,
+      ok: r.status < 300,
+      json: async () => r.corpo,
+      headers: new Headers(r.retryAfter ? { "Retry-After": r.retryAfter } : {}),
+    };
   });
   vi.stubGlobal("fetch", f);
   return f;
@@ -185,35 +191,106 @@ describe("envio", () => {
     await userEvent.clear(screen.getByLabelText("Dongle"));
     await userEvent.type(screen.getByLabelText("Dongle"), "2");
     await enviar();
-    expect(await screen.findByText("Dongle desconhecido.")).toBeInTheDocument();
+    expect(await screen.findByText("Dongle não cadastrado.")).toBeInTheDocument();
   });
 
-  it("401 vai para /entrar", async () => {
+  it("começa com o dongle configurado no servidor e envia esse valor", async () => {
+    const f = fetchCom({ status: 202, corpo: { viagem_id: "x" } });
+    renderComTema(<FormularioProcessar dongleInicial={7} irPara={vi.fn()} />);
+    expect(screen.getByLabelText("Dongle")).toHaveValue(7);
+    await preencherBoot();
+    await enviar();
+    await waitFor(() => expect(f).toHaveBeenCalled());
+    const init = (f.mock.calls as unknown as [string, RequestInit][])[0][1];
+    expect(JSON.parse(init.body as string).entrada.dongle_id).toBe(7);
+  });
+
+  it("409 leva o foco ao campo motorista", async () => {
+    fetchCom({ status: 409, corpo: { codigo: "motorista_repetido" } });
+    renderComTema(<FormularioProcessar irPara={vi.fn()} />);
+    await preencherBoot();
+    await userEvent.click(screen.getByLabelText("Categoria"));
+    await enviar();
+    await screen.findByText(/Já existe uma viagem/);
+    expect(screen.getByLabelText("Motorista")).toHaveFocus();
+  });
+
+  it("401 mostra 'Sessão expirada', oferece login em outra aba e preserva o formulário", async () => {
     fetchCom({ status: 401 });
     const irPara = vi.fn();
     renderComTema(<FormularioProcessar irPara={irPara} />);
-    await preencherBoot();
+    await preencherBoot("João", "8");
     await enviar();
-    await waitFor(() => expect(irPara).toHaveBeenCalledWith("/entrar?retorno=%2Fprocessar"));
+    expect(await screen.findByText(/Sessão expirada./)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Entrar de novo" });
+    expect(link).toHaveAttribute("href", "/entrar?retorno=%2Fprocessar");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(irPara).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Motorista")).toHaveValue("João");
+    expect(screen.getByRole("spinbutton", { name: "Boot" })).toHaveValue(8);
   });
 
-  it("outro erro e falha de rede mostram a mensagem genérica", async () => {
-    fetchCom({ status: 500 });
+  it.each([
+    [403, undefined, undefined, "Esta conta não tem permissão de operador.", "Processar viagem"],
+    [429, "limite_taxa", "4", "Servidor ocupado. Tente de novo em 4 s.", "Tentar de novo"],
+    [
+      429,
+      "limite_taxa",
+      undefined,
+      "Servidor ocupado. Tente de novo em instantes.",
+      "Tentar de novo",
+    ],
+    [503, "banco_ocupado", "9", "Servidor sobrecarregado.", "Tentar de novo"],
+    [
+      503,
+      "api_indisponivel",
+      undefined,
+      "Não foi possível falar com o servidor.",
+      "Tentar de novo",
+    ],
+    [502, "resposta_invalida", undefined, "Erro inesperado no servidor.", "Tentar de novo"],
+    [500, undefined, undefined, "Erro inesperado no servidor.", "Tentar de novo"],
+  ])(
+    "status %i %s mostra a mensagem e o botão certos",
+    async (status, codigo, ra, texto, botao) => {
+      fetchCom({ status, corpo: codigo ? { codigo } : undefined, retryAfter: ra });
+      renderComTema(<FormularioProcessar irPara={vi.fn()} />);
+      await preencherBoot();
+      await enviar();
+      expect(await screen.findByText(texto)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: botao })).toBeEnabled();
+    },
+  );
+
+  it("falha de rede mostra 'Não foi possível falar com o servidor.' e o POST não se repete sozinho", async () => {
+    const f = vi.fn(async () => Promise.reject(new Error("rede")));
+    vi.stubGlobal("fetch", f);
     renderComTema(<FormularioProcessar irPara={vi.fn()} />);
     await preencherBoot();
     await enviar();
-    expect(
-      await screen.findByText("Não foi possível criar a viagem. Tente de novo."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Não foi possível falar com o servidor.")).toBeInTheDocument();
+    expect(f).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(f).toHaveBeenCalledTimes(2);
+  });
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => Promise.reject(new Error("rede"))),
-    );
-    await enviar();
+  it("erroDaCriacao não usa title nem detail para decidir", () => {
+    const p = { type: "t", title: "motorista_repetido", status: 409, codigo: "outro", detail: "x" };
+    expect(erroDaCriacao(409, p, null, "a", "b")).toEqual({
+      geral: "Erro inesperado no servidor.",
+      repetir: true,
+    });
     expect(
-      await screen.findByText("Não foi possível criar a viagem. Tente de novo."),
-    ).toBeInTheDocument();
+      erroDaCriacao(
+        400,
+        { ...p, status: 400, codigo: "entrada_invalida", detail: undefined },
+        null,
+        "a",
+        "b",
+      ),
+    ).toEqual({
+      geral: "Entrada inválida.",
+    });
   });
 
   it("impede envio duplo enquanto aguarda", async () => {
@@ -229,7 +306,7 @@ describe("envio", () => {
     expect(f).toHaveBeenCalledTimes(1);
     liberar({ status: 500 });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Processar viagem" })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: "Tentar de novo" })).toBeEnabled(),
     );
   });
 });

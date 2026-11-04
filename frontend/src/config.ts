@@ -22,6 +22,12 @@ export function nomeCombustivel(id: string): string {
 export const POLLING_ESPERA_MS = 1000;
 export const POLLING_PROVISORIA_MS = 5000;
 export const POLLING_PROVISORIA_MAX_MS = 5 * 60 * 1000;
+/** Recuo do polling após falhas seguidas: 1, 2, 4 e no máximo 5 s. */
+export const POLLING_RECUO_MAX_MS = 5000;
+/** Falhas seguidas até avisar "Sem conexão". */
+export const POLLING_FALHAS_AVISO = 3;
+/** Limite de espera em pendente ou aguardando_dados (3 vezes o limite do worker). */
+export const LIMITE_ESPERA_MS = 60_000;
 
 /** Fração da soma das durações das partes que cada pausa ocupa no eixo X. */
 export const FRACAO_PAUSA_EIXO = 0.05;

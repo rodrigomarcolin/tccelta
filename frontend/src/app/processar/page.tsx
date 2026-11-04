@@ -1,6 +1,7 @@
 import { FormularioProcessar } from "@/componentes/processar/FormularioProcessar";
 import { AlternarTema } from "@/componentes/ui/Tema";
 import { exigirSessao } from "@/servidor/sessao";
+import { dongleInicial } from "@/servidor/viagens/cliente";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export default async function Processar() {
         </div>
         <AlternarTema />
       </header>
-      <FormularioProcessar />
+      <FormularioProcessar dongleInicial={dongleInicial()} />
     </main>
   );
 }

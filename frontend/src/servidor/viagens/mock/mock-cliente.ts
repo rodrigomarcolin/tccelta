@@ -139,8 +139,15 @@ export function criarMockCliente(agora: () => number = Date.now): ViagensCliente
           combustivel: r.combustivel,
           entrada: r.entrada,
           criada_em: new Date(r.criadaEm).toISOString(),
+          // Muda quando a viagem provisória ganha a versão completa (como na API).
           calculada_em:
-            e.status === "pronta" ? new Date(r.criadaEm + AGUARDANDO_ATE_MS).toISOString() : null,
+            e.status === "pronta"
+              ? new Date(
+                  r.criadaEm +
+                    AGUARDANDO_ATE_MS +
+                    (e.completa && CENARIOS_PROVISORIOS.includes(r.cenario) ? PROVISORIA_MS : 0),
+                ).toISOString()
+              : null,
         },
       };
     },

@@ -763,3 +763,9 @@ a {
     print-color-adjust: exact;
   }
 }
+
+.acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
