@@ -78,6 +78,9 @@ Todos são opcionais na requisição e voltam em `parametros` na resposta.
 | `pedal_alto_pct` | 80 | Início da faixa de pedal alto |
 | `pedal_alto_aviso_fracao` | 0,10 | Fração do tempo com motor ligado que dispara o aviso |
 | `freio_motor_pedal_pct`, `freio_motor_rpm`, `freio_motor_kmh` | 3, 1200, 15 | Freio-motor |
+| `cruzeiro_min_kmh` | 40 | Velocidade mínima de cruzeiro |
+| `cruzeiro_amplitude_kmh` | 10 | Diferença máxima entre a maior e a menor velocidade do trecho de cruzeiro |
+| `cruzeiro_min_s` | 30 | Duração mínima do trecho de cruzeiro |
 | `aquecido_c`, `frio_c`, `frio_rpm`, `frio_pedal_pct` | 80, 60, 3000, 60 | Aquecimento e esforço com motor frio |
 | `serie_max_pontos` | 5000 | Limite de pontos por série exposta |
 | `de_t_ms`, `ate_t_ms` | ausentes | Trecho selecionado (ver "Resumo de um trecho") |
@@ -108,7 +111,7 @@ Para E30 e E32, a densidade é o ponto médio da faixa típica de 735 a 765 g/L 
 
 Salvo indicação em contrário, os cálculos usam os pontos da grade dentro da janela da viagem, e `dt = passo / 1000`.
 
-Cálculos que dependem de pontos vizinhos ou de sequências contínuas (aceleração, amostras estáveis, trechos de marcha, trocas, eventos, paradas e variação do pedal) não cruzam partes. A rotação de marcha lenta e as marchas detectadas são únicas para toda a viagem.
+Cálculos que dependem de pontos vizinhos ou de sequências contínuas (aceleração, amostras estáveis, trechos de marcha, trocas, eventos, paradas, trechos de cruzeiro e variação do pedal) não cruzam partes. A rotação de marcha lenta e as marchas detectadas são únicas para toda a viagem.
 
 ## Cálculos
 
@@ -215,6 +218,22 @@ A numeração é relativa ao que foi observado, não às marchas reais do veícu
 | Freio-motor | `condutor.freio_motor_pct` | Tempo com motor ligado, `pedal ≤ freio_motor_pedal_pct`, `rpm ≥ freio_motor_rpm` e `velocidade ≥ freio_motor_kmh`, sobre o tempo em movimento |
 
 Quantis usam interpolação linear entre amostras ordenadas.
+
+### Suavidade e cruzeiro
+
+| Elemento | Campo | Cálculo |
+|---|---|---|
+| Aceleração RMS | `condutor.aceleracao_rms_ms2` | `√(média de a²)`, nos pontos em movimento com aceleração definida; `null` se não houver pontos |
+| Tempo em cruzeiro | `condutor.cruzeiro_s` | Soma das durações dos trechos de cruzeiro; `null` sem leituras de velocidade e `0` se houver leituras, mas nenhum trecho |
+
+**Trechos de cruzeiro**, percorrendo a grade de cada parte:
+
+1. Um ponto é elegível se tiver velocidade definida e `velocidade ≥ cruzeiro_min_kmh`.
+2. A partir do primeiro ponto elegível, estender o trecho enquanto os pontos forem elegíveis e a diferença entre a maior e a menor velocidade do trecho for de até `cruzeiro_amplitude_kmh`.
+3. Se a duração (`t_fim − t_inicio + passo`) for de pelo menos `cruzeiro_min_s`, somar a duração e continuar no ponto seguinte ao fim do trecho.
+4. Se for menor, avançar o início em um ponto.
+
+O trecho de cruzeiro descreve velocidade constante. O projeto não detecta o uso de piloto automático no veículo.
 
 ### Combustível
 
@@ -327,7 +346,9 @@ Os valores abaixo são ilustrativos, e os arrays foram encurtados. As séries us
     "pedal_medio_pct": 35.0,
     "pedal_alto_s": 51.0,
     "pedal_variacao_p95_pct_s": 118.0,
-    "freio_motor_pct": 39.0
+    "freio_motor_pct": 39.0,
+    "aceleracao_rms_ms2": 1.1,
+    "cruzeiro_s": 48.0
   },
   "motor": {
     "aquecimento_s": 67.0,
@@ -506,6 +527,10 @@ Os testes usam viagens de exemplo com resultado conhecido.
 19. **Sem cruzar partes:** a aceleração, os eventos e as trocas não usam pontos de partes diferentes, e o segmento de rota entre elas tem faixa `falha_gps`.
 20. **Boot sem hora:** na entrada `intervalo`, o boot fica de fora com o aviso `boot_sem_hora`. Na entrada `boot`, a análise funciona normalmente com o aviso `sem_hora_absoluta`.
 21. **Marchas na viagem:** em uma viagem com duas partes, a mesma marcha tem o mesmo número nas duas.
+22. **Aceleração RMS:** acelerações de +1, −1, +1 e −1 m/s² dão 1,00 m/s²; de 0, 0, +3 e −3 m/s² dão cerca de 2,12 m/s². Pontos parados não entram no cálculo.
+23. **Cruzeiro:** 60 s a 80 ± 3 km/h somam 60 s. Trechos de 25 s, ou de 60 s a 30 km/h, somam 0 s.
+24. **Cruzeiro sem dados:** sem leituras de velocidade, `cruzeiro_s` vem `null`. Com leituras e nenhum trecho, vem `0`.
+25. **Cruzeiro entre partes:** 20 s no fim de uma parte e 20 s no início da seguinte, na mesma velocidade, não formam um trecho de cruzeiro.
 
 ## Follow-ups
 
