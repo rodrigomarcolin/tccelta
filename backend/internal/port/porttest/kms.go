@@ -15,16 +15,22 @@ import (
 
 // Memory guarda K_auth/K_rec por nome de chave e a chave Ed25519 do JWT, com contadores e falhas.
 type Memory struct {
-	mu     sync.Mutex
-	auth   map[string][]byte
-	rec    map[string][]byte
-	jwt    map[int]ed25519.PrivateKey
-	verify int
+	mu        sync.Mutex
+	auth      map[string][]byte
+	rec       map[string][]byte
+	jwt       map[int]ed25519.PrivateKey
+	cli       map[int]ed25519.PrivateKey
+	clients   map[string]string // client_id -> segredo
+	verifyCli int
+	verify    int
 
 	// Contadores de chamadas.
 	HMACCalls   atomic.Int64
 	VerifyCalls atomic.Int64
 	SignCalls   atomic.Int64
+	// VerifyClientCalls e SignClientCalls contam as chamadas de client credentials.
+	VerifyClientCalls atomic.Int64
+	SignClientCalls   atomic.Int64
 	// Failure, se não nula, é devolvida por todas as chamadas (ex.: porta.ErrKMSUnavailable).
 	Failure atomic.Pointer[error]
 	// FailHMACAfter, se > 0, faz HMACAuth falhar a partir da N-ésima chamada.
@@ -33,7 +39,9 @@ type Memory struct {
 
 // New cria o KMS em memória com a versão 1 da chave do JWT.
 func New() *Memory {
-	m := &Memory{auth: map[string][]byte{}, rec: map[string][]byte{}, jwt: map[int]ed25519.PrivateKey{}}
+	m := &Memory{auth: map[string][]byte{}, rec: map[string][]byte{}, jwt: map[int]ed25519.PrivateKey{}, cli: map[int]ed25519.PrivateKey{},
+		clients: map[string]string{}}
+	m.RotateCLI()
 	m.RotateJWT()
 	return m
 }

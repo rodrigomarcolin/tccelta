@@ -99,20 +99,6 @@ func decode(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
 	return m
 }
 
-func TestTripRoutesAbsentWithoutNoAuthMode(t *testing.T) {
-	e := newTripEnv(t, false, nil)
-	h := e.d.Router()
-	id := "/v1/viagens/" + tripID.String()
-	for _, c := range [][2]string{{"POST", "/v1/viagens"}, {"GET", id}, {"GET", id + "/analise"}} {
-		if w := req(h, c[0], c[1], []byte(validBody), jsonHdr()); w.Code != 404 || w.Header().Get("Content-Type") == "application/problem+json" {
-			t.Errorf("%s %s: %d", c[0], c[1], w.Code)
-		}
-	}
-	if len(e.met.routes) != 0 {
-		t.Fatalf("a rota não existe, mas passou pelo instrument: %v", e.met.routes)
-	}
-}
-
 func TestCreateTripAccepted(t *testing.T) {
 	e := newTripEnv(t, true, nil)
 	e.create.out = trip.Trip{ID: tripID, Status: trip.StatusPending}

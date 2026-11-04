@@ -43,6 +43,10 @@ type M struct {
 	WorkerTripDur         prometheus.Histogram
 	WorkerTripWait        prometheus.Histogram
 	WorkerTripQueue       *prometheus.GaugeVec
+
+	AuthTokens        *prometheus.CounterVec
+	AuthBlocks        *prometheus.CounterVec
+	AuthStoreFailures prometheus.Counter
 }
 
 // New cria o conjunto de métricas em um registro próprio.
@@ -86,10 +90,14 @@ func New() *M {
 	m.WorkerTripWait = prometheus.NewHistogram(prometheus.HistogramOpts{Name: "tccelta_worker_trip_wait_seconds",
 		Buckets: []float64{1, 2, 5, 10, 15, 20, 30, 60, 120, 300}})
 	m.WorkerTripQueue = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "tccelta_worker_trip_queue"}, []string{"state"})
+	m.AuthTokens = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "tccelta_auth_token_requests_total"}, []string{"result"})
+	m.AuthBlocks = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "tccelta_auth_blocks_total"}, []string{"scope"})
+	m.AuthStoreFailures = prometheus.NewCounter(prometheus.CounterOpts{Name: "tccelta_auth_block_store_failures_total"})
 	for _, c := range []prometheus.Collector{m.HTTPReq, m.HTTPDur, m.Blocks, m.Batches, m.IngestionTx, m.BlockVerify, m.Rows, m.Handshakes,
 		m.AnchorRTT, m.Gaps, m.KMSCalls, m.KMSDur, m.KMSBreaker, m.Rejections, m.RedisFailures, m.Reprocessed,
 		m.WorkerBoots, m.WorkerDur, m.WorkerQueue, m.WorkerAlerts, m.WorkerExpired, m.WorkerReconnect, m.WorkerGroups,
-		m.WorkerTrips, m.WorkerTripPartial, m.WorkerTripProvisional, m.WorkerTripDur, m.WorkerTripWait, m.WorkerTripQueue} {
+		m.WorkerTrips, m.WorkerTripPartial, m.WorkerTripProvisional, m.WorkerTripDur, m.WorkerTripWait, m.WorkerTripQueue,
+		m.AuthTokens, m.AuthBlocks, m.AuthStoreFailures} {
 		r.MustRegister(c)
 	}
 	return m

@@ -114,3 +114,40 @@ func TestAnalysisNoAuth(t *testing.T) {
 		t.Fatalf("produção sem o modo: %v", err)
 	}
 }
+
+func TestClientCredentialsDefaults(t *testing.T) {
+	c, err := LoadFrom(env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := c.TokenBlock
+	if c.JWT.AnalysisAudience != "tccelta-analise" || c.JWT.ClientValidity != 30*time.Minute || b.PairTolerance != 5 || b.IPTolerance != 20 ||
+		b.Initial != 30*time.Second || b.Factor != 2 || b.Cap != 15*time.Minute || b.Forget != 30*time.Minute {
+		t.Fatalf("%+v %+v", c.JWT, b)
+	}
+	c, err = LoadFrom(env(map[string]string{
+		"JWT_AUDIENCIA_ANALISE": "outra", "CLI_JWT_VALIDADE": "10m", "TOKEN_BLOQUEIO_TOLERANCIA_PAR": "3", "TOKEN_BLOQUEIO_TOLERANCIA_IP": "9",
+		"TOKEN_BLOQUEIO_INICIAL": "5s", "TOKEN_BLOQUEIO_FATOR": "1.5", "TOKEN_BLOQUEIO_TETO": "1m", "TOKEN_BLOQUEIO_ESQUECER": "1h"}))
+	b = c.TokenBlock
+	if err != nil || c.JWT.AnalysisAudience != "outra" || c.JWT.ClientValidity != 10*time.Minute || b.PairTolerance != 3 || b.IPTolerance != 9 ||
+		b.Initial != 5*time.Second || b.Factor != 1.5 || b.Cap != time.Minute || b.Forget != time.Hour {
+		t.Fatalf("%v %+v %+v", err, c.JWT, b)
+	}
+}
+
+func TestTokenBlockRefusesBadProgression(t *testing.T) {
+	for name, m := range map[string]map[string]string{
+		"fator < 1":      {"TOKEN_BLOQUEIO_FATOR": "0.5"},
+		"teto < inicial": {"TOKEN_BLOQUEIO_INICIAL": "1m", "TOKEN_BLOQUEIO_TETO": "30s"},
+		"tolerância par": {"TOKEN_BLOQUEIO_TOLERANCIA_PAR": "0"},
+		"tolerância IP":  {"TOKEN_BLOQUEIO_TOLERANCIA_IP": "0"},
+		"inicial zero":   {"TOKEN_BLOQUEIO_INICIAL": "0s"},
+		"esquecer zero":  {"TOKEN_BLOQUEIO_ESQUECER": "0s"},
+		"fator inválido": {"TOKEN_BLOQUEIO_FATOR": "dois"},
+		"validade zero":  {"CLI_JWT_VALIDADE": "0s"},
+	} {
+		if _, err := LoadFrom(env(m)); err == nil {
+			t.Errorf("%s deveria ser recusado", name)
+		}
+	}
+}

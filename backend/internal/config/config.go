@@ -40,8 +40,11 @@ type KMSConfig struct {
 type JWTConfig struct {
 	Issuer   string
 	Audience string
-	Validity time.Duration
-	Leeway   time.Duration
+	// AnalysisAudience é o aud dos tokens de cliente (JWT_AUDIENCIA_ANALISE); ClientValidity, a validade deles (CLI_JWT_VALIDADE).
+	AnalysisAudience string
+	ClientValidity   time.Duration
+	Validity         time.Duration
+	Leeway           time.Duration
 }
 
 type ProtocolConfig struct {
@@ -50,6 +53,14 @@ type ProtocolConfig struct {
 	AnchorRTTMax         time.Duration
 	MaxBatchBlocks       int
 	SuggestedTLat        time.Duration
+}
+
+// TokenBlockConfig é o bloqueio progressivo de POST /v1/auth/token (falhas sem bloqueio por par e por IP, e a progressão).
+type TokenBlockConfig struct {
+	PairTolerance, IPTolerance int
+	Initial                    time.Duration
+	Factor                     float64
+	Cap, Forget                time.Duration
 }
 
 type LimitsConfig struct {
@@ -91,9 +102,11 @@ type Config struct {
 	JWT              JWTConfig
 	Protocol         ProtocolConfig
 	Limits           LimitsConfig
+	TokenBlock       TokenBlockConfig
 	Worker           WorkerConfig
 	AllowNoneProfile bool
-	// AnalysisNoAuth liga as rotas de viagem sem autenticação (ANALISE_SEM_AUTH); proibido em produção até a API3.
+	// AnalysisNoAuth abre as rotas de viagem sem exigir o Bearer (ANALISE_SEM_AUTH); proibido em produção. Sem ele, as rotas exigem
+	// o token de client credentials.
 	AnalysisNoAuth bool
 }
 
@@ -206,10 +219,20 @@ func LoadFrom(env func(string) string) (Config, error) {
 		VerifyParallel: l.integer("KMS_VERIFY_PARALELO", 1),
 	}
 	c.JWT = JWTConfig{
-		Issuer:   l.str("JWT_EMISSOR", "tccelta-api"),
-		Audience: l.str("JWT_AUDIENCIA", "tccelta-ingestao"),
-		Validity: l.dur("JWT_VALIDADE", time.Hour),
-		Leeway:   l.dur("JWT_FOLGA", 30*time.Second),
+		Issuer:           l.str("JWT_EMISSOR", "tccelta-api"),
+		Audience:         l.str("JWT_AUDIENCIA", "tccelta-ingestao"),
+		AnalysisAudience: l.str("JWT_AUDIENCIA_ANALISE", "tccelta-analise"),
+		ClientValidity:   l.dur("CLI_JWT_VALIDADE", 30*time.Minute),
+		Validity:         l.dur("JWT_VALIDADE", time.Hour),
+		Leeway:           l.dur("JWT_FOLGA", 30*time.Second),
+	}
+	c.TokenBlock = TokenBlockConfig{
+		PairTolerance: l.integer("TOKEN_BLOQUEIO_TOLERANCIA_PAR", 5),
+		IPTolerance:   l.integer("TOKEN_BLOQUEIO_TOLERANCIA_IP", 20),
+		Initial:       l.dur("TOKEN_BLOQUEIO_INICIAL", 30*time.Second),
+		Factor:        l.float("TOKEN_BLOQUEIO_FATOR", 2),
+		Cap:           l.dur("TOKEN_BLOQUEIO_TETO", 15*time.Minute),
+		Forget:        l.dur("TOKEN_BLOQUEIO_ESQUECER", 30*time.Minute),
 	}
 	c.Protocol = ProtocolConfig{
 		ChallengeValidity:    l.dur("DESAFIO_VALIDADE", 60*time.Second),
@@ -265,6 +288,12 @@ func LoadFrom(env func(string) string) (Config, error) {
 	}
 	if w.TripEvalInterval > w.TripWaitNoBatch {
 		l.errs = append(l.errs, "VIAGEM_INTERVALO_AVALIACAO não pode ser maior que VIAGEM_ESPERA_SEM_LOTE")
+	}
+	if b := c.TokenBlock; b.Factor < 1 || b.Cap < b.Initial || b.PairTolerance < 1 || b.IPTolerance < 1 || b.Initial <= 0 || b.Forget <= 0 {
+		l.errs = append(l.errs, "TOKEN_BLOQUEIO_*: o fator deve ser >= 1, o teto >= o tempo inicial (> 0), as tolerâncias >= 1 e o esquecimento > 0")
+	}
+	if c.JWT.ClientValidity <= 0 {
+		l.errs = append(l.errs, "CLI_JWT_VALIDADE deve ser maior que zero")
 	}
 	if c.Protocol.MaxBatchBlocks < 1 || c.Protocol.MaxBatchBlocks > 255 {
 		l.errs = append(l.errs, "LOTE_MAX_BLOCOS fora de 1..255")

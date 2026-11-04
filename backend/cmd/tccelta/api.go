@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 
+	"tccelta/backend/internal/adapter/authblock"
 	"tccelta/backend/internal/adapter/cache"
 	"tccelta/backend/internal/adapter/jwt"
 	"tccelta/backend/internal/adapter/kmsclient"
@@ -18,10 +20,12 @@ import (
 	"tccelta/backend/internal/config"
 	"tccelta/backend/internal/database"
 	"tccelta/backend/internal/database/dbgen"
+	"tccelta/backend/internal/domain/clientauth"
 	"tccelta/backend/internal/domain/pid"
 	httpapi "tccelta/backend/internal/http"
 	"tccelta/backend/internal/http/ratelimit"
 	"tccelta/backend/internal/usecase/catalog"
+	clientUC "tccelta/backend/internal/usecase/clienttoken"
 	hsUC "tccelta/backend/internal/usecase/handshake"
 	ingUC "tccelta/backend/internal/usecase/ingestion"
 	"tccelta/backend/internal/usecase/session"
@@ -67,31 +71,38 @@ func cmdAPI(ctx context.Context) error {
 	go sinc.Track(ctx, database.Listen(ctx, pool, "pid_changed", log, nil))
 
 	// o KMS pode demorar a subir: tenta carregar as chaves públicas do JWT por até ~1 min
-	var val *jwt.Validator
-	for attempt := 0; ; attempt++ {
-		val, err = jwt.NewValidator(ctx, kms, cfg.JWT.Issuer, cfg.JWT.Audience, cfg.JWT.Leeway)
-		if err == nil {
-			break
-		}
-		if attempt >= 30 || ctx.Err() != nil {
-			return fmt.Errorf("kms: %w", err)
-		}
-		log.Warn("kms.indisponivel_no_boot", "erro", err)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(2 * time.Second):
-		}
+	val, err := bootRetry(ctx, log, func() (*jwt.Validator, error) {
+		return jwt.NewValidator(ctx, kms, cfg.JWT.Issuer, cfg.JWT.Audience, cfg.JWT.Leeway)
+	})
+	if err != nil {
+		return err
 	}
 	go val.UpdatePeriodically(ctx, 10*time.Minute)
 	issuer := jwt.NewIssuer(kms, cfg.JWT.Issuer, cfg.JWT.Audience, cfg.JWT.Validity)
 
+	// client credentials: as chaves cli-v<n> ficam em memória (validam o Bearer das rotas de viagem e alimentam o JWKS)
+	cliVal, err := bootRetry(ctx, log, func() (*jwt.ClientValidator, error) {
+		return jwt.NewClientValidator(ctx, kms, cfg.JWT.Issuer, cfg.JWT.AnalysisAudience, cfg.JWT.Leeway)
+	})
+	if err != nil {
+		return err
+	}
+	go cliVal.UpdatePeriodically(ctx, 10*time.Minute)
+	cliIssuer := jwt.NewClientIssuer(kms, cfg.JWT.Issuer, cfg.JWT.AnalysisAudience, cfg.JWT.ClientValidity)
+
 	lim := &ratelimit.LimiterWithFallback{Local: ratelimit.NewLocal(), OnFailure: func() { met.RedisFailures.Inc() }}
+	var blockRedis authblock.Redis // nil sem REDIS_ENDERECO: o bloqueio usa só o estado local
 	if cfg.Limits.RedisAddress != "" {
 		rc := redis.NewClient(&redis.Options{Addr: cfg.Limits.RedisAddress, Password: cfg.Limits.RedisPassword,
 			DialTimeout: cfg.Limits.RedisTimeout, ReadTimeout: cfg.Limits.RedisTimeout, WriteTimeout: cfg.Limits.RedisTimeout, MaxRetries: -1})
 		lim.Redis = ratelimit.NewRedis(rc, cfg.Limits.RedisTimeout)
+		blockRedis = rc
 	}
+	b := cfg.TokenBlock
+	blocker := authblock.New(blockRedis, cfg.Limits.RedisTimeout, authblock.Policies{
+		Pair: clientauth.Policy{Tolerance: b.PairTolerance, Initial: b.Initial, Factor: b.Factor, Cap: b.Cap, Forget: b.Forget},
+		IP:   clientauth.Policy{Tolerance: b.IPTolerance, Initial: b.Initial, Factor: b.Factor, Cap: b.Cap, Forget: b.Forget},
+	}, met.AuthPort())
 
 	now := func() time.Time { return time.Now() }
 	paramsHS := hsUC.Params{ChallengeValidity: cfg.Protocol.ChallengeValidity, MaxPending: cfg.Protocol.MaxPendingChallenges,
@@ -102,21 +113,25 @@ func cmdAPI(ctx context.Context) error {
 	var closing atomic.Bool
 	deps := &httpapi.Deps{
 		Cfg: cfg, Log: log, Met: met.HTTPPort(),
-		RequestChallenge: hsUC.NewIssueChallenge(repos, kms, met.HandshakePort(), now, log, paramsHS),
-		RespondChallenge: hsUC.NewRespondChallenge(repos, tx, kms, issuer, met.HandshakePort(), now, log, paramsHS),
-		ReceiveBatch:     ingUC.NewReceiveBatch(repos, tx, kms, cat, met.IngestionPort(), now, log, paramsIng),
-		GetConfirmation:  ingUC.NewGetConfirmation(repos, cfg.AllowNoneProfile),
-		CreateTrip:       tripUC.NewCreateTrip(tx),
-		GetTrip:          tripUC.NewGetTrip(tripRepos),
-		GetAnalysis:      tripUC.NewGetAnalysis(tripRepos),
-		Authenticate:     session.NewAuthenticate(val, repos.Dongles, cfg.AllowNoneProfile),
-		Limiter:          lim,
-		Semaphore:        ratelimit.NewConcurrency(cfg.Limits.MaxConcurrentIngestions, cfg.Limits.IngestionSlotWait),
-		NotReady:         &closing,
+		RequestChallenge:   hsUC.NewIssueChallenge(repos, kms, met.HandshakePort(), now, log, paramsHS),
+		RespondChallenge:   hsUC.NewRespondChallenge(repos, tx, kms, issuer, met.HandshakePort(), now, log, paramsHS),
+		ReceiveBatch:       ingUC.NewReceiveBatch(repos, tx, kms, cat, met.IngestionPort(), now, log, paramsIng),
+		GetConfirmation:    ingUC.NewGetConfirmation(repos, cfg.AllowNoneProfile),
+		CreateTrip:         tripUC.NewCreateTrip(tx),
+		GetTrip:            tripUC.NewGetTrip(tripRepos),
+		GetAnalysis:        tripUC.NewGetAnalysis(tripRepos),
+		Authenticate:       session.NewAuthenticate(val, repos.Dongles, cfg.AllowNoneProfile),
+		IssueToken:         clientUC.NewIssueToken(kms, cliIssuer, blocker, met.AuthPort(), log),
+		AuthenticateClient: clientUC.NewAuthenticate(cliVal),
+		ClientKeys:         clientUC.NewGetKeys(cliVal),
+		MetAuth:            met.AuthPort(),
+		Limiter:            lim,
+		Semaphore:          ratelimit.NewConcurrency(cfg.Limits.MaxConcurrentIngestions, cfg.Limits.IngestionSlotWait),
+		NotReady:           &closing,
 		Readiness: func() bool {
 			c, cancel := context.WithTimeout(ctx, time.Second)
 			defer cancel()
-			return pool.Ping(c) == nil && kms.Ready(c) && cat.Loaded() && val.Ready()
+			return pool.Ping(c) == nil && kms.Ready(c) && cat.Loaded() && val.Ready() && cliVal.Ready()
 		}}
 	srv := &http.Server{Addr: cfg.HTTP.Address, Handler: deps.Router(), ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 16 << 10}
@@ -125,6 +140,9 @@ func cmdAPI(ctx context.Context) error {
 	errs := make(chan error, 2)
 	go func() { errs <- srv.ListenAndServe() }()
 	go func() { errs <- msrv.ListenAndServe() }()
+	if cfg.AnalysisNoAuth {
+		log.Warn("aviso", "msg", "ANALISE_SEM_AUTH=true: as rotas de viagem estão abertas, sem conferir o Bearer")
+	}
 	log.Info("api.iniciada", "endereco", cfg.HTTP.Address)
 	select {
 	case err := <-errs:
@@ -141,4 +159,24 @@ func cmdAPI(ctx context.Context) error {
 	_ = msrv.Shutdown(sctx)
 	log.Info("api.encerrada")
 	return err
+}
+
+// bootRetry cria algo que depende do KMS, tentando por até ~1 min, porque o KMS pode demorar a subir.
+func bootRetry[T any](ctx context.Context, log *slog.Logger, build func() (T, error)) (T, error) {
+	for attempt := 0; ; attempt++ {
+		v, err := build()
+		if err == nil {
+			return v, nil
+		}
+		var zero T
+		if attempt >= 30 || ctx.Err() != nil {
+			return zero, fmt.Errorf("kms: %w", err)
+		}
+		log.Warn("kms.indisponivel_no_boot", "erro", err)
+		select {
+		case <-ctx.Done():
+			return zero, ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
 }

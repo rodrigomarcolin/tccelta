@@ -15,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -240,26 +239,7 @@ func (c *Client) Sign(ctx context.Context, input []byte) (sig []byte, version in
 
 // PublicKeys lê as chaves públicas vigentes do JWT, por versão.
 func (c *Client) PublicKeys(ctx context.Context) (map[int]ed25519.PublicKey, error) {
-	var resp respKeys
-	if err := c.call(ctx, http.MethodGet, "/v1/jwt/keys", nil, &resp); err != nil {
-		return nil, err
-	}
-	out := make(map[int]ed25519.PublicKey, len(resp))
-	for k, v := range resp {
-		n, err := strconv.Atoi(k)
-		if err != nil {
-			return nil, unavailable("versão %q inválida", k)
-		}
-		raw, err := base64.StdEncoding.DecodeString(v)
-		if err != nil || len(raw) != ed25519.PublicKeySize {
-			return nil, unavailable("chave pública v%s inválida", k)
-		}
-		out[n] = ed25519.PublicKey(raw)
-	}
-	if len(out) == 0 {
-		return nil, unavailable("nenhuma chave pública")
-	}
-	return out, nil
+	return c.keys(ctx, "/v1/jwt/keys")
 }
 
 // Ready: disjuntor fechado e o /saude/pronta do KMS respondendo 200 (consulta em cache por 2 s).

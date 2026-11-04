@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 
 	"tccelta/backend/internal/domain/trip"
+	"tccelta/backend/internal/port"
+	"tccelta/backend/internal/usecase/clienttoken"
 	"tccelta/backend/internal/usecase/handshake"
 	"tccelta/backend/internal/usecase/ingestion"
 	"tccelta/backend/internal/usecase/session"
@@ -54,4 +56,19 @@ type GetTrip interface {
 // GetAnalysis é o caso de uso de GET /v1/viagens/{id}/analise.
 type GetAnalysis interface {
 	Run(ctx context.Context, id uuid.UUID) (trip.Analysis, error)
+}
+
+// IssueToken é o caso de uso de POST /v1/auth/token.
+type IssueToken interface {
+	Run(ctx context.Context, c clienttoken.Credentials) (clienttoken.Token, error)
+}
+
+// AuthenticateClient é o caso de uso do middleware Bearer das rotas de viagem.
+type AuthenticateClient interface {
+	Run(ctx context.Context, raw string) (port.ClientSession, error)
+}
+
+// GetClientKeys é o caso de uso de GET /.well-known/jwks.json.
+type GetClientKeys interface {
+	Run(ctx context.Context) ([]port.ClientKey, error)
 }

@@ -22,6 +22,7 @@ const (
 	ctxS2 ctxKey = iota
 	ctxSession
 	ctxReqID
+	ctxClient
 )
 
 type respWriter struct {

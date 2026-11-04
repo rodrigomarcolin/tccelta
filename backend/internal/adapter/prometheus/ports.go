@@ -100,3 +100,12 @@ func (m *M) WorkerPort() port.MetricsWorker { return workerPort{m} }
 
 // ReprocessPort devolve o adaptador da porta de métricas do reprocessamento.
 func (m *M) ReprocessPort() port.MetricsReprocess { return reprocessPort{m} }
+
+type authPort struct{ m *M }
+
+func (p authPort) TokenRequest(result string) { p.m.AuthTokens.WithLabelValues(result).Inc() }
+func (p authPort) Block(scope string)         { p.m.AuthBlocks.WithLabelValues(scope).Inc() }
+func (p authPort) BlockStoreFailure()         { p.m.AuthStoreFailures.Inc() }
+
+// AuthPort devolve o adaptador da porta de métricas do client credentials.
+func (m *M) AuthPort() port.MetricsAuth { return authPort{m} }

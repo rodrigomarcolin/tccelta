@@ -36,6 +36,9 @@ func (Nop) TripDuration(time.Duration)                    {}
 func (Nop) TripWait(time.Duration)                        {}
 func (Nop) TripQueue(int64, int64)                        {}
 func (Nop) Reprocessed(int)                               {}
+func (Nop) TokenRequest(string)                           {}
+func (Nop) Block(string)                                  {}
+func (Nop) BlockStoreFailure()                            {}
 
 var (
 	_ port.MetricsHandshake = Nop{}
@@ -44,6 +47,7 @@ var (
 	_ port.MetricsKMS       = Nop{}
 	_ port.MetricsWorker    = Nop{}
 	_ port.MetricsReprocess = Nop{}
+	_ port.MetricsAuth      = Nop{}
 )
 
 // FixedClock devolve um relógio que sempre responde t. Para avançar, use AdjustableClock.
