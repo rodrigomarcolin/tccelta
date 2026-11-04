@@ -271,7 +271,8 @@ export type Problema = {
   viagem_status?: StatusViagem;
 };
 
-export type Resposta<T> = { status: number; corpo: T | Problema };
+/** `retryAfter` (em segundos) vem do cabeçalho `Retry-After` da API, quando enviado. */
+export type Resposta<T> = { status: number; corpo: T | Problema; retryAfter?: number };
 
 export function ehProblema(corpo: unknown): corpo is Problema {
   return (

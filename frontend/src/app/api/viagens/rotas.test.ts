@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.fn();
 vi.mock("@/auth", () => ({ auth: () => auth(), handlers: { GET: vi.fn(), POST: vi.fn() } }));
@@ -20,9 +20,17 @@ const valido = JSON.stringify({
   entrada: { tipo: "boot", dongle_id: 1, boot_id: 8 },
 });
 
+const UUID = "7d1f3a10-0001-4c5e-9b1a-000000000008";
+
 beforeEach(() => {
   reiniciarMock();
   auth.mockReset();
+  vi.stubEnv("OPERATOR_EMAILS", "ana@usp.br, outra@usp.br");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  delete (globalThis as Record<string, unknown>).__tccelta_cliente__;
 });
 
 describe("sem sessão", () => {
@@ -40,6 +48,96 @@ describe("sem sessão", () => {
     const id = EXEMPLOS[0].id;
     expect((await GET_STATUS(new Request("http://x"), ctx(id))).status).toBe(401);
     expect((await GET_ANALISE(new Request("http://x"), ctx(id))).status).toBe(401);
+  });
+});
+
+describe("sessão fora de OPERATOR_EMAILS", () => {
+  beforeEach(() => {
+    auth.mockResolvedValue({ user: { email: "intrusa@usp.br" } });
+    vi.stubEnv("ANALISE_FONTE_DADOS", "api");
+    vi.stubEnv("ANALISE_DONGLE_ID", "1");
+  });
+
+  it("as três rotas respondem 403 e a API não recebe chamada", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    const leitura = vi.fn(async () => "{}");
+    const req = { text: leitura } as unknown as Request;
+    const r = await POST(req);
+    expect(r.status).toBe(403);
+    expect(r.headers.get("Content-Type")).toBe("application/problem+json");
+    expect(await r.json()).toMatchObject({ codigo: "nao_autorizado" });
+    // O corpo não é lido antes da conferência.
+    expect(leitura).not.toHaveBeenCalled();
+    expect((await GET_STATUS(new Request("http://x"), ctx(UUID))).status).toBe(403);
+    expect((await GET_ANALISE(new Request("http://x"), ctx(UUID))).status).toBe(403);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("sem e-mail na sessão também é 403", async () => {
+    auth.mockResolvedValue({ user: {} });
+    expect((await GET_STATUS(new Request("http://x"), ctx(UUID))).status).toBe(403);
+  });
+
+  it("sem sessão a API não recebe chamada", async () => {
+    auth.mockResolvedValue(null);
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    expect((await post(valido)).status).toBe(401);
+    expect((await GET_STATUS(new Request("http://x"), ctx(UUID))).status).toBe(401);
+    expect((await GET_ANALISE(new Request("http://x"), ctx(UUID))).status).toBe(401);
+    expect(f).not.toHaveBeenCalled();
+  });
+});
+
+describe("com a fonte api", () => {
+  beforeEach(() => {
+    auth.mockResolvedValue({ user: { email: "ANA@usp.br" } });
+    vi.stubEnv("ANALISE_FONTE_DADOS", "api");
+    vi.stubEnv("ANALISE_API_URL", "http://api.teste:8080");
+    vi.stubEnv("ANALISE_DONGLE_ID", "3");
+  });
+
+  it("repassa Retry-After e o problema da API", async () => {
+    const f = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ type: "t", title: "limite_taxa", status: 429, codigo: "limite_taxa" }),
+          {
+            status: 429,
+            headers: { "Content-Type": "application/problem+json", "Retry-After": "7" },
+          },
+        ),
+    );
+    vi.stubGlobal("fetch", f);
+    const r = await GET_STATUS(new Request("http://x"), ctx(UUID));
+    expect(r.status).toBe(429);
+    expect(r.headers.get("Retry-After")).toBe("7");
+    expect(await r.json()).toMatchObject({ codigo: "limite_taxa" });
+    expect((f.mock.calls as unknown as [string][])[0][0]).toBe(
+      `http://api.teste:8080/v1/viagens/${UUID}`,
+    );
+  });
+
+  it("id que não é UUID nem chega à API", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    for (const id of ["zzz", "../health", `${UUID}/analise`]) {
+      expect((await GET_STATUS(new Request("http://x"), ctx(id))).status).toBe(404);
+      expect((await GET_ANALISE(new Request("http://x"), ctx(id))).status).toBe(404);
+    }
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("API fora do ar vira 503 api_indisponivel", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.reject(new TypeError("fetch failed"))),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const r = await post(valido);
+    expect(r.status).toBe(503);
+    expect(await r.json()).toMatchObject({ codigo: "api_indisponivel" });
   });
 });
 
