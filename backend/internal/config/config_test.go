@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -92,26 +91,6 @@ func TestTripInvalid(t *testing.T) {
 		if _, err := LoadFrom(env(m)); err == nil {
 			t.Errorf("%s: esperava erro", name)
 		}
-	}
-}
-
-func TestAnalysisNoAuth(t *testing.T) {
-	c, err := LoadFrom(env(nil))
-	if err != nil || c.AnalysisNoAuth || c.Limits.TripIPMin != 600 {
-		t.Fatalf("padrão: %v %+v", err, c)
-	}
-	if _, err := LoadFrom(env(map[string]string{"AMBIENTE": "producao", "ANALISE_SEM_AUTH": "true"})); err == nil ||
-		!strings.Contains(err.Error(), "ANALISE_SEM_AUTH é proibido em AMBIENTE=producao") {
-		t.Fatalf("produção deve recusar: %v", err)
-	}
-	for _, amb := range []string{"dev", "prodlike"} {
-		c, err := LoadFrom(env(map[string]string{"AMBIENTE": amb, "ANALISE_SEM_AUTH": "true", "LIMITE_VIAGEM_IP_MIN": "50"}))
-		if err != nil || !c.AnalysisNoAuth || c.Limits.TripIPMin != 50 {
-			t.Fatalf("%s: %v %+v", amb, err, c)
-		}
-	}
-	if _, err := LoadFrom(env(map[string]string{"AMBIENTE": "producao", "ANALISE_SEM_AUTH": "false"})); err != nil {
-		t.Fatalf("produção sem o modo: %v", err)
 	}
 }
 

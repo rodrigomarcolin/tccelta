@@ -105,9 +105,6 @@ type Config struct {
 	TokenBlock       TokenBlockConfig
 	Worker           WorkerConfig
 	AllowNoneProfile bool
-	// AnalysisNoAuth abre as rotas de viagem sem exigir o Bearer (ANALISE_SEM_AUTH); proibido em produção. Sem ele, as rotas exigem
-	// o token de client credentials.
-	AnalysisNoAuth bool
 }
 
 type envReader struct {
@@ -190,7 +187,6 @@ func LoadFrom(env func(string) string) (Config, error) {
 	c.LogLevel = l.str("LOG_NIVEL", "info")
 	c.LogFormat = l.str("LOG_FORMATO", "json")
 	c.AllowNoneProfile = l.bool("PERMITIR_PERFIL_NONE")
-	c.AnalysisNoAuth = l.bool("ANALISE_SEM_AUTH")
 
 	c.HTTP = HTTPConfig{
 		Address:        l.str("HTTP_ENDERECO", ":8080"),
@@ -275,9 +271,6 @@ func LoadFrom(env func(string) string) (Config, error) {
 	}
 	if c.Environment == "producao" && c.AllowNoneProfile {
 		l.errs = append(l.errs, "PERMITIR_PERFIL_NONE é proibido em AMBIENTE=producao")
-	}
-	if c.Environment == "producao" && c.AnalysisNoAuth {
-		l.errs = append(l.errs, "ANALISE_SEM_AUTH é proibido em AMBIENTE=producao")
 	}
 	w := c.Worker
 	if w.TripWaitNoBatch <= 0 || w.TripFinalLimit <= 0 || w.TripEvalInterval <= 0 || w.TripProvisionalInterval <= 0 || w.TripCalcTimeout <= 0 {

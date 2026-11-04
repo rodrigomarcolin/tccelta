@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -70,17 +71,34 @@ type tripEnv struct {
 	met      *recorder
 }
 
-func newTripEnv(t *testing.T, noAuth bool, env map[string]string) *tripEnv {
+func newTripEnv(t *testing.T, env map[string]string) *tripEnv {
 	t.Helper()
 	cfg, err := config.LoadFrom(func(k string) string { return env[k] })
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.AnalysisNoAuth = noAuth
 	e := &tripEnv{create: &fakeCreateTrip{}, get: &fakeGetTrip{}, analysis: &fakeGetAnalysis{}, met: &recorder{}}
 	e.d = &Deps{Cfg: cfg, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Met: e.met, CreateTrip: e.create, GetTrip: e.get,
-		GetAnalysis: e.analysis, Limiter: ratelimit.NewLocal(), Semaphore: ratelimit.NewConcurrency(1, 0)}
+		GetAnalysis: e.analysis, AuthenticateClient: acceptAnyClient{}, Limiter: ratelimit.NewLocal(), Semaphore: ratelimit.NewConcurrency(1, 0)}
 	return e
+}
+
+// acceptAnyClient aceita qualquer Bearer: os testes das rotas de viagem não exercitam a autenticação (ver token_test.go).
+type acceptAnyClient struct{}
+
+func (acceptAnyClient) Run(context.Context, string) (port.ClientSession, error) {
+	return port.ClientSession{}, nil
+}
+
+// router devolve o roteador com um Bearer qualquer nas requisições que não trazem Authorization.
+func (e *tripEnv) router() http.Handler {
+	h := e.d.Router()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			r.Header.Set("Authorization", "Bearer teste")
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 var tripID = uuid.MustParse("6f1c1f7e-3f0a-4a53-9d51-0c1d7a1b2c3d")
@@ -100,9 +118,9 @@ func decode(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
 }
 
 func TestCreateTripAccepted(t *testing.T) {
-	e := newTripEnv(t, true, nil)
+	e := newTripEnv(t, nil)
 	e.create.out = trip.Trip{ID: tripID, Status: trip.StatusPending}
-	w := req(e.d.Router(), "POST", "/v1/viagens", []byte(validBody), jsonHdr())
+	w := req(e.router(), "POST", "/v1/viagens", []byte(validBody), jsonHdr())
 	if w.Code != 202 || w.Header().Get("Location") != "/v1/viagens/"+tripID.String() || w.Header().Get("X-Request-Id") == "" {
 		t.Fatal(w.Code, w.Header(), w.Body.String())
 	}
@@ -117,7 +135,7 @@ func TestCreateTripAccepted(t *testing.T) {
 	}
 	body := `{"motorista":{"nome":"Ana"},"categoria_viagem":"x","combustivel":"diesel","entrada":{"tipo":"intervalo","dongle_id":2,` +
 		`"t0":"2026-10-28T08:00:00-03:00","t1":"2026-10-28T09:00:00Z"}}`
-	if w := req(e.d.Router(), "POST", "/v1/viagens", []byte(body), map[string]string{"Content-Type": "application/json; charset=utf-8"}); w.Code != 202 {
+	if w := req(e.router(), "POST", "/v1/viagens", []byte(body), map[string]string{"Content-Type": "application/json; charset=utf-8"}); w.Code != 202 {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	if *e.create.in.T0 != "2026-10-28T08:00:00-03:00" || *e.create.in.T1 != "2026-10-28T09:00:00Z" || e.create.in.BootID != nil {
@@ -126,8 +144,8 @@ func TestCreateTripAccepted(t *testing.T) {
 }
 
 func TestCreateTripTransportErrors(t *testing.T) {
-	e := newTripEnv(t, true, nil)
-	h := e.d.Router()
+	e := newTripEnv(t, nil)
+	h := e.router()
 	big := `{"motorista":{"nome":"` + strings.Repeat("a", maxTripBody) + `"}}`
 	padded := validBody + strings.Repeat(" ", maxTripBody) // objeto completo e espaços até passar do limite
 	cases := []struct {
@@ -181,9 +199,9 @@ func TestCreateTripUseCaseErrors(t *testing.T) {
 		{errors.New("boom"), 500, "erro_interno", "", false},
 	}
 	for _, c := range cases {
-		e := newTripEnv(t, true, nil)
+		e := newTripEnv(t, nil)
 		e.create.err = c.err
-		w := req(e.d.Router(), "POST", "/v1/viagens", []byte(validBody), jsonHdr())
+		w := req(e.router(), "POST", "/v1/viagens", []byte(validBody), jsonHdr())
 		m := decode(t, w)
 		if w.Code != c.status || code(w) != c.code || !strings.Contains(m["detail"].(string), c.detail) || (w.Header().Get("Retry-After") != "") != c.retry {
 			t.Errorf("%v: %d %s", c.err, w.Code, w.Body.String())
@@ -200,14 +218,14 @@ func TestGetTripStatus(t *testing.T) {
 		BootGeneration: &gen, BootID: &boot, CreatedAt: created}
 	for dbStatus, api := range map[string]string{trip.StatusPending: "pendente", trip.StatusWaitingData: "aguardando_dados",
 		trip.StatusReady: "pronta", trip.StatusFailed: "falhou"} {
-		e := newTripEnv(t, true, nil)
+		e := newTripEnv(t, nil)
 		tr := base
 		tr.Status, tr.Provisional = dbStatus, dbStatus == trip.StatusReady
 		if dbStatus == trip.StatusReady {
 			tr.CalculatedAt = &calc
 		}
 		e.get.out = tr
-		w := req(e.d.Router(), "GET", "/v1/viagens/"+tripID.String(), nil, nil)
+		w := req(e.router(), "GET", "/v1/viagens/"+tripID.String(), nil, nil)
 		if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || e.get.id != tripID {
 			t.Fatal(w.Code, w.Header(), w.Body.String())
 		}
@@ -232,10 +250,10 @@ func TestGetTripStatus(t *testing.T) {
 }
 
 func TestGetTripStatusNullGenerationAndInterval(t *testing.T) {
-	e := newTripEnv(t, true, nil)
+	e := newTripEnv(t, nil)
 	boot := int32(8)
 	e.get.out = trip.Trip{ID: tripID, Status: trip.StatusPending, EntryType: trip.EntryTypeBoot, BootID: &boot, DongleID: 1}
-	ent := decode(t, req(e.d.Router(), "GET", "/v1/viagens/"+tripID.String(), nil, nil))["entrada"].(map[string]any)
+	ent := decode(t, req(e.router(), "GET", "/v1/viagens/"+tripID.String(), nil, nil))["entrada"].(map[string]any)
 	if v, ok := ent["boot_generation"]; !ok || v != nil {
 		t.Fatalf("boot_generation deve ser null: %v", ent)
 	}
@@ -243,15 +261,15 @@ func TestGetTripStatusNullGenerationAndInterval(t *testing.T) {
 	t0 := time.Date(2026, 10, 28, 8, 0, 0, 0, loc)
 	t1 := t0.Add(time.Hour)
 	e.get.out = trip.Trip{ID: tripID, Status: trip.StatusPending, EntryType: trip.EntryTypeInterval, IntervalStart: &t0, IntervalEnd: &t1, DongleID: 2}
-	ent = decode(t, req(e.d.Router(), "GET", "/v1/viagens/"+tripID.String(), nil, nil))["entrada"].(map[string]any)
+	ent = decode(t, req(e.router(), "GET", "/v1/viagens/"+tripID.String(), nil, nil))["entrada"].(map[string]any)
 	if ent["tipo"] != "intervalo" || ent["t0"] != "2026-10-28T11:00:00.000Z" || ent["t1"] != "2026-10-28T12:00:00.000Z" || len(ent) != 4 {
 		t.Fatalf("%v", ent)
 	}
 }
 
 func TestTripIDValidation(t *testing.T) {
-	e := newTripEnv(t, true, nil)
-	h := e.d.Router()
+	e := newTripEnv(t, nil)
+	h := e.router()
 	for _, id := range []string{"abc", "6f1c1f7e3f0a4a539d510c1d7a1b2c3d", "urn:uuid:" + tripID.String(), "%7B" + tripID.String() + "%7D"} {
 		for _, suffix := range []string{"", "/analise"} {
 			if w := req(h, "GET", "/v1/viagens/"+id+suffix, nil, nil); w.Code != 404 || code(w) != "viagem_desconhecida" {
@@ -271,9 +289,9 @@ func TestTripIDValidation(t *testing.T) {
 
 func TestAnalysisNotReady(t *testing.T) {
 	for dbStatus, api := range map[string]string{trip.StatusPending: "pendente", trip.StatusWaitingData: "aguardando_dados", trip.StatusFailed: "falhou"} {
-		e := newTripEnv(t, true, nil)
+		e := newTripEnv(t, nil)
 		e.analysis.err = trip.NotReadyError{Status: dbStatus}
-		w := req(e.d.Router(), "GET", "/v1/viagens/"+tripID.String()+"/analise", nil, nil)
+		w := req(e.router(), "GET", "/v1/viagens/"+tripID.String()+"/analise", nil, nil)
 		m := decode(t, w)
 		if w.Code != 409 || m["codigo"] != "analise_indisponivel" || m["viagem_status"] != api || m["status"] != 409.0 {
 			t.Errorf("%s: %d %s", dbStatus, w.Code, w.Body.String())
@@ -313,9 +331,9 @@ func readyAnalysis() trip.Analysis {
 }
 
 func TestAnalysisReady(t *testing.T) {
-	e := newTripEnv(t, true, nil)
+	e := newTripEnv(t, nil)
 	e.analysis.out = readyAnalysis()
-	w := req(e.d.Router(), "GET", "/v1/viagens/"+tripID.String()+"/analise?de_t_ms=5&x=1", nil, nil)
+	w := req(e.router(), "GET", "/v1/viagens/"+tripID.String()+"/analise?de_t_ms=5&x=1", nil, nil)
 	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("Content-Type") != "application/json" {
 		t.Fatal(w.Code, w.Header(), w.Body.String())
 	}
@@ -373,7 +391,7 @@ func TestAnalysisReady(t *testing.T) {
 }
 
 func TestAnalysisEmptyTrip(t *testing.T) {
-	e := newTripEnv(t, true, nil)
+	e := newTripEnv(t, nil)
 	gen, boot := int32(0), int32(8)
 	e.analysis.out = trip.Analysis{
 		Trip:     trip.Trip{ID: tripID, DriverName: "João", Category: "feira", EntryType: trip.EntryTypeBoot, BootGeneration: &gen, BootID: &boot, Status: trip.StatusReady},
@@ -381,7 +399,7 @@ func TestAnalysisEmptyTrip(t *testing.T) {
 		Series: trip.AnalysisSeries{StepMs: 150, ExposureStepMs: 150, Series: trip.RawJSON(`{}`), Slow: trip.RawJSON(`{}`), RPMDistribution: trip.RawJSON(`[]`),
 			PedalDistribution: trip.RawJSON(`[]`), RPMPedalGrid: trip.RawJSON(`{}`)},
 	}
-	w := req(e.d.Router(), "GET", "/v1/viagens/"+tripID.String()+"/analise", nil, nil)
+	w := req(e.router(), "GET", "/v1/viagens/"+tripID.String()+"/analise", nil, nil)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
@@ -425,26 +443,26 @@ func TestWithStepsEdgeCases(t *testing.T) {
 }
 
 func TestAnalysisInternalError(t *testing.T) {
-	e := newTripEnv(t, true, nil)
+	e := newTripEnv(t, nil)
 	e.analysis.err = port.ErrDatabaseBusy
-	if w := req(e.d.Router(), "GET", "/v1/viagens/"+tripID.String()+"/analise", nil, nil); w.Code != 503 || code(w) != "banco_ocupado" {
+	if w := req(e.router(), "GET", "/v1/viagens/"+tripID.String()+"/analise", nil, nil); w.Code != 503 || code(w) != "banco_ocupado" {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	e.analysis.err = nil
 	a := readyAnalysis()
 	a.Params = trip.RawJSON(`{invalido`) // jsonb corrompido: melhor 500 que corpo cortado
 	e.analysis.out = a
-	if w := req(e.d.Router(), "GET", "/v1/viagens/"+tripID.String()+"/analise", nil, nil); w.Code != 500 || code(w) != "erro_interno" {
+	if w := req(e.router(), "GET", "/v1/viagens/"+tripID.String()+"/analise", nil, nil); w.Code != 500 || code(w) != "erro_interno" {
 		t.Fatal(w.Code, w.Body.String())
 	}
 }
 
 func TestTripMetricsRoutesAndRequestID(t *testing.T) {
-	e := newTripEnv(t, true, nil)
+	e := newTripEnv(t, nil)
 	e.create.out = trip.Trip{ID: tripID, Status: trip.StatusPending}
 	e.get.out = trip.Trip{ID: tripID, Status: trip.StatusPending}
 	e.analysis.out = readyAnalysis()
-	h := e.d.Router()
+	h := e.router()
 	r1 := req(h, "POST", "/v1/viagens", []byte(validBody), jsonHdr())
 	r2 := req(h, "GET", "/v1/viagens/"+tripID.String(), nil, map[string]string{"X-Request-Id": "abc-123"})
 	r3 := req(h, "GET", "/v1/viagens/"+tripID.String()+"/analise", nil, nil)
@@ -462,9 +480,9 @@ func TestTripMetricsRoutesAndRequestID(t *testing.T) {
 }
 
 func TestTripRateLimitScope(t *testing.T) {
-	e := newTripEnv(t, true, map[string]string{"LIMITE_VIAGEM_IP_MIN": "600", "LIMITE_IP_MIN": "2"})
+	e := newTripEnv(t, map[string]string{"LIMITE_VIAGEM_IP_MIN": "600", "LIMITE_IP_MIN": "2"})
 	e.get.out = trip.Trip{ID: tripID, Status: trip.StatusPending}
-	h := e.d.Router()
+	h := e.router()
 	// 130 consultas de um IP passam, mesmo com o limite geral (LIMITE_IP_MIN) em 2: os escopos são separados
 	for i := 0; i < 130; i++ {
 		if w := req(h, "GET", "/v1/viagens/"+tripID.String(), nil, nil); w.Code != 200 {
@@ -479,9 +497,9 @@ func TestTripRateLimitScope(t *testing.T) {
 		t.Fatalf("limite geral: %d", w.Code)
 	}
 
-	e2 := newTripEnv(t, true, map[string]string{"LIMITE_VIAGEM_IP_MIN": "5"})
+	e2 := newTripEnv(t, map[string]string{"LIMITE_VIAGEM_IP_MIN": "5"})
 	e2.get.out = trip.Trip{ID: tripID, Status: trip.StatusPending}
-	h2 := e2.d.Router()
+	h2 := e2.router()
 	for i := 0; i < 5; i++ {
 		if w := req(h2, "GET", "/v1/viagens/"+tripID.String(), nil, nil); w.Code != 200 {
 			t.Fatalf("consulta %d: %d", i, w.Code)
@@ -498,9 +516,9 @@ func TestTripRateLimitScope(t *testing.T) {
 }
 
 func TestDocumentedPanicRecovery(t *testing.T) {
-	e := newTripEnv(t, true, nil)
+	e := newTripEnv(t, nil)
 	e.d.GetTrip = nil // nil interface: pânico no handler
-	w := req(e.d.Router(), "GET", "/v1/viagens/"+tripID.String(), nil, nil)
+	w := req(e.router(), "GET", "/v1/viagens/"+tripID.String(), nil, nil)
 	if w.Code != 500 || code(w) != "erro_interno" {
 		t.Fatal(w.Code, w.Body.String())
 	}

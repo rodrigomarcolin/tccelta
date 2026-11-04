@@ -101,8 +101,6 @@ services:
     environment:
       AMBIENTE: dev
       PERMITIR_PERFIL_NONE: "true"
-      # as rotas de viagem exigem o Bearer de client credentials; o false explícito vale mesmo que o .env local ligue o modo aberto
-      ANALISE_SEM_AUTH: "false"
       # bloqueio progressivo curto, para o cenário client-auth percorrer a progressão em segundos
       TOKEN_BLOQUEIO_INICIAL: 2s
       TOKEN_BLOQUEIO_TETO: 8s

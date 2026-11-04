@@ -58,18 +58,13 @@ func (d *Deps) Router() http.Handler {
 		d.limitIP, d.authenticateJWT(false), d.limitDevID("blocks", d.Cfg.Limits.BlocksMin), d.limitConcurrency, limitBody(maxBatch)))
 	mux.Handle("GET /v1/dongles/{id}/confirmacao", base("confirmation", d.getConfirmation,
 		d.limitIP, d.authenticateJWT(true), d.limitDevID("confirmation", 60)))
-	// Rotas de viagem: exigem o Bearer de client credentials; com ANALISE_SEM_AUTH=true ficam abertas e o Bearer nem é conferido.
+	// Rotas de viagem: exigem o Bearer de client credentials.
 	vip := d.limitIPScope("viagem_ip", d.Cfg.Limits.TripIPMin)
-	tripAuth := func(ms ...mw) []mw {
-		if d.Cfg.AnalysisNoAuth {
-			return ms
-		}
-		return append(ms, d.authenticateAnalise)
-	}
+	tripAuth := func(ms ...mw) []mw { return append(ms, d.authenticateAnalise) }
 	mux.Handle("POST /v1/viagens", base("trip_create", d.createTrip, tripAuth(vip, limitBody(maxTripBody))...))
 	mux.Handle("GET /v1/viagens/{id}", base("trip_status", d.getTrip, tripAuth(vip)...))
 	mux.Handle("GET /v1/viagens/{id}/analise", base("trip_analysis", d.getAnalysis, tripAuth(vip)...))
-	// Client credentials e chaves públicas: existem nos dois modos.
+	// Client credentials e chaves públicas.
 	mux.Handle("POST /v1/auth/token", base("auth_token", d.issueToken, noStore, d.limitIP, limitBody(maxTokenBody)))
 	mux.Handle("GET /.well-known/jwks.json", base("jwks", d.jwks, d.limitIP))
 	mux.HandleFunc("GET /saude/viva", d.live)

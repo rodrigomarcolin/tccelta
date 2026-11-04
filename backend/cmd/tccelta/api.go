@@ -140,9 +140,6 @@ func cmdAPI(ctx context.Context) error {
 	errs := make(chan error, 2)
 	go func() { errs <- srv.ListenAndServe() }()
 	go func() { errs <- msrv.ListenAndServe() }()
-	if cfg.AnalysisNoAuth {
-		log.Warn("aviso", "msg", "ANALISE_SEM_AUTH=true: as rotas de viagem estão abertas, sem conferir o Bearer")
-	}
 	log.Info("api.iniciada", "endereco", cfg.HTTP.Address)
 	select {
 	case err := <-errs:

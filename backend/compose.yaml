@@ -106,8 +106,6 @@ services:
       KMS_URL: http://kms:8300
       REDIS_ENDERECO: redis:6379
       REDIS_SENHA_ARQUIVO: /run/secrets/redis_senha
-      # rotas de viagem sem autenticação (API2); proibido com AMBIENTE=producao
-      ANALISE_SEM_AUTH: ${ANALISE_SEM_AUTH:-false}
       LIMITE_VIAGEM_IP_MIN: ${LIMITE_VIAGEM_IP_MIN:-600}
     secrets: [pg_senha_api, redis_senha]
     depends_on:

@@ -75,9 +75,9 @@ type authEnv struct {
 	h   http.Handler
 }
 
-func newAuthEnv(t *testing.T, mr *miniredis.Miniredis, kms *porttest.Memory, noAuth bool) *authEnv {
+func newAuthEnv(t *testing.T, mr *miniredis.Miniredis, kms *porttest.Memory) *authEnv {
 	t.Helper()
-	e := &authEnv{tripEnv: newTripEnv(t, noAuth, map[string]string{"PROXIES_CONFIAVEIS": "172.30.10.0/24"}), kms: kms, mr: mr, met: &authRecorder{}}
+	e := &authEnv{tripEnv: newTripEnv(t, map[string]string{"PROXIES_CONFIAVEIS": "172.30.10.0/24"}), kms: kms, mr: mr, met: &authRecorder{}}
 	e.d.Cfg.HTTP.TrustedProxies = []string{"172.30.10.0/24"}
 	val, err := jwt.NewClientValidator(context.Background(), kms, "iss", "tccelta-analise", 30*time.Second)
 	if err != nil {
@@ -163,7 +163,7 @@ func assertNoStore(t *testing.T, w *httptest.ResponseRecorder, what string) {
 
 func TestTokenSuccess(t *testing.T) {
 	kms := newKMS()
-	e := newAuthEnv(t, miniredis.RunT(t), kms, false)
+	e := newAuthEnv(t, miniredis.RunT(t), kms)
 	w := e.good("192.0.2.1:5000")
 	if w.Code != 200 || w.Header().Get("Content-Type") != "application/json" {
 		t.Fatal(w.Code, w.Header(), w.Body.String())
@@ -210,7 +210,7 @@ func TestTokenSuccess(t *testing.T) {
 }
 
 func TestTokenBodyCredentialsAreIgnored(t *testing.T) {
-	e := newAuthEnv(t, miniredis.RunT(t), newKMS(), false)
+	e := newAuthEnv(t, miniredis.RunT(t), newKMS())
 	// client_id/client_secret no corpo não valem: só o Basic
 	w := e.token("192.0.2.1:5000", basic(testClient, testSecret), formOK+"&client_id=outro&client_secret=errado")
 	if w.Code != 200 {
@@ -229,7 +229,7 @@ func TestTokenBodyCredentialsAreIgnored(t *testing.T) {
 
 func TestTokenBadRequests(t *testing.T) {
 	kms := newKMS()
-	e := newAuthEnv(t, miniredis.RunT(t), kms, false)
+	e := newAuthEnv(t, miniredis.RunT(t), kms)
 	ok := basic(testClient, testSecret)
 	cases := []struct {
 		name, ct, body string
@@ -280,7 +280,7 @@ func TestInvalidClientIsUniform(t *testing.T) {
 	kms := newKMS()
 	kms.AddClient("velho-dev", testSecret)
 	kms.RevokeClient("velho-dev")
-	e := newAuthEnv(t, miniredis.RunT(t), kms, false)
+	e := newAuthEnv(t, miniredis.RunT(t), kms)
 	notBasic := "Bearer abc"
 	cases := map[string]string{
 		"sem Authorization":     "",
@@ -324,7 +324,7 @@ func TestProgressiveBlockOverHTTP(t *testing.T) {
 	mr := miniredis.RunT(t)
 	now := time.Unix(1_800_000_000, 0)
 	mr.SetTime(now)
-	e := newAuthEnv(t, mr, kms, false)
+	e := newAuthEnv(t, mr, kms)
 	const ip = "192.0.2.50:4000"
 	for i := 1; i <= 6; i++ {
 		if w := e.bad(ip); w.Code != 401 {
@@ -377,7 +377,7 @@ func TestProgressiveBlockOverHTTP(t *testing.T) {
 
 func TestIPBlockAndIsolation(t *testing.T) {
 	kms := newKMS()
-	e := newAuthEnv(t, miniredis.RunT(t), kms, false)
+	e := newAuthEnv(t, miniredis.RunT(t), kms)
 	const ip = "192.0.2.60:4000"
 	for i := 1; i <= 21; i++ {
 		id := "cli-" + strconv.Itoa(100+i)
@@ -399,7 +399,7 @@ func TestIPBlockAndIsolation(t *testing.T) {
 }
 
 func TestPairBlockDoesNotAffectOtherIP(t *testing.T) {
-	e := newAuthEnv(t, miniredis.RunT(t), newKMS(), false)
+	e := newAuthEnv(t, miniredis.RunT(t), newKMS())
 	for i := 0; i < 6; i++ {
 		e.bad("192.0.2.70:1")
 	}
@@ -412,7 +412,7 @@ func TestPairBlockDoesNotAffectOtherIP(t *testing.T) {
 }
 
 func TestSuccessResetsPairKeepsIPOverHTTP(t *testing.T) {
-	e := newAuthEnv(t, miniredis.RunT(t), newKMS(), false)
+	e := newAuthEnv(t, miniredis.RunT(t), newKMS())
 	const ip = "192.0.2.80:1"
 	for i := 0; i < 5; i++ {
 		e.bad(ip)
@@ -437,7 +437,7 @@ func TestSuccessResetsPairKeepsIPOverHTTP(t *testing.T) {
 func TestTwoReplicasShareBlockState(t *testing.T) {
 	kms := newKMS()
 	mr := miniredis.RunT(t)
-	a, b := newAuthEnv(t, mr, kms, false), newAuthEnv(t, mr, kms, false)
+	a, b := newAuthEnv(t, mr, kms), newAuthEnv(t, mr, kms)
 	const ip = "192.0.2.90:1"
 	for i := 0; i < 3; i++ {
 		a.bad(ip)
@@ -451,7 +451,7 @@ func TestTwoReplicasShareBlockState(t *testing.T) {
 // Redis fora: continua respondendo, o bloqueio vale por réplica e a métrica de falha do armazenamento cresce.
 func TestRedisDownKeepsServingWithLocalBlock(t *testing.T) {
 	mr := miniredis.RunT(t)
-	e := newAuthEnv(t, mr, newKMS(), false)
+	e := newAuthEnv(t, mr, newKMS())
 	mr.Close()
 	const ip = "192.0.2.100:1"
 	if w := e.good(ip); w.Code != 200 {
@@ -471,7 +471,7 @@ func TestRedisDownKeepsServingWithLocalBlock(t *testing.T) {
 }
 
 func TestWithoutRedisConfigured(t *testing.T) {
-	e := newAuthEnv(t, nil, newKMS(), false)
+	e := newAuthEnv(t, nil, newKMS())
 	for i := 0; i < 6; i++ {
 		e.bad("192.0.2.110:1")
 	}
@@ -482,7 +482,7 @@ func TestWithoutRedisConfigured(t *testing.T) {
 
 func TestKMSUnavailableOnToken(t *testing.T) {
 	kms := newKMS()
-	e := newAuthEnv(t, miniredis.RunT(t), kms, false)
+	e := newAuthEnv(t, miniredis.RunT(t), kms)
 	f := error(port.ErrKMSUnavailable)
 	kms.Failure.Store(&f)
 	for i := 0; i < 8; i++ {
@@ -510,7 +510,7 @@ func (f failingIssue) Run(context.Context, clientUC.Credentials) (clientUC.Token
 }
 
 func TestTokenInternalError(t *testing.T) {
-	e := newAuthEnv(t, nil, newKMS(), false)
+	e := newAuthEnv(t, nil, newKMS())
 	e.d.IssueToken = failingIssue{err: errors.New("boom")}
 	w := reqFrom(e.d.Router(), "192.0.2.1:1", "POST", "/v1/auth/token", formOK, map[string]string{"Content-Type": formCT, "Authorization": basic(testClient, testSecret)})
 	if b := oauthBody(t, w); w.Code != 500 || b["error"] != "server_error" || b["codigo"] != "erro_interno" {
@@ -520,7 +520,7 @@ func TestTokenInternalError(t *testing.T) {
 }
 
 func TestTokenRouteRateLimitedByIP(t *testing.T) {
-	e := newAuthEnv(t, nil, newKMS(), false)
+	e := newAuthEnv(t, nil, newKMS())
 	e.d.Cfg.Limits.IPMin = 2
 	e.d.Limiter = ratelimit.NewLocal()
 	h := e.d.Router()
@@ -568,7 +568,7 @@ func TestClientIP(t *testing.T) {
 
 // IPv6 do mesmo /64 divide o contador; X-Real-IP forjado de fora dos proxies confiáveis não troca de contador.
 func TestBlockCounterUsesNormalizedIP(t *testing.T) {
-	e := newAuthEnv(t, miniredis.RunT(t), newKMS(), false)
+	e := newAuthEnv(t, miniredis.RunT(t), newKMS())
 	hdr := func(ip string) map[string]string {
 		return map[string]string{"Content-Type": formCT, "Authorization": basic(testClient, "errado"), "X-Real-IP": ip}
 	}
@@ -601,7 +601,7 @@ func TestBlockCounterUsesNormalizedIP(t *testing.T) {
 
 func TestJWKS(t *testing.T) {
 	kms := newKMS()
-	e := newAuthEnv(t, nil, kms, false)
+	e := newAuthEnv(t, nil, kms)
 	w := reqFrom(e.h, "192.0.2.1:1", "GET", "/.well-known/jwks.json", "", nil)
 	if w.Code != 200 || w.Header().Get("Content-Type") != "application/jwk-set+json" || w.Header().Get("Cache-Control") != "public, max-age=300" {
 		t.Fatal(w.Code, w.Header())
@@ -646,7 +646,7 @@ type noKeys struct{}
 func (noKeys) Run(context.Context) ([]port.ClientKey, error) { return nil, clientUC.ErrNoKeys }
 
 func TestJWKSWithoutKeys(t *testing.T) {
-	e := newAuthEnv(t, nil, newKMS(), false)
+	e := newAuthEnv(t, nil, newKMS())
 	e.d.ClientKeys = noKeys{}
 	w := reqFrom(e.d.Router(), "192.0.2.1:1", "GET", "/.well-known/jwks.json", "", nil)
 	if w.Code != 503 || code(w) != "chaves_indisponiveis" || w.Header().Get("Retry-After") == "" {
@@ -654,9 +654,9 @@ func TestJWKSWithoutKeys(t *testing.T) {
 	}
 }
 
-func TestTripRoutesRequireBearerWithoutNoAuthMode(t *testing.T) {
+func TestTripRoutesRequireBearer(t *testing.T) {
 	kms := newKMS()
-	e := newAuthEnv(t, nil, kms, false)
+	e := newAuthEnv(t, nil, kms)
 	e.create.out = trip.Trip{ID: tripID, Status: trip.StatusPending}
 	id := "/v1/viagens/" + tripID.String()
 	routes := [][2]string{{"POST", "/v1/viagens"}, {"GET", id}, {"GET", id + "/analise"}}
@@ -717,7 +717,7 @@ func (failingAuthClient) Run(context.Context, string) (port.ClientSession, error
 }
 
 func TestAuthenticateClientInternalError(t *testing.T) {
-	e := newAuthEnv(t, nil, newKMS(), false)
+	e := newAuthEnv(t, nil, newKMS())
 	e.d.AuthenticateClient = failingAuthClient{}
 	w := req(e.d.Router(), "GET", "/v1/viagens/"+tripID.String(), nil, map[string]string{"Authorization": "Bearer x"})
 	if w.Code != 500 || code(w) != "erro_interno" {
@@ -725,30 +725,10 @@ func TestAuthenticateClientInternalError(t *testing.T) {
 	}
 }
 
-func TestNoAuthModeOpensTripRoutes(t *testing.T) {
-	e := newAuthEnv(t, nil, newKMS(), true)
-	e.create.out = trip.Trip{ID: tripID, Status: trip.StatusPending}
-	if w := req(e.h, "POST", "/v1/viagens", []byte(validBody), jsonHdr()); w.Code != 202 {
-		t.Fatalf("sem Bearer: %d", w.Code)
-	}
-	hdr := jsonHdr()
-	hdr["Authorization"] = "Bearer lixo-qualquer"
-	if w := req(e.h, "POST", "/v1/viagens", []byte(validBody), hdr); w.Code != 202 {
-		t.Fatalf("o Bearer, mesmo presente, não é conferido: %d", w.Code)
-	}
-	// o endpoint de token e o JWKS existem nos dois modos
-	if w := e.good("192.0.2.1:1"); w.Code != 200 {
-		t.Fatalf("token: %d", w.Code)
-	}
-	if w := reqFrom(e.h, "192.0.2.1:1", "GET", "/.well-known/jwks.json", "", nil); w.Code != 200 {
-		t.Fatalf("jwks: %d", w.Code)
-	}
-}
-
 // Um token do app é recusado nas rotas de viagem e um token de cliente é recusado na ingestão.
 func TestAppAndClientTokensDoNotCross(t *testing.T) {
 	kms := newKMS()
-	e := newAuthEnv(t, nil, kms, false)
+	e := newAuthEnv(t, nil, kms)
 	ctx := context.Background()
 	appIss := jwt.NewIssuer(kms, "iss", "tccelta-ingestao", time.Hour)
 	appTok, err := appIss.Issue(ctx, devID(t), 3)

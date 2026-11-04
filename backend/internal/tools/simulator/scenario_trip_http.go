@@ -13,8 +13,8 @@ import (
 
 // tripHTTPScenario passa pela API de viagens (API2), sem tocar em gold.trip: cria a viagem por POST /v1/viagens, consulta o
 // status até ficar pronta e confere a análise. Três casos: (1) boot já enviado; (2) boot pedido antes de chegar, com a
-// geração resolvida pelo worker; (3) boot que nunca chega, que fecha provisório e vazio. Sem --client, a API precisa
-// estar com ANALISE_SEM_AUTH=true; com --client, usa o Bearer de client credentials. O worker precisa das esperas curtas do compose de teste.
+// geração resolvida pelo worker; (3) boot que nunca chega, que fecha provisório e vazio. Exige --client
+// (client credentials): usa o Bearer, como o servidor do Next.js. O worker precisa das esperas curtas do compose de teste.
 func tripHTTPScenario(ctx context.Context, o Options) error {
 	v := &verifier{log: o.Log}
 	q := o.Inspect
@@ -33,21 +33,20 @@ func tripHTTPScenario(ctx context.Context, o Options) error {
 	}
 	waitForBoots(ctx, q, est.DongleID, 15*time.Second)
 	api := &tripAPI{base: o.API, http: client()}
-	if len(o.Clients) > 0 { // API com autenticação: obtém o token de client credentials, como o servidor do Next.js
-		id, secret, err := primaryClient(o)
-		if err != nil {
-			return err
-		}
-		if api.token, err = fetchToken(ctx, api.http, o.API, id, secret); err != nil {
-			return err
-		}
-		st, body, _ := api.do(ctx, "GET", "/v1/viagens/6f1c1f7e-3f0a-4a53-9d51-0c1d7a1b2c3d", "")
-		v.ok(st == 404 && jstr(body, "codigo") == "viagem_desconhecida", "token de cliente aceito nas rotas de viagem: %d %s", st, jstr(body, "codigo"))
+	// As rotas de viagem exigem o Bearer: obtém o token de client credentials, como o servidor do Next.js.
+	cid, csecret, err := primaryClient(o)
+	if err != nil {
+		return fmt.Errorf("trip-http exige --client: %w", err)
 	}
+	if api.token, err = fetchToken(ctx, api.http, o.API, cid, csecret); err != nil {
+		return err
+	}
+	st, body, _ := api.do(ctx, "GET", "/v1/viagens/6f1c1f7e-3f0a-4a53-9d51-0c1d7a1b2c3d", "")
+	v.ok(st == 404 && jstr(body, "codigo") == "viagem_desconhecida", "token de cliente aceito nas rotas de viagem: %d %s", st, jstr(body, "codigo"))
 	category := fmt.Sprintf("e2e-http-%d", time.Now().Unix()) // o nome do motorista é único por categoria; cada execução usa a sua
 
 	// erros de contrato, antes de criar viagens
-	st, body, _ := api.do(ctx, "POST", "/v1/viagens", tripBody("Erro", category, est.DongleID+1000, est.LastBootID))
+	st, body, _ = api.do(ctx, "POST", "/v1/viagens", tripBody("Erro", category, est.DongleID+1000, est.LastBootID))
 	v.ok(st == 404 && jstr(body, "codigo") == "dongle_desconhecido", "dongle sem estado: %d %s", st, jstr(body, "codigo"))
 	st, body, _ = api.do(ctx, "POST", "/v1/viagens", strings.Replace(tripBody("Erro", category, est.DongleID, est.LastBootID), "gasolina_e30", "personalizado", 1))
 	v.ok(st == 400 && jstr(body, "codigo") == "entrada_invalida", "combustível personalizado: %d %s", st, jstr(body, "codigo"))
@@ -130,7 +129,7 @@ func tripBody(driver, category string, dongleID int32, bootID int32) string {
 type tripAPI struct {
 	base  string
 	http  *http.Client
-	token string // Bearer de client credentials; vazio nas rotas abertas (ANALISE_SEM_AUTH=true)
+	token string // Bearer de client credentials
 }
 
 func (t *tripAPI) do(ctx context.Context, method, path, body string) (int, map[string]any, http.Header) {

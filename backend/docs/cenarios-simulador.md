@@ -25,7 +25,7 @@ Veja o [README do backend](../README.md) para os alvos do Makefile.
 | `generation` | 1 (o primeiro) | O `boot_id` de 16 bits volta a 1 e o servidor avança a "geração" do boot; o reprocessamento preserva as leituras | Qualquer uma das 4 verificações falha |
 | `asym` | todos do CSV, um por vez (todos `asym`, com `k_sig`) | Blocos assinados com ECDSA P-256 são aceitos; uma tag com 1 bit trocado é rejeitada como `invalid_tag` e o ACK não avança | Qualquer uma das 7 verificações por dongle falha |
 | `trip` | 1 (o primeiro) | O worker calcula as viagens da gold (entrada `boot` e entrada `intervalo`) a partir da silver, com o papel `tccelta_worker` | Qualquer uma das 7 verificações falha |
-| `trip-http` | 1 (o primeiro) | As rotas de viagem da API (`POST`, status e análise), com o worker calculando. Com `--client`, autentica como o Next.js (client credentials); sem ele, exige `ANALISE_SEM_AUTH=true` | Qualquer verificação falha |
+| `trip-http` | 1 (o primeiro) | As rotas de viagem da API (`POST`, status e análise), com o worker calculando. Exige `--client`: autentica como o Next.js (client credentials) | Qualquer verificação falha |
 | `client-auth` | não usa o dongle (o CSV é exigido pelo comando) | `POST /v1/auth/token`, JWKS, Bearer das rotas de viagem, isolamento entre o token do app e o de cliente, `invalid_client` uniforme, bloqueio progressivo e métricas `tccelta_auth_*`; exige `--client` | Qualquer verificação falha |
 | `client-auth-rotation` | não usa o dongle | Depois de `clientjwt rotate --now`: o token antigo segue válido, o novo sai com `cli-v<n+1>` e o JWKS publica as duas versões | Qualquer verificação falha |
 | `reconnection` | `N` do CSV | Um volume grande de blocos acumulados offline é drenado por inteiro | Algum dongle termina com `contiguous_seq` diferente do HEAD |
@@ -185,7 +185,7 @@ e `engine_on_s > 0`. Como o cálculo roda no `worker` (papel `tccelta_worker`), 
 ## `trip-http`
 
 Prova as rotas de viagem (API2) de ponta a ponta, sem inserir em `gold.trip`: tudo passa por `POST /v1/viagens`, `GET /v1/viagens/{id}` e
-`GET /v1/viagens/{id}/analise`. Com `--client id:arquivo:ok` (o `make e2e` passa), obtém o token de client credentials e o usa como Bearer, como o servidor do Next.js; sem `--client`, exige a API com `ANALISE_SEM_AUTH=true`. O `compose.test.yaml` deixa o modo aberto desligado. Usa o primeiro dongle do CSV
+`GET /v1/viagens/{id}/analise`. Com `--client id:arquivo:ok` (o `make e2e` passa; é obrigatório), obtém o token de client credentials e o usa como Bearer, como o servidor do Next.js. As rotas de viagem sem Bearer respondem `401`; não existe mais modo sem autenticação. Usa o primeiro dongle do CSV
 e uma categoria nova por execução (o nome do motorista é único por categoria).
 
 1. Erros de contrato: dongle sem estado (`404 dongle_desconhecido`), combustível `personalizado` (`400 entrada_invalida`), id que não é UUID (`404`).
