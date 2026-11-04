@@ -18,6 +18,8 @@ var (
 	ErrInvalid = errors.New("entrada_invalida")
 	// ErrDriverRepeated: já existe viagem (não falha) com o mesmo motorista na categoria.
 	ErrDriverRepeated = errors.New("motorista_repetido")
+	// ErrBootNotFound: o boot pedido nunca chegou ao servidor (nenhuma geração dele na tabela boot).
+	ErrBootNotFound = errors.New("boot_desconhecido")
 	// ErrNotFound: a viagem não existe ou foi excluída.
 	ErrNotFound = errors.New("viagem_desconhecida")
 	// ErrNotReady: a análise só existe com a viagem pronta; NotReadyError traz o estado.

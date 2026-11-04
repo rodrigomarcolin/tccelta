@@ -15,9 +15,10 @@ type CreateTrip struct{ tx port.Transactor }
 // NewCreateTrip liga o caso de uso ao transactor.
 func NewCreateTrip(tx port.Transactor) *CreateTrip { return &CreateTrip{tx: tx} }
 
-// Run valida a entrada e, numa só transação, lê o ponto de corte (head_seq do dongle), resolve a geração do boot, grava a
+// Run valida a entrada e, numa só transação, lê o ponto de corte (head_seq do dongle), confere e resolve a geração do boot, grava a
 // viagem em pending e envia o NOTIFY trip_pending (que só sai no commit). Devolve dongle.ErrUnknown se o dongle não tem
-// dongle_state e trip.ErrDriverRepeated se o motorista já tem viagem na categoria.
+// dongle_state, trip.ErrBootNotFound se a entrada é um boot que nunca chegou e trip.ErrDriverRepeated se o motorista já tem
+// viagem na categoria.
 func (c *CreateTrip) Run(ctx context.Context, in domain.Input) (domain.Trip, error) {
 	draft, err := domain.NewDraft(in)
 	if err != nil {
@@ -31,13 +32,17 @@ func (c *CreateTrip) Run(ctx context.Context, in domain.Input) (domain.Trip, err
 			return err
 		}
 		d.TargetSeq = st.HeadSeq
-		if d.EntryType == domain.EntryTypeBoot && d.BootGeneration == nil {
-			// Sem geração informada vale a maior que tem o boot; se o boot ainda não chegou, o worker resolve depois.
+		if d.EntryType == domain.EntryTypeBoot {
+			// O boot precisa existir: sem nenhuma geração dele a viagem nasceria vazia e ficaria à espera de dados que talvez
+			// nunca cheguem. Sem geração informada vale a maior que tem o boot.
 			g, found, err := r.Boots.LatestGeneration(ctx, d.DongleID, *d.BootID)
 			if err != nil {
 				return err
 			}
-			if found {
+			if !found {
+				return domain.ErrBootNotFound
+			}
+			if d.BootGeneration == nil {
 				d.BootGeneration = &g
 			}
 		}

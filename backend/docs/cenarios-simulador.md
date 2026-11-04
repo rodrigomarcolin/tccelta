@@ -191,10 +191,7 @@ e uma categoria nova por execução (o nome do motorista é único por categoria
 1. Erros de contrato: dongle sem estado (`404 dongle_desconhecido`), combustível `personalizado` (`400 entrada_invalida`), id que não é UUID (`404`).
 2. Boot já enviado: `202` com `Location`; o mesmo motorista com outra caixa dá `409 motorista_repetido`; o status chega a `pronta` (limite
    de 40 s) e a análise traz `viagem.motorista`, `viagem.categoria_viagem`, distância, séries e rota.
-3. Boot ainda não enviado: a viagem nasce com `boot_generation` nula; o dongle faz o boot novo, o handshake e o envio, e a viagem fica
-   `pronta` com a geração resolvida e dados.
-4. Boot que nunca chega: a análise antes da hora dá `409 analise_indisponivel`; depois a viagem fica `pronta` e provisória, com o aviso
-   `sem_leituras`, distância e rota nulas e listas vazias.
+3. Boot inexistente (o próximo ao último e um número absurdo): `404 boot_desconhecido`, sem criar viagem.
 
 ## `client-auth` e `client-auth-rotation`
 

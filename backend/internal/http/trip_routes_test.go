@@ -194,6 +194,7 @@ func TestCreateTripUseCaseErrors(t *testing.T) {
 	}{
 		{trip.FieldError{Field: "motorista.nome", Reason: "obrigatório"}, 400, "entrada_invalida", "motorista.nome", false},
 		{trip.ErrDriverRepeated, 409, "motorista_repetido", "", false},
+		{trip.ErrBootNotFound, 404, "boot_desconhecido", "", false},
 		{dongle.ErrUnknown, 404, "dongle_desconhecido", "", false},
 		{port.ErrDatabaseBusy, 503, "banco_ocupado", "", true},
 		{errors.New("boom"), 500, "erro_interno", "", false},

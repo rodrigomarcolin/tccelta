@@ -76,6 +76,8 @@ func (d *Deps) err(w http.ResponseWriter, err error) {
 		problem(w, 400, "entrada_invalida", err.Error(), 0)
 	case errors.Is(err, trip.ErrDriverRepeated):
 		problem(w, 409, "motorista_repetido", "já existe viagem desse motorista nesta categoria", 0)
+	case errors.Is(err, trip.ErrBootNotFound):
+		problem(w, 404, "boot_desconhecido", "o boot não existe para este dongle", 0)
 	case errors.Is(err, trip.ErrNotFound):
 		problem(w, 404, "viagem_desconhecida", "viagem desconhecida", 0)
 	case errors.Is(err, trip.ErrNotReady):

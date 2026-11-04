@@ -12,8 +12,8 @@ import (
 )
 
 // tripHTTPScenario passa pela API de viagens (API2), sem tocar em gold.trip: cria a viagem por POST /v1/viagens, consulta o
-// status até ficar pronta e confere a análise. Três casos: (1) boot já enviado; (2) boot pedido antes de chegar, com a
-// geração resolvida pelo worker; (3) boot que nunca chega, que fecha provisório e vazio. Exige --client
+// status até ficar pronta e confere a análise. Dois casos: (1) boot já enviado, que vira viagem pronta; (2) boot inexistente, que a API recusa com 404 boot_desconhecido.
+// Exige --client
 // (client credentials): usa o Bearer, como o servidor do Next.js. O worker precisa das esperas curtas do compose de teste.
 func tripHTTPScenario(ctx context.Context, o Options) error {
 	v := &verifier{log: o.Log}
@@ -76,47 +76,12 @@ func tripHTTPScenario(ctx context.Context, o Options) error {
 		"partes %d, pontos %d, passo %.0f ms, rota presente", jlen(an, "viagem", "partes"), jlen(an, "series", "t_ms"), jnum(an, "series", "passo_ms"))
 	v.ok(jstr(an, "parametros", "combustivel") == "gasolina_e30", "parametros.combustivel %q", jstr(an, "parametros", "combustivel"))
 
-	// 2. boot pedido antes de chegar: a viagem nasce com boot_generation nula e o worker a resolve. O POST sai logo depois de um lote,
-	// com o worker ainda esperando; o boot novo só aparece no servidor no handshake seguinte.
-	futureBoot := int32(d.bootIDNow()) + 1
-	if err := generateAndDrain(ctx, a, 5); err != nil { // um lote recente: o worker só fecha a viagem depois de um silêncio
-		return err
+	// 2. boot que nunca chegou ao servidor (o próximo, ainda não enviado, e um número absurdo): a API recusa com 404, sem criar
+	// viagem vazia que ficaria "aguardando dados" para sempre.
+	for _, bootID := range []int32{est.LastBootID + 1000, 40000} {
+		st, body, _ = api.do(ctx, "POST", "/v1/viagens", tripBody(fmt.Sprintf("Boot ausente %d", bootID), category, est.DongleID, bootID))
+		v.ok(st == 404 && jstr(body, "codigo") == "boot_desconhecido", "boot %d inexistente: %d %s", bootID, st, jstr(body, "codigo"))
 	}
-	id2, _, err := api.create(ctx, tripBody("Boot futuro", category, est.DongleID, futureBoot))
-	if err != nil {
-		return err
-	}
-	status = api.status(ctx, id2)
-	v.ok(jhas(status, "entrada", "boot_generation") && jraw(status, "entrada", "boot_generation") == nil,
-		"viagem 2 nasce com boot_generation nula")
-	d.LosePower(0)
-	d.GenerateBlocks(150)
-	if err := a.Handshake(ctx); err != nil {
-		return fmt.Errorf("handshake do boot futuro: %w", err)
-	}
-	if err := a.Drain(ctx); err != nil {
-		return fmt.Errorf("blocos do boot futuro: %w", err)
-	}
-	status = api.waitReady(ctx, id2, 40*time.Second)
-	v.ok(jstr(status, "status") == "pronta" && jraw(status, "entrada", "boot_generation") != nil, "viagem 2 pronta com a geração resolvida (%v)",
-		jraw(status, "entrada", "boot_generation"))
-	an = api.analysis(ctx, id2)
-	v.ok(jnum(an, "resumo", "distancia_km") > 0 && jlen(an, "viagem", "partes") >= 1, "viagem 2 com dados: distância %.4f km", jnum(an, "resumo", "distancia_km"))
-
-	// 3. boot que nunca chega: fecha provisória e vazia no limite final
-	id3, _, err := api.create(ctx, tripBody("Boot ausente", category, est.DongleID, 40000))
-	if err != nil {
-		return err
-	}
-	st, body, _ = api.do(ctx, "GET", "/v1/viagens/"+id3+"/analise", "")
-	v.ok(st == 409 && jstr(body, "codigo") == "analise_indisponivel" && jstr(body, "viagem_status") != "pronta",
-		"análise de viagem não pronta: %d %s (%s)", st, jstr(body, "codigo"), jstr(body, "viagem_status"))
-	status = api.waitReady(ctx, id3, 40*time.Second)
-	v.ok(jstr(status, "status") == "pronta" && jbool(status, "provisoria"), "viagem 3 pronta e provisória")
-	an = api.analysis(ctx, id3)
-	v.ok(hasWarning(an, "sem_leituras"), "viagem 3 com o aviso sem_leituras")
-	v.ok(jraw(an, "resumo", "distancia_km") == nil && jraw(an, "rota") == nil && jlen(an, "eventos") == 0 && jlen(an, "paradas") == 0 &&
-		jlen(an, "faixas_velocidade") == 0, "viagem 3 vazia: distância e rota nulas, listas vazias")
 	return v.result()
 }
 
@@ -198,33 +163,9 @@ func jraw(m map[string]any, path ...string) any {
 	return cur
 }
 
-func jhas(m map[string]any, path ...string) bool {
-	parent := jraw(m, path[:len(path)-1]...)
-	if len(path) == 1 {
-		parent = m
-	}
-	mm, ok := parent.(map[string]any)
-	if !ok {
-		return false
-	}
-	_, ok = mm[path[len(path)-1]]
-	return ok
-}
-
 func jstr(m map[string]any, path ...string) string { s, _ := jraw(m, path...).(string); return s }
 func jnum(m map[string]any, path ...string) float64 {
 	f, _ := jraw(m, path...).(float64)
 	return f
 }
-func jbool(m map[string]any, path ...string) bool { b, _ := jraw(m, path...).(bool); return b }
-func jlen(m map[string]any, path ...string) int   { l, _ := jraw(m, path...).([]any); return len(l) }
-
-func hasWarning(an map[string]any, code string) bool {
-	ws, _ := jraw(an, "avisos").([]any)
-	for _, w := range ws {
-		if mm, ok := w.(map[string]any); ok && mm["codigo"] == code {
-			return true
-		}
-	}
-	return false
-}
+func jlen(m map[string]any, path ...string) int { l, _ := jraw(m, path...).([]any); return len(l) }

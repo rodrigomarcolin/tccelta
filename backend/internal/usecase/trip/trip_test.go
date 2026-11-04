@@ -32,6 +32,9 @@ func newEnv(t *testing.T) *env {
 	db.AddDongle(dongle.Dongle{ID: 1, DevID: protocol.DevID{1}, Active: true})
 	db.SetState(1, dongle.State{HeadSeq: 120})
 	db.AddDongle(dongle.Dongle{ID: 2, DevID: protocol.DevID{2}, Active: true}) // sem handshake: head_seq = 0
+	for _, dongleID := range []int32{1, 2} {                                   // o boot 8 (geração 0) já chegou nos dois dongles
+		db.BootRows = append(db.BootRows, &memory.Boot{PendingBoot: timeline.PendingBoot{BootKey: timeline.BootKey{DongleID: dongleID, BootID: 8}}})
+	}
 	return &env{db: db, create: NewCreateTrip(db), get: NewGetTrip(db.Repositories()), an: NewGetAnalysis(db.Repositories())}
 }
 
@@ -47,7 +50,7 @@ func TestCreateFreezesHeadSeqAndNotifies(t *testing.T) {
 	}
 	row := e.db.TripByID(tr.ID)
 	if row == nil || row.Status != domain.StatusPending || row.TargetSeq != 120 || row.Category != "feira" || row.DriverName != "João" ||
-		row.CalculatedAt != nil || row.BootGeneration != nil {
+		row.CalculatedAt != nil || row.BootGeneration == nil || *row.BootGeneration != 0 {
 		t.Fatalf("%+v", row)
 	}
 	if len(e.db.TripNotified) != 1 || e.db.TripNotified[0] != tr.ID {
@@ -102,12 +105,30 @@ func TestCreateResolvesLatestGeneration(t *testing.T) {
 	if err != nil || *tr.BootGeneration != 1 {
 		t.Fatalf("%v %+v", err, tr)
 	}
-	// boot que ainda não chegou: geração nula, viagem aceita
-	in = bootIn("Pedro")
-	in.BootID = i64(77)
-	tr, err = e.create.Run(context.Background(), in)
-	if err != nil || tr.BootGeneration != nil {
-		t.Fatalf("%v %+v", err, tr)
+}
+
+func TestCreateUnknownBoot(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	in := bootIn("Pedro")
+	in.BootID = i64(77) // nunca chegou
+	if _, err := e.create.Run(ctx, in); !errors.Is(err, domain.ErrBootNotFound) {
+		t.Fatalf("%v", err)
+	}
+	// com geração informada também: o boot precisa existir
+	in.BootGeneration = i64(0)
+	if _, err := e.create.Run(ctx, in); !errors.Is(err, domain.ErrBootNotFound) {
+		t.Fatalf("%v", err)
+	}
+	// o boot 8 existe no dongle 1 e no 2, mas não num dongle sem ele
+	e.db.AddDongle(dongle.Dongle{ID: 3, DevID: protocol.DevID{3}, Active: true})
+	other := bootIn("Rui")
+	other.DongleID = i64(3)
+	if _, err := e.create.Run(ctx, other); !errors.Is(err, domain.ErrBootNotFound) {
+		t.Fatalf("%v", err)
+	}
+	if len(e.db.Trips) != 0 || len(e.db.TripNotified) != 0 {
+		t.Fatal("o boot desconhecido não deixa viagem nem NOTIFY")
 	}
 }
 

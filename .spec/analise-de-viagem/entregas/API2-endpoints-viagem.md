@@ -167,7 +167,7 @@ Fluxo do caso de uso, em uma só `InTransaction`:
 - **E2E:** novo cenário `trip-http` em `internal/tools/simulator`, na lista do `make e2e`, com worker e `ANALISE_SEM_AUTH=true` no `compose.test.yaml`. O cenário `trip` da API1 insere direto no banco; este passa pela API.
   1. Envia blocos de um boot, faz `POST` e consulta o status até `pronta` (limite de 40 s). Confere no `GET .../analise` campos conhecidos do simulador e `viagem.motorista`.
   2. `POST` de um boot ainda não enviado, depois envio dos blocos: a viagem fica `pronta`, com `boot_generation` resolvida e dados.
-  3. `POST` de um boot que nunca chega: a viagem fica `pronta`, provisória, com `sem_leituras`, em cerca de 20 s.
+  3. `POST` de um boot que nunca chegou ao servidor: `404 boot_desconhecido`, sem criar viagem.
 
 ## Critérios de aceite
 
