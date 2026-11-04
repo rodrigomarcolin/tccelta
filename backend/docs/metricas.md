@@ -142,6 +142,29 @@ O worker recalcula a reta de tempo de cada boot (do relógio do dongle para o re
   (a deriva do relógio do dongle passou do limite). Cada alerta novo também é gravado na tabela `alert`.
 - `tccelta_worker_time_queue` que só cresce indica que o worker não acompanha a ingestão.
 
+### Viagens (gold)
+
+O worker também calcula a análise de cada viagem de `gold.trip` (spec `.spec/analise-de-viagem`, entrega API1).
+
+| Série | Tipo | Rótulos | O que mede |
+|---|---|---|---|
+| `tccelta_worker_trips_total` | contador | `result` | Viagens calculadas, por desfecho |
+| `tccelta_worker_trip_partial_total` | contador | — | Viagens calculadas com o aviso `dados_parciais` |
+| `tccelta_worker_trip_provisional_total` | contador | `action` | Ações do ticker das viagens provisórias |
+| `tccelta_worker_trip_duration_seconds` | histograma | — | Tempo da transação de cálculo. Baldes: 10 ms a 60 s |
+| `tccelta_worker_trip_wait_seconds` | histograma | — | Tempo de `created_at` até `calculated_at`. Baldes: 1 s a 5 min |
+| `tccelta_worker_trip_queue` | medidor | `state` | Viagens na fila (atualizado a cada 15 s) |
+
+- `result`: `ready` (primeiro cálculo), `recalculated` (recálculo de viagem pronta) e `failed` (a viagem nova vira `failed`).
+  Um recálculo que falha mantém o resultado anterior, não conta em `failed` e fica só no log (`worker.viagem_recalculo_falhou`).
+- `action`: `recalc_marked` (chegaram dados atrasados, ou um boot sem hora ganhou conversão, ou o boot da viagem apareceu) e
+  `completed` (há prova de completude e nenhum dado novo: `provisional` volta a `false` sem recalcular).
+- `state`: `waiting` (`pending` e `waiting_data`) e `recalc` (`recalc_pending`).
+- `tccelta_worker_trip_wait_seconds` perto de `VIAGEM_LIMITE_FINAL` com `trip_partial_total` subindo indica que as viagens
+  estão saindo pelo limite final: os lotes chegam depois do clique em processar.
+- Logs: `worker.viagem_calculada` (`trip_id`, `dongle_id`, `entrada`, `partes`, `leituras`, `provisoria`, `dados_parciais`,
+  `calculated_through_seq`, `duracao_ms`), `worker.viagem_falhou` (`erro`) e `worker.viagem_recalculo_marcado`.
+
 ## Reprocessamento
 
 | Série | Tipo | O que mede |

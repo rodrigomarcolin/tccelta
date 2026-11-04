@@ -8,7 +8,7 @@ Descrição verificação a verificação em `backend/docs/cenarios-simulador.md
 
 ```mermaid
 flowchart LR
-    SC[scenarios.go<br/>e2e, negative-protocol, time, generation,<br/>reconnection, load, knee] --> APP[AppVirtual app.go<br/>contrato HTTP real]
+    SC[scenarios.go<br/>e2e, negative-protocol, time, generation,<br/>trip, reconnection, load, knee] --> APP[AppVirtual app.go<br/>contrato HTTP real]
     APP --> DV[DongleVirtual dongle.go<br/>flash em memória, assina com K_rec]
     APP -->|HTTP| API[(API real)]
     SC -->|port.Inspector: SELECT, papel owner| DB|SELECT, papel owner| DB[(PostgreSQL)]
@@ -28,6 +28,7 @@ flowchart LR
 | `negative-protocol` | tag adulterada, salto, lote de 33, token de outro dongle, resposta repetida (409), rajada de desafios (429), token lixo (401); dados já aceitos não mudam | alguma das 11 verificações falha |
 | `time` | 4 rodadas ⇒ 4 âncoras; `time_source = anchors`; `base_uncertainty_ms ≤ 2000`; hora reconstruída a menos de 10 s do relógio (tempo real; `--speedup` não afeta) | alguma das 4 verificações |
 | `generation` | `boot_id` de 65534 a 2 (volta do u16): `boot_generation = 1`, pares (geração, boot) esperados, alerta `boot_generation_advanced` uma vez, `reprocess` preserva as leituras | alguma das 4 verificações |
+| `trip` | 200 blocos de um dongle; duas viagens em `gold.trip` (entrada `boot` e `intervalo`) criadas com o papel dono das tabelas | alguma viagem não chega a `ready` em 30 s, ou sem parte, distância ou motor ligado |
 | `reconnection` | `--accumulated` blocos (500) offline por dongle drenados por inteiro, com rampa `--ramp` | algum dongle termina com `contiguous_seq` ≠ HEAD |
 | `load` | `N` dongles em regime por `--duration`; latências por rota | só com resposta 5xx |
 | `knee` | degraus de 100, 250, 500, 1000, 2000 e 4000 dongles; para quando p99 de `POST /blocos` > 1000 ms ou 503 > 1 % | nunca falha; reporta `dongle_capacity` |
@@ -38,7 +39,7 @@ Todos os dongles partem do seq 1; o servidor guarda o estado por DevId, então c
 
 ## `make e2e`
 
-Sobe a stack isolada `compose.test.yaml` (projeto `tccelta-teste`), reconstrói as imagens `ferramentas` e `kms-ferramentas` e roda `e2e`, `negative-protocol`, `time --speedup 120` e `generation`, cada um com 3 dongles novos; derruba a stack com `down -v` ao fim e devolve o código do primeiro cenário que falhou. Não cobre `reconnection`, `load` nem `knee`.
+Sobe a stack isolada `compose.test.yaml` (projeto `tccelta-teste`), reconstrói as imagens `ferramentas` e `kms-ferramentas` e roda `e2e`, `negative-protocol`, `time --speedup 120`, `generation`, `asym` e `trip`, cada um com 3 dongles novos; derruba a stack com `down -v` ao fim e devolve o código do primeiro cenário que falhou. Não cobre `reconnection`, `load` nem `knee`.
 
 ## Testes do backend
 

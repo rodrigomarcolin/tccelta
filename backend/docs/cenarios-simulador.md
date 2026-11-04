@@ -24,11 +24,12 @@ Veja o [README do backend](../README.md) para os alvos do Makefile.
 | `time` | 1 (o primeiro) | O servidor reconstrói a hora das leituras a partir das âncoras de tempo | Qualquer uma das 4 verificações falha |
 | `generation` | 1 (o primeiro) | O `boot_id` de 16 bits volta a 1 e o servidor avança a "geração" do boot; o reprocessamento preserva as leituras | Qualquer uma das 4 verificações falha |
 | `asym` | todos do CSV, um por vez (todos `asym`, com `k_sig`) | Blocos assinados com ECDSA P-256 são aceitos; uma tag com 1 bit trocado é rejeitada como `invalid_tag` e o ACK não avança | Qualquer uma das 7 verificações por dongle falha |
+| `trip` | 1 (o primeiro) | O worker calcula as viagens da gold (entrada `boot` e entrada `intervalo`) a partir da silver, com o papel `tccelta_worker` | Qualquer uma das 7 verificações falha |
 | `reconnection` | `N` do CSV | Um volume grande de blocos acumulados offline é drenado por inteiro | Algum dongle termina com `contiguous_seq` diferente do HEAD |
 | `load` | `N` do CSV | Mede latências por rota com muitos dongles em regime | Só se houver alguma resposta 5xx |
 | `knee` | `N` do CSV (cicla) | Sobe a carga em degraus até achar o limite | Nunca falha: só reporta a capacidade |
 
-Os cenários com verificação (`e2e`, `negative-protocol`, `time`, `generation`, `asym`, `reconnection`) imprimem uma linha
+Os cenários com verificação (`e2e`, `negative-protocol`, `time`, `generation`, `asym`, `trip`, `reconnection`) imprimem uma linha
 `OK` ou `FALHOU` por verificação e terminam com erro (`N verificação(ões) falharam`) se alguma falhar. `load`
 e `knee` não verificam dados; produzem um relatório.
 
@@ -165,6 +166,19 @@ blocos assinados com ECDSA e depois envia um bloco com 1 bit da tag trocado. Ver
 O que o cenário não olha é o KMS: no perfil `asym` a verificação é local, então
 `tccelta_kms_calls_total{operation="verify_rec"}` não cresce com esses dongles (confira em `/metricas`).
 
+## `trip`
+
+Prova o worker de viagens (API1) de ponta a ponta, sobre o primeiro dongle do CSV:
+
+1. Faz o handshake, gera e envia 200 blocos (PIDs `0x0C`, `0x0D` e `0x04`, mais GPS) e espera o worker dar hora ao boot.
+2. Cria duas viagens em `gold.trip` com o papel dono das tabelas (a API de viagens é a API2, ainda sem rota): uma com entrada
+   `boot` (o boot do dongle) e outra com entrada `intervalo`, de poucos segundos antes do início até 5 s depois do fim.
+3. Espera até 30 s que cada uma chegue a `ready` (o `compose.test.yaml` usa `VIAGEM_ESPERA_SEM_LOTE=3s` e `VIAGEM_LIMITE_FINAL=8s`).
+
+Verificações: o boot tem hora absoluta; e, para cada viagem, o estado `ready`, ao menos uma linha em `trip_part`, `distance_km > 0`
+e `engine_on_s > 0`. Como o cálculo roda no `worker` (papel `tccelta_worker`), estar `ready` também prova que ele leu `reading` e
+`position` sem erro de permissão.
+
 ## `reconnection`
 
 Para cada dongle (`--dongles`, padrão: o tamanho do CSV): gera **`--accumulated` blocos** offline (padrão 500),
@@ -201,7 +215,7 @@ está sujeito ao limite por IP.
 ## O `make e2e`
 
 É um encadeamento, não um cenário: sobe a stack **isolada** (`compose.test.yaml`, projeto `tccelta-teste`),
-reconstrói as imagens de ferramentas e roda **`e2e`, `negative-protocol`, `time`, `generation` e `asym`**, cada um com 3
+reconstrói as imagens de ferramentas e roda **`e2e`, `negative-protocol`, `time`, `generation`, `asym` e `trip`**, cada um com 3
 dongles recém-criados (KMS, depois banco; o `asym` com `--profile asym`). Se um falhar, os seguintes não rodam. No fim, com sucesso ou não,
 derruba a stack com `down -v` e devolve o código de saída do cenário que falhou. Não cobre `reconnection`, `load`
 nem `knee`.

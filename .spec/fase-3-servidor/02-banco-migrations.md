@@ -26,6 +26,8 @@ goose e do código gerado pelo sqlc. Tudo em `backend/internal/database/`:
 | `00006_silver.sql` | `reading`, `position` (hypertables) |
 | `00007_extra_roles.sql` | cria papéis ausentes (bancos de teste) |
 | `00008_permissions.sql` | `GRANT`s por papel |
+| `00009_gold.sql` | schema `gold`: `trip` e as tabelas da análise (`trip_part`, `trip_summary`, `trip_speed_band`, `trip_event`, `trip_stop`, `trip_gear`, `trip_gear_shift`, `trip_series`); funções `position_lon`/`position_lat`; `GRANT`s da gold e `SELECT` do worker em `reading`/`position` |
+| `00010_drop_gold_pending.sql` | remove `boot.gold_pending`; só aplicar depois que nenhuma réplica antiga da API estiver viva (ela ainda grava a coluna) |
 
 ## Modelo
 
@@ -130,7 +132,7 @@ erDiagram
 | `dongle_state` | `contiguous_seq` (ACK), `max_seen_seq`, `head_seq`, `tail_seq`, `last_c_s`, `c_conf`, `boot_generation`, `last_boot_id`, `last_ack` (TLV 0x04 assinado). `CHECK`s de ordem; gatilho `dongle_state_monotonic` proíbe regressão de `contiguous_seq`, `head_seq`, `last_c_s`, `c_conf`, `max_seen_seq`, geração e `boot_id` |
 | `raw_block` | bronze; PK `(dongle_id, seq)` (idempotência); particionada por hash de `dongle_id` em 16 partições `raw_block_p0..15`; `payload` 17–1024 B; `signature` 0/32/64 B; `epoch` = `c_S` do JWT; gatilho `raw_block_immutable` bloqueia `UPDATE`; a API só tem `SELECT`/`INSERT` |
 | `rejected_block` | blocos recusados; `reason` ∈ `invalid_tag`, `unknown_pid`, `invalid_marker`, `malformed_record`; `UNIQUE (dongle_id, content_hash)` (reenvio só incrementa `occurrences`) |
-| `boot` | PK `(dongle_id, boot_generation, boot_id)`; faixa observada (`first_seq`, `last_seq`, `first_t_ms`, `last_t_ms`, `max_offset_ms`); reta `a_ms`, `b`, `base_uncertainty_ms`, `time_source`; fila do worker (`time_pending`, `pending_since`); `gold_pending` (gancho sem consumidor); `config` sempre nula |
+| `boot` | PK `(dongle_id, boot_generation, boot_id)`; faixa observada (`first_seq`, `last_seq`, `first_t_ms`, `last_t_ms`, `max_offset_ms`); reta `a_ms`, `b`, `base_uncertainty_ms`, `time_source`; fila do worker (`time_pending`, `pending_since`); `config` sempre nula (a coluna `gold_pending` foi removida pela `00010`; o gatilho da gold é `gold.trip.recalc_pending`) |
 | `challenge` | um desafio por `(dongle_id, c_s)`; `nonce` único; `s1`, `expires_at`; preenchida na resposta (`answered_at` = S2, `boot_*`, `t_ms`, `head_seq`, `tail_seq`, `result` ∈ `accepted`, `accepted_no_anchor`, `invalid_tag`, `inconsistent`, `expired`, `invalid_tag_attempts`, `ack_seq`, `loss_*`, `token_jti`) |
 | `time_anchor` | uma linha por handshake com RTT ≤ 2 s: `t_ms` (desembrulhado), `s1`, `s2`, `nonce` |
 | `anchor_group` | grupos de âncoras do boot (`ordinal`, `first_t_ms`, `last_t_ms`, `t_center_ms`, `lo_ms`, `hi_ms`, `n_anchors`), regravados a cada recálculo |
@@ -145,9 +147,9 @@ erDiagram
 | Papel | Acesso |
 |---|---|
 | `tccelta_api` | `SELECT` em `dongle`, `pid`, `anchor_group`; `SELECT, UPDATE` em `dongle_state`; `SELECT, INSERT` em `raw_block`, `time_anchor`, `reading`, `position`, `gap`, `alert`; `SELECT, INSERT, UPDATE` em `rejected_block`, `challenge`, `boot` |
-| `tccelta_worker` | `SELECT` em `dongle`, `dongle_state`, `raw_block`, `time_anchor`, `gap`, `pid`; `SELECT, UPDATE` em `boot`; `SELECT, UPDATE (result)` em `challenge`; `SELECT, INSERT` em `alert`; `SELECT, INSERT, DELETE` em `anchor_group` |
+| `tccelta_worker` | `SELECT` em `dongle`, `dongle_state`, `raw_block`, `time_anchor`, `gap`, `pid`; `SELECT, UPDATE` em `boot`; `SELECT, UPDATE (result)` em `challenge`; `SELECT, INSERT` em `alert`; `SELECT, INSERT, DELETE` em `anchor_group`; **desde a `00009`:** `SELECT` em `reading`, `position` e `SELECT, INSERT, UPDATE, DELETE` nas tabelas do schema `gold` |
 | `tccelta_provisioner` | `SELECT, INSERT` em `dongle`, `dongle_state` |
-| `tccelta_reader` | `SELECT` em tudo |
+| `tccelta_reader` | `SELECT` em tudo em `public`; na `gold`, `SELECT` nas tabelas existentes e, por `ALTER DEFAULT PRIVILEGES`, nas futuras (`00009`) |
 | `tccelta_owner` | dono; migrations, `worker reprocess` (`DELETE` em `reading`/`position`) e simulador |
 
 ## Consultas (`queries/*.sql`)
@@ -159,3 +161,12 @@ erDiagram
 - Advisory lock por dongle (`LockDongle`) no início da transação do handshake e do lote, e na TX2 do worker.
 - Identidade do boot `(dongle_id, boot_generation, boot_id)`: a volta do `boot_id` (u16) avança `boot_generation` (ver `05`).
 - `NOTIFY pid_changed` (catálogo recarregado pela API) e `NOTIFY boot_pending` (acorda o worker).
+
+## Schema `gold` (`00009_gold.sql`)
+
+A análise de cada viagem (`.spec/analise-de-viagem`, entrega API1). `gold.trip` é a fila e o estado (`pending`, `waiting_data`,
+`ready`, `failed`; `provisional`, `recalc_pending`, `target_seq`, `first_seq`/`last_seq`, `calculated_through_seq`); os `CHECK`
+exigem exatamente uma entrada (`boot` ou `interval`, com `interval_start < interval_end`) e um dos seis combustíveis. O nome do
+motorista é único por `trip_category` (índice parcial `trip_driver_name_unique`, fora as viagens `failed` e excluídas). As
+tabelas filhas têm `ON DELETE CASCADE`; séries, rota e distribuições ficam em `jsonb` (`trip_series`), porque têm `null` por
+elemento. `tccelta_api` só tem `SELECT, INSERT` em `gold.trip` e `SELECT` no resto.

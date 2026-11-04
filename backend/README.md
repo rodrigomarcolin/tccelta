@@ -25,13 +25,13 @@ Um módulo Go (`tccelta/backend`), dois binários: `cmd/tccelta` (API, worker e 
 ```
 cmd/tccelta/            raiz de composição da API, do worker e das ferramentas (fina)
 cmd/tccelta-kms/        raiz de composição do KMS
-internal/domain/        regras puras (protocol, pid, dongle, handshake, ingestion, occurrence, timeline)
+internal/domain/        regras puras (protocol, pid, dongle, handshake, ingestion, occurrence, timeline, trip, tripanalysis)
 internal/port/          TODAS as portas: repositórios + transação, notificações, inspetor, KMS, tokens, métricas, relógio, erros (+ porttest)
-internal/usecase/       catalog, handshake, ingestion, session, boottime, reprocess, provisioning: dependem só de domain e port
+internal/usecase/       catalog, handshake, ingestion, session, boottime, tripcalc, reprocess, provisioning: dependem só de domain e port
 internal/adapter/      implementações das portas: postgres, cache (decorator), memory (testes), kmsclient,
                        jwt, prometheus
 internal/http/         transporte HTTP (+ http/ratelimit: rate limit e concorrência)
-internal/worker/       runtime assíncrono do recálculo de tempo (LISTEN, agendamento, saúde); a lógica está em usecase/boottime
+internal/worker/       runtime assíncrono do recálculo de tempo e das viagens (LISTEN, agendamento, saúde); a lógica está em usecase/boottime e usecase/tripcalc
 internal/tools/        ferramentas de linha de comando: provisioning (lê e valida o record.json), simulator
 internal/database/     infraestrutura de banco: pool, transação, listen, migrações, queries e dbgen (sqlc)
 internal/kms/          serviço KMS: server, vault, provisioning, config, metrics (isolado, veja abaixo)
