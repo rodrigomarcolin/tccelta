@@ -57,11 +57,18 @@ Ordem fixa, de cima para baixo. Em telas estreitas, o mapa fica acima dos indica
 +----------------------------------------------------------------------------------+
 ```
 
-Os números do wireframe são ilustrativos. As porcentagens por faixa e os horários são exemplos.
+Os números do wireframe são ilustrativos. As porcentagens por faixa e os horários são exemplos. O wireframe mostra uma viagem definida por boot; a seção "Viagem com várias partes" descreve as diferenças de uma viagem definida por intervalo.
 
 ### 1. Cabeçalho
 
-Identificação da viagem (dongle e boot), data e hora quando disponíveis, alternância de tema e o botão **Ajustes**.
+Identificação da viagem conforme sua definição, data e hora quando disponíveis, alternância de tema e o botão **Ajustes**:
+
+| Viagem definida por | Identificação | Exemplo |
+|---|---|---|
+| Boot | Dongle e boot | `Dongle 1 · boot 8` |
+| Intervalo de tempo | Dongle, intervalo pedido e número de partes, se houver mais de uma | `Dongle 1 · 28/10 08:00–18:00 · 2 partes` |
+
+A tela recebe a viagem já definida. A forma de escolher o boot ou o intervalo fica fora desta spec.
 
 ### 2. Resumo
 
@@ -71,7 +78,7 @@ Identificação da viagem (dongle e boot), data e hora quando disponíveis, alte
 
 | Grupo | Indicadores |
 |---|---|
-| Uso | Distância, duração, tempo em movimento, horário |
+| Uso | Distância, duração, tempo em movimento, horário e, quando houver, tempo sem dados |
 | Eficiência | km/L, litros, % de marcha lenta |
 | Condução | Velocidade média e máxima, frenagens e acelerações bruscas |
 
@@ -107,13 +114,14 @@ Tabela de eventos (frenagem brusca, aceleração brusca, marcha lenta longa) com
 
 Seção recolhida por padrão, com:
 
-- identificação do boot e duração total desde o boot;
+- partes da viagem: para cada uma, o boot, o período com dados e o período analisado;
+- boots ignorados por não terem hora absoluta e partes sobrepostas, quando houver;
 - períodos medianos dos PIDs e leituras por segundo;
 - razão rotação/velocidade ao longo do tempo e por marcha identificada;
 - cobertura de GPS, número de falhas e maior falha;
 - distância pela velocidade OBD versus distância pelo GPS, com a diferença;
 - combustível usado na estimativa (AFR e densidade) e cobertura do MAF;
-- rotação de marcha lenta usada e sua origem (estimada ou informada);
+- rotação de marcha lenta usada e sua origem (estimada, informada ou reserva);
 - parâmetros e limiares usados, identificados como **limiares do projeto**;
 - limites do método, incluindo o atraso do GPS.
 
@@ -125,6 +133,16 @@ Painel (modal ou gaveta) aberto pelo botão **Ajustes**, com:
 - **Avançado:** rotação de marcha lenta (automática ou informada), margem da marcha lenta, limiar de falha de GPS e limiares de eventos.
 
 Ao alterar um ajuste, a tela recalcula e mostra o valor usado na seção de qualidade. Os padrões estão na spec 02.
+
+### Viagem com várias partes
+
+Uma viagem definida por intervalo de tempo pode reunir dados de mais de um boot, e cada boot forma uma **parte**. Nesse caso:
+
+- **Resumo:** os indicadores valem para a viagem inteira. O tempo sem dados aparece no grupo Uso.
+- **Eixo X:** mostra a hora absoluta. Os gráficos não ligam uma parte à outra, e a pausa entre elas tem o rótulo "Sem dados · duração".
+- **Pausas longas:** ocupam uma largura fixa e pequena no eixo, para não comprimir os dados. O rótulo mantém a duração real.
+- **Mapa:** os marcadores A e B indicam o início e o fim da viagem inteira.
+- **Seleção:** um trecho arrastado pode incluir mais de uma parte.
 
 ## Mapa
 
@@ -164,7 +182,7 @@ Eventos não dependem só da cor: forma e rótulo acessível distinguem os tipos
 
 ### Trechos sem dados
 
-Trechos com falha de GPS ou sem velocidade aparecem como **linha cinza fina**, sem cor de faixa.
+Trechos com falha de GPS ou sem velocidade aparecem como **linha cinza fina**, sem cor de faixa. A ligação entre duas partes da viagem segue a mesma regra.
 
 ## Interações
 
@@ -187,7 +205,8 @@ A tabela de eventos, o botão "limpar" e os Ajustes também funcionam por teclad
 | Sem nenhum GPS | Sem mapa; o Resumo ocupa a largura total, com o aviso "Sem posições de GPS nesta viagem: a rota não pode ser mostrada". As outras seções funcionam normalmente |
 | GPS com falhas | Mapa com os trechos em cinza |
 | Mapa-base indisponível | A rota aparece sobre fundo liso cinza |
-| Sem hora absoluta | O cabeçalho não mostra data nem hora, e o eixo mostra o tempo desde o início da viagem |
+| Sem hora absoluta | Só ocorre em viagem definida por boot: o cabeçalho não mostra data nem hora, e o eixo mostra o tempo desde o início da viagem |
+| Viagem sem leituras | Mensagem "Sem dados para esta viagem", no lugar do resumo e dos gráficos |
 | Sem leituras de um sinal | O gráfico mostra "Sem leituras" no lugar de valores zerados |
 
 ## Regras de conteúdo
@@ -205,7 +224,7 @@ A tabela de eventos, o botão "limpar" e os Ajustes também funcionam por teclad
 3. **Com GPS:** a rota aparece com as cores da faixa recebida e os marcadores A e B.
 4. **Trechos sem dados:** aparecem como linha cinza fina, sem cor de faixa.
 5. **Legenda:** as faixas em movimento somam 100% (± arredondamento), e "Parado" mostra tempo.
-6. **Sem hora absoluta:** o cabeçalho omite data e hora, e não há erro.
+6. **Sem hora absoluta:** em viagem definida por boot, o cabeçalho omite data e hora, e não há erro.
 7. **Rótulos de consumo:** todo valor de litros ou km/L tem "estimado" e o combustível ao lado.
 8. **Marcha:** ponto morto ou embreagem aparece com rótulo próprio, sem número de marcha e sem marcador de troca.
 9. **Interações:** todas as ações da tabela funcionam, e "limpar" restaura a viagem inteira.
@@ -215,3 +234,5 @@ A tabela de eventos, o botão "limpar" e os Ajustes também funcionam por teclad
 13. **Mapa-base indisponível:** a rota aparece sobre fundo liso, sem mensagem de erro cobrindo a tela.
 14. **Linguagem:** nenhum texto usa "infração", "excesso" ou "nota", e a rampa não usa verde nem vermelho puro.
 15. **Tela estreita:** o mapa fica acima dos indicadores, sem rolagem horizontal da página.
+16. **Viagem com várias partes:** o cabeçalho mostra o intervalo e o número de partes, o Resumo mostra o tempo sem dados, os gráficos não ligam partes diferentes, e a pausa aparece com a duração.
+17. **Pausa longa:** uma pausa de várias horas não ocupa a maior parte do eixo X, e o cursor continua indicando a hora correta dos dois lados.

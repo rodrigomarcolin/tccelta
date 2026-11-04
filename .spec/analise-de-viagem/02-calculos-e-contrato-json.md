@@ -14,13 +14,45 @@
 
 | Entrada | Conteúdo |
 |---|---|
-| Identificação | `dongle_id`, `boot_generation`, `boot_id`. Uma viagem corresponde a um boot |
-| Leituras | Por PID: `t_ms` e valor decodificado, no relógio do boot |
-| Posições | `t_ms`, latitude, longitude, no mesmo relógio |
-| Hora | Conversão opcional de `t_ms` para hora absoluta, com incerteza |
-| Parâmetros | Tabela abaixo |
+| Definição da viagem | Seção "Definição da viagem" |
+| Leituras | Por boot e PID: `t_ms` no relógio do boot e valor decodificado |
+| Posições | Por boot: `t_ms` no relógio do boot, latitude e longitude |
+| Hora | Por boot, conversão opcional de `t_ms` para hora absoluta, com incerteza |
+| Parâmetros | Seção "Parâmetros" |
 
 PIDs usados: `0x04` carga, `0x05` líquido de arrefecimento, `0x0C` rotação, `0x0D` velocidade, `0x10` MAF, `0x2F` nível do tanque, `0x49` pedal.
+
+## Definição da viagem
+
+A requisição define a viagem por exatamente uma destas entradas:
+
+| `tipo` | Campos | Dados considerados |
+|---|---|---|
+| `boot` | `dongle_id`, `boot_generation`, `boot_id` | Todas as leituras e posições desse boot |
+| `intervalo` | `dongle_id`, `t0`, `t1` (ISO 8601 com fuso; `t1 > t0`) | Leituras e posições do dongle com `t0 ≤ hora absoluta < t1`, de qualquer boot |
+
+### Partes da viagem
+
+Uma **parte** reúne os dados contínuos de um boot dentro da viagem. A entrada `boot` gera uma parte. A entrada `intervalo` gera uma parte para cada boot com dados no intervalo, em ordem cronológica.
+
+Regras da entrada `intervalo`:
+
+- Um boot que começa ou termina fora do intervalo contribui só com os dados de dentro dele.
+- Um boot sem conversão para hora absoluta não pode ser posicionado no tempo: fica de fora e gera o aviso `boot_sem_hora`.
+- Se a incerteza da conversão fizer duas partes se sobreporem, a parte anterior termina no início da seguinte, e a resposta traz o aviso `partes_sobrepostas`.
+
+Sem nenhum dado, os valores calculados vêm `null`, e a resposta traz o aviso `sem_leituras`.
+
+### Eixo de tempo
+
+Todos os campos `t_ms` da resposta, `de_t_ms` e `ate_t_ms` usam o mesmo eixo:
+
+| `tipo` | Significado de `t_ms` | `relogio` |
+|---|---|---|
+| `boot` | Relógio do boot | Conversão do boot; `null` se não houver |
+| `intervalo` | Milissegundos desde `t0` | `deslocamento_ms` é `t0` em milissegundos desde a época Unix; `incerteza_ms` é a maior incerteza entre as partes |
+
+Em ambos os casos, `hora absoluta = deslocamento_ms + t_ms`.
 
 ## Parâmetros
 
@@ -65,15 +97,18 @@ Para E30 e E32, a densidade é o ponto médio da faixa típica de 735 a 765 g/L 
 
 ## Pré-processamento
 
-1. **Séries:** ordenar por `t_ms` e manter a primeira leitura de cada `t_ms` por PID.
-2. **Janela do boot:** `t0` é a primeira e `t1` a última leitura entre todos os PIDs.
-3. **Passo da grade:** a mediana dos intervalos medianos de rotação, velocidade e pedal, arredondada para múltiplos de 50 ms, limitada a 100–1000 ms. Sem esses PIDs, 1000 ms.
-4. **Grade:** `t0 + i × passo`, até `t1`.
-5. **Reamostragem:** cada ponto recebe a última leitura em ou antes dele, se a idade não passar de `max(3 × intervalo mediano do PID, 2 × passo)`. Caso contrário, `null`.
+1. **Séries:** em cada parte, ordenar por `t_ms` e manter a primeira leitura de cada `t_ms` por PID.
+2. **Dados da parte:** do primeiro ao último instante com leitura, entre todos os PIDs.
+3. **Passo da grade:** único para a viagem. É a mediana dos intervalos medianos de rotação, velocidade e pedal, arredondada para múltiplos de 50 ms, limitada a 100–1000 ms. Sem esses PIDs, 1000 ms. Os intervalos são medidos dentro de cada parte.
+4. **Grade:** uma por parte, com um ponto a cada `passo` desde o início dos dados da parte. Não há pontos entre partes.
+5. **Reamostragem:** cada ponto recebe a última leitura da parte em ou antes dele, se a idade não passar de `max(3 × intervalo mediano do PID, 2 × passo)`. Caso contrário, `null`.
 6. **Motor ligado:** `rpm ≥ motor_ligado_rpm`.
-7. **Janela da viagem:** do primeiro ao último ponto da grade com motor ligado. Sem motor ligado, usa a janela do boot e adiciona o aviso `motor_nunca_ligado`.
+7. **Janela da parte:** do primeiro ao último ponto com motor ligado. Uma parte sem motor ligado fica fora da análise.
+8. **Janela da viagem:** a união das janelas das partes. Se nenhuma parte tiver motor ligado, usa todos os dados e adiciona o aviso `motor_nunca_ligado`.
 
 Salvo indicação em contrário, os cálculos usam os pontos da grade dentro da janela da viagem, e `dt = passo / 1000`.
+
+Cálculos que dependem de pontos vizinhos ou de sequências contínuas (aceleração, amostras estáveis, trechos de marcha, trocas, eventos, paradas e variação do pedal) não cruzam partes. A rotação de marcha lenta e as marchas detectadas são únicas para toda a viagem.
 
 ## Cálculos
 
@@ -82,7 +117,8 @@ Salvo indicação em contrário, os cálculos usam os pontos da grade dentro da 
 | Elemento | Campo | Cálculo |
 |---|---|---|
 | Distância | `resumo.distancia_km` | `Σ velocidade × dt / 3600` |
-| Duração | `resumo.duracao_s` | Fim menos início da janela da viagem |
+| Duração | `resumo.duracao_s` | Soma das durações das janelas das partes |
+| Tempo sem dados | `resumo.sem_dados_s` | Fim da última janela menos início da primeira, menos `duracao_s` |
 | Tempo em movimento | `resumo.em_movimento_s` | Tempo com `velocidade ≥ movimento_kmh` |
 | Tempo parado | `resumo.parado_s` | Tempo com `velocidade < movimento_kmh` |
 | Velocidade média | `resumo.velocidade_media_kmh` | Média da velocidade nos pontos em movimento |
@@ -94,7 +130,7 @@ Salvo indicação em contrário, os cálculos usam os pontos da grade dentro da 
 | km/L | `resumo.km_por_l` | `distancia_km / combustivel_l`; `null` se `combustivel_l ≤ 0,02` |
 | Eventos | `resumo.n_acel_bruscas`, `resumo.n_fren_bruscas` | Contagem de eventos |
 | Taxas | `resumo.acel_por_100km`, `resumo.fren_por_100km` | Contagem × 100 / distância; `null` se `distancia_km < taxa_min_km` |
-| Horário | `viagem.inicio_em`, `viagem.fim_em` | Hora absoluta do início e do fim; `null` sem conversão |
+| Horário | `viagem.inicio_em`, `viagem.fim_em` | Hora absoluta do início da primeira janela e do fim da última; `null` sem conversão |
 
 ### Faixas de velocidade
 
@@ -113,7 +149,7 @@ A distribuição é calculada por ponto da grade, então existe mesmo sem GPS. C
 
 1. Considerar as posições dentro da janela da viagem, em ordem de `t_ms`.
 2. Para cada par consecutivo `i` e `i+1`, formar um segmento:
-   - Se `t[i+1] − t[i] > gps_falha_s`, a faixa é `falha_gps` e a velocidade é `null`.
+   - Se os pontos forem de partes diferentes ou `t[i+1] − t[i] > gps_falha_s`, a faixa é `falha_gps` e a velocidade é `null`.
    - Senão, a velocidade é a **média das leituras brutas de `0x0D`** em `[t[i], t[i+1])`.
    - Sem leitura no intervalo, usa a última leitura se tiver até `velocidade_idade_max_ms` de idade.
    - Sem nenhuma das duas, a faixa é `sem_velocidade` e a velocidade é `null`.
@@ -202,7 +238,7 @@ Quantis usam interpolação linear entre amostras ordenadas.
 
 | Campo | Cálculo |
 |---|---|
-| `leituras_total`, `leituras_por_s` | Número de leituras e taxa na janela do boot |
+| `leituras_total`, `leituras_por_s` | Número de leituras e taxa nos dados das partes |
 | `periodos_mediana_ms` | Intervalo mediano por PID |
 | `gps.periodo_mediana_s` | Intervalo mediano entre posições |
 | `gps.cobertura_pct` | Tempo em intervalos até `gps_falha_s`, sobre a duração da viagem |
@@ -216,7 +252,10 @@ Quantis usam interpolação linear entre amostras ordenadas.
 | `codigo` | Condição |
 |---|---|
 | `sem_gps` | Nenhuma posição na janela da viagem |
-| `sem_hora_absoluta` | Sem conversão para hora absoluta |
+| `sem_hora_absoluta` | Entrada `boot` sem conversão para hora absoluta |
+| `boot_sem_hora` | Entrada `intervalo` com boot ignorado por não ter conversão; `detalhe` identifica o boot |
+| `partes_sobrepostas` | Duas partes se sobrepõem no tempo |
+| `sem_leituras` | Nenhuma leitura na viagem |
 | `motor_nunca_ligado` | Nenhum ponto com motor ligado |
 | `cobertura_maf_baixa` | Cobertura do MAF abaixo de 90% |
 | `consumo_pode_estar_subestimado` | `pedal_alto_s / motor_ligado_s > pedal_alto_aviso_fracao` |
@@ -232,22 +271,28 @@ Quando a requisição traz `de_t_ms` e `ate_t_ms`, a resposta contém só `viage
 
 ## Formato JSON
 
-Os valores abaixo são ilustrativos, e os arrays foram encurtados. As séries usam arrays paralelos para reduzir o tamanho da resposta. Todos os campos `t_ms` usam o relógio do boot.
+Os valores abaixo são ilustrativos, e os arrays foram encurtados. As séries usam arrays paralelos para reduzir o tamanho da resposta. O exemplo usa a entrada `boot`.
 
 ```json
 {
   "versao_calculo": "1",
   "viagem": {
-    "dongle_id": 1,
-    "boot_generation": 0,
-    "boot_id": 8,
+    "entrada": { "tipo": "boot", "dongle_id": 1, "boot_generation": 0, "boot_id": 8 },
     "inicio_t_ms": 33481,
     "fim_t_ms": 268453,
-    "boot_inicio_t_ms": 881,
-    "boot_fim_t_ms": 268453,
     "inicio_em": "2026-10-28T14:03:22-03:00",
     "fim_em": "2026-10-28T14:07:17-03:00",
-    "relogio": { "deslocamento_ms": 1793206969000, "incerteza_ms": 180 }
+    "relogio": { "deslocamento_ms": 1793206969000, "incerteza_ms": 180 },
+    "partes": [
+      {
+        "boot_generation": 0,
+        "boot_id": 8,
+        "dados_inicio_t_ms": 881,
+        "dados_fim_t_ms": 268453,
+        "inicio_t_ms": 33481,
+        "fim_t_ms": 268453
+      }
+    ]
   },
   "parametros": {
     "combustivel": "gasolina_e30",
@@ -263,6 +308,7 @@ Os valores abaixo são ilustrativos, e os arrays foram encurtados. As séries us
   "resumo": {
     "distancia_km": 3.5,
     "duracao_s": 235.0,
+    "sem_dados_s": 0.0,
     "em_movimento_s": 201.0,
     "parado_s": 23.0,
     "velocidade_media_kmh": 63.0,
@@ -388,8 +434,46 @@ Os valores abaixo são ilustrativos, e os arrays foram encurtados. As séries us
 }
 ```
 
+Na entrada `intervalo`, muda o bloco `viagem`:
+
+```json
+{
+  "entrada": {
+    "tipo": "intervalo",
+    "dongle_id": 1,
+    "t0": "2026-10-28T08:00:00-03:00",
+    "t1": "2026-10-28T18:00:00-03:00"
+  },
+  "inicio_t_ms": 21600000,
+  "fim_t_ms": 29400000,
+  "inicio_em": "2026-10-28T14:00:00-03:00",
+  "fim_em": "2026-10-28T16:10:00-03:00",
+  "relogio": { "deslocamento_ms": 1793185200000, "incerteza_ms": 240 },
+  "partes": [
+    {
+      "boot_generation": 0,
+      "boot_id": 8,
+      "dados_inicio_t_ms": 21560000,
+      "dados_fim_t_ms": 22800000,
+      "inicio_t_ms": 21600000,
+      "fim_t_ms": 22800000
+    },
+    {
+      "boot_generation": 0,
+      "boot_id": 9,
+      "dados_inicio_t_ms": 28150000,
+      "dados_fim_t_ms": 29400000,
+      "inicio_t_ms": 28200000,
+      "fim_t_ms": 29400000
+    }
+  ]
+}
+```
+
 ### Regras do contrato
 
+- **Avisos:** cada item traz `codigo` e, quando aplicável, `detalhe`.
+- **Entre partes:** cada série de `series` e `series_lentas` traz um ponto separador com valores `null` logo após o fim da parte, para o gráfico não ligar partes diferentes. Medianas móveis são calculadas dentro de cada parte.
 - **Marcha:** em `series.marcha`, `1..N` é a marcha detectada, `0` é ponto morto ou embreagem e `null` é indefinida.
 - **Sem GPS:** `rota` e as posições de `paradas` e `eventos` vêm `null`. `qualidade.gps` traz `cobertura_pct: 0` e os demais campos `null`.
 - **Sem hora absoluta:** `inicio_em`, `fim_em` e `relogio` vêm `null`.
@@ -406,7 +490,7 @@ Os testes usam viagens de exemplo com resultado conhecido.
 3. **Cor da rota:** com velocidade do GPS diferente da OBD, a faixa do segmento segue a média OBD.
 4. **Falha de GPS:** um intervalo de 8 s gera `falha_gps` com o padrão; com `gps_falha_s = 10`, gera uma faixa de velocidade.
 5. **Segmento sem leitura:** usa a última leitura com até 2 s; com mais de 2 s, gera `sem_velocidade`.
-6. **Janela da viagem:** leituras com motor desligado antes da partida não entram na duração, mas entram em `viagem.boot_inicio_t_ms`.
+6. **Janela da viagem:** leituras com motor desligado antes da partida não entram na duração, mas entram em `viagem.partes[].dados_inicio_t_ms`.
 7. **Combustível:** para um total de 0,74 L com gasolina pura, os presets E30 e E32 dão cerca de 0,83 L (0,74 × 14,7 × 745 / (13,0 × 750)). `gasolina_pura` mantém 0,74 L.
 8. **Marcha lenta:** a viagem do PDF não gera a falsa "6ª" nem trocas com ela; esse tempo aparece em `ponto_morto_embreagem_s`.
 9. **Parâmetro da marcha lenta:** alterar `marcha_lenta_rpm` ou `marcha_lenta_margem_rpm` altera a classificação, e o valor usado volta em `marchas.marcha_lenta`.
@@ -416,9 +500,13 @@ Os testes usam viagens de exemplo com resultado conhecido.
 13. **Trecho:** um trecho recalcula `resumo` e `distribuicoes` sem mudar a numeração das marchas.
 14. **Regressão:** com `combustivel = gasolina_pura`, a viagem do PDF mantém 3,5 km, 131 km/h, 0,74 L, 4,7 km/L, 2 acelerações e 6 frenagens bruscas.
 15. **Reprodutibilidade:** a mesma entrada, com os mesmos parâmetros e a mesma `versao_calculo`, gera o mesmo resultado.
+16. **Entrada inválida:** uma requisição com as duas entradas, sem nenhuma, ou com `t1 ≤ t0` é rejeitada.
+17. **Intervalo em um boot:** um intervalo dentro de um boot gera uma parte só com os dados de dentro dele, e `t_ms` conta a partir de `t0`.
+18. **Intervalo com dois boots:** gera duas partes em ordem cronológica. A distância e os litros somam as duas, `duracao_s` não inclui o tempo entre elas, e esse tempo aparece em `sem_dados_s`.
+19. **Sem cruzar partes:** a aceleração, os eventos e as trocas não usam pontos de partes diferentes, e o segmento de rota entre elas tem faixa `falha_gps`.
+20. **Boot sem hora:** na entrada `intervalo`, o boot fica de fora com o aviso `boot_sem_hora`. Na entrada `boot`, a análise funciona normalmente com o aviso `sem_hora_absoluta`.
+21. **Marchas na viagem:** em uma viagem com duas partes, a mesma marcha tem o mesmo número nas duas.
 
-## Questões em aberto
+## Follow-ups
 
-- **AFR do E30:** a fonte específica do E30 indica cerca de 13,0, e a comparação da fonte do E32 indica cerca de 13,1. Esta spec usa 13,0, o que torna os presets E30 e E32 iguais.
-- **Margem da marcha lenta:** o padrão de 150 rpm precisa ser calibrado com viagens reais.
-- **Limite de viagem:** uma viagem corresponde a um boot. Falta decidir se um desligamento do motor no meio do boot deve dividir a viagem.
+- **Calibrar a marcha lenta:** ajustar o padrão de 150 rpm de `marcha_lenta_margem_rpm` com viagens reais.
