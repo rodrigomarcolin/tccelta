@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { useTema } from "@/componentes/ui/Tema";
@@ -81,13 +81,36 @@ function desenharMarcador(
   ctx.restore();
 }
 
+function mesmasSeries(a: SerieGrafico[], b: SerieGrafico[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (s, i) =>
+        s.valores === b[i].valores &&
+        s.rotulo === b[i].rotulo &&
+        s.cor === b[i].cor &&
+        s.passo === b[i].passo &&
+        s.tracejada === b[i].tracejada,
+    )
+  );
+}
+
+/** Mantém a mesma referência enquanto o conteúdo não muda, para não recriar o gráfico a cada render. */
+function useSeriesEstaveis(series: SerieGrafico[]): SerieGrafico[] {
+  const [estaveis, setEstaveis] = useState(series);
+  if (!mesmasSeries(estaveis, series)) setEstaveis(series);
+  return estaveis;
+}
+
 /** Gráfico de linha (uPlot) com `null` como lacuna, cursor sincronizado e marcadores. */
 export default function GraficoUPlot(props: PropsGrafico) {
-  const { titulo, x, series, altura = 150, semLeituras } = props;
+  const { titulo, x, altura = 150, semLeituras } = props;
+  const series = useSeriesEstaveis(props.series);
   const tema = useTema();
   const raiz = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
   const aplicando = useRef(false);
+  const criando = useRef(false);
   const cbCursor = useRef(props.onCursorX);
   useEffect(() => {
     cbCursor.current = props.onCursorX;
@@ -148,7 +171,8 @@ export default function GraficoUPlot(props: PropsGrafico) {
       hooks: {
         setCursor: [
           (u) => {
-            if (aplicando.current) return;
+            // Criar o gráfico dispara este hook com o cursor fora; isso não é o mouse saindo.
+            if (aplicando.current || criando.current) return;
             const i = u.cursor.idx;
             const cb = cbCursor.current;
             if (!cb) return;
@@ -206,7 +230,9 @@ export default function GraficoUPlot(props: PropsGrafico) {
       },
     };
 
+    criando.current = true;
     const u = new uPlot(opts, [x, ...series.map((s) => s.valores)] as uPlot.AlignedData, el);
+    criando.current = false;
     plot.current = u;
     const ro = new ResizeObserver(() =>
       u.setSize({ width: el.clientWidth || 600, height: altura }),

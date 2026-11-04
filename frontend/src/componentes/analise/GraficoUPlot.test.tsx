@@ -15,6 +15,7 @@ const { Fake } = vi.hoisted(() => {
     static instancias: FakeUPlot[] = [];
     static paths = { stepped: () => "passo" };
     static chamadasCtx: string[] = [];
+    static hookNaCriacao = false;
     cursor: { idx: number | null; left: number | null } = { idx: null, left: -1 };
     data: number[][];
     bbox = { left: 0, top: 0, width: 400, height: 100 };
@@ -37,6 +38,8 @@ const { Fake } = vi.hoisted(() => {
     ) {
       this.data = dados;
       FakeUPlot.instancias.push(this);
+      // O uPlot real dispara o hook de cursor durante a criação, com o cursor fora.
+      if (FakeUPlot.hookNaCriacao) for (const h of opts.hooks.setCursor) h(this);
     }
   }
   return { Fake: FakeUPlot };
@@ -180,6 +183,36 @@ describe("GraficoUPlot", () => {
     expect(Fake.chamadasCtx).toEqual(
       expect.arrayContaining(["fillRect", "fillText", "stroke", "fill", "arc", "lineTo"]),
     );
+  });
+
+  it("não recria o gráfico quando só a referência de `series` muda", () => {
+    const x = [0, 100, 200];
+    const valores = [1, null, 3];
+    const serie = () => [{ rotulo: "v", valores, cor: "--accent" }];
+    const { rerender } = render(<GraficoUPlot {...base({ x, series: serie() })} />);
+    rerender(<GraficoUPlot {...base({ x, series: serie(), cursorX: 100 })} />);
+    expect(Fake.instancias).toHaveLength(1);
+    expect(Fake.instancias[0].destroy).not.toHaveBeenCalled();
+    // Dados diferentes recriam.
+    rerender(
+      <GraficoUPlot
+        {...base({ series: [{ rotulo: "v", valores: [1, 2, 3], cor: "--accent" }] })}
+      />,
+    );
+    expect(Fake.instancias).toHaveLength(2);
+  });
+
+  it("ignora o setCursor disparado pela própria criação do gráfico", () => {
+    const onCursorX = vi.fn();
+    Fake.hookNaCriacao = true;
+    renderComTema(<GraficoUPlot {...base({ onCursorX })} />);
+    Fake.hookNaCriacao = false;
+    const u = Fake.instancias[0];
+    // Durante `new uPlot` o hook roda com o cursor fora; o componente não pode propagar null.
+    expect(onCursorX).not.toHaveBeenCalled();
+    u.cursor = { idx: null, left: -1 };
+    u.opts.hooks.setCursor[0](u);
+    expect(onCursorX).toHaveBeenCalledWith(null);
   });
 
   it("mostra 'Sem leituras' em vez do gráfico quando o sinal falta", () => {
