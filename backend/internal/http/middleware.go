@@ -91,14 +91,22 @@ func (d *Deps) ipFrom(r *http.Request) string {
 }
 
 func (d *Deps) limitIP(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if ok, ra := d.Limiter.Allow(r.Context(), "ip", d.ipFrom(r), d.Cfg.Limits.IPMin); !ok {
-			d.rej("rate_limit")
-			problem(w, 429, "limite_taxa", "limite por IP", ra)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return d.limitIPScope("ip", d.Cfg.Limits.IPMin)(next)
+}
+
+// limitIPScope limita as requisições por IP num escopo próprio, para que o contador de uma família de rotas não consuma o
+// de outra (as rotas de viagem têm limite e escopo separados dos de ingestão).
+func (d *Deps) limitIPScope(scope string, limit int) mw {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if ok, ra := d.Limiter.Allow(r.Context(), scope, d.ipFrom(r), limit); !ok {
+				d.rej("rate_limit")
+				problem(w, 429, "limite_taxa", "limite por IP", ra)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func (d *Deps) limitDevID(scope string, limit int) mw {

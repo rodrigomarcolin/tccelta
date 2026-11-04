@@ -12,18 +12,30 @@ import (
 	"tccelta/backend/internal/domain/handshake"
 	"tccelta/backend/internal/domain/ingestion"
 	"tccelta/backend/internal/domain/protocol"
+	"tccelta/backend/internal/domain/trip"
 	"tccelta/backend/internal/port"
 )
 
 // problem escreve application/problem+json (RFC 9457). O campo codigo e os códigos em português são contrato de fio com o app.
 func problem(w http.ResponseWriter, status int, code, detalhe string, retryAfter time.Duration) {
+	problemWith(w, status, code, detalhe, retryAfter, nil)
+}
+
+// problemWith é problem com campos a mais no corpo (por exemplo viagem_status). Os campos extras não trocam os padrões.
+func problemWith(w http.ResponseWriter, status int, code, detalhe string, retryAfter time.Duration, extra map[string]any) {
 	if retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int((retryAfter+time.Second-1)/time.Second)))
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"type": "https://tccelta.local/erros/" + code, "title": code, "status": status, "codigo": code, "detail": detalhe})
+	body := map[string]any{
+		"type": "https://tccelta.local/erros/" + code, "title": code, "status": status, "codigo": code, "detail": detalhe}
+	for k, v := range extra {
+		if _, taken := body[k]; !taken {
+			body[k] = v
+		}
+	}
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 func (d *Deps) retry503() time.Duration {
@@ -60,6 +72,16 @@ func (d *Deps) err(w http.ResponseWriter, err error) {
 	case errors.Is(err, protocol.ErrUnexpectedType), errors.Is(err, protocol.ErrTLVShort), errors.Is(err, protocol.ErrTLVLength),
 		errors.Is(err, protocol.ErrInvalidSize), errors.Is(err, protocol.ErrReservedFlags):
 		problem(w, 400, "tlv_invalido", err.Error(), 0)
+	case errors.Is(err, trip.ErrInvalid):
+		problem(w, 400, "entrada_invalida", err.Error(), 0)
+	case errors.Is(err, trip.ErrDriverRepeated):
+		problem(w, 409, "motorista_repetido", "já existe viagem desse motorista nesta categoria", 0)
+	case errors.Is(err, trip.ErrNotFound):
+		problem(w, 404, "viagem_desconhecida", "viagem desconhecida", 0)
+	case errors.Is(err, trip.ErrNotReady):
+		var nr trip.NotReadyError
+		_ = errors.As(err, &nr)
+		problemWith(w, 409, "analise_indisponivel", "a análise só existe com a viagem pronta", 0, map[string]any{"viagem_status": tripStatus(nr.Status)})
 	case errors.Is(err, port.ErrKMSUnavailable):
 		d.rej("kms")
 		problem(w, 503, "kms_indisponivel", "KMS indisponível", d.retry503())
@@ -85,3 +107,14 @@ var wireReasons = map[ingestion.Reason]string{
 
 // wireReason devolve o valor de contrato de X-Lote-Motivo para o motivo interno.
 func wireReason(r ingestion.Reason) string { return wireReasons[r] }
+
+// tripStatuses traduz o status interno da viagem (gold.trip.status) para o nome da API. Os literais em português são
+// contrato de fio com o front; os valores do banco são em inglês.
+var tripStatuses = map[string]string{
+	trip.StatusPending:     "pendente",
+	trip.StatusWaitingData: "aguardando_dados",
+	trip.StatusReady:       "pronta",
+	trip.StatusFailed:      "falhou",
+}
+
+func tripStatus(s string) string { return tripStatuses[s] }

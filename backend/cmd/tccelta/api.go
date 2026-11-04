@@ -25,6 +25,7 @@ import (
 	hsUC "tccelta/backend/internal/usecase/handshake"
 	ingUC "tccelta/backend/internal/usecase/ingestion"
 	"tccelta/backend/internal/usecase/session"
+	tripUC "tccelta/backend/internal/usecase/trip"
 )
 
 // cmdAPI é a raiz de composição da API: liga os adaptadores (postgres, kmsclient, prometheus, jwt)
@@ -53,6 +54,10 @@ func cmdAPI(ctx context.Context) error {
 	repos := postgres.Repositories(dbgen.New(pool))
 	repos.Dongles = cache.NewDongles(repos.Dongles, 10000, 60*time.Second)
 	tx := postgres.NewTransactor(pool)
+
+	// a leitura da análise abre a própria transação REPEATABLE READ somente leitura, por isso precisa do pool
+	tripRepos := repos
+	tripRepos.Trips = postgres.TripsWithPool(pool)
 
 	cat := pid.New()
 	sinc := catalog.NewSync(repos.Pids, cat, log)
@@ -101,6 +106,9 @@ func cmdAPI(ctx context.Context) error {
 		RespondChallenge: hsUC.NewRespondChallenge(repos, tx, kms, issuer, met.HandshakePort(), now, log, paramsHS),
 		ReceiveBatch:     ingUC.NewReceiveBatch(repos, tx, kms, cat, met.IngestionPort(), now, log, paramsIng),
 		GetConfirmation:  ingUC.NewGetConfirmation(repos, cfg.AllowNoneProfile),
+		CreateTrip:       tripUC.NewCreateTrip(tx),
+		GetTrip:          tripUC.NewGetTrip(tripRepos),
+		GetAnalysis:      tripUC.NewGetAnalysis(tripRepos),
 		Authenticate:     session.NewAuthenticate(val, repos.Dongles, cfg.AllowNoneProfile),
 		Limiter:          lim,
 		Semaphore:        ratelimit.NewConcurrency(cfg.Limits.MaxConcurrentIngestions, cfg.Limits.IngestionSlotWait),

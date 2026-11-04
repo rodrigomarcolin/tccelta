@@ -5,6 +5,9 @@ package http
 import (
 	"context"
 
+	"github.com/google/uuid"
+
+	"tccelta/backend/internal/domain/trip"
 	"tccelta/backend/internal/usecase/handshake"
 	"tccelta/backend/internal/usecase/ingestion"
 	"tccelta/backend/internal/usecase/session"
@@ -36,4 +39,19 @@ type GetConfirmation interface {
 // Authenticate é o caso de uso do middleware Bearer.
 type Authenticate interface {
 	Run(ctx context.Context, raw string) (session.Authenticated, error)
+}
+
+// CreateTrip é o caso de uso de POST /v1/viagens.
+type CreateTrip interface {
+	Run(ctx context.Context, in trip.Input) (trip.Trip, error)
+}
+
+// GetTrip é o caso de uso de GET /v1/viagens/{id}.
+type GetTrip interface {
+	Run(ctx context.Context, id uuid.UUID) (trip.Trip, error)
+}
+
+// GetAnalysis é o caso de uso de GET /v1/viagens/{id}/analise.
+type GetAnalysis interface {
+	Run(ctx context.Context, id uuid.UUID) (trip.Analysis, error)
 }

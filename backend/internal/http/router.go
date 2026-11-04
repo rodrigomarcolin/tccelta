@@ -20,6 +20,9 @@ type Deps struct {
 	RespondChallenge RespondChallenge
 	ReceiveBatch     ReceiveBatch
 	GetConfirmation  GetConfirmation
+	CreateTrip       CreateTrip
+	GetTrip          GetTrip
+	GetAnalysis      GetAnalysis
 	Authenticate     Authenticate
 	Limiter          ratelimit.Limiter
 	Semaphore        *ratelimit.Concurrency
@@ -48,6 +51,12 @@ func (d *Deps) Router() http.Handler {
 		d.limitIP, d.authenticateJWT(false), d.limitDevID("blocks", d.Cfg.Limits.BlocksMin), d.limitConcurrency, limitBody(maxBatch)))
 	mux.Handle("GET /v1/dongles/{id}/confirmacao", base("confirmation", d.getConfirmation,
 		d.limitIP, d.authenticateJWT(true), d.limitDevID("confirmation", 60)))
+	if d.Cfg.AnalysisNoAuth { // sem o modo, as rotas nem existem e o ServeMux responde 404 (a autenticação chega na API3)
+		vip := d.limitIPScope("viagem_ip", d.Cfg.Limits.TripIPMin)
+		mux.Handle("POST /v1/viagens", base("trip_create", d.createTrip, vip, limitBody(maxTripBody)))
+		mux.Handle("GET /v1/viagens/{id}", base("trip_status", d.getTrip, vip))
+		mux.Handle("GET /v1/viagens/{id}/analise", base("trip_analysis", d.getAnalysis, vip))
+	}
 	mux.HandleFunc("GET /saude/viva", d.live)
 	mux.HandleFunc("GET /saude/pronta", d.ready)
 	return mux

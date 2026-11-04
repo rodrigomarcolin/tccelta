@@ -54,12 +54,14 @@ type ProtocolConfig struct {
 
 type LimitsConfig struct {
 	ChallengeMin, ResponseMin, BlocksMin, IPMin int
-	MaxConcurrentIngestions                     int
-	IngestionSlotWait                           time.Duration
-	RetryAfterOverload                          int
-	RedisAddress                                string
-	RedisPassword                               string
-	RedisTimeout                                time.Duration
+	// TripIPMin é o limite por IP das rotas de viagem (escopo próprio, LIMITE_VIAGEM_IP_MIN).
+	TripIPMin               int
+	MaxConcurrentIngestions int
+	IngestionSlotWait       time.Duration
+	RetryAfterOverload      int
+	RedisAddress            string
+	RedisPassword           string
+	RedisTimeout            time.Duration
 }
 
 type WorkerConfig struct {
@@ -91,6 +93,8 @@ type Config struct {
 	Limits           LimitsConfig
 	Worker           WorkerConfig
 	AllowNoneProfile bool
+	// AnalysisNoAuth liga as rotas de viagem sem autenticação (ANALISE_SEM_AUTH); proibido em produção até a API3.
+	AnalysisNoAuth bool
 }
 
 type envReader struct {
@@ -173,6 +177,7 @@ func LoadFrom(env func(string) string) (Config, error) {
 	c.LogLevel = l.str("LOG_NIVEL", "info")
 	c.LogFormat = l.str("LOG_FORMATO", "json")
 	c.AllowNoneProfile = l.bool("PERMITIR_PERFIL_NONE")
+	c.AnalysisNoAuth = l.bool("ANALISE_SEM_AUTH")
 
 	c.HTTP = HTTPConfig{
 		Address:        l.str("HTTP_ENDERECO", ":8080"),
@@ -218,6 +223,7 @@ func LoadFrom(env func(string) string) (Config, error) {
 		ResponseMin:             l.integer("LIMITE_RESPOSTA_MIN", 12),
 		BlocksMin:               l.integer("LIMITE_BLOCOS_MIN", 120),
 		IPMin:                   l.integer("LIMITE_IP_MIN", 120),
+		TripIPMin:               l.integer("LIMITE_VIAGEM_IP_MIN", 600),
 		MaxConcurrentIngestions: l.integer("INGESTAO_MAX_SIMULTANEAS", 32),
 		IngestionSlotWait:       l.dur("INGESTAO_ESPERA_VAGA", 100*time.Millisecond),
 		RetryAfterOverload:      l.integer("RETRY_AFTER_SOBRECARGA", 5),
@@ -246,6 +252,9 @@ func LoadFrom(env func(string) string) (Config, error) {
 	}
 	if c.Environment == "producao" && c.AllowNoneProfile {
 		l.errs = append(l.errs, "PERMITIR_PERFIL_NONE é proibido em AMBIENTE=producao")
+	}
+	if c.Environment == "producao" && c.AnalysisNoAuth {
+		l.errs = append(l.errs, "ANALISE_SEM_AUTH é proibido em AMBIENTE=producao")
 	}
 	w := c.Worker
 	if w.TripWaitNoBatch <= 0 || w.TripFinalLimit <= 0 || w.TripEvalInterval <= 0 || w.TripProvisionalInterval <= 0 || w.TripCalcTimeout <= 0 {

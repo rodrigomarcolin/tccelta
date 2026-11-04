@@ -101,6 +101,7 @@ services:
     environment:
       AMBIENTE: dev
       PERMITIR_PERFIL_NONE: "true"
+      ANALISE_SEM_AUTH: "true"
       BANCO_URL: postgres://tccelta_api@banco:5432/tccelta?sslmode=disable
       BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_api
       KMS_URL: http://kms:8300
