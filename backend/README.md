@@ -240,6 +240,7 @@ O `make env` cria o `.env` a partir de `.env.example`. As variáveis, e onde cad
 | `IMG_TIMESCALE` | `timescale/timescaledb-ha:pg17` | Imagem do banco |
 | `VAULT_VERSAO` | `1.18` | Versão da imagem do Vault |
 | `API_REPLICAS` | `2` | Réplicas da API. Cada uma publica uma porta do intervalo `8080-8081` |
+| `API_PORTAS` | `8080-8081` | Portas do host da API (uma por réplica). Com `API_REPLICAS=1`, use `8080` para a URL do front não depender de qual porta o Docker escolheu |
 | `API_HOST` | `localhost` | Endereço do site no `Caddyfile` e nome do certificado. Para o celular, ponha o IP do PC na rede |
 | `API_PORTA_TLS` | `8443` | Porta do Caddy no host |
 | `CADDY_TLS` | `internal` | Diretiva `tls` do Caddy: `internal` usa a CA local dele |
