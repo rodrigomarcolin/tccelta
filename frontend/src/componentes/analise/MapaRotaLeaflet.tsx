@@ -80,7 +80,7 @@ export default function MapaRotaLeaflet(props: PropsMapa) {
 
       let carregados = 0;
       let erros = 0;
-      const opcoes = { attribution: ATRIBUICAO_TILES, subdomains: "abcd", maxZoom: 19 };
+      const opcoes = { attribution: ATRIBUICAO_TILES, maxZoom: 19 };
       const claro = lib.tileLayer(TILES.claro, { ...opcoes, className: "tile-claro" });
       const escuro = lib.tileLayer(TILES.escuro, { ...opcoes, className: "tile-escuro" });
       for (const t of [claro, escuro]) {

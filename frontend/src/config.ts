@@ -41,8 +41,8 @@ export function temaValido(valor: string | undefined | null): Tema {
 }
 
 export const TILES = {
-  claro: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-  escuro: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  claro: "/api/mapa/claro/{z}/{x}/{y}",
+  escuro: "/api/mapa/escuro/{z}/{x}/{y}",
 } as const;
 
 export const ATRIBUICAO_TILES =
