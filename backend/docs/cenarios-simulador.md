@@ -25,7 +25,9 @@ Veja o [README do backend](../README.md) para os alvos do Makefile.
 | `generation` | 1 (o primeiro) | O `boot_id` de 16 bits volta a 1 e o servidor avança a "geração" do boot; o reprocessamento preserva as leituras | Qualquer uma das 4 verificações falha |
 | `asym` | todos do CSV, um por vez (todos `asym`, com `k_sig`) | Blocos assinados com ECDSA P-256 são aceitos; uma tag com 1 bit trocado é rejeitada como `invalid_tag` e o ACK não avança | Qualquer uma das 7 verificações por dongle falha |
 | `trip` | 1 (o primeiro) | O worker calcula as viagens da gold (entrada `boot` e entrada `intervalo`) a partir da silver, com o papel `tccelta_worker` | Qualquer uma das 7 verificações falha |
-| `trip-http` | 1 (o primeiro) | As rotas de viagem da API (`POST`, status e análise), com o worker calculando; exige `ANALISE_SEM_AUTH=true` | Qualquer verificação falha |
+| `trip-http` | 1 (o primeiro) | As rotas de viagem da API (`POST`, status e análise), com o worker calculando. Com `--client`, autentica como o Next.js (client credentials); sem ele, exige `ANALISE_SEM_AUTH=true` | Qualquer verificação falha |
+| `client-auth` | não usa o dongle (o CSV é exigido pelo comando) | `POST /v1/auth/token`, JWKS, Bearer das rotas de viagem, isolamento entre o token do app e o de cliente, `invalid_client` uniforme, bloqueio progressivo e métricas `tccelta_auth_*`; exige `--client` | Qualquer verificação falha |
+| `client-auth-rotation` | não usa o dongle | Depois de `clientjwt rotate --now`: o token antigo segue válido, o novo sai com `cli-v<n+1>` e o JWKS publica as duas versões | Qualquer verificação falha |
 | `reconnection` | `N` do CSV | Um volume grande de blocos acumulados offline é drenado por inteiro | Algum dongle termina com `contiguous_seq` diferente do HEAD |
 | `load` | `N` do CSV | Mede latências por rota com muitos dongles em regime | Só se houver alguma resposta 5xx |
 | `knee` | `N` do CSV (cicla) | Sobe a carga em degraus até achar o limite | Nunca falha: só reporta a capacidade |
@@ -183,7 +185,7 @@ e `engine_on_s > 0`. Como o cálculo roda no `worker` (papel `tccelta_worker`), 
 ## `trip-http`
 
 Prova as rotas de viagem (API2) de ponta a ponta, sem inserir em `gold.trip`: tudo passa por `POST /v1/viagens`, `GET /v1/viagens/{id}` e
-`GET /v1/viagens/{id}/analise`. Exige a API com `ANALISE_SEM_AUTH=true` (o `compose.test.yaml` já liga). Usa o primeiro dongle do CSV
+`GET /v1/viagens/{id}/analise`. Com `--client id:arquivo:ok` (o `make e2e` passa), obtém o token de client credentials e o usa como Bearer, como o servidor do Next.js; sem `--client`, exige a API com `ANALISE_SEM_AUTH=true`. O `compose.test.yaml` deixa o modo aberto desligado. Usa o primeiro dongle do CSV
 e uma categoria nova por execução (o nome do motorista é único por categoria).
 
 1. Erros de contrato: dongle sem estado (`404 dongle_desconhecido`), combustível `personalizado` (`400 entrada_invalida`), id que não é UUID (`404`).
@@ -193,6 +195,29 @@ e uma categoria nova por execução (o nome do motorista é único por categoria
    `pronta` com a geração resolvida e dados.
 4. Boot que nunca chega: a análise antes da hora dá `409 analise_indisponivel`; depois a viagem fica `pronta` e provisória, com o aviso
    `sem_leituras`, distância e rota nulas e listas vazias.
+
+## `client-auth` e `client-auth-rotation`
+
+Provam o client credentials (API3) de ponta a ponta, com o Redis, o KMS e o Vault do `compose.test.yaml`. Os clientes vêm de
+`--client id:arquivo_do_segredo:ok|invalido` (repetível; o primeiro `ok` é o principal) e o `make e2e` os cria com
+`tccelta-kms client create|rotate|revoke`: `e2e-cli` (principal), `e2e-rot` (segredo novo `ok`, segredo antigo `invalido`) e `e2e-rev`
+(revogado, `invalido`). A API do teste usa uma progressão curta (`TOKEN_BLOQUEIO_INICIAL=2s`, `TETO=8s`, `ESQUECER=6s`).
+
+`client-auth`:
+
+1. `200` com `access_token`, `Bearer`, `expires_in`, `Cache-Control: no-store` e `Pragma: no-cache`; claims `aud` `tccelta-analise`,
+   `sub` do cliente e sem `cs`.
+2. O JWKS só tem chaves `cli-v<n>` e o token verifica com a chave do `kid`.
+3. Rotas de viagem: `token_ausente`, `token_invalido` e `404 viagem_desconhecida` com token válido.
+4. O token de cliente é recusado em `/v1/dongles/blocos` e `/v1/dongles/{id}/confirmacao`.
+5. `400` para `grant_type` errado, `scope` e `Content-Type`.
+6. Segredo errado, cliente desconhecido, segredo antigo, cliente revogado e Basic ausente dão a mesma resposta `401 invalid_client`.
+7. Seis falhas do par: a 6ª é `401` e a seguinte é `429` com `Retry-After`; depois dele, a credencial certa volta a funcionar.
+8. As séries `tccelta_auth_*` existem e nenhuma usa `client_id` ou IP como rótulo.
+
+Com `--token-file`, grava o token emitido. `client-auth-rotation` roda depois de `clientjwt rotate --now` (serviço `kms-rotacao` do
+`compose.test.yaml`): o token antigo segue válido até `exp`, o token novo sai com a chave nova e é aceito sem reiniciar a API (ela recarrega
+as chaves ao ver um `kid` desconhecido, no máximo a cada 30 s) e o JWKS publica as duas versões.
 
 ## `reconnection`
 

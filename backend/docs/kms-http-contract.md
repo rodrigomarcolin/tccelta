@@ -85,6 +85,53 @@ Resposta `200`:
 {"2":"<base64 de 32 bytes>","3":"<base64 de 32 bytes>"}
 ```
 
+## `POST /v1/clients/verify`
+
+Confere o segredo de um cliente de *client credentials* (token de `POST /v1/auth/token` na API). O Vault guarda só
+`SHA-256(sal ‖ segredo)` em `kv-clientes/data/clients/<client_id>`; o KMS lê o registro, recalcula o hash e compara com
+`subtle.ConstantTimeCompare`. Cliente inexistente ou revogado compara contra um registro-fantasma, para executar o mesmo
+trabalho: segredo errado, cliente desconhecido e cliente revogado dão o mesmo `{"valid":false}`. Não há cache de registro no
+KMS, então troca (`client rotate`) e revogação valem na hora.
+
+**Exceção às convenções:** `secret` é **texto** (o valor ASCII de 43 caracteres), não base64. `client_id` segue
+`^[a-z0-9][a-z0-9-]{2,63}$` e `secret` tem de 1 a 128 caracteres; fora disso, `400 entradas_invalidas`.
+
+Requisição:
+
+```json
+{"client_id":"next-feira","secret":"0123456789abcdefghijklmnopqrstuvwxyzABCDEFG"}
+```
+
+Resposta `200`:
+
+```json
+{"valid":true}
+```
+
+## `POST /v1/client-jwt/sign`
+
+Igual a `POST /v1/jwt/sign`, com a chave Ed25519 `cli` dos tokens de cliente (`kid` `cli-v<versao>`), que tem rotação própria.
+Requisição e resposta têm o mesmo formato:
+
+```json
+{"input":"YWJj"}
+```
+
+```json
+{"signature":"<base64 de 64 bytes>","version":2}
+```
+
+## `GET /v1/client-jwt/keys`
+
+Igual a `GET /v1/jwt/keys`, para a chave `cli`. A API carrega estas chaves no boot, a cada 10 min e por `kid` desconhecido
+(no máximo a cada 30 s); são as que o `GET /.well-known/jwks.json` publica.
+
+Resposta `200`:
+
+```json
+{"2":"<base64 de 32 bytes>"}
+```
+
 ## Saúde
 
 | Rota | Resposta |
@@ -101,7 +148,7 @@ para o healthcheck do contêiner. Em `:9300` fica também `GET /metricas` (séri
 |---|---|---|
 | 400 | `corpo_malformado` | JSON inválido, campo desconhecido ou conteúdo extra |
 | 400 | `chave_invalida` | `key` fora do alfabeto/tamanho |
-| 400 | `entradas_invalidas` | lista vazia/grande demais, base64 inválido, tamanho de item, `tags` ≠ `entradas` |
+| 400 | `entradas_invalidas` | lista vazia/grande demais, base64 inválido, tamanho de item, `tags` ≠ `entradas`; em `/v1/clients/verify`, `client_id` fora do formato ou `secret` fora de 1 a 128 caracteres |
 | 401 | `cliente_nao_autenticado` | sem certificado de cliente verificado (fora do dev) |
 | 413 | `corpo_grande` | corpo acima de 1 MiB |
 | 415 | `tipo_conteudo` | `Content-Type` diferente de `application/json` |

@@ -34,6 +34,9 @@ flowchart LR
 | `POST /v1/blocks/verify` | `{key, inputs[], tags[]}` ⇒ `{valid[]}`: verifica a tag de 32 B com `K_rec`, numa só chamada ao Vault (`batch_input`); tag errada é `false`, não erro |
 | `POST /v1/jwt/sign` | `{input}` (signing string) ⇒ `{signature (64 B), version}` |
 | `GET /v1/jwt/keys` | `{"<versão>": "<chave pública Ed25519 em base64>"}` das versões ainda válidas |
+| `POST /v1/clients/verify` | `{client_id, secret}` ⇒ `{valid}`: confere o segredo de um cliente de *client credentials* contra `SHA-256(sal ‖ segredo)` guardado no KV `kv-clientes`, em tempo constante; segredo errado, cliente desconhecido e revogado dão o mesmo `valid:false`. `secret` é texto (exceção à regra "binário em base64"), de 1 a 128 caracteres |
+| `POST /v1/client-jwt/sign` | como `/v1/jwt/sign`, com a chave Ed25519 `cli` (kid `cli-v<n>`, rotação própria) |
+| `GET /v1/client-jwt/keys` | como `/v1/jwt/keys`, para a chave `cli` |
 | `GET /saude/viva`, `GET /saude/pronta` | pronta = token do Vault válido e disjuntor fechado; também em `KMS_METRICAS_ENDERECO` (`:9300`) junto com `/metricas` |
 
 Convenções: JSON UTF-8, `Content-Type: application/json`, campos desconhecidos recusados, base64 padrão, corpo ≤ 1 MiB, listas de 1 a 256 itens e itens de 1 a 4096 B, `key` com `[A-Za-z0-9_-]{1,64}`. Erros `problem+json`: `corpo_malformado`, `chave_invalida`, `entradas_invalidas` (400), `cliente_nao_autenticado` (401), `cliente_nao_autorizado` (403), `corpo_grande` (413), `tipo_conteudo` (415), `kms_indisponivel` (503, com `Retry-After`), `nao_pronto`, `erro_interno`. Na API, erro de rede/timeout/429/5xx vira `ErrKMSUnavailable` (503 `kms_indisponivel`); outros 4xx são bug de contrato (500). Cliente da API: `KMS_TIMEOUT` 2 s, `KMS_MAX_CONCORRENCIA` 32, uma nova tentativa para falha de rede.
@@ -88,9 +91,22 @@ Em duas etapas, nesta ordem: KMS importa as chaves e grava `<out>/<devid>/record
 
 `Rotator` (`kms/vault/rotation.go`) sobre `transit-jwt/keys/jwt`: `Check(force)` rotaciona se a versão mais nova tem idade ≥ `JWT_ROTACAO_PERIODO` (720 h) ou com `--now`, e depois expurga (sobe `min_decryption_version`) as versões cujo sucessor tem mais que `JWT_VALIDADE` (+ folga) de idade, para que tokens ainda válidos continuem aceitos. `tccelta-kms jwt rotate [--now]` roda uma vez; `jwt schedule` (serviço `jwt-rotacao`) repete a cada `JWT_ROTACAO_VERIFICACAO` (1 h). A API não rotaciona nem expurga; ela revalida as chaves públicas (ver `08`). Métricas `tccelta_kmssvc_jwt_rotations_total` e `tccelta_kmssvc_jwt_last_check_ok`.
 
+## Client credentials (API3 da análise de viagem)
+
+O servidor do Next.js obtém um JWT com `POST /v1/auth/token` (RFC 6749 §4.4) e o usa como Bearer nas rotas `/v1/viagens*`. A API continua sem credencial do Vault; tudo passa pelo KMS.
+
+- **Segredo:** 32 bytes de `crypto/rand` em base64url sem padding (43 caracteres). O Vault guarda `{algo: "sha256-v1", salt (16 B), hash = SHA-256(salt ‖ secret), status, created_at}` no KV v2 `kv-clientes`, caminho `clients/<client_id>` (`client_id` com `^[a-z0-9][a-z0-9-]{2,63}$`). Revogar grava `status: revoked` e apaga `hash` e `salt` (o histórico fica nas versões do KV). Sem cache no KMS: troca e revogação valem na hora.
+- **Chave de assinatura:** `transit-jwt/keys/cli` (Ed25519, `exportable=false`), no mount já existente; o nome separa as políticas. `Rotator` próprio (`clientjwt rotate|schedule`, serviço `jwt-cli-rotacao`, mesmo AppRole do `jwt-rotacao`), com `Validity = CLI_JWT_VALIDADE + JWT_FOLGA + 10 min`.
+- **Comandos** (token do provisionador, como `provision`): `tccelta-kms client create|rotate|revoke --id ID [--out FILE]`. `create` usa `cas=0` e falha se o cliente existe; `rotate` exige cliente ativo e troca segredo e sal; `revoke` é idempotente. O segredo sai uma vez (stdout ou arquivo 0400) e nunca vai a log, métrica nem erro.
+- **Políticas:** `tccelta-kms` ganha `transit-jwt/sign/cli` (update), `transit-jwt/keys/cli` (read) e `kv-clientes/data/clients/*` (read), com negações para `transit-jwt/keys/cli/*` e `kv-clientes/metadata|delete|destroy|undelete/*`; `tccelta-rotacao-jwt` ganha `keys/cli` (read), `keys/cli/rotate` e `keys/cli/config` (update); `tccelta-provisionador` ganha `kv-clientes/data/clients/*` (create, update, read), sem delete. Os papéis AppRole não mudam. O `vault-bootstrap` habilita `kv-clientes`, cria a chave `cli` e grava as políticas (idempotente). O script `politicas-negativas.sh` (parte do `make e2e`) confere no Vault real que o `kms` não escreve no KV, não lê metadata e não rotaciona a `cli`.
+- **Configuração:** `VAULT_MOUNT_CLIENTES` (`kv-clientes`), `VAULT_CHAVE_CLI` (`cli`), `CLI_JWT_VALIDADE` (`30m`), `CLI_JWT_ROTACAO_PERIODO` (`720h`). Métrica `tccelta_kmssvc_client_verify_total{result}`.
+- **Provisionamento:** dev, `make seed-client` (segredo em `deploy/segredos/analise_cliente_secret`); prodlike, `client create` pelo `kms-ferramentas` (o `compose.prodlike.yaml` ajusta `VAULT_ADDR` e `VAULT_CACERT`); produção, `client create` no host do KMS.
+
+A API (`internal/usecase/clienttoken`, `internal/adapter/jwt/client_{issuer,validator}.go`, `internal/adapter/authblock`, `internal/http/{token,jwks,authentication_analysis}.go`) está descrita em `backend/docs/kms.md` e em `.spec/analise-de-viagem/entregas/API3-client-credentials.md`.
+
 ## Configuração do KMS
 
-Variáveis: `AMBIENTE`, `KMS_ENDERECO`, `KMS_METRICAS_ENDERECO`, `KMS_TLS_CERT`, `KMS_TLS_KEY`, `KMS_TLS_CLIENT_CA`, `KMS_TLS_CLIENTE_CN`, `VAULT_ADDR`, `VAULT_CACERT`, `VAULT_CLIENT_CERT`, `VAULT_CLIENT_KEY`, `VAULT_APPROLE_ROLE_ID_ARQUIVO`, `VAULT_APPROLE_SECRET_ID_ARQUIVO`, `VAULT_TOKEN_ARQUIVO`, `VAULT_TIMEOUT` (2 s), `VAULT_RETENTATIVAS` (1), `VAULT_MAX_SIMULTANEAS` (32), `VAULT_MOUNT_AUTH|REC|JWT`, `VAULT_CHAVE_JWT`, `JWT_VALIDADE`, `JWT_FOLGA`, `JWT_ROTACAO_PERIODO`, `JWT_ROTACAO_VERIFICACAO`. Tabela completa em `backend/docs/kms.md`.
+Variáveis: `AMBIENTE`, `KMS_ENDERECO`, `KMS_METRICAS_ENDERECO`, `KMS_TLS_CERT`, `KMS_TLS_KEY`, `KMS_TLS_CLIENT_CA`, `KMS_TLS_CLIENTE_CN`, `VAULT_ADDR`, `VAULT_CACERT`, `VAULT_CLIENT_CERT`, `VAULT_CLIENT_KEY`, `VAULT_APPROLE_ROLE_ID_ARQUIVO`, `VAULT_APPROLE_SECRET_ID_ARQUIVO`, `VAULT_TOKEN_ARQUIVO`, `VAULT_TIMEOUT` (2 s), `VAULT_RETENTATIVAS` (1), `VAULT_MAX_SIMULTANEAS` (32), `VAULT_MOUNT_AUTH|REC|JWT`, `VAULT_CHAVE_JWT`, `VAULT_MOUNT_CLIENTES`, `VAULT_CHAVE_CLI`, `JWT_VALIDADE`, `JWT_FOLGA`, `JWT_ROTACAO_PERIODO`, `JWT_ROTACAO_VERIFICACAO`, `CLI_JWT_VALIDADE`, `CLI_JWT_ROTACAO_PERIODO`, `KMS_SAUDE_ROTACAO`. Tabela completa em `backend/docs/kms.md`.
 
 ## Testes
 

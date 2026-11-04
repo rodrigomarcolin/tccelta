@@ -31,7 +31,8 @@ uma stack isolada para o `make e2e`. Ela é descrita no [README](../README.md#st
 | Dongles de teste (`seed-dev`, `provision new`, `scenario`) | Funcionam | O KMS os permite, mas o `kms-ferramentas` não foi ajustado ao Vault em TLS: **na prática não funcionam** | **Recusados** pelo KMS (`provision new` e `importar` do CSV) |
 | Registro de chave com `alg none` | Aceito | Aceito | **Recusado** |
 | Perfil de bloco `none` (`PERMITIR_PERFIL_NONE`) | Pode ser ligado | Pode ser ligado | **Proibido**: configuração inválida |
-| Rotas de viagem sem autenticação (`ANALISE_SEM_AUTH`) | Desligadas por padrão; podem ser ligadas | Podem ser ligadas | **Proibido**: configuração inválida (até a API3) |
+| Rotas de viagem sem autenticação (`ANALISE_SEM_AUTH`) | Desligadas por padrão (as rotas exigem o Bearer de client credentials); podem ser ligadas até a INT2 remover o modo | Mesma regra do dev | **Proibido**: configuração inválida |
+| Cliente de client credentials (`POST /v1/auth/token`) | `make seed-client` cria `next-dev` e grava o segredo em `deploy/segredos/analise_cliente_secret` | `client create` pelo `kms-ferramentas` do overlay (Vault em HTTPS: `compose.prodlike.yaml` ajusta `VAULT_ADDR` e `VAULT_CACERT`) | `client create --out` no host do KMS, com o token do provisionador; o operador entrega o segredo ao Next.js como variável de ambiente de runtime |
 
 Na coluna **prod**, as linhas "Identidade do cliente do KMS", "Dongles de teste", "`alg none`" e "Perfil de bloco
 `none`" são regras **do código**, que valem com `AMBIENTE=producao`. As demais descrevem o desenho do deploy e
