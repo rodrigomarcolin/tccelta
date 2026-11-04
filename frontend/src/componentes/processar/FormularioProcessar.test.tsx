@@ -194,6 +194,16 @@ describe("envio", () => {
     expect(await screen.findByText("Dongle não cadastrado.")).toBeInTheDocument();
   });
 
+  it("404 boot_desconhecido aparece no campo boot", async () => {
+    fetchCom({ status: 404, corpo: { codigo: "boot_desconhecido" } });
+    renderComTema(<FormularioProcessar irPara={vi.fn()} />);
+    await preencherBoot();
+    await enviar();
+    expect(
+      await screen.findByText("Este boot não existe para o dongle informado. Confira o número."),
+    ).toBeInTheDocument();
+  });
+
   it("começa com o dongle configurado no servidor e envia esse valor", async () => {
     const f = fetchCom({ status: 202, corpo: { viagem_id: "x" } });
     renderComTema(<FormularioProcessar dongleInicial={7} irPara={vi.fn()} />);

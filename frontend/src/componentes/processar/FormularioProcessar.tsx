@@ -116,6 +116,9 @@ export function erroDaCriacao(
   if (status === 404 && codigo === "dongle_desconhecido") {
     return { dongle: "Dongle não cadastrado." };
   }
+  if (status === 404 && codigo === "boot_desconhecido") {
+    return { bootId: "Este boot não existe para o dongle informado. Confira o número." };
+  }
   if (codigo === "credencial_invalida") {
     return { geral: "O servidor não aceitou a credencial do sistema. Chame a organização." };
   }
