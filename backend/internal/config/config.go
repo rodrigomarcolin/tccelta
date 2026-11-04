@@ -70,6 +70,13 @@ type WorkerConfig struct {
 	MaxDriftPPM        float64
 	SpanMin            time.Duration
 	MinHalfWidthMs     float64
+
+	// Viagens (API1).
+	TripWaitNoBatch         time.Duration
+	TripFinalLimit          time.Duration
+	TripEvalInterval        time.Duration
+	TripProvisionalInterval time.Duration
+	TripCalcTimeout         time.Duration
 }
 
 type Config struct {
@@ -219,13 +226,18 @@ func LoadFrom(env func(string) string) (Config, error) {
 		RedisTimeout:            l.dur("REDIS_TIMEOUT", 50*time.Millisecond),
 	}
 	c.Worker = WorkerConfig{
-		Concurrency:        l.integer("WORKER_CONCORRENCIA", 4),
-		PollInterval:       l.dur("WORKER_INTERVALO_POLL", 30*time.Second),
-		ExpirationInterval: l.dur("WORKER_INTERVALO_EXPIRACAO", 60*time.Second),
-		GroupWindow:        l.dur("ANCORA_JANELA_GRUPO", 10*time.Minute),
-		MaxDriftPPM:        l.float("DERIVA_MAX_PPM", 40),
-		SpanMin:            l.dur("ANCORA_SPAN_MIN", time.Hour),
-		MinHalfWidthMs:     l.float("MEIA_LARGURA_MIN_MS", 0.5),
+		Concurrency:             l.integer("WORKER_CONCORRENCIA", 4),
+		PollInterval:            l.dur("WORKER_INTERVALO_POLL", 30*time.Second),
+		ExpirationInterval:      l.dur("WORKER_INTERVALO_EXPIRACAO", 60*time.Second),
+		GroupWindow:             l.dur("ANCORA_JANELA_GRUPO", 10*time.Minute),
+		MaxDriftPPM:             l.float("DERIVA_MAX_PPM", 40),
+		SpanMin:                 l.dur("ANCORA_SPAN_MIN", time.Hour),
+		MinHalfWidthMs:          l.float("MEIA_LARGURA_MIN_MS", 0.5),
+		TripWaitNoBatch:         l.dur("VIAGEM_ESPERA_SEM_LOTE", 10*time.Second),
+		TripFinalLimit:          l.dur("VIAGEM_LIMITE_FINAL", 20*time.Second),
+		TripEvalInterval:        l.dur("VIAGEM_INTERVALO_AVALIACAO", time.Second),
+		TripProvisionalInterval: l.dur("VIAGEM_INTERVALO_PROVISORIAS", 5*time.Second),
+		TripCalcTimeout:         l.dur("VIAGEM_TIMEOUT_CALCULO", 60*time.Second),
 	}
 	switch c.Environment {
 	case "dev", "prodlike", "producao":
@@ -234,6 +246,16 @@ func LoadFrom(env func(string) string) (Config, error) {
 	}
 	if c.Environment == "producao" && c.AllowNoneProfile {
 		l.errs = append(l.errs, "PERMITIR_PERFIL_NONE é proibido em AMBIENTE=producao")
+	}
+	w := c.Worker
+	if w.TripWaitNoBatch <= 0 || w.TripFinalLimit <= 0 || w.TripEvalInterval <= 0 || w.TripProvisionalInterval <= 0 || w.TripCalcTimeout <= 0 {
+		l.errs = append(l.errs, "VIAGEM_*: as durações devem ser maiores que zero")
+	}
+	if w.TripFinalLimit <= w.TripWaitNoBatch {
+		l.errs = append(l.errs, "VIAGEM_LIMITE_FINAL deve ser maior que VIAGEM_ESPERA_SEM_LOTE")
+	}
+	if w.TripEvalInterval > w.TripWaitNoBatch {
+		l.errs = append(l.errs, "VIAGEM_INTERVALO_AVALIACAO não pode ser maior que VIAGEM_ESPERA_SEM_LOTE")
 	}
 	if c.Protocol.MaxBatchBlocks < 1 || c.Protocol.MaxBatchBlocks > 255 {
 		l.errs = append(l.errs, "LOTE_MAX_BLOCOS fora de 1..255")

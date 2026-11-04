@@ -122,6 +122,10 @@ services:
     environment:
       BANCO_URL: postgres://tccelta_worker@banco:5432/tccelta?sslmode=disable
       BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_worker
+      VIAGEM_ESPERA_SEM_LOTE: 3s
+      VIAGEM_LIMITE_FINAL: 8s
+      VIAGEM_INTERVALO_AVALIACAO: 500ms
+      VIAGEM_INTERVALO_PROVISORIAS: 2s
     secrets: [pg_senha_worker]
     depends_on: { migrar: { condition: service_completed_successfully } }
     networks: [dados]

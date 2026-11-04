@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func env(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
@@ -50,5 +51,45 @@ func TestKMS(t *testing.T) {
 	}
 	if c.KMS.URL != "http://kms:8300" || c.KMS.Timeout.Milliseconds() != 500 || c.KMS.MaxConcurrency != 8 || c.KMS.VerifyBatch != 32 {
 		t.Fatalf("%+v", c.KMS)
+	}
+}
+
+func TestTripDefaults(t *testing.T) {
+	c, err := LoadFrom(env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := c.Worker
+	if w.TripWaitNoBatch != 10*time.Second || w.TripFinalLimit != 20*time.Second || w.TripEvalInterval != time.Second ||
+		w.TripProvisionalInterval != 5*time.Second || w.TripCalcTimeout != 60*time.Second {
+		t.Fatalf("%+v", w)
+	}
+}
+
+func TestTripOverrides(t *testing.T) {
+	c, err := LoadFrom(env(map[string]string{"VIAGEM_ESPERA_SEM_LOTE": "3s", "VIAGEM_LIMITE_FINAL": "8s", "VIAGEM_INTERVALO_AVALIACAO": "500ms",
+		"VIAGEM_INTERVALO_PROVISORIAS": "2s", "VIAGEM_TIMEOUT_CALCULO": "90s"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := c.Worker
+	if w.TripWaitNoBatch != 3*time.Second || w.TripFinalLimit != 8*time.Second || w.TripEvalInterval != 500*time.Millisecond ||
+		w.TripProvisionalInterval != 2*time.Second || w.TripCalcTimeout != 90*time.Second {
+		t.Fatalf("%+v", w)
+	}
+}
+
+func TestTripInvalid(t *testing.T) {
+	for name, m := range map[string]map[string]string{
+		"valor zero":                  {"VIAGEM_INTERVALO_PROVISORIAS": "0s"},
+		"valor negativo":              {"VIAGEM_TIMEOUT_CALCULO": "-1s"},
+		"limite final <= espera":      {"VIAGEM_ESPERA_SEM_LOTE": "20s", "VIAGEM_LIMITE_FINAL": "20s"},
+		"limite final < espera":       {"VIAGEM_ESPERA_SEM_LOTE": "30s"},
+		"avaliação > espera sem lote": {"VIAGEM_INTERVALO_AVALIACAO": "11s"},
+		"duração ilegível":            {"VIAGEM_LIMITE_FINAL": "vinte"},
+	} {
+		if _, err := LoadFrom(env(m)); err == nil {
+			t.Errorf("%s: esperava erro", name)
+		}
 	}
 }
