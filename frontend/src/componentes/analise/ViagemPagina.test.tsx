@@ -358,6 +358,50 @@ describe("rede e recuo", () => {
     expect(screen.queryByText(/Servidor ocupado/)).toBeNull();
   });
 
+  it("credencial_invalida pausa o polling pelo prazo e avisa", async () => {
+    let recusada = true;
+    instalar({
+      status: () =>
+        recusada
+          ? {
+              status: 502,
+              corpo: { codigo: "credencial_invalida", title: "c", status: 502 },
+              retryAfter: "60",
+            }
+          : { status: 200, corpo: status("pendente") },
+      analise: () => ({ status: 409 }),
+    });
+    await montar();
+    expect(
+      screen.getByText("O servidor não aceitou a credencial do sistema. Chame a organização."),
+    ).toBeInTheDocument();
+    await avancar(59_000);
+    expect(contar("status")).toBe(1);
+    recusada = false;
+    await avancar(1000);
+    expect(contar("status")).toBe(2);
+    expect(screen.queryByText(/credencial/)).toBeNull();
+  });
+
+  it("bloqueado mostra o tempo restante e pausa o polling", async () => {
+    instalar({
+      status: () => ({
+        status: 429,
+        corpo: { codigo: "bloqueado", title: "b", status: 429 },
+        retryAfter: "20",
+      }),
+      analise: () => ({ status: 409 }),
+    });
+    await montar();
+    expect(
+      screen.getByText("Acesso temporariamente bloqueado. Tente de novo em 20 s."),
+    ).toBeInTheDocument();
+    await avancar(19_000);
+    expect(contar("status")).toBe(1);
+    await avancar(1000);
+    expect(contar("status")).toBe(2);
+  });
+
   it("429 na análise também adia", async () => {
     instalar({
       status: () => ({ status: 200, corpo: status("pronta") }),

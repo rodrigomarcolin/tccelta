@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ehProblema, type Analise } from "@/contrato/tipos";
 import { criarApiCliente } from "./api-cliente";
+import type { GerenciadorToken } from "./token";
 import { construirAnalise } from "./mock/analises";
 import type { CenarioId } from "./mock/cenarios";
 import { violacoesDoContrato } from "@/testes/contrato";
@@ -20,7 +21,13 @@ const CENARIOS: CenarioId[] = [
   "intervalo",
 ];
 
-type Chamada = { metodo: string; url: string; tipo: string | undefined; corpo: string };
+type Chamada = {
+  metodo: string;
+  url: string;
+  tipo: string | undefined;
+  auth: string | undefined;
+  corpo: string;
+};
 type Resposta = {
   status: number;
   tipo?: string;
@@ -44,6 +51,8 @@ let servidor: Server;
 let base: string;
 let chamadas: Chamada[];
 let proxima: Resposta;
+const TOKEN = "tk-sentinela";
+let tokens: GerenciadorToken;
 let log: ReturnType<typeof vi.fn<(mensagem: string) => void>>;
 
 beforeAll(async () => {
@@ -55,6 +64,7 @@ beforeAll(async () => {
         metodo: req.method ?? "",
         url: req.url ?? "",
         tipo: req.headers["content-type"],
+        auth: req.headers.authorization,
         corpo: Buffer.concat(partes).toString("utf8"),
       });
       const r = proxima;
@@ -82,9 +92,13 @@ beforeEach(() => {
   chamadas = [];
   proxima = { status: 200, corpo: "{}" };
   log = vi.fn<(mensagem: string) => void>();
+  tokens = {
+    getToken: vi.fn(async () => ({ ok: true as const, token: TOKEN })),
+    invalidate: vi.fn(),
+  };
 });
 
-const cliente = (timeoutMs = 2000) => criarApiCliente({ baseUrl: base, timeoutMs, log });
+const cliente = (timeoutMs = 2000) => criarApiCliente({ baseUrl: base, timeoutMs, tokens, log });
 
 describe("criar (POST /v1/viagens)", () => {
   const corpo = {
@@ -258,7 +272,7 @@ describe("falhas de transporte", () => {
   });
 
   it("conexão recusada vira 503 api_indisponivel", async () => {
-    const morto = criarApiCliente({ baseUrl: "http://127.0.0.1:1", timeoutMs: 1000, log });
+    const morto = criarApiCliente({ baseUrl: "http://127.0.0.1:1", timeoutMs: 1000, tokens, log });
     const r = await morto.analise(ID);
     expect(r.status).toBe(503);
     expect(r.corpo).toMatchObject({ codigo: "api_indisponivel" });
@@ -274,12 +288,102 @@ describe("falhas de transporte", () => {
 describe("opções de fetch", () => {
   it("usa cache no-store, timeout e a base informada", async () => {
     const fetchFn = vi.fn(async () => new Response("{}", { status: 200 }));
-    const c = criarApiCliente({ baseUrl: "http://api:8080", timeoutMs: 1234, fetchFn });
+    const c = criarApiCliente({ baseUrl: "http://api:8080", timeoutMs: 1234, tokens, fetchFn });
     await c.status(ID);
     const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(`http://api:8080/v1/viagens/${ID}`);
     expect(init.cache).toBe("no-store");
     expect(init.signal).toBeInstanceOf(AbortSignal);
-    expect(init.headers).not.toHaveProperty("Authorization");
+    expect(init.headers).toHaveProperty("Authorization", `Bearer ${TOKEN}`);
+  });
+});
+
+describe("Bearer e erros de credencial", () => {
+  it("toda chamada leva o Bearer do gerenciador, em GET e POST", async () => {
+    proxima = { status: 202, corpo: JSON.stringify({ viagem_id: ID, status: "pendente" }) };
+    await cliente().criar({});
+    await cliente().status(ID);
+    await cliente().analise(ID);
+    expect(chamadas.map((c) => c.auth)).toEqual([
+      `Bearer ${TOKEN}`,
+      `Bearer ${TOKEN}`,
+      `Bearer ${TOKEN}`,
+    ]);
+  });
+
+  it("o token e o segredo não vão ao log nem à resposta de erro", async () => {
+    proxima = { status: 500, corpo: "{}" };
+    const r = await cliente().status(ID);
+    expect(JSON.stringify(r)).not.toContain(TOKEN);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(TOKEN);
+  });
+
+  it("401: invalida, renova e repete uma vez com o token novo", async () => {
+    let n = 0;
+    tokens = {
+      getToken: vi.fn(async () => ({ ok: true as const, token: `t${++n}` })),
+      invalidate: vi.fn(),
+    };
+    let respostas = 0;
+    const fetchFn = vi.fn(async (_u: unknown, init?: RequestInit) => {
+      respostas++;
+      const auth = (init?.headers as Record<string, string>).Authorization;
+      return respostas === 1
+        ? new Response(problema(401, "token_expirado"), {
+            status: 401,
+            headers: { "Content-Type": "application/problem+json" },
+          })
+        : new Response(JSON.stringify({ ok: auth }), { status: 200 });
+    });
+    const c = criarApiCliente({ baseUrl: base, timeoutMs: 1000, tokens, fetchFn, log });
+    const r = await c.status(ID);
+    expect(r).toEqual({ status: 200, corpo: { ok: "Bearer t2" } });
+    expect(tokens.invalidate).toHaveBeenCalledExactlyOnceWith("t1");
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("segundo 401 vira 502 credencial_invalida, sem terceira tentativa", async () => {
+    proxima = {
+      status: 401,
+      tipo: "application/problem+json",
+      corpo: problema(401, "token_invalido"),
+    };
+    const r = await cliente().criar({ a: 1 });
+    expect(r.status).toBe(502);
+    expect(r.corpo).toMatchObject({ codigo: "credencial_invalida" });
+    expect(chamadas).toHaveLength(2);
+    expect(tokens.getToken).toHaveBeenCalledTimes(2);
+  });
+
+  it("403 vira 502 credencial_invalida, sem repetir", async () => {
+    proxima = { status: 403, tipo: "application/problem+json", corpo: problema(403, "proibido") };
+    const r = await cliente().status(ID);
+    expect(r.status).toBe(502);
+    expect(r.corpo).toMatchObject({ codigo: "credencial_invalida" });
+    expect(chamadas).toHaveLength(1);
+  });
+
+  it("falha do gerenciador é devolvida sem chamar a API de viagens", async () => {
+    tokens = {
+      getToken: vi.fn(async () => ({
+        ok: false as const,
+        falha: {
+          status: 429,
+          corpo: { type: "x", title: "bloqueado", status: 429, codigo: "bloqueado" },
+          retryAfter: 42,
+        },
+      })),
+      invalidate: vi.fn(),
+    };
+    const r = await cliente().status(ID);
+    expect(r).toMatchObject({ status: 429, retryAfter: 42, corpo: { codigo: "bloqueado" } });
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("timeout depois do token não repete o pedido", async () => {
+    proxima = { status: 200, corpo: "{}", atrasoMs: 300 };
+    const r = await cliente(40).criar({});
+    expect(r.status).toBe(503);
+    expect(chamadas).toHaveLength(1);
   });
 });

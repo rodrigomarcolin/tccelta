@@ -10,7 +10,7 @@ import {
   POLLING_PROVISORIA_MS,
   POLLING_RECUO_MAX_MS,
 } from "@/config";
-import type { Analise, StatusResposta } from "@/contrato/tipos";
+import { ehProblema, type Analise, type StatusResposta } from "@/contrato/tipos";
 import { AlternarTema } from "@/componentes/ui/Tema";
 import { AnaliseView } from "./AnaliseView";
 import {
@@ -48,6 +48,10 @@ const INICIAL: Estado = {
 };
 
 const AVISO_REDE = "Sem conexão com o servidor. Tentando novamente…";
+
+const AVISO_CREDENCIAL = "O servidor não aceitou a credencial do sistema. Chame a organização.";
+const avisoBloqueado = (s: number) =>
+  `Acesso temporariamente bloqueado. Tente de novo em ${Math.ceil(s)} s.`;
 
 const formatarHora = (iso: string): string | null => {
   const d = new Date(iso);
@@ -167,6 +171,15 @@ export function ViagemPagina({ id, irPara = irParaPadrao }: Props) {
 
     /** Trata o que é comum às duas rotas. Devolve `true` se já decidiu o que fazer. */
     const falhaComum = (r: Lida): boolean => {
+      // Credencial do sistema recusada ou acesso bloqueado: o servidor já segurou
+      // as tentativas até o prazo; o polling pausa por esse tempo e não insiste.
+      const codigo = ehProblema(r.corpo) ? r.corpo.codigo : undefined;
+      if (codigo === "credencial_invalida" || codigo === "bloqueado") {
+        const s = Math.max(1, r.retryAfter ?? 60);
+        mudar({ aviso: codigo === "bloqueado" ? avisoBloqueado(s) : AVISO_CREDENCIAL });
+        agendar(s * 1000);
+        return true;
+      }
       if (r.status === 401) {
         sessaoExpirou();
         return true;

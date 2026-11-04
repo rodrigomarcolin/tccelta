@@ -116,6 +116,16 @@ export function erroDaCriacao(
   if (status === 404 && codigo === "dongle_desconhecido") {
     return { dongle: "Dongle não cadastrado." };
   }
+  if (codigo === "credencial_invalida") {
+    return { geral: "O servidor não aceitou a credencial do sistema. Chame a organização." };
+  }
+  if (codigo === "bloqueado") {
+    const s = Number(retryAfter);
+    return {
+      geral: `Acesso temporariamente bloqueado. Tente de novo em ${Number.isFinite(s) && s > 0 ? `${Math.ceil(s)} s` : "instantes"}.`,
+      repetir: true,
+    };
+  }
   if (status === 401) return { geral: "Sessão expirada.", sessaoExpirada: true };
   if (status === 403) return { geral: "Esta conta não tem permissão de operador." };
   if (status === 429) {

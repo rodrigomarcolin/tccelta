@@ -90,24 +90,32 @@ describe("sessão fora de OPERATOR_EMAILS", () => {
   });
 });
 
+const tokenOk = () =>
+  new Response(JSON.stringify({ access_token: "jwt-x", token_type: "Bearer", expires_in: 1800 }), {
+    status: 200,
+  });
+
 describe("com a fonte api", () => {
   beforeEach(() => {
     auth.mockResolvedValue({ user: { email: "ANA@usp.br" } });
     vi.stubEnv("ANALISE_FONTE_DADOS", "api");
     vi.stubEnv("ANALISE_API_URL", "http://api.teste:8080");
     vi.stubEnv("ANALISE_DONGLE_ID", "3");
+    vi.stubEnv("ANALISE_CLIENT_ID", "next-test");
+    vi.stubEnv("ANALISE_CLIENT_SECRET", "segredo-de-teste");
   });
 
   it("repassa Retry-After e o problema da API", async () => {
-    const f = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({ type: "t", title: "limite_taxa", status: 429, codigo: "limite_taxa" }),
-          {
-            status: 429,
-            headers: { "Content-Type": "application/problem+json", "Retry-After": "7" },
-          },
-        ),
+    const f = vi.fn(async (url: string | URL | Request) =>
+      String(url).endsWith("/v1/auth/token")
+        ? tokenOk()
+        : new Response(
+            JSON.stringify({ type: "t", title: "limite_taxa", status: 429, codigo: "limite_taxa" }),
+            {
+              status: 429,
+              headers: { "Content-Type": "application/problem+json", "Retry-After": "7" },
+            },
+          ),
     );
     vi.stubGlobal("fetch", f);
     const r = await GET_STATUS(new Request("http://x"), ctx(UUID));
@@ -115,6 +123,9 @@ describe("com a fonte api", () => {
     expect(r.headers.get("Retry-After")).toBe("7");
     expect(await r.json()).toMatchObject({ codigo: "limite_taxa" });
     expect((f.mock.calls as unknown as [string][])[0][0]).toBe(
+      `http://api.teste:8080/v1/auth/token`,
+    );
+    expect((f.mock.calls as unknown as [string][])[1][0]).toBe(
       `http://api.teste:8080/v1/viagens/${UUID}`,
     );
   });
@@ -138,6 +149,20 @@ describe("com a fonte api", () => {
     const r = await post(valido);
     expect(r.status).toBe(503);
     expect(await r.json()).toMatchObject({ codigo: "api_indisponivel" });
+  });
+
+  it("segredo recusado pela API de token vira 502 credencial_invalida, sem 401 ao navegador", async () => {
+    delete (globalThis as Record<string, unknown>).__tccelta_cliente__;
+    vi.stubEnv("ANALISE_CLIENT_SECRET", "outro-segredo");
+    const f = vi.fn(async () => new Response('{"error":"invalid_client"}', { status: 401 }));
+    vi.stubGlobal("fetch", f);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const r = await GET_STATUS(new Request("http://x"), ctx(UUID));
+    expect(r.status).toBe(502);
+    expect(await r.json()).toMatchObject({ codigo: "credencial_invalida" });
+    const r2 = await GET_STATUS(new Request("http://x"), ctx(UUID));
+    expect(r2.status).toBe(502);
+    expect(f).toHaveBeenCalledTimes(1);
   });
 });
 

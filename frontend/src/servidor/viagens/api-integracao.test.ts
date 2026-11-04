@@ -4,21 +4,29 @@ import type { Analise, CriarViagemResposta, StatusResposta } from "@/contrato/ti
 import { ehProblema } from "@/contrato/tipos";
 import { violacoesDoContrato } from "@/testes/contrato";
 import { criarApiCliente } from "./api-cliente";
+import { criarGerenciadorToken } from "./token";
 
 /**
  * Integração com a API real (opt-in). Exige a stack do backend no ar com
- * `ANALISE_SEM_AUTH=true` (ver INT1, "Subir localmente"):
+ * os dados de dev (ver INT1, "Subir localmente") e o cliente `next-dev`:
  *
- *   ANALISE_INTEGRACAO_API_URL=http://127.0.0.1:8080 ANALISE_INTEGRACAO_DONGLE_ID=1 [ANALISE_INTEGRACAO_BOOT_ID=<boot com dados>] npx vitest run api-integracao
+ *   ANALISE_INTEGRACAO_API_URL=http://127.0.0.1:8080 ANALISE_INTEGRACAO_CLIENT_SECRET=$(cat ../backend/deploy/segredos/analise_cliente_secret) ANALISE_INTEGRACAO_DONGLE_ID=1 [ANALISE_INTEGRACAO_BOOT_ID=<boot com dados>] npx vitest run api-integracao
  *
  * Sem a variável, os testes são ignorados e a suíte não faz chamada de rede.
  */
 const URL_API = process.env.ANALISE_INTEGRACAO_API_URL;
+const CLIENT_ID = process.env.ANALISE_INTEGRACAO_CLIENT_ID ?? "next-dev";
+const CLIENT_SECRET = process.env.ANALISE_INTEGRACAO_CLIENT_SECRET ?? "";
 const DONGLE = Number(process.env.ANALISE_INTEGRACAO_DONGLE_ID ?? "1");
 const BOOT = Number(process.env.ANALISE_INTEGRACAO_BOOT_ID ?? "4242");
 
 describe.skipIf(!URL_API)("API real de viagens (INT1)", () => {
-  const cliente = criarApiCliente({ baseUrl: URL_API ?? "", timeoutMs: 5000 });
+  const tokens = criarGerenciadorToken({
+    baseUrl: URL_API ?? "",
+    clientId: CLIENT_ID,
+    clientSecret: CLIENT_SECRET.trim(),
+  });
+  const cliente = criarApiCliente({ baseUrl: URL_API ?? "", timeoutMs: 5000, tokens });
   const sufixo = Date.now().toString(36);
   const corpo = (nome: string, dongle = DONGLE) => ({
     motorista: { nome },
@@ -82,5 +90,34 @@ describe.skipIf(!URL_API)("API real de viagens (INT1)", () => {
     const r = await cliente.status("00000000-0000-4000-8000-000000000000");
     expect(r.status).toBe(404);
     expect(ehProblema(r.corpo) && r.corpo.codigo).toBe("viagem_desconhecida");
+  });
+});
+
+describe.skipIf(!URL_API)("API real: autenticação (INT2)", () => {
+  const id = "00000000-0000-4000-8000-000000000000";
+
+  it("sem Bearer, as rotas de viagem respondem 401", async () => {
+    const r = await fetch(`${URL_API}/v1/viagens/${id}`);
+    expect(r.status).toBe(401);
+    const p = (await r.json()) as { codigo: string };
+    expect(p.codigo).toBe("token_ausente");
+    const post = await fetch(`${URL_API}/v1/viagens`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(post.status).toBe(401);
+  });
+
+  it("o token do gerenciador abre a rota (404 de viagem, não 401)", async () => {
+    const tokens = criarGerenciadorToken({
+      baseUrl: URL_API ?? "",
+      clientId: CLIENT_ID,
+      clientSecret: CLIENT_SECRET.trim(),
+    });
+    const t = await tokens.getToken();
+    expect(t.ok).toBe(true);
+    const cliente = criarApiCliente({ baseUrl: URL_API ?? "", timeoutMs: 5000, tokens });
+    expect((await cliente.status(id)).status).toBe(404);
   });
 });

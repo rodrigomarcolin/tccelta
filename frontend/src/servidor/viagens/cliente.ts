@@ -3,6 +3,7 @@ import { DONGLE_INICIAL } from "@/config";
 import { criarApiCliente } from "./api-cliente";
 import { criarMockCliente } from "./mock/mock-cliente";
 import type { ViagensCliente } from "./tipos";
+import { criarGerenciadorToken } from "./token";
 
 export type { ViagensCliente } from "./tipos";
 
@@ -11,7 +12,15 @@ export type FonteDados = "mock" | "api";
 type Ambiente = Record<string, string | undefined>;
 
 export type ConfigDados =
-  { fonte: "mock" } | { fonte: "api"; url: string; timeoutMs: number; dongleId: number };
+  | { fonte: "mock" }
+  | {
+      fonte: "api";
+      url: string;
+      timeoutMs: number;
+      dongleId: number;
+      clientId: string;
+      clientSecret: string;
+    };
 
 const TIMEOUT_PADRAO_MS = 10_000;
 const URL_PADRAO_DEV = "http://127.0.0.1:8080";
@@ -28,7 +37,8 @@ function inteiroPositivo(bruto: string | undefined, nome: string): number | unde
  * Lê a configuração de dados, em runtime. Em produção `ANALISE_FONTE_DADOS` é
  * obrigatória, para o estande nunca mostrar dados de exemplo por falta de
  * configuração. Com `api`, a URL (padrão só em desenvolvimento) e o dongle são
- * obrigatórios. Não existe `ANALISE_SEM_AUTH` aqui: quem a liga é o backend.
+ * obrigatórios, assim como `ANALISE_CLIENT_ID` e `ANALISE_CLIENT_SECRET` (só
+ * servidor, nunca `NEXT_PUBLIC_`). O segredo não é logado nem entra na chave de cache.
  */
 export function lerConfig(env: Ambiente = process.env): ConfigDados {
   const valor = env.ANALISE_FONTE_DADOS?.trim();
@@ -62,11 +72,19 @@ export function lerConfig(env: Ambiente = process.env): ConfigDados {
     throw new Error("ANALISE_DONGLE_ID é obrigatória com ANALISE_FONTE_DADOS=api");
   }
   const timeoutMs = inteiroPositivo(env.ANALISE_TIMEOUT_MS, "ANALISE_TIMEOUT_MS");
+  const clientId = env.ANALISE_CLIENT_ID?.trim();
+  if (!clientId) throw new Error("ANALISE_CLIENT_ID é obrigatória com ANALISE_FONTE_DADOS=api");
+  const clientSecret = env.ANALISE_CLIENT_SECRET?.trim();
+  if (!clientSecret) {
+    throw new Error("ANALISE_CLIENT_SECRET é obrigatória com ANALISE_FONTE_DADOS=api");
+  }
   return {
     fonte: "api",
     url: url.toString().replace(/\/+$/, ""),
     timeoutMs: timeoutMs ?? TIMEOUT_PADRAO_MS,
     dongleId,
+    clientId,
+    clientSecret,
   };
 }
 
@@ -86,14 +104,25 @@ type Guardado = { chave: string; cliente: ViagensCliente };
 
 export function obterCliente(env: Ambiente = process.env): ViagensCliente {
   const c = lerConfig(env);
-  const chave = c.fonte === "mock" ? "mock" : `api|${c.url}|${c.timeoutMs}`;
+  const chave =
+    c.fonte === "mock"
+      ? "mock"
+      : `api|${c.url}|${c.timeoutMs}|${c.clientId}|${c.clientSecret.length}`;
   const g = globalThis as unknown as Record<string, Guardado | undefined>;
   const atual = g[CHAVE];
   if (atual?.chave === chave) return atual.cliente;
   const cliente =
     c.fonte === "mock"
       ? criarMockCliente()
-      : criarApiCliente({ baseUrl: c.url, timeoutMs: c.timeoutMs });
+      : criarApiCliente({
+          baseUrl: c.url,
+          timeoutMs: c.timeoutMs,
+          tokens: criarGerenciadorToken({
+            baseUrl: c.url,
+            clientId: c.clientId,
+            clientSecret: c.clientSecret,
+          }),
+        });
   g[CHAVE] = { chave, cliente };
   return cliente;
 }

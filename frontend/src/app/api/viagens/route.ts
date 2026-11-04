@@ -3,6 +3,7 @@ import { comSessao, responder, responderProblema } from "@/servidor/api";
 import { obterCliente } from "@/servidor/viagens/cliente";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const LIMITE_CORPO = 4096;
 

@@ -250,6 +250,27 @@ describe("envio", () => {
     ],
     [502, "resposta_invalida", undefined, "Erro inesperado no servidor.", "Tentar de novo"],
     [500, undefined, undefined, "Erro inesperado no servidor.", "Tentar de novo"],
+    [
+      502,
+      "credencial_invalida",
+      undefined,
+      "O servidor não aceitou a credencial do sistema. Chame a organização.",
+      "Processar viagem",
+    ],
+    [
+      429,
+      "bloqueado",
+      "30",
+      "Acesso temporariamente bloqueado. Tente de novo em 30 s.",
+      "Tentar de novo",
+    ],
+    [
+      429,
+      "bloqueado",
+      undefined,
+      "Acesso temporariamente bloqueado. Tente de novo em instantes.",
+      "Tentar de novo",
+    ],
   ])(
     "status %i %s mostra a mensagem e o botão certos",
     async (status, codigo, ra, texto, botao) => {
