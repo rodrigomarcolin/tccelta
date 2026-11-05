@@ -1,0 +1,325 @@
+\chapter{Modelagem de Ameaças} \label{cap:modelagemameacas}
+
+O presente capítulo busca identificar: o que precisa ser protegido no sistema; em quem se pode confiar e quem pode atacá-lo; e as ameaças que deverão ser mitigadas pelo projeto. A \autoref{sec:escopo} apresenta o escopo, os objetivos de segurança, os ativos e as premissas. A \autoref{sec:fronteiras} delimita as fronteiras de confiança e a \autoref{sec:adversarios} descreve os adversários considerados. A \autoref{sec:catalogoatqs} reúne o catálogo de ataques, detalhado na \autoref{tab:catalogo-ataques}. Por fim, a \autoref{sec:priorizacao} explicita o critério de priorização, o que será mitigado, e o que restará como limitação.
+
+\section{Escopo, ativos e objetivos de segurança} \label{sec:escopo}
+
+\subsection{Escopo e Objetivos} 
+O objetivo é obter uma comunicação com autenticidade entre o \textit{dongle} e um servidor externo, tendo como intermediário um \textit{app mobile} que se comunica com o \textit{dongle} por meio de \textit{BLE} e que não é confiável. Ao receber os dados, o servidor deve ter garantia criptográfica de que eles foram medidos a partir do dongle que se identifica como originador do dado, a fim de que não seja possível alterar o conteúdo das medições ou deliberadamente esconder informação entre duas medições diferentes sem que o servidor consiga detectar.
+
+As informações medidas serão utilizadas em análises sobre o funcionamento do carro e a forma como o motorista se comporta, por isso não devem ser alvo de manipulação, e devem refletir os dados reais gerados pelo carro. Para isso, se fazem necessários os seguintes serviços de segurança:
+
+\begin{itemize}
+	\item \textbf{Autenticidade}: todo registro recebido foi gerado pelo \textit{dongle} associado;
+	\item \textbf{Integridade}: o registro recebido não foi alterado;
+	\item \textbf{Unicidade}: cada registro é recebido uma única vez e a ordem de geração é mantida;
+	\item \textbf{Completude Detectável}: o servidor sabe se, e quais, registros faltam ao sincronizar com o \textit{dongle}.
+\end{itemize}
+
+%e vínculo ao veículo, o que garante que o servidor consegue identificar quando há troca de veículo entre os \textit{boots} do dongle.
+
+\subsection{Ativos}
+
+Os ativos são os elementos cua violação compromete os objetivos acima. São listados na \autoref{tab:ativos}, com a indicação de onde se originam e a propriedade que asseguram.
+
+{\small
+\begin{longtable}{|>{\raggedright\arraybackslash}p{0.30\textwidth}|>{\raggedright\arraybackslash}p{0.30\textwidth}|>{\raggedright\arraybackslash}p{0.30\textwidth}|}
+	\caption{Ativos do sistema}
+	\label{tab:ativos} \\
+	\hline
+	\textbf{Ativo} & \textbf{Onde reside} & \textbf{Propriedade protegida} \\
+	\hline
+	\endfirsthead
+	\hline
+	\textbf{Ativo} & \textbf{Onde reside} & \textbf{Propriedade protegida} \\
+	\hline
+	\endhead
+	\hline
+	\endfoot
+	\hline
+	\multicolumn{3}{l}{Fonte: elaborado pelos autores.} \\
+	\endlastfoot
+ 
+	Registros medidos & \textit{Dongle}, \textit{app} e servidor & Autenticidade e integridade \\ \hline
+	Ordem e número de sequência dos registros & \textit{Dongle} e servidor & Unicidade \\ \hline
+	Estado de sincronização (último registro gerado e confirmado) & \textit{Dongle} e servidor & Completude detectável \\ \hline
+	Chave de assinatura e identidade do \textit{dongle} & \textit{Dongle} (chave privada); servidor (identidade registrada) & Autenticidade \\ \hline
+	Âncora de tempo e época & \textit{Dongle} e servidor & Ordem e frescor dos registros \\ \hline
+	Mensagens do servidor (desafio, confirmação, \textit{token} de diagnóstico) & Servidor, \textit{app} e \textit{dongle} & Recuperabilidade e disponibilidade \\ \hline
+	Dados de condução e de posição & \textit{Dongle} e \textit{app} & Confidencialidade (privacidade do motorista) \\ \hline
+	Modo e configuração do \textit{dongle} & \textit{Dongle} & Integridade e disponibilidade da coleta \\ \hline
+\end{longtable}
+}
+
+
+\subsection{Premissas} \label{sec:premissas}
+
+A análise parte das segintes premissas:
+
+\begin{itemize}
+    \item (P1) o \textit{firmware} do \textit{dongle} é íntegro e sua chave privada não pode ser extraída pelo adversário;
+    \item (P2) o servidor é íntegro e sua base de dados não é comprometida;
+    \item (P3) a identidade e a chave do \textit{dongle} são provisionadas e registradas no servidor de forma segura, antes do uso;
+    \item (P4) o \textit{app}, o enlace \textit{BLE} e a internet não são confiáveis: o adversário pode ler, alterar, repetir, reordenar e descartar o que passa por eles, inclusive controlando o celular com acesso \textit{root};
+    \item (P5) as primitivas criptográficas empregadas são seguras e corretamente implementadas;
+    \item (P6) a memória do \textit{dongle} é finita, e o \textit{dongle} não possui, por si só, uma noção confiável de hora absoluta;
+    \item (P7) os dados que chegam ao \textit{dongle} pelo barramento CAN são tomados como entrada correta, pois garantir a veracidade da rede CAN do veículo está fora do escopo (\autoref{sec:priorizacao}).
+\end{itemize}
+
+\section{Fronteiras de Confiança} \label{sec:fronteiras}
+
+Nesse contexto, só é possível confiar plenamente no dongle e no servidor. Assim, o app e os enlaces BLE e internet são modelados como não confiáveis, conforme a \autoref{fig:fronteiras-confianca}.
+
+\begin{figure}[H]
+	\centering
+	\caption{Fronteiras de confiança entre \textit{dongle}, \textit{app} e servidor}
+	\label{fig:fronteiras-confianca}
+	% Fonte PlantUML: ../assets/aux-docs/plantuml/fronteiras-confianca.puml
+	\includegraphics[width=\textwidth]{assets/cap5-modelagemameacas/fronteiras-confianca.png}
+	\legend{Fonte: elaborado pelos autores.}
+\end{figure}
+
+\section{Adversários} \label{sec:adversarios}
+
+Existem diversos adversários e ataques que podem ser modelados no cenário, envolvendo os diferentes componentes e ligações entre eles. É possível dividir os ataques em três principais categorias. Dentro das categorias de ataque, também é possível definir cinco tipos principais de adversários que aparecem entre elas:
+
+\begin{itemize}
+    \item (AD1) o terceiro perto do carro que pode ter acesso ao enlace de rádio do BLE, cujo objetivo é espionar ou injetar dados;
+    \item (AD2) o próprio motorista que tem acesso ao app original do sistema, cujo objetivo é esconder, alterar medidas do dongle ou enviar as medidas do dongle para terceiros não autorizados;
+    \item (AD3) um app de terceiro no celular pareado que pode acessar as características BLE, cujo objetivo é coletar as informações medidas para outros propósitos;
+    \item (AD4) um atacante na rede entre o celular e o servidor, cujo objetivo é ler ou alterar dados no caminho para o servidor;
+    \item (AD5) um invasor no servidor que tem acesso ao banco de dados e tudo que está armazenado, cujo objetivo pode ser apagar ou forjar dados.
+\end{itemize}
+
+
+Para especificar os ataques, será utilizada uma metodologia de modelagem que define seis campos: o adversário, a pré-condição do ataque, o método a partir do qual o ataque é executado, a vulnerabilidade que ele explora, o alvo que está sendo atacado, e, por fim, o efeito que o ataque causa.
+
+\section{Catálogo de Ataques, por Categoria} \label{sec:catalogoatqs}
+
+Os ataques são organizados em três categorias, e descritos na \autoref{tab:catalogo-ataques} com os seis campos. A seguir, apresentar-se-á uma visão geral de cada categoria.
+
+\subsection{Comunicação Wireless} \label{sec:comunicacao-wireless}
+
+Reúne os ataques ao enlace \textit{BLE} entre o \textit{app} e o \textit{dongle}, praticados principalmente pelo AD1: \textit{sniffing} (A1.1), \textit{replay} (A1.2), \textit{Man in the Middle} (A1.3), acesso direto ao \textit{dongle} (A1.4) e negação de serviço (A1.5). Todos exploram potenciais ausências de cifração, de autenticação mútua e garantia de frescor no enlace. Os mesmos princípios se aplicam a um AD4 que interfere na comunicação entre o \textit{app} e o servidor.
+
+\subsection{Comunicação entre Carro e Dongle} \label{sec:comunicacao-carro-dongle}
+
+Reúne ataques ao barramento CAN, nos quais o AD2 usa um elemento externo para simular a rede do veículo por inteiro (A2.1) ou para sobrescrever valores específicos (A2.2). O efeito comum é a geração de registros autênticos, mas com conteúdo enganoso; a assinatura pŕova que o \textit{dongle} mediu, mas não que a medição foi feita em um carro real com valores legítimos.
+
+
+\subsection{Aplicativo Malicioso}  \label{sec:app-malicioso}
+
+
+Como o aplicativo será instalado no aparelho do usuário, um aparelho com \textit{root}  dá ao AD2 o controle total do \textit{app}, permitindo a manipulação dos dados enviados ao servidor de modo que não mais correspondam ao que o \textit{dongle} realmente mediu. Esse adversário pode querer forjar dados que relatem comportamentos mecânicos ou de direção diversos dos reais.
+
+A categoria cobre ataques de exfiltração de dados por um \textit{app} de terceiro ou SDK embutido (A3.1), a omissão de mensagens do servidor (A3.2), e os ataques aos registros enviados: alteração (A3.3), repetição (A3.4), reordenação (A3.5), descarte intermediário (A3.6) e omissão das últimas medições (A3.7). 
+
+\subsection{Tabela de Ataques Identificados} \label{sec:tabela-ataques}
+A \autoref{tab:catalogo-ataques} resume os ataques identificados, com os seis campos usados na modelagem: adversário, pré-condição, método, vulnerabilidade explorada, alvo e efeito.
+ 
+
+{\small
+\begin{longtable}{|>{\raggedright\arraybackslash}p{0.24\textwidth}|>{\raggedright\arraybackslash}p{0.68\textwidth}|}
+	\caption{Catálogo de ataques identificados}
+	\label{tab:catalogo-ataques} \\
+	\hline
+	\textbf{Campo} & \textbf{Descrição} \\
+	\hline
+	\endfirsthead
+	\hline
+	\textbf{Campo} & \textbf{Descrição} \\
+	\hline
+	\endhead
+	\hline
+	\endfoot
+	\hline
+	\multicolumn{2}{l}{Fonte: elaborado pelos autores.} \\
+	\endlastfoot
+ 
+	% ======================= Categoria 1 =======================
+	\multicolumn{2}{|c|}{\textbf{Categoria 1 -- Comunicação sem fio}} \\* \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A1.1 -- \textit{Sniffing}}} \\* \hline
+	Adversário & AD1 \\* \hline
+	Pré-condição & \textit{Sniffer} ao alcance do sinal \textit{BLE}; enlace não cifrado. \\* \hline
+	Método & Seguir a conexão e recuperar, de forma passiva, tudo que passa pelas características do \textit{dongle}. \\* \hline
+	Vulnerabilidade explorada & Falta de cifração nas características \textit{BLE}. \\* \hline
+	Alvo & Dados transferidos pelo enlace. \\* \hline
+	Efeito & Vazamento dos dados medidos pelo \textit{dongle}, afetando a privacidade do motorista. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A1.2 -- \textit{Replay}}} \\* \hline
+	Adversário & AD1 \\* \hline
+	Pré-condição & Ter capturado o tráfego por \textit{sniffing} e conseguir se conectar ao \textit{dongle} ou se passar por ele. \\* \hline
+	Método & Reescrever na característica de recepção quadros gravados anteriormente (\texttt{AT\#DIAG 1}, \texttt{AT\#PID}, \texttt{ATZ}), ou se anunciar como o \textit{dongle} e devolver respostas antigas ao \textit{app}. \\* \hline
+	Vulnerabilidade explorada & Ausência de autenticação da conexão e de garantia de frescor das mensagens; o \textit{app} não verifica a identidade do \textit{dongle}. \\* \hline
+	Alvo & Modo e configuração do \textit{dongle}; dados exibidos pelo \textit{app}. \\* \hline
+	Efeito & Coleta pausada ou reconfigurada sem o conhecimento do motorista, ou painel com valores falsos. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A1.3 -- \textit{Man in the Middle}}} \\* \hline
+	Adversário & AD1 \\* \hline
+	Pré-condição & Estar presente quando o \textit{app} se conecta ou durante o pareamento, com dois rádios \textit{BLE}. \\* \hline
+	Método & Conectar-se ao \textit{dongle}, anunciar um clone dele ao \textit{app} e repassar todo o tráfego entre os dois, alterando valores ou inserindo comandos no caminho. \\* \hline
+	Vulnerabilidade explorada & Nenhum dos lados autentica o outro no enlace. \\* \hline
+	Alvo & Integridade de comandos e respostas, incluindo as requisições ao barramento CAN no modo diagnóstico. \\* \hline
+	Efeito & Painel adulterado e requisições injetadas no carro. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A1.4 -- Acesso direto}} \\* \hline
+	Adversário & AD1 \\* \hline
+	Pré-condição & O \textit{dongle} aceita conexões de qualquer dispositivo. \\* \hline
+	Método & Conectar-se e escrever comandos na característica de recepção, inclusive requisições ao barramento CAN no modo diagnóstico. \\* \hline
+	Vulnerabilidade explorada & Falta de autenticação da conexão, agravada pela aceitação de uma segunda conexão simultânea. \\* \hline
+	Alvo & Dados medidos, modo diagnóstico e configuração do \textit{dongle}. \\* \hline
+	Efeito & Leitura dos dados, pausa da coleta e consultas ao veículo feitas em nome do dono. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A1.5 -- Negação de serviço do enlace}} \\* \hline
+	Adversário & AD1 \\* \hline
+	Pré-condição & Estar ao alcance do sinal \textit{BLE} do \textit{dongle}. \\* \hline
+	Método & Conectar-se ao \textit{dongle} assim que ele começa a se anunciar e manter a conexão aberta, ocupando as conexões aceitas, de modo que o \textit{app} oficial não consiga se conectar. \\* \hline
+	Vulnerabilidade explorada & O \textit{dongle} aceita conexões de qualquer dispositivo e tem um número limitado delas. \\* \hline
+	Alvo & Disponibilidade do enlace \textit{BLE} e, por consequência, a sincronização dos registros com o servidor. \\* \hline
+	Efeito & \textit{Dongle} inacessível ao \textit{app}: o painel deixa de ser atualizado e o servidor recebe um intervalo sem dados que não é causado pelo motorista. \\ \hline
+ 
+	% ======================= Categoria 2 =======================
+	\multicolumn{2}{|c|}{\textbf{Categoria 2 -- Comunicação entre carro e \textit{dongle}}} \\* \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A2.1 -- ECU emulada}} \\* \hline
+	Adversário & AD2 \\* \hline
+	Pré-condição & Acesso físico à porta OBD e um emulador ou \textit{gateway} CAN (o ECUSim do projeto serve como prova de conceito). \\* \hline
+	Método & Ligar o \textit{dongle} no emulador, ou colocar um \textit{gateway} entre a porta e o \textit{dongle} que repassa as requisições ao carro e altera apenas as respostas escolhidas, como limitar a velocidade reportada. \\* \hline
+	Vulnerabilidade explorada & Respostas OBD-II não autenticadas; o \textit{dongle} confia em quem responder. \\* \hline
+	Alvo & Veracidade dos dados medidos, antes de serem assinados. \\* \hline
+	Efeito & Registros autênticos com conteúdo falso: a assinatura prova que o \textit{dongle} mediu, mas não que o carro disse aquilo. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A2.2 -- Resposta concorrente no barramento}} \\* \hline
+	Adversário & AD2 \\* \hline
+	Pré-condição & Dispositivo ligado ao CAN capaz de responder mais rápido que a ECU. \\* \hline
+	Método & Escutar as requisições funcionais, enviadas para o identificador 0x7DF, e responder em 0x7E8 antes da ECU real. \\* \hline
+	Vulnerabilidade explorada & A mesma de A2.1, somada ao fato de o \textit{dongle} aceitar a primeira resposta da faixa 0x7E8--0x7EF sem endereçar ECUs específicas. \\* \hline
+	Alvo & Veracidade dos PIDs escolhidos. \\* \hline
+	Efeito & Registros autênticos com conteúdo falso, além de painel e diagnóstico enganados. \\ \hline
+ 
+	% ======================= Categoria 3 =======================
+	\multicolumn{2}{|c|}{\textbf{Categoria 3 -- Aplicativo malicioso}} \\* \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A3.1 -- Exfiltração}} \\* \hline
+	Adversário & AD3, ou SDK de terceiros embutido no próprio \textit{app} \\* \hline
+	Pré-condição & Permissão de \textit{Bluetooth} e de internet no celular pareado com o \textit{dongle}. \\* \hline
+	Método & Conectar-se ao \textit{dongle} quando o \textit{app} oficial não está conectado e ler os dados medidos, ou ler os registros e posições que passam pelo \textit{app}, enviando tudo a outro servidor. \\* \hline
+	Vulnerabilidade explorada & Dados não cifrados na camada de aplicação; autorização feita por aparelho, e não por \textit{app}. \\* \hline
+	Alvo & Privacidade do motorista. \\* \hline
+	Efeito & Vazamento de dados pessoais e rastreamento do veículo. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A3.2 -- Omissão de mensagens do servidor}} \\* \hline
+	Adversário & AD2, por meio de um \textit{app} modificado \\* \hline
+	Pré-condição & O \textit{app} é o único caminho entre o servidor e o \textit{dongle}. \\* \hline
+	Método & Receber do servidor o desafio, a confirmação de recebimento ou o \textit{token} de diagnóstico e não repassá-los ao \textit{dongle}, ou repassar apenas alguns. \\* \hline
+	Vulnerabilidade explorada & As mensagens do servidor não têm confirmação de entrega ao \textit{dongle}. \\* \hline
+	Alvo & Recuperabilidade dos registros, âncora de tempo e troca de época. \\* \hline
+	Efeito & Sem confirmações, a memória do \textit{dongle} enche e ele descarta registros antigos; sem desafio, não há âncora de tempo nem época nova; sem \textit{token}, o diagnóstico é negado. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A3.3 -- Alteração de medições}} \\* \hline
+	Adversário & AD2 \\* \hline
+	Pré-condição & Controlar o \textit{app}, ou um \textit{proxy} com uma autoridade certificadora instalada no celular. \\* \hline
+	Método & Modificar bytes de um bloco antes de enviá-lo ao servidor. \\* \hline
+	Vulnerabilidade explorada & Ausência de integridade fim a fim. \\* \hline
+	Alvo & Integridade dos registros. \\* \hline
+	Efeito & Aceitação de dados falsos. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A3.4 -- Repetição de medições}} \\* \hline
+	Adversário & AD2 \\* \hline
+	Pré-condição & Ter gravado blocos antigos. \\* \hline
+	Método & Reenviar ao servidor blocos já aceitos. \\* \hline
+	Vulnerabilidade explorada & Falta de garantia de unicidade. \\* \hline
+	Alvo & Unicidade dos registros. \\* \hline
+	Efeito & Dados duplicados no servidor. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A3.5 -- Reordenação das medidas enviadas}} \\* \hline
+	Adversário & AD2 \\* \hline
+	Pré-condição & Controlar o \textit{app}. \\* \hline
+	Método & Enviar os blocos fora de ordem. \\* \hline
+	Vulnerabilidade explorada & A ordem dos registros não é garantida. \\* \hline
+	Alvo & Ordem dos registros. \\* \hline
+	Efeito & Linha do tempo falsa. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A3.6 -- Descarte de medições intermediárias}} \\* \hline
+	Adversário & AD2 \\* \hline
+	Pré-condição & Controlar o \textit{app}. \\* \hline
+	Método & Deixar de enviar os blocos escolhidos, como o de uma frenagem brusca. \\* \hline
+	Vulnerabilidade explorada & Falta de completude. \\* \hline
+	Alvo & Completude dos registros. \\* \hline
+	Efeito & Lacuna silenciosa nos dados do servidor. \\ \hline
+ 
+	\multicolumn{2}{|l|}{\textbf{A3.7 -- Omissão das últimas medições}} \\* \hline
+	Adversário & AD2 \\* \hline
+	Pré-condição & Controlar o \textit{app}. \\* \hline
+	Método & Parar de enviar blocos antes do último, ocultando, por exemplo, a última viagem. \\* \hline
+	Vulnerabilidade explorada & O servidor não conhece o número de sequência do último registro gerado. \\* \hline
+	Alvo & Completude dos registros. \\* \hline
+	Efeito & Perda de dados invisível ao servidor. \\ \hline
+\end{longtable}
+}
+ 
+
+\section{Priorização, Escopo de Mitigação e Limitações} \label{sec:priorizacao}
+
+\subsection{Critério de Priorização}
+
+Cada ataque foi avaliado por dois fatores, qual sejam, impacto e viabilidade, à luz dos objetivos principais do trabalho. O impacto é alto quando o ataque viola a autenticidade, a integridade, a unicidade ou a completude dos registros aceitos pelo servidor. São médios quando afetam a confidencialidade, a disponibilidade ou o painel do \textit{app}, sem prejuízo à veracidade dos dados aceitos no servidor. 
+
+A viabilidade é alta quando o ataque exige apenas controlar o \textit{app} ou o celular do adversário, ou escuta passiva. É média quando exige proximidade física, equipamento específico, ou acesso à porta OBD-II.
+
+Com isso, são definicas três prioridades:
+
+\begin{itemize}
+	\item \textbf{P1}: impacto alto e viabilidade alta, dentro do escopo, tratados diretamente pelo protocolo fim a fim;
+    \item \textbf{P2}: tratados, total ou parcialmente, por protocolos de segurança de enlace já estabelecidos;
+    \item \textbf{P3}: fora do escopo ou risco aceito, registrados como limitação.
+\end{itemize}
+
+A \autoref{tab:priorizacao} aplica o critério a cada ataque do catálogo.
+ 
+{\small
+\begin{longtable}{|>{\raggedright\arraybackslash}p{0.09\textwidth}|>{\centering\arraybackslash}p{0.10\textwidth}|>{\centering\arraybackslash}p{0.13\textwidth}|>{\centering\arraybackslash}p{0.13\textwidth}|>{\raggedright\arraybackslash}p{0.42\textwidth}|}
+	\caption{Priorização dos ataques e tratamento adotado}
+	\label{tab:priorizacao} \\
+	\hline
+	\textbf{Ataque} & \textbf{Impacto} & \textbf{Viabilidade} & \textbf{Prioridade} & \textbf{Tratamento} \\
+	\hline
+	\endfirsthead
+	\hline
+	\textbf{Ataque} & \textbf{Impacto} & \textbf{Viabilidade} & \textbf{Prioridade} & \textbf{Tratamento} \\
+	\hline
+	\endhead
+	\hline
+	\endfoot
+	\hline
+	\multicolumn{5}{l}{Fonte: elaborado pelos autores.} \\
+	\endlastfoot
+ 
+	A3.3 & Alto & Alta & P1 & Protocolo fim a fim (integridade e autenticidade). \\ \hline
+	A3.4 & Alto & Alta & P1 & Protocolo fim a fim (unicidade). \\ \hline
+	A3.5 & Alto & Alta & P1 & Protocolo fim a fim (ordem). \\ \hline
+	A3.6 & Alto & Alta & P1 & Protocolo fim a fim (completude detectável). \\ \hline
+	A3.7 & Alto & Alta & P1 & Protocolo fim a fim (estado de sincronização conhecido pelo servidor). \\ \hline
+	A3.2 & Alto & Alta & P1 & Protocolo fim a fim: detecção e recuperação; o protocolo não impede o descarte pelo \textit{app}. \\ \hline
+	A1.1 & Médio & Alta & P2 & LESC no enlace \textit{BLE}. \\ \hline
+	A1.2 & Médio & Média & P2 & LESC no enlace \textit{BLE}; os registros já são protegidos pelo protocolo fim a fim. \\ \hline
+	A1.3 & Médio & Média & P2 & LESC, cuja proteção contra \textit{MITM} depende do método de pareamento; registros protegidos fim a fim. \\ \hline
+	A1.4 & Médio & Alta & P2 & Pareamento e vínculo LESC, restringindo conexões a dispositivos autorizados. \\ \hline
+	A3.1 & Médio & Média & P3 & Risco residual: o LESC autoriza por aparelho, e não por \textit{app}, e um SDK embutido no \textit{app} oficial não é coberto. \\ \hline
+	A1.5 & Médio & Alta & P3 & Risco aceito: não é impedido, mas a lacuna resultante é detectável pelo servidor (completude). \\ \hline
+	A2.1 & Alto & Média & P3 & Fora do escopo (premissa P7); ver limitações. \\ \hline
+	A2.2 & Alto & Média & P3 & Fora do escopo (premissa P7); ver limitações. \\ \hline
+\end{longtable}
+}
+
+\subsection{Escopo de Mitigação}
+
+Tendo em vista que o objetivo principal é a chegada, confiável e completamente, dos dados autênticos e íntegros ao servidor, foram priorizados os ataques da categoria de aplicatifo malicioso \autoref{sec:app-malicioso}, classificados como P1, excetuando-se a exfiltração. Os capítulos relacionados à especificação (\autoref{cap:especificacao}), à implementação (\autoref{cap:implementacao}), e à validação (\autoref{cap:validacaotestes}) dedicam-se extensivamente à proposta de um sistema que atinja este objetivo.
+
+Como complemento à segurança fim a fim, ataques de comunicação sem fio (\autoref{sec:comunicacao-wireless}) são tratados com protocolos já estabelecidos, cujo principal propósito é essencialmente o da confidencialidade: o \textit(LE Secure Connections) do \textit{BLE} no enlace entre o \textit{dongle} e o \textit{app}, e o HTTP/TLS no enlace entre o \textit{app} e o servidor.
+
+
+\subsection{Limitações}
+
+Encontram-se fora do escopo os ataques ao barramento CAN (\autoref{sec:comunicacao-carro-dongle}), pois considera-se que a garantia de que o \textit{dongle} estará conectado a um barramento CAN real e legítimo de um carro é preocupação que deve ser endereçada por meios externos ao projeto do sistema. Nota-se, entretanto, que figura, entre as possíveis mitigações, a integração do \textit{dongle} à arquitetura do carro, com conexão direta ao barramento CAN por debaixo do painél, o que pode ser feito, por exemplo, por empresas de gerenciamento de frotas, antes de colocarem seus veículos nas ruas. 
