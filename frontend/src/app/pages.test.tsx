@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { BASE_PATH } from "@/config";
 
 const auth = vi.fn();
 const signIn = vi.fn();
@@ -124,7 +125,7 @@ describe("/entrar", () => {
     expect(form).not.toBeNull();
     expect(action).toBeTypeOf("function");
     await (action as () => Promise<void>)();
-    expect(signIn).toHaveBeenCalledWith("google", { redirectTo: "/viagem/x" });
+    expect(signIn).toHaveBeenCalledWith("google", { redirectTo: `${BASE_PATH}/viagem/x` });
   });
 });
 

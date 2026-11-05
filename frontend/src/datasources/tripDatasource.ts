@@ -1,3 +1,4 @@
+import { BASE_PATH } from "@/config";
 import { ApiError } from "@/domain/trip/apiError";
 import type {
   CreateTripRequest,
@@ -33,7 +34,7 @@ async function request(
   expected: number,
   valid: (body: unknown) => boolean,
 ): Promise<unknown> {
-  const response = await fetch(url, { cache: "no-store", ...init });
+  const response = await fetch(`${BASE_PATH}${url}`, { cache: "no-store", ...init });
   const body: unknown = await response.json().catch(() => null);
   const retryAfter = parseRetryAfter(response.headers?.get("Retry-After"));
   if (response.status !== expected || !valid(body)) {

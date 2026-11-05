@@ -4,6 +4,7 @@ import { safeReturnPath } from "@/auth/operators";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldError } from "@/components/ui/Field";
+import { BASE_PATH } from "@/config";
 import { Page } from "@/components/ui/Page";
 import { IconDongle } from "@/components/icons/Icons";
 
@@ -32,7 +33,8 @@ export default async function SignInPage({
 
   async function signInWithGoogle() {
     "use server";
-    await signIn("google", { redirectTo: destination });
+    // Auth.js builds this URL itself (no Next basePath handling), unlike redirect() above.
+    await signIn("google", { redirectTo: `${BASE_PATH}${destination}` });
   }
 
   return (

@@ -1,5 +1,6 @@
 import { act, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BASE_PATH } from "@/config";
 import type { TripStatusResponse, TripStatus } from "@/domain/trip/types";
 import { analysisFor, renderWithTheme } from "@/tests/helpers";
 import { router } from "@/tests/router";
@@ -202,7 +203,9 @@ describe("other states", () => {
   it("401 on status goes to /entrar with the return path", async () => {
     install({ status: () => ({ status: 401 }), analysis: () => ({ status: 401 }) });
     await mount();
-    expect(router.replace).toHaveBeenCalledWith(`/entrar?retorno=${encodeURIComponent(`/viagem/${ID}`)}`);
+    expect(router.replace).toHaveBeenCalledWith(
+      `/entrar?retorno=${encodeURIComponent(`/viagem/${ID}`)}`,
+    );
     await advance(5000);
     expect(count("status")).toBe(1);
   });
@@ -719,7 +722,7 @@ describe("navigation and restarts", () => {
     await advance(0);
     expect(screen.queryByTestId("map")).toBeNull();
     expect(screen.getByLabelText("Carregando a análise")).toBeInTheDocument();
-    expect(calls).toEqual([`/api/trips/${OTHER}`]);
+    expect(calls).toEqual([`${BASE_PATH}/api/trips/${OTHER}`]);
   });
 
   it("an online event during the backoff restarts the failure count", async () => {

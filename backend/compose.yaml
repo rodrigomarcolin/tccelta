@@ -231,6 +231,29 @@ services:
     depends_on: { api: { condition: service_healthy }, visitantes: { condition: service_healthy } }
     networks: [borda]
 
+  # Dashboard Next (frontend/), servido pelo Caddy em /dashboard. Perfil proprio: o `up` geral nao o sobe
+  # (o .env.frontend so existe depois que o stack.yml cria o cliente de client credentials na VPS).
+  frontend:
+    image: tccelta-frontend:local
+    build: { context: ../frontend }
+    profiles: [dashboard]
+    env_file:
+      - path: .env.frontend
+        required: false
+    read_only: true
+    tmpfs: [/tmp, /app/.next/cache]
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:3000/dashboard/entrar || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
+    networks: [borda]
+
   cloudflared:
     image: cloudflare/cloudflared:${CLOUDFLARED_VERSAO:-2024.12.2}
     profiles: [tunel]

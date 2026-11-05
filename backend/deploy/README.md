@@ -120,6 +120,17 @@ item de `dbeaver_ips` precisa ser IPv4 em CIDR (ex.: `203.0.113.5/32`).
 
 Sem `--tags`, roda tudo.
 
+## Dashboard em /dashboard
+
+O dashboard Next (`frontend/`) é o serviço `frontend` do compose, no perfil `dashboard`: o `up` geral não o sobe, só o
+`stack.yml`. O Caddy encaminha `/dashboard*` para ele (com `handle`, sem remover o prefixo). O código vai para
+`/opt/frontend` (tag `codigo` do `site.yml`). O `stack.yml` gera o `.env.frontend` a partir de `frontend.env.j2`, com
+dois segredos que nascem na VPS (`AUTH_SECRET` e o segredo do cliente de client credentials, em `deploy/segredos/`); o
+restante vem de `frontend_*` em `group_vars/all/local.yml` (modelo em `local.yml.example`).
+
+No Google Cloud Console, o cliente OAuth precisa do redirect URI
+`https://<dominio_api>/dashboard/api/auth/callback/google`.
+
 ## Proxy da Cloudflare (opcional)
 
 Por padrão o domínio fica em **só DNS** (nuvem cinza). Para manter o **proxy ligado** (nuvem laranja) no nome da API,

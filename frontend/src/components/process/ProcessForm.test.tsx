@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BASE_PATH } from "@/config";
 import { renderWithTheme } from "@/tests/helpers";
 import { router } from "@/tests/router";
 import { creationError, ProcessForm, buildBody, toRfc3339, validateFields } from "./ProcessForm";
@@ -121,7 +122,7 @@ describe("submit", () => {
     await submit();
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/viagem/abc"));
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("/api/trips");
+    expect(url).toBe(`${BASE_PATH}/api/trips`);
     expect(JSON.parse(init.body as string)).toEqual({
       motorista: { nome: "João" },
       categoria_viagem: "feira",

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BASE_PATH } from "@/config";
 
 type Config = {
   providers: unknown[];
@@ -35,7 +36,7 @@ describe("auth.ts", () => {
   it("uses a JWT session, Google and the /entrar screens", () => {
     const c = captured.factory!();
     expect(c.session.strategy).toBe("jwt");
-    expect(c.pages).toEqual({ signIn: "/entrar", error: "/entrar" });
+    expect(c.pages).toEqual({ signIn: `${BASE_PATH}/entrar`, error: `${BASE_PATH}/entrar` });
     expect(c.providers).toHaveLength(1);
   });
 
@@ -43,7 +44,7 @@ describe("auth.ts", () => {
     const profile = { email: "ana@usp.br", email_verified: true };
     vi.stubEnv("OPERATOR_EMAILS", "");
     expect(captured.factory!().callbacks.signIn({ profile })).toBe(
-      "/entrar?erro=conta_nao_liberada",
+      `${BASE_PATH}/entrar?erro=conta_nao_liberada`,
     );
     vi.stubEnv("OPERATOR_EMAILS", "Ana@usp.br");
     expect(captured.factory!().callbacks.signIn({ profile })).toBe(true);
@@ -51,7 +52,7 @@ describe("auth.ts", () => {
       captured.factory!().callbacks.signIn({
         profile: { email: "ana@gmail.com", email_verified: true },
       }),
-    ).toBe("/entrar?erro=conta_nao_liberada");
+    ).toBe(`${BASE_PATH}/entrar?erro=conta_nao_liberada`);
   });
 });
 

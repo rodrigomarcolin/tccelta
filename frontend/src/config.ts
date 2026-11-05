@@ -1,5 +1,8 @@
 import type { FuelId } from "@/domain/trip/types";
 
+/** Must equal `basePath` in next.config.ts (checked by src/tests/basePath.test.ts). */
+export const BASE_PATH = "/dashboard";
+
 /** Fixed display timezone: the fair is local and must not depend on the browser. */
 export const TIMEZONE = "America/Sao_Paulo";
 

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BASE_PATH } from "@/config";
 import { ApiError } from "@/domain/trip/apiError";
 import { createTrip, getTripAnalysis, getTripStatus } from "./tripDatasource";
 
@@ -45,7 +46,7 @@ describe("createTrip", () => {
     const f = stubFetch({ status: 202, body: { viagem_id: "abc", status: "pendente" } });
     expect(await createTrip(REQUEST)).toEqual({ viagem_id: "abc", status: "pendente" });
     const [url, init] = f.mock.calls[0];
-    expect(url).toBe("/api/trips");
+    expect(url).toBe(`${BASE_PATH}/api/trips`);
     expect(init).toMatchObject({ method: "POST", cache: "no-store" });
     expect(JSON.parse(init?.body as string)).toEqual(REQUEST);
   });
@@ -100,7 +101,7 @@ describe("getTripStatus", () => {
     const controller = new AbortController();
     expect(await getTripStatus("t1", controller.signal)).toEqual(STATUS);
     const [url, init] = f.mock.calls[0];
-    expect(url).toBe("/api/trips/t1");
+    expect(url).toBe(`${BASE_PATH}/api/trips/t1`);
     expect(init?.cache).toBe("no-store");
     expect(init?.signal).toBe(controller.signal);
   });
@@ -128,7 +129,7 @@ describe("getTripAnalysis", () => {
   it("reads the analysis route", async () => {
     const f = stubFetch({ status: 200, body: { versao: 1 } });
     expect(await getTripAnalysis("t1")).toEqual({ versao: 1 });
-    expect(f.mock.calls[0][0]).toBe("/api/trips/t1/analysis");
+    expect(f.mock.calls[0][0]).toBe(`${BASE_PATH}/api/trips/t1/analysis`);
   });
 
   it("409 carries the problem", async () => {
