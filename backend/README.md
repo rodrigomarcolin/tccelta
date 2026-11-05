@@ -107,7 +107,7 @@ Python `python:3.12-slim`.
 | `secrets` | Roda `scripts/gerar-segredos.sh`: gera, em `deploy/segredos/`, as senhas do Postgres (superusuário, dono, API, worker, provisionador), o token de desenvolvimento do Vault e a senha do Redis | Idempotente: só cria o que falta. Usa um contêiner `alpine` com `openssl`. Cria também um `cloudflared_token` vazio |
 | `certs` | Roda `scripts/gerar-certs.sh`: PKI de laboratório em `deploy/kms/certs/` (CA, certificado do Vault, do KMS e certificado de cliente da API; ECDSA P-256, 1 ano) | Idempotente. A variável `KMS_HOST` acrescenta um nome extra aos certificados do Vault e do KMS |
 | `build` | `docker compose build` | Constrói as imagens sem subir |
-| `up` | `env` + `secrets`, depois `up -d --build --wait` | Sobe banco, Redis, Vault (modo dev), `vault-bootstrap`, `migrar`, KMS, API, worker e `jwt-rotacao`. `--wait` só retorna quando os healthchecks ficam verdes |
+| `up` | `env` + `secrets`, depois `up -d --build --wait` | Sobe banco, Redis, Vault (raft em volume), `vault-unseal`, `vault-bootstrap`, `migrar`, KMS, API, worker e `jwt-rotacao`. `--wait` só retorna quando os healthchecks ficam verdes |
 | `up-tls` | Igual ao `up`, com o perfil `tls` | Acrescenta o Caddy na porta `API_PORTA_TLS` (8443). É o caminho para o celular alcançar a API na rede local |
 | `up-tunnel` | Igual ao `up`, com o perfil `tunel` | Acrescenta Caddy e `cloudflared`. O token do túnel vai em `deploy/segredos/cloudflared_token` |
 | `up-prodlike` | `env` + `secrets` + `certs`, depois sobe com `compose.prodlike.yaml` e o perfil `tls` | Vault em modo servidor (raft, TLS), mTLS entre API e KMS. Veja [prodlike](#prodlike) |
@@ -135,7 +135,7 @@ esse comportamento.
 | Alvo | O que faz |
 |---|---|
 | `vault-bootstrap` | Reexecuta o serviço `vault-bootstrap`: habilita os motores Transit `transit-auth`, `transit-rec` e `transit-jwt`, cria a chave Ed25519 do JWT (não exportável), grava as políticas `tccelta-kms`, `tccelta-provisionador` e `tccelta-rotacao-jwt` (mais uma de teste no perfil dev) e cria os AppRoles correspondentes. O `make up` já o executa; o script é idempotente |
-| `vault-unseal` | **Só prodlike.** Inicializa e abre o Vault (`init-unseal.sh`), guardando o material de inicialização no volume `vault_init` |
+| `vault-unseal` | Inicializa e abre o Vault (`init-unseal.sh`), guardando o material de inicialização no volume `vault_init` |
 | `vault-unseal-manual` | **Só prodlike.** `vault operator unseal` interativo, para abrir o Vault digitando as chaves |
 
 ### Dongles (provisionamento em dois passos)
@@ -193,7 +193,7 @@ O `compose.yaml` define o projeto `tccelta`. Sem perfil, ele sobe:
 |---|---|---|
 | `banco` | PostgreSQL com TimescaleDB e PostGIS (`IMG_TIMESCALE`) | `127.0.0.1:5432` |
 | `redis` | Limites de taxa compartilhados entre réplicas | nenhuma |
-| `vault` | Vault em modo dev | `127.0.0.1:8200` |
+| `vault` | Vault (raft em volume, HTTP) | `127.0.0.1:8200` |
 | `vault-bootstrap` | Política e AppRoles (executa e sai) | nenhuma |
 | `migrar` | Migrations (executa e sai) | nenhuma |
 | `kms` | Serviço KMS (HTTP na 8300 e métricas/saúde na 9300, dentro da rede) | nenhuma |

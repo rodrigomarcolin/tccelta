@@ -48,31 +48,48 @@ services:
     networks: [dados]
     shm_size: 512m
 
+  # Vault em modo servidor (raft em volume), nao -dev: o modo dev e em memoria e perdia KV, chaves Transit e AppRoles a
+  # cada reinicio. Estado em vault_dados; chave de unseal e token raiz de laboratorio em vault_init (ver init-unseal.sh).
   vault:
     image: hashicorp/vault:${VAULT_VERSAO:-1.18}
+    init: true
     cap_add: [IPC_LOCK]
     environment:
-      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
       VAULT_ADDR: http://127.0.0.1:8200
-    secrets: [vault_dev_root_token]
-    entrypoint: ["/bin/sh", "-c",
-      "VAULT_DEV_ROOT_TOKEN_ID=$$(cat /run/secrets/vault_dev_root_token) exec vault server -dev"]
+    entrypoint: ["vault", "server", "-config=/vault/dev-config/vault-dev.hcl"]
+    volumes:
+      - ./deploy/kms/vault/config/vault-dev.hcl:/vault/dev-config/vault-dev.hcl:ro
+      - vault_dados:/vault/data
+      - vault_init:/vault/init
     healthcheck:
+      # sai com 2 enquanto selado: fica unhealthy ate o vault-unseal abrir
       test: ["CMD", "vault", "status"]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 30
     ports: ["127.0.0.1:8200:8200"]
+    networks: [cofre]
+
+  # Inicializa (so na primeira vez) e abre o Vault a cada `up`. Init de laboratorio: 1 chave, limiar 1.
+  vault-unseal:
+    image: hashicorp/vault:${VAULT_VERSAO:-1.18}
+    entrypoint: ["/bin/sh", "/vault/scripts/init-unseal.sh"]
+    environment: { VAULT_ADDR: "http://vault:8200" }
+    volumes:
+      - ./deploy/kms/vault/scripts:/vault/scripts:ro
+      - vault_init:/vault/init
+    depends_on: { vault: { condition: service_started } }
+    restart: "no"
     networks: [cofre]
 
   vault-bootstrap:
     image: hashicorp/vault:${VAULT_VERSAO:-1.18}
-    depends_on: { vault: { condition: service_healthy } }
+    depends_on: { vault-unseal: { condition: service_completed_successfully } }
     environment:
       VAULT_ADDR: http://vault:8200
       PERFIL: dev
-    secrets: [vault_dev_root_token]
     volumes:
+      - vault_init:/vault/init:ro
       - ./deploy/kms/vault/scripts:/vault/scripts:ro
       - ./deploy/kms/vault/policies:/vault/policies:ro
       - vault_approle_kms:/approle/kms

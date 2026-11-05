@@ -2,7 +2,8 @@
 # Bootstrap idempotente do Vault (executa na imagem hashicorp/vault, /bin/sh).
 set -eu
 : "${VAULT_ADDR:?}" "${PERFIL:?}"
-if [ "$PERFIL" = dev ]; then
+if [ -s /run/secrets/vault_dev_root_token ]; then
+  # stack de teste (compose.test.yaml): Vault -dev com token fixo; no resto, o token raiz vem do init.json
   VAULT_TOKEN="$(cat /run/secrets/vault_dev_root_token)"
 else
   VAULT_TOKEN="$(sed -n 's/.*"root_token": *"\([^"]*\)".*/\1/p' /vault/init/init.json)"
