@@ -37,6 +37,7 @@ export function MapDouble(p: MapProps) {
       data-focus={p.focus ? `${p.focus.lat},${p.focus.lon}` : ""}
       data-theme={p.theme}
       data-events={p.events.length}
+      data-compact={String(p.compact ?? false)}
     >
       <button type="button" onClick={() => p.onHoverT(p.route.t_ms[10])}>
         hover na rota

@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import Link from "next/link";
 import type { TripAnalysis } from "@/domain/trip/types";
 import { headerDescription } from "@/domain/trip/analysis";
@@ -7,10 +8,16 @@ import { buttonClass } from "@/components/ui/Button";
 import { DataValue } from "@/components/ui/DataValue";
 import { PageHeader, PageHeaderTitle } from "@/components/ui/PageHeader";
 
-export function Header({ analysis }: { analysis: TripAnalysis }) {
+export function Header({
+  analysis,
+  headerRef,
+}: {
+  analysis: TripAnalysis;
+  headerRef?: Ref<HTMLElement>;
+}) {
   const { identification, when } = headerDescription(analysis);
   return (
-    <PageHeader>
+    <PageHeader sticky ref={headerRef}>
       <PageHeaderTitle>
         <Link
           href="/processar"
@@ -30,7 +37,7 @@ export function Header({ analysis }: { analysis: TripAnalysis }) {
           <span className="text-secondary">categoria {analysis.viagem.categoria_viagem}</span>
         </p>
       </PageHeaderTitle>
-      <div className="print:hidden">
+      <div className="shrink-0 print:hidden">
         <ThemeToggle />
       </div>
     </PageHeader>

@@ -19,6 +19,8 @@ import { NoticeBar } from "./NoticeBar";
 import { InstantTooltip } from "./Instant";
 import { Timeline, type Cursor } from "./Timeline";
 import { RouteMap } from "./RouteMap";
+import { Minimap } from "./Minimap";
+import { useMapOffscreen } from "./useMapOffscreen";
 import { GearsRpm } from "./GearsRpm";
 import { Quality } from "./Quality";
 import { Legend, Summary } from "./Summary";
@@ -38,6 +40,16 @@ type Props = {
 const SECTION = "mb-9 print:break-inside-avoid";
 const SUMMARY = "mb-9 grid gap-7 print:mb-[8mm] print:break-inside-avoid";
 
+/** Explains the event markers of the map (the shapes alone do not say which is which). */
+function EventSymbols() {
+  return (
+    <p className="m-0 text-[12px] text-secondary">
+      <span aria-hidden="true">●</span> Frenagem brusca · <span aria-hidden="true">○</span>{" "}
+      Aceleração brusca
+    </p>
+  );
+}
+
 export function AnalysisView({
   analysis,
   provisional,
@@ -48,7 +60,9 @@ export function AnalysisView({
   const theme = useTheme();
   const [cursor, setCursorState] = useState<Cursor>({ t: null, source: "chart" });
   const [focus, setFocus] = useState<{ lat: number; lon: number; nonce: number } | null>(null);
-  const mapRef = useRef<HTMLDivElement>(null);
+  const mapFrameRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const { offscreen, headerBottom } = useMapOffscreen(mapFrameRef, headerRef);
 
   const axis = useMemo(() => analysisAxis(analysis), [analysis]);
   const fmtAxis = useMemo(() => timeFormatter(analysis), [analysis]);
@@ -69,7 +83,8 @@ export function AnalysisView({
     if (e.lat === null || e.lon === null) return;
     setFocus({ lat: e.lat, lon: e.lon, nonce: Date.now() });
     setCursorState({ t: e.t_inicio_ms, source: "pinned" });
-    mapRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    // Lands just below the sticky header (see `scrollMarginTop` on the frame).
+    mapFrameRef.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
   }, []);
 
   const markInstant = useCallback((t: number) => setCursorState({ t, source: "pinned" }), []);
@@ -81,7 +96,7 @@ export function AnalysisView({
 
   return (
     <div>
-      <Header analysis={analysis} />
+      <Header analysis={analysis} headerRef={headerRef} />
       {notice ? <ConnectionBanner text={notice} /> : null}
       {provisional ? <ProvisionalBanner expired={provisionalExpired} /> : null}
       {updatedAt ? <Note role="status">Resultado atualizado às {updatedAt}</Note> : null}
@@ -107,8 +122,12 @@ export function AnalysisView({
               Resumo
             </h2>
             {hasMap && route ? (
-              <div className="grid content-start gap-4" ref={mapRef}>
-                <div className="relative">
+              <div className="grid content-start gap-4">
+                <div
+                  className="relative isolate"
+                  ref={mapFrameRef}
+                  style={{ scrollMarginTop: headerBottom + 12 }}
+                >
                   <RouteMap
                     route={route}
                     events={analysis.eventos}
@@ -126,6 +145,7 @@ export function AnalysisView({
                     formatT={fmtFull}
                   />
                 </div>
+                <EventSymbols />
                 <Legend analysis={analysis} />
               </div>
             ) : null}
@@ -134,6 +154,16 @@ export function AnalysisView({
               {!hasMap ? <Legend analysis={analysis} /> : null}
             </div>
           </section>
+
+          {hasMap && route ? (
+            <Minimap
+              route={route}
+              theme={theme}
+              cursorT={cursor.t}
+              visible={offscreen}
+              headerBottom={headerBottom}
+            />
+          ) : null}
 
           <section className={SECTION} aria-labelledby="t-timeline">
             <h2 id="t-timeline">Linha do tempo</h2>

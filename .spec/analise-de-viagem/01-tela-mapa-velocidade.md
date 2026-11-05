@@ -175,10 +175,16 @@ As faixas são fixas, para permitir comparar viagens. Elas **não** representam 
 |---|---|
 | Início e fim | Marcadores **A** e **B**, com texto |
 | Parada | Marcador neutro (cinza) com **tamanho conforme a duração** |
-| Frenagem brusca | Ícone próprio (por exemplo, triângulo para baixo) |
-| Aceleração brusca | Ícone diferente (por exemplo, triângulo para cima) |
+| Frenagem brusca | Círculo **cheio** (cor `--text-primary`) |
+| Aceleração brusca | Círculo **vazio** (fundo de superfície, contorno `--text-primary`) |
 
-Eventos não dependem só da cor: forma e rótulo acessível distinguem os tipos.
+Eventos não dependem só da cor: preenchimento e rótulo acessível distinguem os tipos. Círculos, e não triângulos, para não se confundir com setas de direção. Uma legenda abaixo do mapa ("● Frenagem brusca · ○ Aceleração brusca") explica os símbolos. Os gráficos da Linha do tempo continuam com ▼ e ▲.
+
+### Cabeçalho fixo e minimapa
+
+- O cabeçalho (link "Nova viagem", título, identificação, motorista e categoria, botão de tema) fica fixo no topo da janela ao rolar. Na impressão, deixa de ser fixo.
+- Com o mapa fora da tela (menos de 25% da altura visível abaixo do cabeçalho), um **minimapa** aparece no canto superior direito, abaixo do cabeçalho: 260×180 px (170×120 px no celular). Mostra a rota inteira e o ponto do cursor compartilhado, para acompanhar o hover dos gráficos. Não tem marcadores, paradas nem eventos, não é interativo (o mouse passa para o gráfico embaixo), fica oculto para leitores de tela e não é impresso.
+- Em telas com menos de ~1800 px, o minimapa cobre a ponta direita dos gráficos enquanto está visível.
 
 ### Trechos sem dados
 

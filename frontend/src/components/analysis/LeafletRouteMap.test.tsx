@@ -107,6 +107,8 @@ beforeEach(() => {
   state.tiles = [];
   document.documentElement.style.setProperty("--band-ate_30", "#8c3326");
   document.documentElement.style.setProperty("--band-fault", "#8b97a6");
+  document.documentElement.style.setProperty("--text-primary", "#111111");
+  document.documentElement.style.setProperty("--surface-card", "#eeeeee");
 });
 
 describe("route", () => {
@@ -126,7 +128,12 @@ describe("route", () => {
     expect(icons.some((h) => h.includes(">A<"))).toBe(true);
     expect(icons.some((h) => h.includes(">B<"))).toBe(true);
     // Events: only braking and acceleration; stops as circles.
-    expect(icons.filter((h) => h.includes("polygon"))).toHaveLength(2);
+    const eventIcons = icons.filter((h) => h.includes("<circle"));
+    expect(eventIcons).toHaveLength(2);
+    expect(icons.some((h) => h.includes("<polygon"))).toBe(false);
+    // Braking is filled, acceleration is empty: different fills.
+    const fills = eventIcons.map((h) => /fill="([^"]*)"/.exec(h)?.[1]);
+    expect(fills[0]).not.toBe(fills[1]);
     expect(ofKind("circle")).toHaveLength(p.stops.length);
   });
 
@@ -161,6 +168,28 @@ describe("route", () => {
     await waitFor(() =>
       expect((state.map as Record<string, unknown[]>).called_setView).toBeDefined(),
     );
+  });
+});
+
+describe("compact (minimap)", () => {
+  it("has no zoom control, no A/B, no stops nor events, and no mouse handlers", async () => {
+    await mountMap(props({ compact: true, events: [], stops: [] }));
+    const options = state.created.find((c) => c.kind === "map")!.args[1] as Record<string, unknown>;
+    expect(options.zoomControl).toBe(false);
+    expect(options.dragging).toBe(false);
+    expect(options.keyboard).toBe(false);
+    expect(ofKind("marker")).toHaveLength(0);
+    expect(ofKind("circle")).toHaveLength(0);
+    expect(state.mapHandlers.mousemove).toBeUndefined();
+    expect(state.mapHandlers.mouseout).toBeUndefined();
+  });
+
+  it("still draws the cursor and fits the whole route", async () => {
+    await mountMap(
+      props({ compact: true, events: [], stops: [], cursorT: props().route.t_ms[5] as number }),
+    );
+    await waitFor(() => expect(ofKind("circle")).toHaveLength(1));
+    expect((state.map as Record<string, unknown[]>).called_fitBounds).toHaveLength(1);
   });
 });
 

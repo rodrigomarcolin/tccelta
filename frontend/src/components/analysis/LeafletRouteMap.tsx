@@ -19,6 +19,8 @@ export type MapProps = {
   onHoverT: (t: number | null) => void;
   focus: { lat: number; lon: number; nonce: number } | null;
   formatT: (t: number) => string;
+  /** Minimap: only route and cursor, no interaction, thinner strokes. */
+  compact?: boolean;
 };
 
 const TILE_ERROR_LIMIT = 3;
@@ -35,10 +37,11 @@ function eventIcon(L: typeof Leaflet, tipo: TripEvent["tipo"]): Leaflet.DivIcon 
   if (tipo === "marcha_lenta_longa") return null;
   const outline = cssColor("--text-primary");
   const fillColor = cssColor("--surface-card");
-  const polygonPoints = tipo === "frenagem_brusca" ? "2,3 16,3 9,16" : "2,15 16,15 9,2";
+  // Braking is a filled circle, acceleration an empty one (never confused with direction arrows).
+  const fill = tipo === "frenagem_brusca" ? outline : fillColor;
   return L.divIcon({
     className: "border-0 bg-transparent",
-    html: `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><polygon points="${polygonPoints}" fill="${fillColor}" stroke="${outline}" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
+    html: `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="6.5" fill="${fill}" stroke="${outline}" stroke-width="1.8"/></svg>`,
     iconSize: [18, 18],
     iconAnchor: [9, 9],
   });
@@ -55,7 +58,7 @@ function abIcon(L: typeof Leaflet, letter: "A" | "B"): Leaflet.DivIcon {
 
 /** Leaflet map with the route colored by segment. Runs only on the client. */
 export default function LeafletRouteMap(props: MapProps) {
-  const { route, events, stops, theme, cursorT, focus } = props;
+  const { route, events, stops, theme, cursorT, focus, compact = false } = props;
   const el = useRef<HTMLDivElement>(null);
   const L = useRef<typeof Leaflet | null>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
@@ -82,7 +85,21 @@ export default function LeafletRouteMap(props: MapProps) {
       const lib = (mod as unknown as { default?: typeof Leaflet }).default ?? mod;
       if (cancelled || !el.current) return;
       L.current = lib;
-      const m = lib.map(el.current, { preferCanvas: true, zoomControl: true });
+      const m = lib.map(
+        el.current,
+        compact
+          ? {
+              preferCanvas: true,
+              zoomControl: false,
+              dragging: false,
+              touchZoom: false,
+              scrollWheelZoom: false,
+              doubleClickZoom: false,
+              boxZoom: false,
+              keyboard: false,
+            }
+          : { preferCanvas: true, zoomControl: true },
+      );
       mapRef.current = m;
       layerRef.current = lib.layerGroup().addTo(m);
 
@@ -109,21 +126,24 @@ export default function LeafletRouteMap(props: MapProps) {
       const pts = routeRef.current.lat
         .map((la, i) => [la, routeRef.current.lon[i]] as [number | null, number | null])
         .filter((p): p is [number, number] => p[0] !== null && p[1] !== null);
-      if (pts.length) m.fitBounds(lib.latLngBounds(pts), { padding: [24, 24] });
+      if (pts.length)
+        m.fitBounds(lib.latLngBounds(pts), { padding: compact ? [10, 10] : [24, 24] });
       else m.setView([-25.43, -49.27], 13);
 
-      m.on("mousemove", (ev: Leaflet.LeafletMouseEvent) => {
-        const metersPerPx =
-          (156543.03 * Math.cos((ev.latlng.lat * Math.PI) / 180)) / 2 ** m.getZoom();
-        const point = routePointAtPlace(
-          routeRef.current,
-          ev.latlng.lat,
-          ev.latlng.lng,
-          metersPerPx * 16,
-        );
-        hoverCallback.current(point ? point.t : null);
-      });
-      m.on("mouseout", () => hoverCallback.current(null));
+      if (!compact) {
+        m.on("mousemove", (ev: Leaflet.LeafletMouseEvent) => {
+          const metersPerPx =
+            (156543.03 * Math.cos((ev.latlng.lat * Math.PI) / 180)) / 2 ** m.getZoom();
+          const point = routePointAtPlace(
+            routeRef.current,
+            ev.latlng.lat,
+            ev.latlng.lng,
+            metersPerPx * 16,
+          );
+          hoverCallback.current(point ? point.t : null);
+        });
+        m.on("mouseout", () => hoverCallback.current(null));
+      }
 
       setReady(true);
       cleanup = () => {
@@ -138,10 +158,12 @@ export default function LeafletRouteMap(props: MapProps) {
       cleanup?.();
       setReady(false);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Printing: redraws with the light theme colors.
   useEffect(() => {
+    if (compact) return;
     const before = () => {
       setPrinting(true);
       mapRef.current?.invalidateSize();
@@ -153,7 +175,7 @@ export default function LeafletRouteMap(props: MapProps) {
       window.removeEventListener("beforeprint", before);
       window.removeEventListener("afterprint", after);
     };
-  }, []);
+  }, [compact]);
 
   // Route, start and end markers, stops and events.
   useEffect(() => {
@@ -203,7 +225,7 @@ export default function LeafletRouteMap(props: MapProps) {
       lib
         .polyline([t.a, t.b], {
           color: outline,
-          weight: 8,
+          weight: compact ? 5 : 8,
           opacity: 1,
           lineCap: "round",
           interactive: false,
@@ -215,13 +237,15 @@ export default function LeafletRouteMap(props: MapProps) {
       lib
         .polyline([t.a, t.b], {
           color: bandColor(t.band),
-          weight: noData ? 2 : 5,
+          weight: noData ? (compact ? 1.5 : 2) : compact ? 3 : 5,
           opacity: noData ? 0.9 : 1,
           lineCap: "round",
           interactive: false,
         })
         .addTo(group);
     }
+
+    if (compact) return;
 
     for (const p of stops) {
       if (p.lat === null || p.lon === null) continue;
@@ -280,9 +304,9 @@ export default function LeafletRouteMap(props: MapProps) {
     if (!cursor.current) {
       cursor.current = lib
         .circleMarker([point.lat, point.lon], {
-          radius: 7,
+          radius: compact ? 5 : 7,
           color: cssColor("--accent"),
-          weight: 3,
+          weight: compact ? 2 : 3,
           fillColor: cssColor("--surface-card"),
           fillOpacity: 1,
           interactive: false,
@@ -291,7 +315,7 @@ export default function LeafletRouteMap(props: MapProps) {
     } else {
       cursor.current.setLatLng([point.lat, point.lon]);
     }
-  }, [ready, cursorT, route, theme]);
+  }, [ready, cursorT, route, theme, compact]);
 
   // "Ver no mapa": centers on the event.
   useEffect(() => {
@@ -309,7 +333,7 @@ export default function LeafletRouteMap(props: MapProps) {
   }, [ready, theme, printing]);
 
   return (
-    <MapBox>
+    <MapBox compact={compact}>
       <div
         ref={el}
         className={`h-full w-full font-ui ${noBase ? "bg-track" : "bg-sunken"}`}

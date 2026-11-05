@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { analysisFor, renderWithTheme } from "@/tests/helpers";
@@ -110,6 +110,70 @@ describe("normal boot (scenario boot 8)", () => {
     expect(charts()[0].getAttribute("data-cursor-x")).not.toBe("");
     await userEvent.click(screen.getByRole("button", { name: "sair da rota" }));
     expect(charts()[0].getAttribute("data-cursor-x")).toBe("");
+  });
+
+  it("'ver no mapa' scrolls the map frame to just below the sticky header", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      renderWithTheme(<AnalysisView analysis={analysisFor("normal")} provisional={false} />);
+      await userEvent.click(screen.getByRole("button", { name: /Ver no mapa: Frenagem brusca/ }));
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
+      const frame = scrollIntoView.mock.contexts[0] as HTMLElement;
+      expect(frame).toContainElement(screen.getByTestId("map"));
+      expect(frame.style.scrollMarginTop).toBe("12px");
+    } finally {
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
+  });
+
+  it("shows a minimap with the chart cursor only while the map is off screen", async () => {
+    const rects = { map: { top: 100, bottom: 520, height: 420 }, header: { bottom: 80 } };
+    const spy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        const r =
+          this.tagName === "HEADER"
+            ? rects.header
+            : this.className.includes("isolate")
+              ? rects.map
+              : {};
+        return {
+          top: 0,
+          left: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          bottom: 0,
+          x: 0,
+          y: 0,
+          ...r,
+        } as DOMRect;
+      });
+    try {
+      renderWithTheme(<AnalysisView analysis={analysisFor("normal")} provisional={false} />);
+      expect(screen.getAllByTestId("map")).toHaveLength(1);
+
+      // Scrolls past the map.
+      rects.map = { top: -600, bottom: -180, height: 420 };
+      act(() => {
+        window.dispatchEvent(new Event("scroll"));
+      });
+      await waitFor(() => expect(screen.getAllByTestId("map")).toHaveLength(2));
+      await userEvent.click(chartButton("Velocidade ao longo da viagem"));
+      const minimap = screen.getAllByTestId("map").find((m) => m.dataset.compact === "true")!;
+      expect(minimap.dataset.cursorT).not.toBe("");
+      expect(minimap.closest("[aria-hidden]")).not.toHaveClass("invisible");
+
+      // Back to the map: the minimap is hidden.
+      rects.map = { top: 100, bottom: 520, height: 420 };
+      act(() => {
+        window.dispatchEvent(new Event("scroll"));
+      });
+      await waitFor(() => expect(minimap.closest("[aria-hidden]")).toHaveClass("invisible"));
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("'ver no mapa' centers the event and pins the instant; keeps the cursor on leave", async () => {
