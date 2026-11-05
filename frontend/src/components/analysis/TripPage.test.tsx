@@ -2,6 +2,7 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TripStatusResponse, TripStatus } from "@/domain/trip/types";
 import { analysisFor, renderWithTheme } from "@/tests/helpers";
+import { router } from "@/tests/router";
 import { TripPage } from "./TripPage";
 
 vi.mock("@/components/analysis/Chart", async () => ({
@@ -70,10 +71,9 @@ const count = (suffix: "status" | "analysis") =>
   calls.filter((u) => (suffix === "analysis" ? u.endsWith("/analysis") : !u.endsWith("/analysis")))
     .length;
 
-async function mount(goTo = vi.fn()) {
-  renderWithTheme(<TripPage id={ID} goTo={goTo} />);
+async function mount() {
+  renderWithTheme(<TripPage id={ID} />);
   await advance(0);
-  return goTo;
 }
 
 let hidden = false;
@@ -201,8 +201,8 @@ describe("other states", () => {
 
   it("401 on status goes to /entrar with the return path", async () => {
     install({ status: () => ({ status: 401 }), analysis: () => ({ status: 401 }) });
-    const goToMock = await mount();
-    expect(goToMock).toHaveBeenCalledWith(`/entrar?retorno=${encodeURIComponent(`/viagem/${ID}`)}`);
+    await mount();
+    expect(router.replace).toHaveBeenCalledWith(`/entrar?retorno=${encodeURIComponent(`/viagem/${ID}`)}`);
     await advance(5000);
     expect(count("status")).toBe(1);
   });
@@ -212,8 +212,8 @@ describe("other states", () => {
       status: () => ({ status: 200, body: status("pronta") }),
       analysis: () => ({ status: 401 }),
     });
-    const goToMock = await mount();
-    expect(goToMock).toHaveBeenCalledTimes(1);
+    await mount();
+    expect(router.replace).toHaveBeenCalledTimes(1);
   });
 
   it("unexpected response (400 off-contract): message, and 'Tentar de novo' reloads", async () => {
@@ -254,7 +254,7 @@ describe("other states", () => {
       "fetch",
       vi.fn(() => new Promise(() => undefined)),
     );
-    renderWithTheme(<TripPage id={ID} goTo={vi.fn()} />);
+    renderWithTheme(<TripPage id={ID} />);
     expect(screen.getByLabelText("Carregando a análise")).toBeInTheDocument();
   });
 });
@@ -666,7 +666,7 @@ describe("provisional trip", () => {
 describe("cancellation", () => {
   it("unmounting cancels the in-flight request", async () => {
     install({ status: () => new Promise(() => undefined), analysis: () => ({ status: 409 }) });
-    const { unmount } = renderWithTheme(<TripPage id={ID} goTo={vi.fn()} />);
+    const { unmount } = renderWithTheme(<TripPage id={ID} />);
     await advance(0);
     expect(signals[0].aborted).toBe(false);
     unmount();
@@ -678,7 +678,7 @@ describe("cancellation", () => {
       status: () => ({ status: 200, body: status("pendente") }),
       analysis: () => ({ status: 409 }),
     });
-    const { unmount } = renderWithTheme(<TripPage id={ID} goTo={vi.fn()} />);
+    const { unmount } = renderWithTheme(<TripPage id={ID} />);
     await advance(0);
     unmount();
     await advance(10_000);
@@ -691,7 +691,7 @@ describe("cancellation", () => {
       status: () => new Promise((_ok, no) => (fail = no)),
       analysis: () => ({ status: 409 }),
     });
-    const { unmount } = renderWithTheme(<TripPage id={ID} goTo={vi.fn()} />);
+    const { unmount } = renderWithTheme(<TripPage id={ID} />);
     await advance(0);
     unmount();
     fail(new Error("aborted"));
@@ -707,7 +707,7 @@ describe("navigation and restarts", () => {
       status: () => ({ status: 200, body: status("pronta", true, "c1") }),
       analysis: () => ({ status: 200, body: analysisFor("normal") }),
     });
-    const { rerender } = renderWithTheme(<TripPage id={ID} goTo={vi.fn()} />);
+    const { rerender } = renderWithTheme(<TripPage id={ID} />);
     await advance(0);
     expect(screen.getByTestId("map")).toBeInTheDocument();
 
@@ -715,7 +715,7 @@ describe("navigation and restarts", () => {
       status: () => new Promise(() => undefined),
       analysis: () => new Promise(() => undefined),
     });
-    rerender(<TripPage id={OTHER} goTo={vi.fn()} />);
+    rerender(<TripPage id={OTHER} />);
     await advance(0);
     expect(screen.queryByTestId("map")).toBeNull();
     expect(screen.getByLabelText("Carregando a análise")).toBeInTheDocument();

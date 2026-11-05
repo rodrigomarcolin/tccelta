@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { FUELS, INITIAL_DONGLE } from "@/config";
 import { ApiError } from "@/domain/trip/apiError";
 import type { CreateTripRequest, Problem } from "@/domain/trip/types";
@@ -106,7 +107,6 @@ export function buildBody(c: Fields): CreateTripRequest {
 type Props = {
   /** Initial value of the dongle field (`ANALISE_DONGLE_ID` on the server). */
   initialDongle?: number;
-  goTo?: (url: string) => void;
 };
 
 /** Translates the error response of the `POST` (by `codigo`, never by `title` or `detail`). */
@@ -161,10 +161,8 @@ export function creationError(
   return { general: "Erro inesperado no servidor.", retry: true };
 }
 
-export function ProcessForm({
-  initialDongle = INITIAL_DONGLE,
-  goTo = (u) => window.location.assign(u),
-}: Props) {
+export function ProcessForm({ initialDongle = INITIAL_DONGLE }: Props) {
+  const router = useRouter();
   const driverRef = useRef<HTMLInputElement>(null);
   const [c, setC] = useState<Fields>(() => initialFields(initialDongle));
   const [errors, setErrors] = useState<Errors>({});
@@ -186,7 +184,7 @@ export function ProcessForm({
 
     try {
       const created = await createTrip.mutateAsync(buildBody(c));
-      goTo(`/viagem/${created.viagem_id}`);
+      router.push(`/viagem/${created.viagem_id}`);
     } catch (error) {
       if (!(error instanceof ApiError)) {
         setErrors({ general: "Não foi possível falar com o servidor.", retry: true });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useTripMonitor } from "@/use-cases/useTripMonitor";
 import { ThemeToggle } from "@/components/ui/Theme";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -15,15 +16,7 @@ import {
   ConnectionBanner,
 } from "./States";
 
-type Props = {
-  id: string;
-  /** Replaces navigation (tests). */
-  goTo?: (url: string) => void;
-};
-
-function defaultGoTo(url: string) {
-  window.location.assign(url);
-}
+type Props = { id: string };
 
 function SimplePage({ children, text }: { children: ReactNode; text?: string | null }) {
   return (
@@ -39,8 +32,9 @@ function SimplePage({ children, text }: { children: ReactNode; text?: string | n
 }
 
 /** Waiting, polling and display of the analysis for `/viagem/[id]`. */
-export function TripPage({ id, goTo = defaultGoTo }: Props) {
-  const trip = useTripMonitor(id, goTo);
+export function TripPage({ id }: Props) {
+  const router = useRouter();
+  const trip = useTripMonitor(id, router.replace);
   const { analysis, provisional, provisionalExpired, notice, updatedAt } = trip;
   // The same element between polls that bring nothing new: the analysis is not rendered again.
   const view = useMemo(

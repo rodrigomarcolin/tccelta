@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithTheme } from "@/tests/helpers";
+import { router } from "@/tests/router";
 import { creationError, ProcessForm, buildBody, toRfc3339, validateFields } from "./ProcessForm";
 
 type Resp = { status: number; body?: unknown; retryAfter?: string };
@@ -30,7 +31,7 @@ const submit = () => userEvent.click(screen.getByRole("button", { name: "Process
 
 describe("initial values", () => {
   it("category feira, E30, dongle 1 and the 6 presets", () => {
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     expect(screen.getByLabelText("Categoria")).toHaveValue("feira");
     expect(screen.getByLabelText("Dongle")).toHaveValue(1);
     const fuel = screen.getByLabelText("Combustível") as HTMLSelectElement;
@@ -49,7 +50,7 @@ describe("initial values", () => {
 describe("client-side validation", () => {
   it("empty fields are not sent", async () => {
     const f = fetchWith({ status: 202 });
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     await userEvent.clear(screen.getByLabelText("Categoria"));
     await userEvent.clear(screen.getByLabelText("Dongle"));
     await submit();
@@ -63,7 +64,7 @@ describe("client-side validation", () => {
 
   it("interval requires dates and t1 after t0", async () => {
     const f = fetchWith({ status: 202 });
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     await userEvent.type(screen.getByLabelText("Motorista"), "Ana");
     await userEvent.click(screen.getByLabelText("Intervalo de tempo"));
     await submit();
@@ -115,11 +116,10 @@ describe("client-side validation", () => {
 describe("submit", () => {
   it("202 goes to /viagem/<id> and sends the expected body", async () => {
     const f = fetchWith({ status: 202, body: { viagem_id: "abc", status: "pendente" } });
-    const goTo = vi.fn();
-    renderWithTheme(<ProcessForm goTo={goTo} />);
+    renderWithTheme(<ProcessForm />);
     await fillBoot("  João ", "8");
     await submit();
-    await waitFor(() => expect(goTo).toHaveBeenCalledWith("/viagem/abc"));
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/viagem/abc"));
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/trips");
     expect(JSON.parse(init.body as string)).toEqual({
@@ -134,7 +134,7 @@ describe("submit", () => {
 
   it("sends interval with -03:00 timezone", async () => {
     const f = fetchWith({ status: 202, body: { viagem_id: "x" } });
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     await userEvent.type(screen.getByLabelText("Motorista"), "Ana");
     await userEvent.click(screen.getByLabelText("Intervalo de tempo"));
     fireEvent.change(screen.getByLabelText("Início"), { target: { value: "2026-10-28T08:00" } });
@@ -150,7 +150,7 @@ describe("submit", () => {
 
   it("409 shows on the driver field and keeps the rest", async () => {
     fetchWith({ status: 409, body: { codigo: "motorista_repetido" } });
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     await fillBoot("João", "8");
     await userEvent.selectOptions(screen.getByLabelText("Combustível"), "diesel");
     await submit();
@@ -170,7 +170,7 @@ describe("submit", () => {
       status: 400,
       body: { codigo: "entrada_invalida", detail: "entrada.boot_id: de 1 a 65535" },
     });
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     await fillBoot("João", "70000");
     await submit();
     const notice = await screen.findByText("entrada.boot_id: de 1 a 65535");
@@ -180,7 +180,7 @@ describe("submit", () => {
 
   it("404 dongle_desconhecido shows on the dongle field", async () => {
     fetchWith({ status: 404, body: { codigo: "dongle_desconhecido" } });
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     await fillBoot();
     await userEvent.clear(screen.getByLabelText("Dongle"));
     await userEvent.type(screen.getByLabelText("Dongle"), "2");
@@ -190,7 +190,7 @@ describe("submit", () => {
 
   it("404 boot_desconhecido shows on the boot field", async () => {
     fetchWith({ status: 404, body: { codigo: "boot_desconhecido" } });
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     await fillBoot();
     await submit();
     expect(
@@ -200,7 +200,7 @@ describe("submit", () => {
 
   it("starts with the dongle configured on the server and sends that value", async () => {
     const f = fetchWith({ status: 202, body: { viagem_id: "x" } });
-    renderWithTheme(<ProcessForm initialDongle={7} goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm initialDongle={7} />);
     expect(screen.getByLabelText("Dongle")).toHaveValue(7);
     await fillBoot();
     await submit();
@@ -211,7 +211,7 @@ describe("submit", () => {
 
   it("409 moves focus to the driver field", async () => {
     fetchWith({ status: 409, body: { codigo: "motorista_repetido" } });
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     await fillBoot();
     await userEvent.click(screen.getByLabelText("Categoria"));
     await submit();
@@ -221,15 +221,14 @@ describe("submit", () => {
 
   it('401 shows "Sessão expirada", offers login in another tab and preserves the form', async () => {
     fetchWith({ status: 401 });
-    const goTo = vi.fn();
-    renderWithTheme(<ProcessForm goTo={goTo} />);
+    renderWithTheme(<ProcessForm />);
     await fillBoot("João", "8");
     await submit();
     expect(await screen.findByText(/Sessão expirada./)).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Entrar de novo" });
     expect(link).toHaveAttribute("href", "/entrar?retorno=%2Fprocessar");
     expect(link).toHaveAttribute("target", "_blank");
-    expect(goTo).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Motorista")).toHaveValue("João");
     expect(screen.getByRole("spinbutton", { name: "Boot" })).toHaveValue(8);
   });
@@ -279,7 +278,7 @@ describe("submit", () => {
     "status %i %s shows the right message and button",
     async (status, codigo, ra, text, buttonName) => {
       fetchWith({ status, body: codigo ? { codigo } : undefined, retryAfter: ra });
-      renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+      renderWithTheme(<ProcessForm />);
       await fillBoot();
       await submit();
       expect(await screen.findByText(text)).toBeInTheDocument();
@@ -290,7 +289,7 @@ describe("submit", () => {
   it('network failure shows "Não foi possível falar com o servidor." and the POST does not repeat on its own', async () => {
     const f = vi.fn(async () => Promise.reject(new Error("rede")));
     vi.stubGlobal("fetch", f);
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     await fillBoot();
     await submit();
     expect(await screen.findByText("Não foi possível falar com o servidor.")).toBeInTheDocument();
@@ -321,7 +320,7 @@ describe("submit", () => {
   it("prevents double submit while waiting", async () => {
     let release: (r: Resp) => void = () => undefined;
     const f = fetchWith(() => new Promise<Resp>((res) => (release = res)));
-    renderWithTheme(<ProcessForm goTo={vi.fn()} />);
+    renderWithTheme(<ProcessForm />);
     await fillBoot();
     const button = screen.getByRole("button", { name: "Processar viagem" });
     await userEvent.click(button);
