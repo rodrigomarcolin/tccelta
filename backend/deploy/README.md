@@ -112,6 +112,13 @@ O procedimento acima ainda não foi executado contra um Vault de verdade (nem os
 | `app` | Aplicação: código, `.env`, segredos, certificados, `pg_hba`, firewall do banco |
 | `codigo` | Cria a pasta da aplicação e sincroniza o código (rsync) |
 | `dbeaver` | Só o acesso ao banco: `pg_hba.conf` e firewall da 5432. Use para trocar IPs permitidos |
+| `frontend` | Só o dashboard, nos dois playbooks: sincroniza `frontend/`, constrói só a imagem `frontend` e sobe só o contêiner. Não toca na API, no worker nem nas migrações |
+
+Para atualizar só o dashboard (sem parar a ingestão e sem construir o backend):
+`bash deploy/ansible/run.sh site.yml stack.yml --tags frontend`. Os dois playbooks na mesma chamada: o `site.yml`
+envia o código para `/opt/frontend` e o `stack.yml` constrói e recria o contêiner (o Vault precisa estar aberto, por causa
+do cliente de client credentials, que só é criado na primeira vez). A tarefa de build só do front tem a tag `never`: numa
+execução completa, quem constrói é a tarefa de sempre.
 
 Para liberar ou trocar um IP do DBeaver: edite `dbeaver_ips` em `group_vars/all/local.yml` e rode
 `bash deploy/ansible/run.sh site.yml --tags dbeaver`. Sem `rsync`, sem `stack.yml` e sem recriar o banco. No fim, o
@@ -119,6 +126,17 @@ playbook confere o firewall (um `RETURN` por IP e `DROP` no fim) e o `pg_hba.con
 item de `dbeaver_ips` precisa ser IPv4 em CIDR (ex.: `203.0.113.5/32`).
 
 Sem `--tags`, roda tudo.
+
+## Dashboard em /dashboard
+
+O dashboard Next (`frontend/`) é o serviço `frontend` do compose, no perfil `dashboard`: o `up` geral não o sobe, só o
+`stack.yml`. O Caddy encaminha `/dashboard*` para ele (com `handle`, sem remover o prefixo). O código vai para
+`/opt/frontend` (tag `codigo` do `site.yml`). O `stack.yml` gera o `.env.frontend` a partir de `frontend.env.j2`, com
+dois segredos que nascem na VPS (`AUTH_SECRET` e o segredo do cliente de client credentials, em `deploy/segredos/`); o
+restante vem de `frontend_*` em `group_vars/all/local.yml` (modelo em `local.yml.example`).
+
+No Google Cloud Console, o cliente OAuth precisa do redirect URI
+`https://<dominio_api>/dashboard/api/auth/callback/google`.
 
 ## Proxy da Cloudflare (opcional)
 

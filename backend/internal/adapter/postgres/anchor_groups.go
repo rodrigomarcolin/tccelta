@@ -24,3 +24,15 @@ func (r *anchorGroups) Copy(ctx context.Context, k timeline.BootKey, computedAt 
 	_, err := r.q.CopyAnchorGroups(ctx, rows)
 	return err
 }
+
+func (r *anchorGroups) List(ctx context.Context, k timeline.BootKey) ([]timeline.Group, error) {
+	rows, err := r.q.ListBootAnchorGroups(ctx, k.DongleID, k.Generation, k.BootID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]timeline.Group, len(rows))
+	for i, g := range rows {
+		out[i] = timeline.Group{Lo: g.LoMs, Hi: g.HiMs, TCenter: g.TCenterMs, FirstT: g.FirstTMs, LastT: g.LastTMs, N: int(g.NAnchors)}
+	}
+	return out, nil
+}

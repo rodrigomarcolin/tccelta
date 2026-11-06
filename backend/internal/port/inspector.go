@@ -3,6 +3,8 @@ package port
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"tccelta/backend/internal/domain/protocol"
 )
 
@@ -20,6 +22,8 @@ type Inspector interface {
 	CountAlerts(ctx context.Context, dongleID int32, alertType string) (int64, error)
 	// ReadingTime é a hora reconstruída (ms desde a época) da leitura mais recente de um boot com tempo.
 	ReadingTime(ctx context.Context, dongleID int32) (float64, error)
+	// TripStatus devolve o estado e os totais da análise de uma viagem (gold).
+	TripStatus(ctx context.Context, tripID uuid.UUID) (TripInspection, error)
 }
 
 // InspectedState é o recorte de dongle_state conferido pelo simulador.

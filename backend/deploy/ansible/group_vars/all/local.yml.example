@@ -10,3 +10,15 @@ dbeaver_ips:
 
 # Dominios (etapa 2): ficam em group_vars/all/main.yml (dominio_api, dominio_db), NAO aqui: o main.yml e carregado
 # depois deste arquivo e sobrescreveria qualquer valor definido nos dois.
+
+# Dashboard em /dashboard (stack.yml). AUTH_SECRET e o segredo do cliente de client credentials NAO vao aqui:
+# nascem na VPS (deploy/segredos/) na primeira execucao do stack.yml.
+frontend_client_id: dashboard-prod
+# dongle_id inteiro da tabela dongle (nao o dev_id hex)
+frontend_dongle_id: 1
+# Credenciais OAuth do Google Cloud Console (cliente "Aplicativo da Web")
+frontend_google_id: xxxxxxxx.apps.googleusercontent.com
+frontend_google_secret: troque-me
+# E-mails USP autorizados a processar viagens
+frontend_operadores:
+  - fulano@usp.br

@@ -31,6 +31,23 @@ func (q *Queries) ReadLastAck(ctx context.Context, dongleID int32) ([]byte, erro
 	return last_ack, err
 }
 
+const readProgress = `-- name: ReadProgress :one
+SELECT contiguous_seq, head_seq, last_ack_at FROM dongle_state WHERE dongle_id = $1
+`
+
+type ReadProgressRow struct {
+	ContiguousSeq int64
+	HeadSeq       int64
+	LastAckAt     *time.Time
+}
+
+func (q *Queries) ReadProgress(ctx context.Context, dongleID int32) (ReadProgressRow, error) {
+	row := q.db.QueryRow(ctx, readProgress, dongleID)
+	var i ReadProgressRow
+	err := row.Scan(&i.ContiguousSeq, &i.HeadSeq, &i.LastAckAt)
+	return i, err
+}
+
 const readState = `-- name: ReadState :one
 SELECT contiguous_seq, max_seen_seq, head_seq, tail_seq, last_c_s, c_conf, boot_generation, last_boot_id
 FROM dongle_state WHERE dongle_id = $1

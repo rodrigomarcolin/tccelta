@@ -64,6 +64,21 @@ services:
       VAULT_CACERT: /run/certs/ca.pem
     volumes:
       - ./deploy/kms/certs/ca.pem:/run/certs/ca.pem:ro
+  jwt-cli-rotacao:
+    environment:
+      AMBIENTE: prodlike
+      VAULT_ADDR: https://vault:8200
+      VAULT_CACERT: /run/certs/ca.pem
+    volumes:
+      - ./deploy/kms/certs/ca.pem:/run/certs/ca.pem:ro
+  # Ferramentas do KMS (provision, client ...) com o Vault em TLS: sem isto o comando falaria HTTP com o Vault em HTTPS.
+  kms-ferramentas:
+    environment:
+      AMBIENTE: prodlike
+      VAULT_ADDR: https://vault:8200
+      VAULT_CACERT: /run/certs/ca.pem
+    volumes:
+      - ./deploy/kms/certs/ca.pem:/run/certs/ca.pem:ro
   # API: fala com o KMS por mTLS (certificado de cliente da API, CA para conferir o servidor).
   api:
     environment:

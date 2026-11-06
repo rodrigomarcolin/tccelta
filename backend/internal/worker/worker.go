@@ -1,4 +1,5 @@
-// Package worker é o runtime assíncrono do recálculo de tempo (spec 06): escuta boot_pending, agenda o dreno da fila,
+// Package worker é o runtime assíncrono do recálculo de tempo (spec 06) e do cálculo das viagens (API1): escuta boot_pending e
+// trip_pending, agenda o dreno das filas,
 // roda a expiração de desafios, atualiza o gauge da fila e serve a saúde. A lógica de negócio está em usecase/boottime.
 package worker
 
@@ -14,11 +15,13 @@ import (
 	"tccelta/backend/internal/config"
 	"tccelta/backend/internal/port"
 	"tccelta/backend/internal/usecase/boottime"
+	"tccelta/backend/internal/usecase/tripcalc"
 )
 
 // Worker processa a fila de boots pendentes.
 type Worker struct {
 	Boots   *boottime.Processor
+	Trips   *tripcalc.Calculator
 	Signals port.Notifications
 	Cfg     config.WorkerConfig
 	Log     *slog.Logger
@@ -115,12 +118,14 @@ func (w *Worker) Run(ctx context.Context, healthAddr string) error {
 					w.Log.Error("worker.expiracao_falhou", "erro", err)
 				}
 			case <-f.C:
+				w.reportTripQueue(ctx)
 				if c, err := w.Boots.PendingCount(ctx); err == nil {
 					w.Met.Queue(c)
 				}
 			}
 		}
 	}()
+	w.startTrips(ctx, &wg)
 	var srv *http.Server
 	if healthAddr != "" {
 		mux := http.NewServeMux()

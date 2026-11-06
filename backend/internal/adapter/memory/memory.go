@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"tccelta/backend/internal/domain/dongle"
 	"tccelta/backend/internal/domain/handshake"
 	"tccelta/backend/internal/domain/ingestion"
@@ -57,13 +59,21 @@ type Database struct {
 	BootRows   []*Boot
 	Groups     map[timeline.BootKey][]timeline.Group
 	DataBlocks map[int32][]ingestion.StoredBlock
+	// Trips é gold.trip (com o resultado gravado); TripNotifications conta os trip_pending; os Source* são a silver lida pelo cálculo.
+	Trips             []*TripRow
+	TripNotifications int
+	TripNotified      []uuid.UUID // ids enviados por NotifyTrip, na ordem
+	SourceBlocks      []SourceBlock
+	SourceReadings    []SourceReading
+	SourcePositions   []SourcePosition
+	lastAckAt         map[int32]time.Time
 }
 
 // New cria o banco vazio.
 func New() *Database {
 	return &Database{dongles: map[protocol.DevID]dongle.Dongle{}, states: map[int32]dongle.State{}, lastCS: map[int32]int64{},
 		challenges: map[challengeKey]Challenge{}, tmsBoot: map[bootKey]int64{}, seen: map[[2]int64]bool{},
-		Groups: map[timeline.BootKey][]timeline.Group{}, DataBlocks: map[int32][]ingestion.StoredBlock{}}
+		Groups: map[timeline.BootKey][]timeline.Group{}, DataBlocks: map[int32][]ingestion.StoredBlock{}, lastAckAt: map[int32]time.Time{}}
 }
 
 // AddDongle cadastra um dongle (e seu estado zerado).
@@ -87,7 +97,8 @@ func (b *Database) Challenge(id int32, cs int64) (Challenge, bool) {
 // Repositories devolve os repositórios sobre o banco.
 func (b *Database) Repositories() port.Repositories {
 	return port.Repositories{Dongles: (*dongles)(b), Challenges: (*challenges)(b), States: (*states)(b),
-		Boots: (*boots)(b), Blocks: (*blocks)(b), Occurrences: (*occurrences)(b), Pids: (*pids)(b), AnchorGroups: (*anchorGroups)(b)}
+		Boots: (*boots)(b), Blocks: (*blocks)(b), Occurrences: (*occurrences)(b), Pids: (*pids)(b), AnchorGroups: (*anchorGroups)(b),
+		Trips: (*trips)(b), TripSources: (*tripSources)(b)}
 }
 
 // InTransaction implementa port.Transactor.
@@ -127,6 +138,11 @@ func (b *Database) clone() *Database {
 	c.Gaps, c.Alerts = b.Gaps[:len(b.Gaps):len(b.Gaps)], b.Alerts[:len(b.Alerts):len(b.Alerts)]
 	c.Anchors, c.Notifications = b.Anchors[:len(b.Anchors):len(b.Anchors)], b.Notifications[:len(b.Notifications):len(b.Notifications)]
 	c.BootRows, c.DataBlocks = b.cloneBootRows(), b.DataBlocks
+	c.Trips, c.TripNotifications, c.TripNotified = b.cloneTrips(), b.TripNotifications, b.TripNotified[:len(b.TripNotified):len(b.TripNotified)]
+	c.SourceBlocks, c.SourceReadings, c.SourcePositions = b.SourceBlocks, b.SourceReadings, b.SourcePositions
+	for k, v := range b.lastAckAt {
+		c.lastAckAt[k] = v
+	}
 	for k, v := range b.Groups {
 		c.Groups[k] = v[:len(v):len(v)]
 	}
@@ -138,6 +154,7 @@ func (b *Database) restore(c *Database) {
 	b.RawBlocks, b.Rejected, b.Readings, b.Positions = c.RawBlocks, c.Rejected, c.Readings, c.Positions
 	b.Gaps, b.Alerts, b.Anchors, b.Notifications = c.Gaps, c.Alerts, c.Anchors, c.Notifications
 	b.BootRows, b.Groups, b.DataBlocks = c.BootRows, c.Groups, c.DataBlocks
+	b.Trips, b.TripNotifications, b.TripNotified, b.lastAckAt = c.Trips, c.TripNotifications, c.TripNotified, c.lastAckAt
 }
 
 type dongles Database
@@ -210,7 +227,10 @@ func (r *challenges) MarkInvalidTag(_ context.Context, id int32, cs int64, nonce
 type states Database
 
 func (r *states) Read(_ context.Context, id int32) (dongle.State, error) {
-	e := r.states[id]
+	e, ok := r.states[id]
+	if !ok {
+		return dongle.State{}, dongle.ErrUnknown
+	}
 	e.LastAck = nil
 	return e, nil
 }

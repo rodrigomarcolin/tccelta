@@ -22,7 +22,6 @@ type Boot struct {
 	Pending           bool
 	PendingSince      time.Time
 	TimeUpdatedAt     time.Time
-	GoldPending       bool
 	Anchors           []timeline.Anchor
 }
 
@@ -130,15 +129,6 @@ func (r *boots) MarkAnchorlessNeighbors(_ context.Context, dongleID int32, first
 		}
 	}
 	return n, nil
-}
-
-func (r *boots) MarkGold(_ context.Context, dongleID int32, fromSeq, toSeq int64) error {
-	for _, x := range r.BootRows {
-		if x.DongleID == dongleID && x.FirstSeq != nil && x.LastSeq != nil && *x.FirstSeq <= toSeq && *x.LastSeq >= fromSeq {
-			x.GoldPending = true
-		}
-	}
-	return nil
 }
 
 func (r *boots) CountPending(context.Context) (int64, error) {
@@ -259,4 +249,14 @@ func (r *blocks) DeletePositions(_ context.Context, _ int32, fromSeq, toSeq int6
 	n := int64(len(r.Positions) - len(keep))
 	r.Positions = keep
 	return n, nil
+}
+
+func (r *boots) LatestGeneration(_ context.Context, dongleID, bootID int32) (int32, bool, error) {
+	found, gen := false, int32(0)
+	for _, b := range r.BootRows {
+		if b.DongleID == dongleID && b.BootID == bootID && (!found || b.Generation > gen) {
+			found, gen = true, b.Generation
+		}
+	}
+	return gen, found, nil
 }

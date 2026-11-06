@@ -22,6 +22,10 @@ type Vault interface {
 	VerifyBlocks(ctx context.Context, key string, inputs, tags [][]byte) ([]bool, error)
 	Sign(ctx context.Context, input []byte) (signature []byte, version int, err error)
 	PublicKeys(ctx context.Context) (map[int]ed25519.PublicKey, error)
+	// VerifyClient confere o segredo de um cliente (client credentials); SignClient e ClientPublicKeys usam a chave `cli`.
+	VerifyClient(ctx context.Context, clientID, secret string) (bool, error)
+	SignClient(ctx context.Context, input []byte) (signature []byte, version int, err error)
+	ClientPublicKeys(ctx context.Context) (map[int]ed25519.PublicKey, error)
 	// Ready: token do Vault válido e disjuntor fechado.
 	Ready() bool
 }
@@ -65,6 +69,9 @@ func (s *Server) Router() http.Handler {
 	mux.Handle("POST /v1/blocks/verify", base("verify", s.verifyBlocks))
 	mux.Handle("POST /v1/jwt/sign", base("sign", s.signJWT))
 	mux.Handle("GET /v1/jwt/keys", base("keys", s.publicKeys))
+	mux.Handle("POST /v1/clients/verify", base("client_verify", s.verifyClient))
+	mux.Handle("POST /v1/client-jwt/sign", base("client_sign", s.signClientJWT))
+	mux.Handle("GET /v1/client-jwt/keys", base("client_keys", s.clientPublicKeys))
 	s.HealthRoutes(mux)
 	return mux
 }

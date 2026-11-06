@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/protocol"
 	"tccelta/backend/internal/port"
@@ -64,6 +66,19 @@ func (r *inspector) CountAlerts(ctx context.Context, dongleID int32, alertType s
 }
 func (r *inspector) ReadingTime(ctx context.Context, dongleID int32) (float64, error) {
 	return r.q.VerifyReadingTime(ctx, dongleID)
+}
+
+func (r *inspector) TripStatus(ctx context.Context, tripID uuid.UUID) (port.TripInspection, error) {
+	s, err := r.q.VerifyTripStatus(ctx, tripID)
+	if err != nil {
+		return port.TripInspection{}, err
+	}
+	c, err := r.q.VerifyTripCounts(ctx, tripID)
+	if err != nil {
+		return port.TripInspection{}, err
+	}
+	return port.TripInspection{Status: s.Status, Provisional: s.Provisional, CalculatedThroughSeq: s.CalculatedThroughSeq,
+		Parts: c.Parts, DistanceKm: c.DistanceKm, EngineOnS: c.EngineOnS}, nil
 }
 
 var _ port.Inspector = (*inspector)(nil)

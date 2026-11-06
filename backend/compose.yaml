@@ -48,31 +48,48 @@ services:
     networks: [dados]
     shm_size: 512m
 
+  # Vault em modo servidor (raft em volume), nao -dev: o modo dev e em memoria e perdia KV, chaves Transit e AppRoles a
+  # cada reinicio. Estado em vault_dados; chave de unseal e token raiz de laboratorio em vault_init (ver init-unseal.sh).
   vault:
     image: hashicorp/vault:${VAULT_VERSAO:-1.18}
+    init: true
     cap_add: [IPC_LOCK]
     environment:
-      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
       VAULT_ADDR: http://127.0.0.1:8200
-    secrets: [vault_dev_root_token]
-    entrypoint: ["/bin/sh", "-c",
-      "VAULT_DEV_ROOT_TOKEN_ID=$$(cat /run/secrets/vault_dev_root_token) exec vault server -dev"]
+    entrypoint: ["vault", "server", "-config=/vault/dev-config/vault-dev.hcl"]
+    volumes:
+      - ./deploy/kms/vault/config/vault-dev.hcl:/vault/dev-config/vault-dev.hcl:ro
+      - vault_dados:/vault/data
+      - vault_init:/vault/init
     healthcheck:
+      # sai com 2 enquanto selado: fica unhealthy ate o vault-unseal abrir
       test: ["CMD", "vault", "status"]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 30
     ports: ["127.0.0.1:8200:8200"]
+    networks: [cofre]
+
+  # Inicializa (so na primeira vez) e abre o Vault a cada `up`. Init de laboratorio: 1 chave, limiar 1.
+  vault-unseal:
+    image: hashicorp/vault:${VAULT_VERSAO:-1.18}
+    entrypoint: ["/bin/sh", "/vault/scripts/init-unseal.sh"]
+    environment: { VAULT_ADDR: "http://vault:8200" }
+    volumes:
+      - ./deploy/kms/vault/scripts:/vault/scripts:ro
+      - vault_init:/vault/init
+    depends_on: { vault: { condition: service_started } }
+    restart: "no"
     networks: [cofre]
 
   vault-bootstrap:
     image: hashicorp/vault:${VAULT_VERSAO:-1.18}
-    depends_on: { vault: { condition: service_healthy } }
+    depends_on: { vault-unseal: { condition: service_completed_successfully } }
     environment:
       VAULT_ADDR: http://vault:8200
       PERFIL: dev
-    secrets: [vault_dev_root_token]
     volumes:
+      - vault_init:/vault/init:ro
       - ./deploy/kms/vault/scripts:/vault/scripts:ro
       - ./deploy/kms/vault/policies:/vault/policies:ro
       - vault_approle_kms:/approle/kms
@@ -106,6 +123,7 @@ services:
       KMS_URL: http://kms:8300
       REDIS_ENDERECO: redis:6379
       REDIS_SENHA_ARQUIVO: /run/secrets/redis_senha
+      LIMITE_VIAGEM_IP_MIN: ${LIMITE_VIAGEM_IP_MIN:-600}
     secrets: [pg_senha_api, redis_senha]
     depends_on:
       migrar: { condition: service_completed_successfully }
@@ -118,7 +136,7 @@ services:
       retries: 6
       start_period: 10s
     stop_grace_period: 30s
-    ports: ["127.0.0.1:8080-8081:8080"]
+    ports: ["127.0.0.1:${API_PORTAS:-8080-8081}:8080"]
     networks: [borda, dados, kms]
 
   # Servico KMS (cmd/tccelta-kms): unico cliente do Vault em runtime. Em producao pode ficar noutro host
@@ -151,6 +169,11 @@ services:
     environment:
       BANCO_URL: postgres://tccelta_worker@banco:5432/tccelta?sslmode=disable
       BANCO_SENHA_ARQUIVO: /run/secrets/pg_senha_worker
+      VIAGEM_ESPERA_SEM_LOTE: ${VIAGEM_ESPERA_SEM_LOTE:-10s}
+      VIAGEM_LIMITE_FINAL: ${VIAGEM_LIMITE_FINAL:-20s}
+      VIAGEM_INTERVALO_AVALIACAO: ${VIAGEM_INTERVALO_AVALIACAO:-1s}
+      VIAGEM_INTERVALO_PROVISORIAS: ${VIAGEM_INTERVALO_PROVISORIAS:-5s}
+      VIAGEM_TIMEOUT_CALCULO: ${VIAGEM_TIMEOUT_CALCULO:-60s}
     secrets: [pg_senha_worker]
     depends_on: { migrar: { condition: service_completed_successfully } }
     healthcheck:
@@ -208,6 +231,29 @@ services:
     depends_on: { api: { condition: service_healthy }, visitantes: { condition: service_healthy } }
     networks: [borda]
 
+  # Dashboard Next (frontend/), servido pelo Caddy em /dashboard. Perfil proprio: o `up` geral nao o sobe
+  # (o .env.frontend so existe depois que o stack.yml cria o cliente de client credentials na VPS).
+  frontend:
+    image: tccelta-frontend:local
+    build: { context: ../frontend }
+    profiles: [dashboard]
+    env_file:
+      - path: .env.frontend
+        required: false
+    read_only: true
+    tmpfs: [/tmp, /app/.next/cache]
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:3000/dashboard/entrar || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
+    networks: [borda]
+
   cloudflared:
     image: cloudflare/cloudflared:${CLOUDFLARED_VERSAO:-2024.12.2}
     profiles: [tunel]
@@ -236,6 +282,30 @@ services:
     depends_on: { vault-bootstrap: { condition: service_completed_successfully } }
     healthcheck:
       test: ["CMD", "/tccelta-kms", "health", "--url", "http://127.0.0.1:8092/saude/viva"]
+      interval: 30s
+      timeout: 3s
+      retries: 4
+    networks: [cofre]
+
+  # Rotacao da chave cli (JWT dos clientes), com o mesmo AppRole do jwt-rotacao e a politica estendida.
+  jwt-cli-rotacao:
+    <<: *kms
+    command: ["clientjwt", "schedule"]
+    environment:
+      AMBIENTE: dev
+      VAULT_ADDR: http://vault:8200
+      CLI_JWT_VALIDADE: ${CLI_JWT_VALIDADE:-30m}
+      JWT_FOLGA: ${JWT_FOLGA:-30s}
+      VAULT_APPROLE_ROLE_ID_ARQUIVO: /run/approle/rotacao_role_id
+      VAULT_APPROLE_SECRET_ID_ARQUIVO: /run/approle/rotacao_secret_id
+      CLI_JWT_ROTACAO_PERIODO: ${CLI_JWT_ROTACAO_PERIODO:-720h}
+      JWT_ROTACAO_VERIFICACAO: ${JWT_ROTACAO_VERIFICACAO:-1h}
+      # porta de saude propria (distinta da do jwt-rotacao, 8092)
+      KMS_SAUDE_ROTACAO: ":8093"
+    volumes: [vault_approle_rotacao:/run/approle:ro]
+    depends_on: { vault-bootstrap: { condition: service_completed_successfully } }
+    healthcheck:
+      test: ["CMD", "/tccelta-kms", "health", "--url", "http://127.0.0.1:8093/saude/viva"]
       interval: 30s
       timeout: 3s
       retries: 4

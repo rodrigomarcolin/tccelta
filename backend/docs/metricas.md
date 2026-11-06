@@ -122,6 +122,18 @@ crescem e `tccelta_kms_breaker_open` vai a `1` (cenário do P1-25 do roteiro).
 A API e o worker registram o pool, cada um com o seu. `connections_in_use` perto de `connections_total` por muito tempo indica falta de
 conexões e costuma vir junto com `rejections_total{reason="database_busy"}`.
 
+## Client credentials (API)
+
+| Série | Tipo | Rótulos | O que mede |
+|---|---|---|---|
+| `tccelta_auth_token_requests_total` | contador | `result`: `issued`, `invalid_client`, `blocked`, `invalid_request`, `kms_unavailable` | Pedidos de `POST /v1/auth/token` por resultado. `invalid_client` é a resposta `401` (sem Basic, malformado, segredo errado, desconhecido ou revogado); `blocked`, o `429` do bloqueio progressivo; `invalid_request`, os `400`; `kms_unavailable`, o `503` |
+| `tccelta_auth_blocks_total` | contador | `scope`: `pair`, `ip` | Bloqueios novos (a falha que ultrapassou a tolerância), por contador: par `(client_id, IP)` ou IP |
+| `tccelta_auth_block_store_failures_total` | contador | — | Vezes em que o Redis do bloqueio falhou e a réplica usou o estado local (falha aberta) |
+
+Nenhuma série usa `client_id` ou IP como rótulo; eles aparecem só no log (`http.acesso` e o evento `auth.falha`, com `client_id` apenas se
+casar com o formato, o IP e as contagens). Se `tccelta_auth_block_store_failures_total` cresce, o bloqueio passou a valer por réplica.
+`rejections_total{reason="token_bloqueado"}` conta os `429` do bloqueio. Desbloqueio manual: apagar as chaves `tccelta:tok:*` no Redis.
+
 ## Worker
 
 O worker recalcula a reta de tempo de cada boot (do relógio do dongle para o relógio real) e expira desafios.
@@ -142,6 +154,29 @@ O worker recalcula a reta de tempo de cada boot (do relógio do dongle para o re
   (a deriva do relógio do dongle passou do limite). Cada alerta novo também é gravado na tabela `alert`.
 - `tccelta_worker_time_queue` que só cresce indica que o worker não acompanha a ingestão.
 
+### Viagens (gold)
+
+O worker também calcula a análise de cada viagem de `gold.trip` (spec `.spec/analise-de-viagem`, entrega API1).
+
+| Série | Tipo | Rótulos | O que mede |
+|---|---|---|---|
+| `tccelta_worker_trips_total` | contador | `result` | Viagens calculadas, por desfecho |
+| `tccelta_worker_trip_partial_total` | contador | — | Viagens calculadas com o aviso `dados_parciais` |
+| `tccelta_worker_trip_provisional_total` | contador | `action` | Ações do ticker das viagens provisórias |
+| `tccelta_worker_trip_duration_seconds` | histograma | — | Tempo da transação de cálculo. Baldes: 10 ms a 60 s |
+| `tccelta_worker_trip_wait_seconds` | histograma | — | Tempo de `created_at` até `calculated_at`. Baldes: 1 s a 5 min |
+| `tccelta_worker_trip_queue` | medidor | `state` | Viagens na fila (atualizado a cada 15 s) |
+
+- `result`: `ready` (primeiro cálculo), `recalculated` (recálculo de viagem pronta) e `failed` (a viagem nova vira `failed`).
+  Um recálculo que falha mantém o resultado anterior, não conta em `failed` e fica só no log (`worker.viagem_recalculo_falhou`).
+- `action`: `recalc_marked` (chegaram dados atrasados, ou um boot sem hora ganhou conversão, ou o boot da viagem apareceu) e
+  `completed` (há prova de completude e nenhum dado novo: `provisional` volta a `false` sem recalcular).
+- `state`: `waiting` (`pending` e `waiting_data`) e `recalc` (`recalc_pending`).
+- `tccelta_worker_trip_wait_seconds` perto de `VIAGEM_LIMITE_FINAL` com `trip_partial_total` subindo indica que as viagens
+  estão saindo pelo limite final: os lotes chegam depois do clique em processar.
+- Logs: `worker.viagem_calculada` (`trip_id`, `dongle_id`, `entrada`, `partes`, `leituras`, `provisoria`, `dados_parciais`,
+  `calculated_through_seq`, `duracao_ms`), `worker.viagem_falhou` (`erro`) e `worker.viagem_recalculo_marcado`.
+
 ## Reprocessamento
 
 | Série | Tipo | O que mede |
@@ -158,6 +193,9 @@ código são: `tccelta_kmssvc_http_requests_total`, `tccelta_kmssvc_http_duratio
 `tccelta_kmssvc_vault_breaker_open`, `tccelta_kmssvc_rejections_total`, `tccelta_kmssvc_jwt_rotations_total` e
 `tccelta_kmssvc_jwt_last_check_ok`. Os rótulos e a semântica delas ficam para o `docs/kms.md`; não os revisei
 aqui.
+
+A verificação de segredo de cliente (`POST /v1/clients/verify`) tem a série `tccelta_kmssvc_client_verify_total{result="valid"|"invalid"}`;
+as operações novas do Vault aparecem em `tccelta_kmssvc_vault_calls_total` como `verify_client` e `sign_cli`; sem rótulo de `client_id`.
 
 ## Consultas úteis
 

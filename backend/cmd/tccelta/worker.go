@@ -25,6 +25,7 @@ import (
 	"tccelta/backend/internal/usecase/boottime"
 	"tccelta/backend/internal/usecase/catalog"
 	"tccelta/backend/internal/usecase/reprocess"
+	"tccelta/backend/internal/usecase/tripcalc"
 	"tccelta/backend/internal/worker"
 )
 
@@ -59,7 +60,11 @@ func cmdWorker(ctx context.Context, args []string) error {
 		MinHalfWidthMs: cfg.Worker.MinHalfWidthMs, SpanMinMs: float64(cfg.Worker.SpanMin.Milliseconds())}
 	boots := boottime.New(repos, postgres.NewTransactorWith(pool, database.TxOptions{StatementTimeout: 10 * time.Second}),
 		postgres.NewTransactor(pool), met.WorkerPort(), port.RealClock, log, boottime.Params{Timeline: tcfg})
-	w := &worker.Worker{Boots: boots, Signals: postgres.NewNotifications(pool, log), Cfg: cfg.Worker, Log: log, Met: met.WorkerPort()}
+	// o cálculo da viagem tem statement_timeout próprio (VIAGEM_TIMEOUT_CALCULO): o de 10 s não cabe numa viagem longa
+	tripTx := postgres.NewTransactorWith(pool, database.TxOptions{LockTimeout: database.DefaultOptions.LockTimeout, StatementTimeout: cfg.Worker.TripCalcTimeout})
+	trips := tripcalc.New(repos, tripTx, postgres.NewTransactor(pool), met.WorkerPort(), port.RealClock, log, tripcalc.Config{
+		WaitNoBatch: cfg.Worker.TripWaitNoBatch, FinalLimit: cfg.Worker.TripFinalLimit, Timeline: tcfg})
+	w := &worker.Worker{Boots: boots, Trips: trips, Signals: postgres.NewNotifications(pool, log), Cfg: cfg.Worker, Log: log, Met: met.WorkerPort()}
 	log.Info("worker.iniciado")
 	return w.Run(ctx, cfg.HTTP.WorkerHealth)
 }

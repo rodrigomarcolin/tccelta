@@ -38,3 +38,12 @@ type problem struct {
 	Code   string `json:"codigo"`
 	Detail string `json:"detail"`
 }
+
+type reqClientVerify struct {
+	ClientID string `json:"client_id"`
+	Secret   string `json:"secret"` // texto: exceção à regra "binário em base64" do contrato
+}
+
+type respClientVerify struct {
+	Valid bool `json:"valid"`
+}

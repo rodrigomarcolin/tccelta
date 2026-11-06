@@ -18,10 +18,30 @@ func serveHealth(ctx context.Context, addr string) {
 	_ = srv.ListenAndServe()
 }
 
-// cmdJWT: rotação e expurgo da chave Ed25519 do JWT no Transit.
+// cmdJWT: rotação e expurgo da chave Ed25519 do JWT do app no Transit.
 func cmdJWT(ctx context.Context, args []string) error {
+	return rotateKey(ctx, "jwt", args, func(c config.Config) keyPlan {
+		return keyPlan{key: c.Vault.JWTKey, period: c.Rotation.Period, validity: c.JWT.Validity + c.JWT.Leeway + 10*time.Minute}
+	})
+}
+
+// cmdClientJWT: rotação e expurgo da chave Ed25519 `cli` (JWT dos clientes) no mesmo mount do Transit.
+func cmdClientJWT(ctx context.Context, args []string) error {
+	return rotateKey(ctx, "clientjwt", args, func(c config.Config) keyPlan {
+		return keyPlan{key: c.Vault.ClientJWTKey, period: c.ClientJWT.RotationPeriod, validity: c.ClientJWT.Validity + c.JWT.Leeway + 10*time.Minute}
+	})
+}
+
+// keyPlan diz o que girar: o nome da chave no mount do JWT, a cada quanto tempo e por quanto tempo uma versão
+// antiga ainda precisa validar tokens.
+type keyPlan struct {
+	key              string
+	period, validity time.Duration
+}
+
+func rotateKey(ctx context.Context, cmd string, args []string, plan func(config.Config) keyPlan) error {
 	if len(args) == 0 {
-		return fmt.Errorf("uso: jwt <rotate [--now]|schedule>")
+		return fmt.Errorf("uso: %s <rotate [--now]|schedule>", cmd)
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -33,8 +53,8 @@ func cmdJWT(ctx context.Context, args []string) error {
 		return err
 	}
 	defer cli.Close()
-	rot := &vault.Rotator{T: cli, Mount: cfg.Vault.MountJWT, Key: cfg.Vault.JWTKey, Period: cfg.Rotation.Period,
-		Validity: cfg.JWT.Validity + cfg.JWT.Leeway + 10*time.Minute, Log: log}
+	p := plan(cfg)
+	rot := &vault.Rotator{T: cli, Mount: cfg.Vault.MountJWT, Key: p.key, Period: p.period, Validity: p.validity, Log: log}
 	switch args[0] {
 	case "rotate":
 		force := len(args) > 1 && args[1] == "--now"

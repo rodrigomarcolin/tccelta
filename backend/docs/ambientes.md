@@ -2,7 +2,7 @@
 
 São três níveis de segurança sobre o **mesmo código e as mesmas imagens**. Muda a configuração, não o programa.
 
-- **dev** (`make up`): conveniência primeiro. Tudo em HTTP, Vault em modo de desenvolvimento, portas abertas em
+- **dev** (`make up`): conveniência primeiro. Tudo em HTTP, Vault em modo servidor (raft em volume, HTTP), portas abertas em
   `127.0.0.1` e dongles de teste à mão.
 - **prodlike** (`make up-prodlike`): a stack de desenvolvimento com os guardrails de **transporte e de segredos**
   ligados: HTTPS e mTLS em toda a cadeia, Vault de verdade, nada publicado no host. O nome quer dizer "com os
@@ -19,8 +19,8 @@ uma stack isolada para o `make e2e`. Ela é descrita no [README](../README.md#st
 |---|---|---|---|
 | Como sobe | `make up` (`compose.yaml`) | `make up-prodlike` (`compose.yaml` + `compose.prodlike.yaml`, perfil `tls`) | Não há alvo. Só `deploy/kms/compose.yaml` (Vault + KMS num host, atrás de VPN); a API fica em outro host, sem definição aqui |
 | `AMBIENTE` | `dev` | `prodlike` | `producao` |
-| Vault | Modo dev: em memória (perde tudo ao reiniciar), token raiz fixo em arquivo, porta 8200 no host | Modo servidor: raft em volume, TLS 1.3, sem token raiz de desenvolvimento | Modo servidor com a mesma configuração (`vault.hcl`), com `IPC_LOCK`; só o KMS o alcança |
-| Init e unseal do Vault | Já nasce aberto | Automático, **de laboratório**: 1 chave, limiar 1, guardada em `init.json` no volume `vault_init` | Manual: o `init-unseal.sh` **recusa** `producao`. O script registra a intenção: 5 chaves, limiar 3 |
+| Vault | Modo servidor: raft em volume (sobrevive a reinício), HTTP, porta 8200 no host | Modo servidor: raft em volume, TLS 1.3, sem token raiz de desenvolvimento | Modo servidor com a mesma configuração (`vault.hcl`), com `IPC_LOCK`; só o KMS o alcança |
+| Init e unseal do Vault | Automático, de laboratório (igual ao prodlike), a cada `up` | Automático, **de laboratório**: 1 chave, limiar 1, guardada em `init.json` no volume `vault_init` | Manual: o `init-unseal.sh` **recusa** `producao`. O script registra a intenção: 5 chaves, limiar 3 |
 | Auditoria do Vault | Desligada | Ligada (`auditoria.log`) | Ligada (o bootstrap liga em tudo que não é dev) |
 | KMS → Vault | HTTP | HTTPS (CA de laboratório) | HTTPS |
 | API → KMS | `http://kms:8300` | `https://kms:8300` com mTLS | O KMS exige mTLS. Pelo comentário do `deploy/kms/compose.yaml`, a API precisa de `KMS_URL` https, do certificado de cliente e da CA; a validação do lado da API não foi conferida |
@@ -31,6 +31,7 @@ uma stack isolada para o `make e2e`. Ela é descrita no [README](../README.md#st
 | Dongles de teste (`seed-dev`, `provision new`, `scenario`) | Funcionam | O KMS os permite, mas o `kms-ferramentas` não foi ajustado ao Vault em TLS: **na prática não funcionam** | **Recusados** pelo KMS (`provision new` e `importar` do CSV) |
 | Registro de chave com `alg none` | Aceito | Aceito | **Recusado** |
 | Perfil de bloco `none` (`PERMITIR_PERFIL_NONE`) | Pode ser ligado | Pode ser ligado | **Proibido**: configuração inválida |
+| Cliente de client credentials (`POST /v1/auth/token`) | `make seed-client` cria `next-dev` e grava o segredo em `deploy/segredos/analise_cliente_secret` | `client create` pelo `kms-ferramentas` do overlay (Vault em HTTPS: `compose.prodlike.yaml` ajusta `VAULT_ADDR` e `VAULT_CACERT`) | `client create --out` no host do KMS, com o token do provisionador; o operador entrega o segredo ao Next.js como variável de ambiente de runtime |
 
 Na coluna **prod**, as linhas "Identidade do cliente do KMS", "Dongles de teste", "`alg none`" e "Perfil de bloco
 `none`" são regras **do código**, que valem com `AMBIENTE=producao`. As demais descrevem o desenho do deploy e
@@ -67,7 +68,7 @@ Para uma produção de verdade faltam:
 ## Trocar de um nível para outro
 
 Os dois primeiros compartilham o projeto `tccelta` e o volume do banco. Ao ir de dev para prodlike (ou voltar),
-rode `make clean` primeiro: o Vault muda de modo (memória para raft). O bootstrap regenera um `secret_id` inválido
+rode `make clean` primeiro: os dois modos compartilham os volumes do Vault (`vault_dados`, `vault_init`); o bootstrap regenera um `secret_id` inválido
 que sobre no volume, mas começar limpo evita surpresa. Depois: `make certs` e `make up-prodlike` (ou só `make up`).
 O `make clean` apaga os dados de desenvolvimento.
 

@@ -20,6 +20,10 @@
 	handle /api/visitantes* {
 		reverse_proxy visitantes:8082
 	}
+	# Dashboard Next (frontend/): o Next espera receber o prefixo, por isso handle e nao handle_path
+	handle /dashboard* {
+		reverse_proxy frontend:3000
+	}
 	handle_path /api/* {
 		reverse_proxy {
 			dynamic a {

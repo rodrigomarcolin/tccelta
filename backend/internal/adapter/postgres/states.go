@@ -2,6 +2,9 @@ package postgres
 
 import (
 	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
 
 	"tccelta/backend/internal/database/dbgen"
 	"tccelta/backend/internal/domain/dongle"
@@ -13,6 +16,9 @@ type states struct{ q dbgen.Querier }
 
 func (r *states) Read(ctx context.Context, dongleID int32) (dongle.State, error) {
 	e, err := r.q.ReadState(ctx, dongleID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dongle.State{}, dongle.ErrUnknown
+	}
 	if err != nil {
 		return dongle.State{}, err
 	}
@@ -44,4 +50,12 @@ func (r *states) UpdateIngestion(ctx context.Context, a ingestion.StateUpdate) e
 	return r.q.UpdateIngestionState(ctx, dbgen.UpdateIngestionStateParams{
 		ContiguousSeq: a.ContiguousSeq, MaxSeen: a.MaxSeen, LastAck: a.LastAck, Now: &now,
 		BootGeneration: a.BootGeneration, LastBootID: a.LastBootID, DongleID: a.DongleID})
+}
+
+func (r *states) ReadProgress(ctx context.Context, dongleID int32) (dongle.Progress, error) {
+	e, err := r.q.ReadProgress(ctx, dongleID)
+	if err != nil {
+		return dongle.Progress{}, err
+	}
+	return dongle.Progress{ContiguousSeq: e.ContiguousSeq, HeadSeq: e.HeadSeq, LastAckAt: e.LastAckAt}, nil
 }

@@ -16,14 +16,15 @@ import (
 type M struct {
 	Reg *prometheus.Registry
 
-	HTTPReq       *prometheus.CounterVec
-	HTTPDur       *prometheus.HistogramVec
-	VaultCalls    *prometheus.CounterVec
-	VaultDur      *prometheus.HistogramVec
-	VaultBreaker  prometheus.Gauge
-	Rejections    *prometheus.CounterVec
-	JWTRotations  prometheus.Counter
-	JWTRotationOK prometheus.Gauge
+	HTTPReq        *prometheus.CounterVec
+	HTTPDur        *prometheus.HistogramVec
+	VaultCalls     *prometheus.CounterVec
+	VaultDur       *prometheus.HistogramVec
+	VaultBreaker   prometheus.Gauge
+	Rejections     *prometheus.CounterVec
+	JWTRotations   prometheus.Counter
+	JWTRotationOK  prometheus.Gauge
+	ClientVerifies *prometheus.CounterVec
 }
 
 // New cria o conjunto de métricas em um registro próprio.
@@ -38,9 +39,10 @@ func New() *M {
 		Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2}}, []string{"operation"})
 	m.VaultBreaker = prometheus.NewGauge(prometheus.GaugeOpts{Name: "tccelta_kmssvc_vault_breaker_open"})
 	m.Rejections = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "tccelta_kmssvc_rejections_total"}, []string{"reason"})
+	m.ClientVerifies = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "tccelta_kmssvc_client_verify_total"}, []string{"result"})
 	m.JWTRotations = prometheus.NewCounter(prometheus.CounterOpts{Name: "tccelta_kmssvc_jwt_rotations_total"})
 	m.JWTRotationOK = prometheus.NewGauge(prometheus.GaugeOpts{Name: "tccelta_kmssvc_jwt_last_check_ok"})
-	for _, c := range []prometheus.Collector{m.HTTPReq, m.HTTPDur, m.VaultCalls, m.VaultDur, m.VaultBreaker, m.Rejections, m.JWTRotations, m.JWTRotationOK} {
+	for _, c := range []prometheus.Collector{m.HTTPReq, m.HTTPDur, m.VaultCalls, m.VaultDur, m.VaultBreaker, m.Rejections, m.JWTRotations, m.JWTRotationOK, m.ClientVerifies} {
 		r.MustRegister(c)
 	}
 	return m
@@ -76,3 +78,6 @@ func (m *M) Server(address string) *http.Server {
 	mux.Handle("GET /metricas", promhttp.HandlerFor(m.Reg, promhttp.HandlerOpts{}))
 	return &http.Server{Addr: address, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 }
+
+// ClientVerify conta uma verificação de segredo de cliente: valid ou invalid.
+func (m *M) ClientVerify(result string) { m.ClientVerifies.WithLabelValues(result).Inc() }

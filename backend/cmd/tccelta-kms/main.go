@@ -22,6 +22,9 @@ const usage = `tccelta-kms %s
 uso: tccelta-kms <subcomando> [opções]
   serve                                    serviço KMS (HTTP, contrato em docs/kms-http-contract.md)
   jwt <rotate [--now]|schedule>            rotação da chave do JWT
+  clientjwt <rotate [--now]|schedule>      rotação da chave cli (JWT dos clientes)
+  client <create|rotate|revoke> --id ID [--out ARQ]
+                                           clientes de client credentials (segredo mostrado uma vez)
   provision <new|import|import-record|export-wrapping|verify>
                                            importa K_auth/K_rec no Vault e grava record.json
   health --url <url>                       healthcheck (sai 0/1)
@@ -41,6 +44,10 @@ func main() {
 		err = cmdServe(ctx)
 	case "jwt":
 		err = cmdJWT(ctx, args)
+	case "clientjwt":
+		err = cmdClientJWT(ctx, args)
+	case "client":
+		err = cmdClient(ctx, args)
 	case "provision":
 		err = cmdProvision(ctx, args)
 	case "health":

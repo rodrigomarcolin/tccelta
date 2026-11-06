@@ -7,7 +7,80 @@ package dbgen
 
 import (
 	"context"
+	"time"
+
+	"github.com/google/uuid"
 )
+
+const seedTripBoot = `-- name: SeedTripBoot :one
+INSERT INTO gold.trip (trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, boot_generation, boot_id,
+                       status, target_seq)
+VALUES ($1, $2, $3, $4, $5, 'boot', $6, $7,
+        'pending', $8)
+RETURNING trip_id
+`
+
+type SeedTripBootParams struct {
+	TripCategory         string
+	DriverName           string
+	DriverNameNormalized string
+	Fuel                 string
+	DongleID             int32
+	BootGeneration       *int32
+	BootID               *int32
+	TargetSeq            int64
+}
+
+func (q *Queries) SeedTripBoot(ctx context.Context, arg SeedTripBootParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedTripBoot,
+		arg.TripCategory,
+		arg.DriverName,
+		arg.DriverNameNormalized,
+		arg.Fuel,
+		arg.DongleID,
+		arg.BootGeneration,
+		arg.BootID,
+		arg.TargetSeq,
+	)
+	var trip_id uuid.UUID
+	err := row.Scan(&trip_id)
+	return trip_id, err
+}
+
+const seedTripInterval = `-- name: SeedTripInterval :one
+INSERT INTO gold.trip (trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, interval_start, interval_end,
+                       status, target_seq)
+VALUES ($1, $2, $3, $4, $5, 'interval', $6, $7,
+        'pending', $8)
+RETURNING trip_id
+`
+
+type SeedTripIntervalParams struct {
+	TripCategory         string
+	DriverName           string
+	DriverNameNormalized string
+	Fuel                 string
+	DongleID             int32
+	IntervalStart        *time.Time
+	IntervalEnd          *time.Time
+	TargetSeq            int64
+}
+
+func (q *Queries) SeedTripInterval(ctx context.Context, arg SeedTripIntervalParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedTripInterval,
+		arg.TripCategory,
+		arg.DriverName,
+		arg.DriverNameNormalized,
+		arg.Fuel,
+		arg.DongleID,
+		arg.IntervalStart,
+		arg.IntervalEnd,
+		arg.TargetSeq,
+	)
+	var trip_id uuid.UUID
+	err := row.Scan(&trip_id)
+	return trip_id, err
+}
 
 const verifyCountAlerts = `-- name: VerifyCountAlerts :one
 SELECT count(*) FROM alert WHERE dongle_id = $1 AND type = $2
@@ -176,4 +249,40 @@ func (q *Queries) VerifyReadingTime(ctx context.Context, dongleID int32) (float6
 	var time_ms float64
 	err := row.Scan(&time_ms)
 	return time_ms, err
+}
+
+const verifyTripCounts = `-- name: VerifyTripCounts :one
+SELECT (SELECT count(*) FROM gold.trip_part p WHERE p.trip_id = $1) AS parts,
+       COALESCE((SELECT s.distance_km FROM gold.trip_summary s WHERE s.trip_id = $1), 0)::float8 AS distance_km,
+       COALESCE((SELECT s2.engine_on_s FROM gold.trip_summary s2 WHERE s2.trip_id = $1), 0)::float8 AS engine_on_s
+`
+
+type VerifyTripCountsRow struct {
+	Parts      int64
+	DistanceKm float64
+	EngineOnS  float64
+}
+
+func (q *Queries) VerifyTripCounts(ctx context.Context, tripID uuid.UUID) (VerifyTripCountsRow, error) {
+	row := q.db.QueryRow(ctx, verifyTripCounts, tripID)
+	var i VerifyTripCountsRow
+	err := row.Scan(&i.Parts, &i.DistanceKm, &i.EngineOnS)
+	return i, err
+}
+
+const verifyTripStatus = `-- name: VerifyTripStatus :one
+SELECT status, provisional, calculated_through_seq FROM gold.trip WHERE trip_id = $1
+`
+
+type VerifyTripStatusRow struct {
+	Status               string
+	Provisional          bool
+	CalculatedThroughSeq *int64
+}
+
+func (q *Queries) VerifyTripStatus(ctx context.Context, tripID uuid.UUID) (VerifyTripStatusRow, error) {
+	row := q.db.QueryRow(ctx, verifyTripStatus, tripID)
+	var i VerifyTripStatusRow
+	err := row.Scan(&i.Status, &i.Provisional, &i.CalculatedThroughSeq)
+	return i, err
 }

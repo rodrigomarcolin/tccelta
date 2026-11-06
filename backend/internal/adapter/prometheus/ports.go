@@ -81,6 +81,15 @@ func (p workerPort) BootDuration(d time.Duration) { p.m.WorkerDur.Observe(d.Seco
 func (p workerPort) Expired(n int64)              { p.m.WorkerExpired.Add(float64(n)) }
 func (p workerPort) Queue(n int64)                { p.m.WorkerQueue.Set(float64(n)) }
 func (p workerPort) Reconnection()                { p.m.WorkerReconnect.Inc() }
+func (p workerPort) Trip(result string)           { p.m.WorkerTrips.WithLabelValues(result).Inc() }
+func (p workerPort) TripPartial()                 { p.m.WorkerTripPartial.Inc() }
+func (p workerPort) TripProvisional(a string)     { p.m.WorkerTripProvisional.WithLabelValues(a).Inc() }
+func (p workerPort) TripDuration(d time.Duration) { p.m.WorkerTripDur.Observe(d.Seconds()) }
+func (p workerPort) TripWait(d time.Duration)     { p.m.WorkerTripWait.Observe(d.Seconds()) }
+func (p workerPort) TripQueue(waiting, recalc int64) {
+	p.m.WorkerTripQueue.WithLabelValues("waiting").Set(float64(waiting))
+	p.m.WorkerTripQueue.WithLabelValues("recalc").Set(float64(recalc))
+}
 
 type reprocessPort struct{ m *M }
 
@@ -91,3 +100,12 @@ func (m *M) WorkerPort() port.MetricsWorker { return workerPort{m} }
 
 // ReprocessPort devolve o adaptador da porta de métricas do reprocessamento.
 func (m *M) ReprocessPort() port.MetricsReprocess { return reprocessPort{m} }
+
+type authPort struct{ m *M }
+
+func (p authPort) TokenRequest(result string) { p.m.AuthTokens.WithLabelValues(result).Inc() }
+func (p authPort) Block(scope string)         { p.m.AuthBlocks.WithLabelValues(scope).Inc() }
+func (p authPort) BlockStoreFailure()         { p.m.AuthStoreFailures.Inc() }
+
+// AuthPort devolve o adaptador da porta de métricas do client credentials.
+func (m *M) AuthPort() port.MetricsAuth { return authPort{m} }

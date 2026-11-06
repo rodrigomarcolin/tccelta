@@ -25,13 +25,13 @@ Um módulo Go (`tccelta/backend`), dois binários: `cmd/tccelta` (API, worker e 
 ```
 cmd/tccelta/            raiz de composição da API, do worker e das ferramentas (fina)
 cmd/tccelta-kms/        raiz de composição do KMS
-internal/domain/        regras puras (protocol, pid, dongle, handshake, ingestion, occurrence, timeline)
+internal/domain/        regras puras (protocol, pid, dongle, handshake, ingestion, occurrence, timeline, trip, tripanalysis)
 internal/port/          TODAS as portas: repositórios + transação, notificações, inspetor, KMS, tokens, métricas, relógio, erros (+ porttest)
-internal/usecase/       catalog, handshake, ingestion, session, boottime, reprocess, provisioning: dependem só de domain e port
+internal/usecase/       catalog, handshake, ingestion, session, boottime, tripcalc, reprocess, provisioning: dependem só de domain e port
 internal/adapter/      implementações das portas: postgres, cache (decorator), memory (testes), kmsclient,
                        jwt, prometheus
 internal/http/         transporte HTTP (+ http/ratelimit: rate limit e concorrência)
-internal/worker/       runtime assíncrono do recálculo de tempo (LISTEN, agendamento, saúde); a lógica está em usecase/boottime
+internal/worker/       runtime assíncrono do recálculo de tempo e das viagens (LISTEN, agendamento, saúde); a lógica está em usecase/boottime e usecase/tripcalc
 internal/tools/        ferramentas de linha de comando: provisioning (lê e valida o record.json), simulator
 internal/database/     infraestrutura de banco: pool, transação, listen, migrações, queries e dbgen (sqlc)
 internal/kms/          serviço KMS: server, vault, provisioning, config, metrics (isolado, veja abaixo)
@@ -107,7 +107,7 @@ Python `python:3.12-slim`.
 | `secrets` | Roda `scripts/gerar-segredos.sh`: gera, em `deploy/segredos/`, as senhas do Postgres (superusuário, dono, API, worker, provisionador), o token de desenvolvimento do Vault e a senha do Redis | Idempotente: só cria o que falta. Usa um contêiner `alpine` com `openssl`. Cria também um `cloudflared_token` vazio |
 | `certs` | Roda `scripts/gerar-certs.sh`: PKI de laboratório em `deploy/kms/certs/` (CA, certificado do Vault, do KMS e certificado de cliente da API; ECDSA P-256, 1 ano) | Idempotente. A variável `KMS_HOST` acrescenta um nome extra aos certificados do Vault e do KMS |
 | `build` | `docker compose build` | Constrói as imagens sem subir |
-| `up` | `env` + `secrets`, depois `up -d --build --wait` | Sobe banco, Redis, Vault (modo dev), `vault-bootstrap`, `migrar`, KMS, API, worker e `jwt-rotacao`. `--wait` só retorna quando os healthchecks ficam verdes |
+| `up` | `env` + `secrets`, depois `up -d --build --wait` | Sobe banco, Redis, Vault (raft em volume), `vault-unseal`, `vault-bootstrap`, `migrar`, KMS, API, worker e `jwt-rotacao`. `--wait` só retorna quando os healthchecks ficam verdes |
 | `up-tls` | Igual ao `up`, com o perfil `tls` | Acrescenta o Caddy na porta `API_PORTA_TLS` (8443). É o caminho para o celular alcançar a API na rede local |
 | `up-tunnel` | Igual ao `up`, com o perfil `tunel` | Acrescenta Caddy e `cloudflared`. O token do túnel vai em `deploy/segredos/cloudflared_token` |
 | `up-prodlike` | `env` + `secrets` + `certs`, depois sobe com `compose.prodlike.yaml` e o perfil `tls` | Vault em modo servidor (raft, TLS), mTLS entre API e KMS. Veja [prodlike](#prodlike) |
@@ -135,7 +135,7 @@ esse comportamento.
 | Alvo | O que faz |
 |---|---|
 | `vault-bootstrap` | Reexecuta o serviço `vault-bootstrap`: habilita os motores Transit `transit-auth`, `transit-rec` e `transit-jwt`, cria a chave Ed25519 do JWT (não exportável), grava as políticas `tccelta-kms`, `tccelta-provisionador` e `tccelta-rotacao-jwt` (mais uma de teste no perfil dev) e cria os AppRoles correspondentes. O `make up` já o executa; o script é idempotente |
-| `vault-unseal` | **Só prodlike.** Inicializa e abre o Vault (`init-unseal.sh`), guardando o material de inicialização no volume `vault_init` |
+| `vault-unseal` | Inicializa e abre o Vault (`init-unseal.sh`), guardando o material de inicialização no volume `vault_init` |
 | `vault-unseal-manual` | **Só prodlike.** `vault operator unseal` interativo, para abrir o Vault digitando as chaves |
 
 ### Dongles (provisionamento em dois passos)
@@ -170,7 +170,7 @@ cadastrá-lo, monte um CSV com o mesmo formato (`dev_id_hex,k_auth_hex,k_rec_hex
 | Alvo | O que faz | Observações |
 |---|---|---|
 | `test` | `go test -race ./...` em contêiner | Todo o módulo, inclusive o KMS |
-| `test-integration` | `go test -p 1 -tags integration -race ./...`, com o socket do Docker montado para o testcontainers | Hoje **nenhum arquivo** tem a tag `integration`, então o alvo só reexecuta os testes de unidade |
+| `test-integration` | `go test -p 1 -tags integration -race ./...`, com o socket do Docker montado para o testcontainers | Os testes com a tag `integration` (`internal/adapter/postgres/trips_integration_test.go`) precisam de um banco migrado e leem `TEST_BANCO_DONO_URL` e `TEST_BANCO_API_URL` (URL completa dos papéis `tccelta_owner` e `tccelta_api`); sem elas são ignorados. Rode-os na rede da pilha de teste (`docker compose -f compose.test.yaml up -d --wait`, rede `tccelta-teste_dados`, host `banco`) |
 | `vectors` | Roda `scripts/gerar_vetores.py`, que gera `internal/domain/protocol/testdata/vetores.json` e o copia para `../mobile-app/test/fixtures/protocolo_vetores.json` | O script foi escrito de forma independente do código Go, a partir da spec, para servir de referência cruzada. Os vetores do firmware (`vetores_firmware.json`) vêm de outro gerador, o `vectors.py` |
 | `lint` | `golangci-lint run` (v2.15.0) com `.golangci.yml` | Inclui a regra `depguard` que impede a API e o KMS de importarem um ao outro. Ainda não foi executado |
 | `build-tools` | Reconstrói as imagens `ferramentas` e `kms-ferramentas` | O `docker compose run` só constrói uma imagem que **não existe**; depois de mudar o código, uma imagem antiga continua rodando o binário antigo. O `scenario` e o `e2e` já chamam este passo |
@@ -193,7 +193,7 @@ O `compose.yaml` define o projeto `tccelta`. Sem perfil, ele sobe:
 |---|---|---|
 | `banco` | PostgreSQL com TimescaleDB e PostGIS (`IMG_TIMESCALE`) | `127.0.0.1:5432` |
 | `redis` | Limites de taxa compartilhados entre réplicas | nenhuma |
-| `vault` | Vault em modo dev | `127.0.0.1:8200` |
+| `vault` | Vault (raft em volume, HTTP) | `127.0.0.1:8200` |
 | `vault-bootstrap` | Política e AppRoles (executa e sai) | nenhuma |
 | `migrar` | Migrations (executa e sai) | nenhuma |
 | `kms` | Serviço KMS (HTTP na 8300 e métricas/saúde na 9300, dentro da rede) | nenhuma |
@@ -240,6 +240,7 @@ O `make env` cria o `.env` a partir de `.env.example`. As variáveis, e onde cad
 | `IMG_TIMESCALE` | `timescale/timescaledb-ha:pg17` | Imagem do banco |
 | `VAULT_VERSAO` | `1.18` | Versão da imagem do Vault |
 | `API_REPLICAS` | `2` | Réplicas da API. Cada uma publica uma porta do intervalo `8080-8081` |
+| `API_PORTAS` | `8080-8081` | Portas do host da API (uma por réplica). Com `API_REPLICAS=1`, use `8080` para a URL do front não depender de qual porta o Docker escolheu |
 | `API_HOST` | `localhost` | Endereço do site no `Caddyfile` e nome do certificado. Para o celular, ponha o IP do PC na rede |
 | `API_PORTA_TLS` | `8443` | Porta do Caddy no host |
 | `CADDY_TLS` | `internal` | Diretiva `tls` do Caddy: `internal` usa a CA local dele |
@@ -316,7 +317,7 @@ binário `tccelta`.
 ## Lacunas conhecidas
 
 - Nenhum alvo foi reexecutado depois do refactor (veja o aviso no topo).
-- `test-integration` não tem testes com a tag `integration`.
+- Os testes `integration` só rodam com as variáveis `TEST_BANCO_*`; o CI (`go test -tags integration`) não sobe banco, então eles são ignorados lá.
 - `lint` e a regra de `depguard` nunca rodaram.
 - `load-test` e as metas M1 a M6 não foram medidas.
 - O túnel, o perfil `observabilidade` e o `prodlike` nunca foram exercitados.

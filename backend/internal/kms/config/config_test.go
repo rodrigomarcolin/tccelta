@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func env(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
@@ -39,5 +42,21 @@ func TestMTLSRequiredOutsideDev(t *testing.T) {
 	}
 	if err := (Config{}).ValidateServer(); err == nil {
 		t.Fatal("sem VAULT_ADDR")
+	}
+}
+
+func TestClientJWTAndMountDefaults(t *testing.T) {
+	c, err := LoadFrom(func(string) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Vault.MountClients != "kv-clientes" || c.Vault.ClientJWTKey != "cli" || c.ClientJWT.Validity != 30*time.Minute || c.ClientJWT.RotationPeriod != 720*time.Hour {
+		t.Fatalf("%+v %+v", c.Vault, c.ClientJWT)
+	}
+	c, err = LoadFrom(func(k string) string {
+		return map[string]string{"VAULT_MOUNT_CLIENTES": "kv-x", "VAULT_CHAVE_CLI": "outra", "CLI_JWT_VALIDADE": "10m", "CLI_JWT_ROTACAO_PERIODO": "1h"}[k]
+	})
+	if err != nil || c.Vault.MountClients != "kv-x" || c.Vault.ClientJWTKey != "outra" || c.ClientJWT.Validity != 10*time.Minute || c.ClientJWT.RotationPeriod != time.Hour {
+		t.Fatalf("%v %+v", err, c)
 	}
 }

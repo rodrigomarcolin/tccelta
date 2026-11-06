@@ -12,7 +12,7 @@ import (
 	"tccelta/backend/internal/domain/ingestion"
 	"tccelta/backend/internal/domain/pid"
 	"tccelta/backend/internal/domain/protocol"
-	"tccelta/backend/internal/domain/timeline"
+	"tccelta/backend/internal/domain/trip"
 	"tccelta/backend/internal/port/porttest"
 )
 
@@ -74,18 +74,19 @@ func TestDryRunWritesNothing(t *testing.T) {
 	}
 }
 
-func TestApplyReplacesRowsAndMarksGold(t *testing.T) {
+func TestApplyReplacesRowsAndMarksTripsRecalc(t *testing.T) {
 	e := newEnv(t, dataBlock(1, 1, 12), dataBlock(2, 1, 12), dataBlock(3, 1, 12))
 	e.seed(1)
 	e.seed(2)
 	e.seed(9) // fora da faixa dos blocos: fica
-	boot := &memory.Boot{LastSeq: i64(3)}
-	boot.BootKey = timeline.BootKey{DongleID: dongleID, BootID: 1}
-	boot.FirstSeq = i64(1)
-	other := &memory.Boot{LastSeq: i64(100)}
-	other.BootKey = timeline.BootKey{DongleID: dongleID, BootID: 2}
-	other.FirstSeq = i64(50)
-	e.db.BootRows = append(e.db.BootRows, boot, other)
+	ready := func(first, last *int64) *memory.TripRow {
+		return e.db.AddTrip(trip.Trip{DongleID: dongleID, Status: trip.StatusReady, FirstSeq: first, LastSeq: last})
+	}
+	crossing := ready(i64(2), i64(10))
+	outside := ready(i64(50), i64(100))
+	noRange := ready(nil, nil)
+	pending := e.db.AddTrip(trip.Trip{DongleID: dongleID, Status: trip.StatusPending, FirstSeq: i64(1), LastSeq: i64(3)})
+	otherDongle := e.db.AddTrip(trip.Trip{DongleID: dongleID + 1, Status: trip.StatusReady, FirstSeq: i64(1), LastSeq: i64(3)})
 
 	r, err := e.uc.Run(context.Background(), Options{DongleID: dongleID, Apply: true, Operator: "teste", Batch: 2})
 	if err != nil {
@@ -101,8 +102,12 @@ func TestApplyReplacesRowsAndMarksGold(t *testing.T) {
 	if e.met.rows != 3 {
 		t.Fatalf("métrica %d", e.met.rows)
 	}
-	if !boot.GoldPending || other.GoldPending {
-		t.Fatalf("gold: %v %v", boot.GoldPending, other.GoldPending)
+	if !crossing.RecalcPending || outside.RecalcPending || noRange.RecalcPending || pending.RecalcPending || otherDongle.RecalcPending {
+		t.Fatalf("recalc: cruza=%v fora=%v sem faixa=%v pendente=%v outro dongle=%v",
+			crossing.RecalcPending, outside.RecalcPending, noRange.RecalcPending, pending.RecalcPending, otherDongle.RecalcPending)
+	}
+	if e.db.TripNotifications != 2 { // uma por janela, na mesma transação que regrava a silver
+		t.Fatalf("notificações %d", e.db.TripNotifications)
 	}
 	if len(e.db.Alerts) != 1 || e.db.Alerts[0].Type != "reprocessing" || !strings.Contains(string(e.db.Alerts[0].Detail), `"operator":"teste"`) {
 		t.Fatalf("%+v", e.db.Alerts)

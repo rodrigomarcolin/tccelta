@@ -156,11 +156,22 @@ func (v *Vault) VerifyBlocks(ctx context.Context, key string, inputs, tags [][]b
 	return out, nil
 }
 
-// Sign assina a signing string do JWT com a chave Ed25519.
+// Sign assina a signing string do JWT do app com a chave Ed25519 `jwt`.
 func (v *Vault) Sign(ctx context.Context, input []byte) (sig []byte, version int, err error) {
 	t0 := time.Now()
 	defer func() { v.observe("sign_jwt", t0, err) }()
-	r, err := v.t.Write(ctx, fmt.Sprintf("%s/sign/%s", v.cfg.MountJWT, v.cfg.JWTKey), map[string]any{"input": b64(input)})
+	return v.sign(ctx, v.cfg.JWTKey, input)
+}
+
+// SignClient assina a signing string do JWT dos clientes (client credentials) com a chave `cli`.
+func (v *Vault) SignClient(ctx context.Context, input []byte) (sig []byte, version int, err error) {
+	t0 := time.Now()
+	defer func() { v.observe("sign_cli", t0, err) }()
+	return v.sign(ctx, v.cfg.ClientJWTKey, input)
+}
+
+func (v *Vault) sign(ctx context.Context, key string, input []byte) ([]byte, int, error) {
+	r, err := v.t.Write(ctx, fmt.Sprintf("%s/sign/%s", v.cfg.MountJWT, key), map[string]any{"input": b64(input)})
 	if err != nil {
 		return nil, 0, translate(err)
 	}
@@ -170,20 +181,29 @@ func (v *Vault) Sign(ctx context.Context, input []byte) (sig []byte, version int
 	if len(p) != 3 || !strings.HasPrefix(p[1], "v") {
 		return nil, 0, fmt.Errorf("%w: assinatura em formato inesperado", ErrUnavailable)
 	}
-	version, err = strconv.Atoi(p[1][1:])
+	version, err := strconv.Atoi(p[1][1:])
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: versão da assinatura", ErrUnavailable)
 	}
-	sig, err = base64.StdEncoding.DecodeString(p[2])
+	sig, err := base64.StdEncoding.DecodeString(p[2])
 	if err != nil || len(sig) != ed25519.SignatureSize {
 		return nil, 0, fmt.Errorf("%w: assinatura inválida", ErrUnavailable)
 	}
 	return sig, version, nil
 }
 
-// PublicKeys lê as públicas da chave JWT (só versões >= min_decryption_version).
+// PublicKeys lê as públicas da chave `jwt` do app (só versões >= min_decryption_version).
 func (v *Vault) PublicKeys(ctx context.Context) (map[int]ed25519.PublicKey, error) {
-	r, err := v.t.Read(ctx, fmt.Sprintf("%s/keys/%s", v.cfg.MountJWT, v.cfg.JWTKey))
+	return v.publicKeys(ctx, v.cfg.JWTKey)
+}
+
+// ClientPublicKeys lê as públicas da chave `cli` dos clientes.
+func (v *Vault) ClientPublicKeys(ctx context.Context) (map[int]ed25519.PublicKey, error) {
+	return v.publicKeys(ctx, v.cfg.ClientJWTKey)
+}
+
+func (v *Vault) publicKeys(ctx context.Context, key string) (map[int]ed25519.PublicKey, error) {
+	r, err := v.t.Read(ctx, fmt.Sprintf("%s/keys/%s", v.cfg.MountJWT, key))
 	if err != nil {
 		return nil, translate(err)
 	}

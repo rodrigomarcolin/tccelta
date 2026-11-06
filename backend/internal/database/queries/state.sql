@@ -20,3 +20,6 @@ WHERE dongle_id = @dongle_id;
 
 -- name: ReadLastAck :one
 SELECT last_ack FROM dongle_state WHERE dongle_id = @dongle_id;
+
+-- name: ReadProgress :one
+SELECT contiguous_seq, head_seq, last_ack_at FROM dongle_state WHERE dongle_id = @dongle_id;

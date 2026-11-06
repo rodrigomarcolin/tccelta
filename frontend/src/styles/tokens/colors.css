@@ -1,0 +1,136 @@
+/* OBD2 Cockpit — color tokens (adapted from the "App OBD2 design brief" design system).
+   Dark theme is the default. Color only carries meaning: cyan = action and cursor,
+   amber = warning, red = error. The hue between yellow and cyan is never used. */
+
+:root,
+[data-theme="dark"] {
+  --neutral-50: #e8edf2;
+  --neutral-200: #8b97a6;
+  --neutral-400: #5a6675;
+  --neutral-700: #2a3441;
+  --neutral-800: #161e29;
+
+  --bg-screen: #0a0e14;
+  --surface-card: #141b24;
+  --surface-list: #10161e;
+  --surface-sunken: #0a0e14;
+  --track: #161e29;
+
+  --text-primary: #e8edf2;
+  --text-secondary: #8b97a6;
+  --text-tertiary: #5a6675;
+
+  --border-hairline: rgba(255, 255, 255, 0.05);
+  --border-strong: rgba(255, 255, 255, 0.1);
+
+  --accent: #22d3ee;
+  --accent-on: #04222a;
+  --accent-wash: rgba(34, 211, 238, 0.1);
+  --warning: #ffb020;
+  --warning-wash: rgba(255, 176, 32, 0.08);
+  --danger: #f4385a;
+  --danger-wash: rgba(244, 56, 90, 0.08);
+
+  --route-outline: #ffffff;
+
+  --band-parado: #8b97a6;
+  --band-ate_30: #8c3326;
+  --band-30_60: #b44d2c;
+  --band-60_80: #d96a31;
+  --band-80_110: #ec8e42;
+  --band-acima_110: #f7b878;
+  --band-fault: #8b97a6;
+
+  --gear-0: #8b97a6;
+  --gear-1: #5b9bff;
+  --gear-2: #b58cff;
+  --gear-3: #ff7eb6;
+  --gear-4: #6ec3f0;
+  --gear-5: #8f9bff;
+  --gear-6: #e58bff;
+
+  --heat: 110, 168, 220;
+}
+
+[data-theme="light"] {
+  --bg-screen: #f2f5f8;
+  --surface-card: #ffffff;
+  --surface-list: #f8fafc;
+  --surface-sunken: #eaeff4;
+  --track: #e3e9ef;
+
+  --text-primary: #0f1720;
+  --text-secondary: #46525f;
+  --text-tertiary: #5f6b79;
+
+  --border-hairline: rgba(10, 14, 20, 0.08);
+  --border-strong: rgba(10, 14, 20, 0.16);
+
+  --accent: #08768c;
+  --accent-on: #ffffff;
+  --accent-wash: rgba(8, 118, 140, 0.1);
+  --warning: #9a5b00;
+  --warning-wash: rgba(154, 91, 0, 0.1);
+  --danger: #c0213f;
+  --danger-wash: rgba(192, 33, 63, 0.08);
+
+  --route-outline: #ffffff;
+
+  --band-parado: #7b8794;
+  --band-ate_30: #e8934a;
+  --band-30_60: #d9703a;
+  --band-60_80: #be5030;
+  --band-80_110: #983528;
+  --band-acima_110: #6a1f22;
+  --band-fault: #7b8794;
+
+  --gear-0: #7b8794;
+  --gear-1: #1d5fd1;
+  --gear-2: #7a44d6;
+  --gear-3: #c2377f;
+  --gear-4: #1583b5;
+  --gear-5: #4c57d6;
+  --gear-6: #8a3fc2;
+
+  --heat: 31, 95, 153;
+}
+
+/* Print: forces the light theme tokens. Kept in sync with the block above. */
+@media print {
+  :root,
+  [data-theme="dark"],
+  [data-theme="light"] {
+    --bg-screen: #ffffff;
+    --surface-card: #ffffff;
+    --surface-list: #f8fafc;
+    --surface-sunken: #eaeff4;
+    --track: #e3e9ef;
+    --text-primary: #0f1720;
+    --text-secondary: #46525f;
+    --text-tertiary: #5f6b79;
+    --border-hairline: rgba(10, 14, 20, 0.08);
+    --border-strong: rgba(10, 14, 20, 0.16);
+    --accent: #08768c;
+    --accent-on: #ffffff;
+    --accent-wash: rgba(8, 118, 140, 0.1);
+    --warning: #9a5b00;
+    --warning-wash: rgba(154, 91, 0, 0.1);
+    --danger: #c0213f;
+    --danger-wash: rgba(192, 33, 63, 0.08);
+    --band-parado: #7b8794;
+    --band-ate_30: #e8934a;
+    --band-30_60: #d9703a;
+    --band-60_80: #be5030;
+    --band-80_110: #983528;
+    --band-acima_110: #6a1f22;
+    --band-fault: #7b8794;
+    --gear-0: #7b8794;
+    --gear-1: #1d5fd1;
+    --gear-2: #7a44d6;
+    --gear-3: #c2377f;
+    --gear-4: #1583b5;
+    --gear-5: #4c57d6;
+    --gear-6: #8a3fc2;
+    --heat: 31, 95, 153;
+  }
+}

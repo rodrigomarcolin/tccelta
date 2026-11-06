@@ -68,6 +68,22 @@ sequenceDiagram
 
 Feita pelo serviço `jwt-rotacao` (ver `07`): tokens emitidos com a versão anterior continuam válidos até `exp` porque a versão só é expurgada depois de `JWT_VALIDADE` + folga; a API recarrega as chaves por `kid` desconhecido ou a cada 10 min.
 
+## Token de cliente (client credentials, análise de viagem)
+
+Separado do token do app: `ClientIssuer`/`ClientValidator` (`adapter/jwt/client_{issuer,validator}.go`, portas `port.ClientTokenIssuer`/`ClientTokenValidator`), caso de uso `usecase/clienttoken` e middleware `authenticateAnalise` (`http/authentication_analysis.go`) em `/v1/viagens*`. O `Validator` do app **não muda**.
+
+| | Token do app | Token de cliente |
+|---|---|---|
+| `kid` / chaves | `jwt-v<n>`, `GET /v1/jwt/keys` | `cli-v<n>`, `GET /v1/client-jwt/keys` |
+| `aud` | `JWT_AUDIENCIA` (`tccelta-ingestao`) | `JWT_AUDIENCIA_ANALISE` (`tccelta-analise`) |
+| `sub` | DevId (16 hex) | `client_id` |
+| `cs` | obrigatório | ausente |
+| validade | `JWT_VALIDADE` (1 h) | `CLI_JWT_VALIDADE` (30 min) |
+
+Os dois mapas de chaves vêm de rotas diferentes do KMS e nunca se misturam: um token do app é recusado nas rotas de viagem (`kid`, `aud`) e um token de cliente é recusado em `/v1/dongles/*` (`kid`, `aud`, `sub` sem 16 hex, falta `cs`). Respostas do middleware: `401 token_ausente|token_expirado|token_invalido`, com `WWW-Authenticate: Bearer`. `ANALISE_SEM_AUTH=true` abre as rotas de viagem sem conferir o Bearer (inválido em `producao`).
+
+`POST /v1/auth/token`: HTTP Basic, `grant_type=client_credentials` em `application/x-www-form-urlencoded` (até 1 KiB); erros no formato da RFC 6749 §5.2 (`{error, error_description, codigo}`); `401 invalid_client` idêntico para sem Basic, cliente desconhecido, revogado e segredo errado; `429 temporarily_unavailable` (`bloqueado`) com `Retry-After`; `Cache-Control: no-store` em todas as respostas. Bloqueio progressivo por par `(client_id, IP)` e por IP (`adapter/authblock`, Redis com dois scripts Lua e estado local de reserva), `GET /.well-known/jwks.json` com as chaves `cli`.
+
 ## Testes
 
 `adapter/jwt` (emissão, `kid`, rotação durante a emissão, validação, expiração, claims inválidas), `usecase/session`, `http` (mapeamento de erros e cabeçalhos), cenário `negative-protocol` do simulador (token lixo ⇒ 401; token de outro dongle ⇒ 403).

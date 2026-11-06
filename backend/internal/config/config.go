@@ -40,8 +40,11 @@ type KMSConfig struct {
 type JWTConfig struct {
 	Issuer   string
 	Audience string
-	Validity time.Duration
-	Leeway   time.Duration
+	// AnalysisAudience é o aud dos tokens de cliente (JWT_AUDIENCIA_ANALISE); ClientValidity, a validade deles (CLI_JWT_VALIDADE).
+	AnalysisAudience string
+	ClientValidity   time.Duration
+	Validity         time.Duration
+	Leeway           time.Duration
 }
 
 type ProtocolConfig struct {
@@ -52,14 +55,24 @@ type ProtocolConfig struct {
 	SuggestedTLat        time.Duration
 }
 
+// TokenBlockConfig é o bloqueio progressivo de POST /v1/auth/token (falhas sem bloqueio por par e por IP, e a progressão).
+type TokenBlockConfig struct {
+	PairTolerance, IPTolerance int
+	Initial                    time.Duration
+	Factor                     float64
+	Cap, Forget                time.Duration
+}
+
 type LimitsConfig struct {
 	ChallengeMin, ResponseMin, BlocksMin, IPMin int
-	MaxConcurrentIngestions                     int
-	IngestionSlotWait                           time.Duration
-	RetryAfterOverload                          int
-	RedisAddress                                string
-	RedisPassword                               string
-	RedisTimeout                                time.Duration
+	// TripIPMin é o limite por IP das rotas de viagem (escopo próprio, LIMITE_VIAGEM_IP_MIN).
+	TripIPMin               int
+	MaxConcurrentIngestions int
+	IngestionSlotWait       time.Duration
+	RetryAfterOverload      int
+	RedisAddress            string
+	RedisPassword           string
+	RedisTimeout            time.Duration
 }
 
 type WorkerConfig struct {
@@ -70,6 +83,13 @@ type WorkerConfig struct {
 	MaxDriftPPM        float64
 	SpanMin            time.Duration
 	MinHalfWidthMs     float64
+
+	// Viagens (API1).
+	TripWaitNoBatch         time.Duration
+	TripFinalLimit          time.Duration
+	TripEvalInterval        time.Duration
+	TripProvisionalInterval time.Duration
+	TripCalcTimeout         time.Duration
 }
 
 type Config struct {
@@ -82,6 +102,7 @@ type Config struct {
 	JWT              JWTConfig
 	Protocol         ProtocolConfig
 	Limits           LimitsConfig
+	TokenBlock       TokenBlockConfig
 	Worker           WorkerConfig
 	AllowNoneProfile bool
 }
@@ -194,10 +215,20 @@ func LoadFrom(env func(string) string) (Config, error) {
 		VerifyParallel: l.integer("KMS_VERIFY_PARALELO", 1),
 	}
 	c.JWT = JWTConfig{
-		Issuer:   l.str("JWT_EMISSOR", "tccelta-api"),
-		Audience: l.str("JWT_AUDIENCIA", "tccelta-ingestao"),
-		Validity: l.dur("JWT_VALIDADE", time.Hour),
-		Leeway:   l.dur("JWT_FOLGA", 30*time.Second),
+		Issuer:           l.str("JWT_EMISSOR", "tccelta-api"),
+		Audience:         l.str("JWT_AUDIENCIA", "tccelta-ingestao"),
+		AnalysisAudience: l.str("JWT_AUDIENCIA_ANALISE", "tccelta-analise"),
+		ClientValidity:   l.dur("CLI_JWT_VALIDADE", 30*time.Minute),
+		Validity:         l.dur("JWT_VALIDADE", time.Hour),
+		Leeway:           l.dur("JWT_FOLGA", 30*time.Second),
+	}
+	c.TokenBlock = TokenBlockConfig{
+		PairTolerance: l.integer("TOKEN_BLOQUEIO_TOLERANCIA_PAR", 5),
+		IPTolerance:   l.integer("TOKEN_BLOQUEIO_TOLERANCIA_IP", 20),
+		Initial:       l.dur("TOKEN_BLOQUEIO_INICIAL", 30*time.Second),
+		Factor:        l.float("TOKEN_BLOQUEIO_FATOR", 2),
+		Cap:           l.dur("TOKEN_BLOQUEIO_TETO", 15*time.Minute),
+		Forget:        l.dur("TOKEN_BLOQUEIO_ESQUECER", 30*time.Minute),
 	}
 	c.Protocol = ProtocolConfig{
 		ChallengeValidity:    l.dur("DESAFIO_VALIDADE", 60*time.Second),
@@ -211,6 +242,7 @@ func LoadFrom(env func(string) string) (Config, error) {
 		ResponseMin:             l.integer("LIMITE_RESPOSTA_MIN", 12),
 		BlocksMin:               l.integer("LIMITE_BLOCOS_MIN", 120),
 		IPMin:                   l.integer("LIMITE_IP_MIN", 120),
+		TripIPMin:               l.integer("LIMITE_VIAGEM_IP_MIN", 600),
 		MaxConcurrentIngestions: l.integer("INGESTAO_MAX_SIMULTANEAS", 32),
 		IngestionSlotWait:       l.dur("INGESTAO_ESPERA_VAGA", 100*time.Millisecond),
 		RetryAfterOverload:      l.integer("RETRY_AFTER_SOBRECARGA", 5),
@@ -219,13 +251,18 @@ func LoadFrom(env func(string) string) (Config, error) {
 		RedisTimeout:            l.dur("REDIS_TIMEOUT", 50*time.Millisecond),
 	}
 	c.Worker = WorkerConfig{
-		Concurrency:        l.integer("WORKER_CONCORRENCIA", 4),
-		PollInterval:       l.dur("WORKER_INTERVALO_POLL", 30*time.Second),
-		ExpirationInterval: l.dur("WORKER_INTERVALO_EXPIRACAO", 60*time.Second),
-		GroupWindow:        l.dur("ANCORA_JANELA_GRUPO", 10*time.Minute),
-		MaxDriftPPM:        l.float("DERIVA_MAX_PPM", 40),
-		SpanMin:            l.dur("ANCORA_SPAN_MIN", time.Hour),
-		MinHalfWidthMs:     l.float("MEIA_LARGURA_MIN_MS", 0.5),
+		Concurrency:             l.integer("WORKER_CONCORRENCIA", 4),
+		PollInterval:            l.dur("WORKER_INTERVALO_POLL", 30*time.Second),
+		ExpirationInterval:      l.dur("WORKER_INTERVALO_EXPIRACAO", 60*time.Second),
+		GroupWindow:             l.dur("ANCORA_JANELA_GRUPO", 10*time.Minute),
+		MaxDriftPPM:             l.float("DERIVA_MAX_PPM", 40),
+		SpanMin:                 l.dur("ANCORA_SPAN_MIN", time.Hour),
+		MinHalfWidthMs:          l.float("MEIA_LARGURA_MIN_MS", 0.5),
+		TripWaitNoBatch:         l.dur("VIAGEM_ESPERA_SEM_LOTE", 10*time.Second),
+		TripFinalLimit:          l.dur("VIAGEM_LIMITE_FINAL", 20*time.Second),
+		TripEvalInterval:        l.dur("VIAGEM_INTERVALO_AVALIACAO", time.Second),
+		TripProvisionalInterval: l.dur("VIAGEM_INTERVALO_PROVISORIAS", 5*time.Second),
+		TripCalcTimeout:         l.dur("VIAGEM_TIMEOUT_CALCULO", 60*time.Second),
 	}
 	switch c.Environment {
 	case "dev", "prodlike", "producao":
@@ -234,6 +271,22 @@ func LoadFrom(env func(string) string) (Config, error) {
 	}
 	if c.Environment == "producao" && c.AllowNoneProfile {
 		l.errs = append(l.errs, "PERMITIR_PERFIL_NONE é proibido em AMBIENTE=producao")
+	}
+	w := c.Worker
+	if w.TripWaitNoBatch <= 0 || w.TripFinalLimit <= 0 || w.TripEvalInterval <= 0 || w.TripProvisionalInterval <= 0 || w.TripCalcTimeout <= 0 {
+		l.errs = append(l.errs, "VIAGEM_*: as durações devem ser maiores que zero")
+	}
+	if w.TripFinalLimit <= w.TripWaitNoBatch {
+		l.errs = append(l.errs, "VIAGEM_LIMITE_FINAL deve ser maior que VIAGEM_ESPERA_SEM_LOTE")
+	}
+	if w.TripEvalInterval > w.TripWaitNoBatch {
+		l.errs = append(l.errs, "VIAGEM_INTERVALO_AVALIACAO não pode ser maior que VIAGEM_ESPERA_SEM_LOTE")
+	}
+	if b := c.TokenBlock; b.Factor < 1 || b.Cap < b.Initial || b.PairTolerance < 1 || b.IPTolerance < 1 || b.Initial <= 0 || b.Forget <= 0 {
+		l.errs = append(l.errs, "TOKEN_BLOQUEIO_*: o fator deve ser >= 1, o teto >= o tempo inicial (> 0), as tolerâncias >= 1 e o esquecimento > 0")
+	}
+	if c.JWT.ClientValidity <= 0 {
+		l.errs = append(l.errs, "CLI_JWT_VALIDADE deve ser maior que zero")
 	}
 	if c.Protocol.MaxBatchBlocks < 1 || c.Protocol.MaxBatchBlocks > 255 {
 		l.errs = append(l.errs, "LOTE_MAX_BLOCOS fora de 1..255")

@@ -23,6 +23,7 @@ type Options struct {
 	Inspect     port.Inspector    // leitura de verificação (papel com SELECT; tccelta_owner em dev/teste)
 	Repos       port.Repositories // catálogo de PIDs e reprocessamento (o cenário generation)
 	Tx          port.Transactor   // transações do reprocessamento
+	Seeder      port.TripSeeder   // cria viagens em gold.trip (cenário trip; papel dono das tabelas)
 	Keys        []Keys
 	Report      *Report
 	Log         *slog.Logger
@@ -33,6 +34,12 @@ type Options struct {
 	Ramp        time.Duration
 	Speedup     float64
 	Drift       float64
+	// Clients são os clientes de client credentials dos cenários trip-http e client-auth (--client id:arquivo:ok|invalido).
+	Clients []ClientCred
+	// TokenFile guarda o token emitido pela fase client-auth, que a client-auth-rotation relê.
+	TokenFile string
+	// MetricsURL é o /metricas da API, para conferir as séries tccelta_auth_*.
+	MetricsURL string
 }
 
 type verifier struct {
@@ -84,6 +91,14 @@ func Run(ctx context.Context, name string, o Options) error {
 		return load(ctx, o)
 	case "reconnection":
 		return reconnection(ctx, o)
+	case "trip":
+		return tripScenario(ctx, o)
+	case "trip-http":
+		return tripHTTPScenario(ctx, o)
+	case "client-auth":
+		return clientAuthScenario(ctx, o)
+	case "client-auth-rotation":
+		return clientAuthRotationScenario(ctx, o)
 	case "knee":
 		return knee(ctx, o)
 	}

@@ -7,9 +7,14 @@ package dbgen
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Querier interface {
+	BootFirstReceived(ctx context.Context, arg BootFirstReceivedParams) (time.Time, error)
+	BootLastReceived(ctx context.Context, arg BootLastReceivedParams) (time.Time, error)
+	ClearTripProvisional(ctx context.Context, tripID uuid.UUID) error
 	// Uso único: pertence ao dongle, nonce confere, pendente e no prazo. Duas
 	// respostas simultâneas: só uma recebe a linha.
 	ConsumeChallenge(ctx context.Context, arg ConsumeChallengeParams) (time.Time, error)
@@ -18,15 +23,31 @@ type Querier interface {
 	CopyReadings(ctx context.Context, arg []CopyReadingsParams) (int64, error)
 	CountPendingBoots(ctx context.Context) (int64, error)
 	CountReadings(ctx context.Context, dongleID int32, fromSeq int64, toSeq int64) (int64, error)
+	CountTripQueue(ctx context.Context) (CountTripQueueRow, error)
 	DeleteAnchorGroups(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32) error
 	DeleteBlockPositions(ctx context.Context, arg DeleteBlockPositionsParams) (int64, error)
 	DeleteBlockReadings(ctx context.Context, arg DeleteBlockReadingsParams) (int64, error)
+	DeleteTripEvents(ctx context.Context, tripID uuid.UUID) error
+	DeleteTripGearShifts(ctx context.Context, tripID uuid.UUID) error
+	DeleteTripGears(ctx context.Context, tripID uuid.UUID) error
+	DeleteTripParts(ctx context.Context, tripID uuid.UUID) error
+	DeleteTripSeries(ctx context.Context, tripID uuid.UUID) error
+	DeleteTripSpeedBands(ctx context.Context, tripID uuid.UUID) error
+	DeleteTripStops(ctx context.Context, tripID uuid.UUID) error
+	DeleteTripSummary(ctx context.Context, tripID uuid.UUID) error
 	EnsurePendingBoot(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32, now time.Time) error
 	// Job periódico do worker (spec 06).
 	ExpireChallenges(ctx context.Context, now time.Time) (int64, error)
+	// Uma viagem nova que falha vira failed (e libera o nome); um recálculo que falha mantém o resultado anterior.
+	FailTrip(ctx context.Context, tripID uuid.UUID) error
 	FinalizeChallenge(ctx context.Context, arg FinalizeChallengeParams) error
+	// Leitura da silver (papel tccelta_worker: SELECT em reading, position e boot).
+	FindBootForTrip(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32) (FindBootForTripRow, error)
 	FindChallenge(ctx context.Context, dongleID int32, cS int64) (FindChallengeRow, error)
 	FindDongleByDevID(ctx context.Context, devID []byte) (FindDongleByDevIDRow, error)
+	FindTrip(ctx context.Context, tripID uuid.UUID) (GoldTrip, error)
+	GetTripSeries(ctx context.Context, tripID uuid.UUID) (GoldTripSeries, error)
+	GetTripSummary(ctx context.Context, tripID uuid.UUID) (GoldTripSummary, error)
 	InsertAlert(ctx context.Context, arg InsertAlertParams) error
 	// Evita repetir o mesmo alerta a cada recalculo (janela de 24 h por boot e tipo).
 	InsertAlertIfNew(ctx context.Context, arg InsertAlertIfNewParams) error
@@ -37,29 +58,73 @@ type Querier interface {
 	// context.sql
 	InsertGap(ctx context.Context, arg InsertGapParams) error
 	InsertRawBlocks(ctx context.Context, arg InsertRawBlocksParams) ([]int64, error)
+	// API2: criação e leitura da viagem (papel tccelta_api: INSERT em gold.trip e SELECT nas tabelas da gold).
+	InsertTrip(ctx context.Context, arg InsertTripParams) (GoldTrip, error)
+	InsertTripEvent(ctx context.Context, arg InsertTripEventParams) error
+	InsertTripGear(ctx context.Context, arg InsertTripGearParams) error
+	InsertTripGearShift(ctx context.Context, arg InsertTripGearShiftParams) error
+	InsertTripPart(ctx context.Context, arg InsertTripPartParams) error
+	InsertTripSeries(ctx context.Context, arg InsertTripSeriesParams) error
+	InsertTripSpeedBand(ctx context.Context, arg InsertTripSpeedBandParams) error
+	InsertTripStop(ctx context.Context, arg InsertTripStopParams) error
+	InsertTripSummary(ctx context.Context, arg InsertTripSummaryParams) error
 	// Incrementa c_S (lock de linha curto em dongle_state) e insere o desafio,
 	// só se o dongle tiver menos de @max_pending desafios pendentes no prazo.
 	IssueChallenge(ctx context.Context, arg IssueChallengeParams) (IssueChallengeRow, error)
+	LatestBootGeneration(ctx context.Context, dongleID int32, bootID int32) (int32, error)
 	ListBootAnchorGroups(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32) ([]ListBootAnchorGroupsRow, error)
 	ListBootAnchors(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32) ([]ListBootAnchorsRow, error)
 	ListDataBlocks(ctx context.Context, dongleID int32, fromSeq int64, toSeq int64, rowLimit int32) ([]ListDataBlocksRow, error)
+	// Boots com conversão de hora cuja faixa [first, last] (hora absoluta) toca [from_ms, to_ms).
+	ListIntervalBoots(ctx context.Context, dongleID int32, fromMs float64, toMs float64) ([]ListIntervalBootsRow, error)
 	ListPids(ctx context.Context) ([]Pid, error)
+	ListProvisionalTrips(ctx context.Context) ([]ListProvisionalTripsRow, error)
+	ListTripEvents(ctx context.Context, tripID uuid.UUID) ([]GoldTripEvent, error)
+	ListTripGearShifts(ctx context.Context, tripID uuid.UUID) ([]GoldTripGearShift, error)
+	ListTripGears(ctx context.Context, tripID uuid.UUID) ([]GoldTripGear, error)
+	ListTripParts(ctx context.Context, tripID uuid.UUID) ([]GoldTripPart, error)
+	ListTripSpeedBands(ctx context.Context, tripID uuid.UUID) ([]GoldTripSpeedBand, error)
+	ListTripStops(ctx context.Context, tripID uuid.UUID) ([]GoldTripStop, error)
+	// Boots sem hora que podem cair no intervalo: a hora real é no máximo o recebimento (max_offset_ms) e a posição por
+	// seq fica entre o último boot convertido que termina antes de t0 e o primeiro que começa em ou depois de t1.
+	ListUnconvertedBoots(ctx context.Context, dongleID int32, t0Ms float64, t1Ms float64) ([]ListUnconvertedBootsRow, error)
+	// trip.sql: fila e gravação da análise da viagem (schema gold) e leitura da silver para o cálculo (API1).
+	ListWaitingTrips(ctx context.Context) ([]GoldTrip, error)
+	LoadTripPositions(ctx context.Context, arg LoadTripPositionsParams) ([]LoadTripPositionsRow, error)
+	LoadTripReadings(ctx context.Context, arg LoadTripReadingsParams) ([]LoadTripReadingsRow, error)
 	// state.sql
 	LockDongle(ctx context.Context, dongleID int32) error
 	// Todos os boots sem âncora entre o boot ancorado anterior e o seguinte (por seq).
 	MarkAnchorlessNeighbors(ctx context.Context, now time.Time, dongleID int32, firstSeq *int64) (int64, error)
-	MarkGoldBoots(ctx context.Context, dongleID int32, toSeq *int64, fromSeq *int64) error
 	MarkInvalidTag(ctx context.Context, dongleID int32, cS int64, nonce []byte) error
+	MarkTripWaiting(ctx context.Context, tripID uuid.UUID) error
+	// reprocess: as viagens prontas cuja faixa de seq cruza a reprocessada.
+	MarkTripsRecalc(ctx context.Context, dongleID int32, toSeq *int64, fromSeq *int64) error
+	MarkTripsRecalcByID(ctx context.Context, tripIds []uuid.UUID) error
+	// Hora absoluta (ms) do t0 do bloco mais recente já convertido, entre os blocos de seq em [from_seq, to_seq].
+	// Janela curta de propósito: raw_block é percorrido por seq, e a busca só precisa dos últimos blocos.
+	MaxConvertedBlockTime(ctx context.Context, dongleID int32, fromSeq int64, toSeq int64) (float64, error)
 	NextAnchoredBoot(ctx context.Context, dongleID int32, firstSeq *int64) (NextAnchoredBootRow, error)
+	NextBootFirstSeq(ctx context.Context, dongleID int32, afterSeq *int64) (*int64, error)
 	NotifyPendingBoot(ctx context.Context, payload string) error
+	NotifyTripCreated(ctx context.Context, payload string) error
+	NotifyTripPending(ctx context.Context) error
 	PreviousAnchoredBoot(ctx context.Context, dongleID int32, firstSeq *int64) (PreviousAnchoredBootRow, error)
 	ReadLastAck(ctx context.Context, dongleID int32) ([]byte, error)
 	// Devolve as linhas candidatas nas geracoes G e G+1; o chamador escolhe a certa (atribuirGeracao).
 	ReadLastBootTMs(ctx context.Context, dongleID int32, bootIds []int32, generationA int32, generationB int32) ([]ReadLastBootTMsRow, error)
+	ReadProgress(ctx context.Context, dongleID int32) (ReadProgressRow, error)
 	ReadState(ctx context.Context, dongleID int32) (ReadStateRow, error)
 	ReadStateSnapshot(ctx context.Context, dongleID int32) (ReadStateSnapshotRow, error)
 	RegisterRejected(ctx context.Context, arg RegisterRejectedParams) error
+	// A API grava boot_generation nula quando o boot ainda não existe; vale a maior geração que tem o boot_id.
+	ResolveTripGeneration(ctx context.Context, tripID uuid.UUID, dongleID int32, bootID int32) (*int32, error)
+	SaveTripResult(ctx context.Context, arg SaveTripResultParams) error
+	SeedTripBoot(ctx context.Context, arg SeedTripBootParams) (uuid.UUID, error)
+	SeedTripInterval(ctx context.Context, arg SeedTripIntervalParams) (uuid.UUID, error)
 	TakePendingBoot(ctx context.Context) (TakePendingBootRow, error)
+	TakeRecalcTrip(ctx context.Context) (GoldTrip, error)
+	TakeTrip(ctx context.Context, tripID uuid.UUID) (GoldTrip, error)
 	UpdateBootTime(ctx context.Context, arg UpdateBootTimeParams) error
 	UpdateHandshakeState(ctx context.Context, arg UpdateHandshakeStateParams) error
 	UpdateIngestionBoots(ctx context.Context, arg UpdateIngestionBootsParams) error
@@ -73,6 +138,8 @@ type Querier interface {
 	VerifyListBoots(ctx context.Context, dongleID int32) ([]VerifyListBootsRow, error)
 	VerifyListGaps(ctx context.Context, dongleID int32) ([]VerifyListGapsRow, error)
 	VerifyReadingTime(ctx context.Context, dongleID int32) (float64, error)
+	VerifyTripCounts(ctx context.Context, tripID uuid.UUID) (VerifyTripCountsRow, error)
+	VerifyTripStatus(ctx context.Context, tripID uuid.UUID) (VerifyTripStatusRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -1,4 +1,5 @@
 # Depois do init/unseal/bootstrap do Vault:  run.sh stack.yml   (-e recriar=true apos trocar certificados)
+# So o dashboard (sem parar a API nem migrar):  run.sh site.yml stack.yml --tags frontend
 - name: Sobe a stack
   hosts: vps
   become: true
@@ -10,11 +11,86 @@
       ansible.builtin.command: "{{ compose_cmd }} exec -T vault vault status"
       args: { chdir: "{{ app_dir }}" }
       changed_when: false
+      tags: [frontend]
 
-    - name: Sobe tudo (migracoes, KMS, API, worker, Caddy)
-      ansible.builtin.command: "{{ compose_cmd }} up -d --build --wait {{ '--force-recreate vault kms api' if (recriar | default(false) | bool) else '' }}"
+    # Antes de parar qualquer coisa: o tempo de build nao entra no downtime.
+    - name: Constroi as imagens (dashboard e ferramentas incluidos)
+      ansible.builtin.command: "{{ compose_cmd }} --profile dashboard --profile ferramentas build"
       args: { chdir: "{{ app_dir }}" }
       changed_when: true
+
+    # `never`: so roda com `--tags frontend`; numa execucao completa o build acima ja inclui o dashboard.
+    - name: Constroi so a imagem do dashboard
+      ansible.builtin.command: "{{ compose_cmd }} --profile dashboard build frontend"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: true
+      tags: [never, frontend]
+
+    # A migracao 00010 derruba boot.gold_pending, coluna que a API ANTIGA ainda escreve: as replicas antigas
+    # precisam morrer antes do `migrar`.
+    - name: Para a API e o worker antigos
+      ansible.builtin.command: "{{ compose_cmd }} stop api worker"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: true
+
+    - name: Migracoes
+      ansible.builtin.command: "{{ compose_cmd }} run --rm migrar"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: true
+
+    - name: Sobe tudo (KMS, API, worker, Caddy)
+      ansible.builtin.command: "{{ compose_cmd }} up -d --wait {{ '--force-recreate vault kms api' if (recriar | default(false) | bool) else '' }}"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: true
+
+    - name: Cliente de client credentials do dashboard (uma vez; o segredo fica na VPS)
+      ansible.builtin.shell: |
+        set -eu
+        umask 077
+        T=deploy/segredos/analise_cliente_secret
+        {{ compose_cmd }} --profile ferramentas run --rm -T kms-ferramentas client create --id {{ frontend_client_id }} > "$T.tmp" \
+          || {{ compose_cmd }} --profile ferramentas run --rm -T kms-ferramentas client rotate --id {{ frontend_client_id }} > "$T.tmp"
+        [ -s "$T.tmp" ] || { echo "segredo vazio" >&2; exit 1; }
+        mv "$T.tmp" "$T"
+      args:
+        chdir: "{{ app_dir }}"
+        creates: "{{ app_dir }}/deploy/segredos/analise_cliente_secret"
+      no_log: true
+      tags: [frontend]
+
+    - name: AUTH_SECRET do dashboard (gerado na VPS, uma vez; nunca sobrescrito)
+      ansible.builtin.shell: umask 077 && openssl rand -base64 32 | tr -d '\n' > "{{ app_dir }}/deploy/segredos/frontend_auth_secret"
+      args: { creates: "{{ app_dir }}/deploy/segredos/frontend_auth_secret" }
+      no_log: true
+      tags: [frontend]
+
+    - name: Le os segredos do dashboard
+      ansible.builtin.slurp: { src: "{{ app_dir }}/deploy/segredos/{{ item }}" }
+      loop: [analise_cliente_secret, frontend_auth_secret]
+      register: segredos_frontend
+      no_log: true
+      tags: [frontend]
+
+    - name: .env.frontend (gerado a partir do template; nao edite a mao)
+      ansible.builtin.template:
+        src: frontend.env.j2
+        dest: "{{ app_dir }}/.env.frontend"
+        owner: deploy
+        group: deploy
+        mode: "0600"
+      vars:
+        frontend_client_secret: "{{ segredos_frontend.results[0].content | b64decode | trim }}"
+        frontend_auth_secret: "{{ segredos_frontend.results[1].content | b64decode | trim }}"
+      register: env_frontend
+      no_log: true
+      tags: [frontend]
+
+    # --no-deps: numa execucao so do dashboard, nao recria API, KMS nem Vault se o compose deles mudou.
+    - name: Sobe o dashboard (recria se o .env.frontend mudou)
+      ansible.builtin.command: "{{ compose_cmd }} up -d --wait --no-deps {{ '--force-recreate' if env_frontend.changed else '' }} frontend"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: true
+      tags: [frontend]
 
     # O Caddy monta o Caddyfile como arquivo unico (o rsync troca o inode) e roda com `admin off` (sem recarga):
     # o contêiner pode ficar com o arquivo antigo e o compose nao nota. Sem arquivo de estado: compara o que o

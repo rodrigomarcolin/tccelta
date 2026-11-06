@@ -127,10 +127,14 @@ func (r *boots) MarkAnchorlessNeighbors(ctx context.Context, dongleID int32, fir
 	return r.q.MarkAnchorlessNeighbors(ctx, now, dongleID, &firstSeq)
 }
 
-func (r *boots) MarkGold(ctx context.Context, dongleID int32, fromSeq, toSeq int64) error {
-	return r.q.MarkGoldBoots(ctx, dongleID, &toSeq, &fromSeq)
-}
-
 func (r *boots) CountPending(ctx context.Context) (int64, error) {
 	return r.q.CountPendingBoots(ctx)
+}
+
+func (r *boots) LatestGeneration(ctx context.Context, dongleID, bootID int32) (int32, bool, error) {
+	g, err := r.q.LatestBootGeneration(ctx, dongleID, bootID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	return g, err == nil, err
 }

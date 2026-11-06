@@ -18,6 +18,17 @@ path "transit-jwt/keys/jwt" {
   capabilities = ["read"]
 }
 
+# Tokens de cliente (client credentials): assinar com a chave cli, ler a publica e ler o registro (hash) do cliente.
+path "transit-jwt/sign/cli" {
+  capabilities = ["update"]
+}
+path "transit-jwt/keys/cli" {
+  capabilities = ["read"]
+}
+path "kv-clientes/data/clients/*" {
+  capabilities = ["read"]
+}
+
 # Ciclo de vida do proprio token (a role usa token_no_default_policy=true).
 path "auth/token/lookup-self" { capabilities = ["read"] }
 path "auth/token/renew-self"  { capabilities = ["update"] }
@@ -36,6 +47,11 @@ path "transit-auth/export/*"      { capabilities = ["deny"] }
 path "transit-auth/backup/*"      { capabilities = ["deny"] }
 path "transit-auth/byok-export/*" { capabilities = ["deny"] }
 path "transit-jwt/keys/jwt/*"     { capabilities = ["deny"] }
+path "transit-jwt/keys/cli/*"      { capabilities = ["deny"] }
+path "kv-clientes/metadata/*"      { capabilities = ["deny"] }
+path "kv-clientes/delete/*"        { capabilities = ["deny"] }
+path "kv-clientes/destroy/*"       { capabilities = ["deny"] }
+path "kv-clientes/undelete/*"      { capabilities = ["deny"] }
 path "transit-jwt/export/*"       { capabilities = ["deny"] }
 path "transit-jwt/backup/*"       { capabilities = ["deny"] }
 path "sys/*"                      { capabilities = ["deny"] }

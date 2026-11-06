@@ -14,9 +14,5 @@ DELETE FROM position
 WHERE dongle_id = @dongle_id AND block_seq >= @from_seq AND block_seq <= @to_seq
   AND received_at >= @received_min AND received_at <= @received_max;
 
--- name: MarkGoldBoots :exec
-UPDATE boot SET gold_pending = true
-WHERE dongle_id = @dongle_id AND first_seq <= @to_seq AND last_seq >= @from_seq;
-
 -- name: CountReadings :one
 SELECT count(*) FROM reading WHERE dongle_id = @dongle_id AND block_seq >= @from_seq AND block_seq <= @to_seq;

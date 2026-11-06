@@ -56,7 +56,7 @@ Configuração padrão em `timeline.DefaultConfig()`: 10 min, 40 ppm, 0,5 ms, 1 
 
 ## Permissões do papel `tccelta_worker`
 
-`SELECT` em `dongle`, `dongle_state`, `raw_block`, `time_anchor`, `gap`, `pid`; `SELECT, UPDATE` em `boot`; `UPDATE (result)` em `challenge`; `INSERT` em `alert`; `INSERT, DELETE` em `anchor_group`. Não escreve em `reading`/`position`.
+`SELECT` em `dongle`, `dongle_state`, `raw_block`, `time_anchor`, `gap`, `pid`; `SELECT, UPDATE` em `boot`; `UPDATE (result)` em `challenge`; `INSERT` em `alert`; `INSERT, DELETE` em `anchor_group`; `SELECT` em `reading` e `position` e `SELECT, INSERT, UPDATE, DELETE` nas tabelas do schema `gold` (desde a `00009`). Não escreve em `reading`/`position`.
 
 ## Métricas
 
@@ -65,3 +65,24 @@ Configuração padrão em `timeline.DefaultConfig()`: 10 min, 40 ppm, 0,5 ms, 1 
 ## Testes
 
 `domain/timeline` (grupos, reta, vizinhos, desenrolar do `t_ms`), cenário `time` do simulador (4 âncoras, `time_source = anchors`, incerteza ≤ 2000 ms, hora reconstruída a menos de 10 s do relógio), cenário `e2e` (verificação 6) e `generation`.
+
+## Worker de viagens (`gold`, entrega API1)
+
+O mesmo processo calcula a análise das viagens de `gold.trip` (caso de uso `usecase/tripcalc`, runtime `internal/worker/trip.go`,
+cálculo puro em `domain/tripanalysis`; cálculos e contrato em `.spec/analise-de-viagem/02`). O `NOTIFY trip_pending` acorda; os
+tickers são a rede de segurança.
+
+- **Avaliação (fora de transação, `VIAGEM_INTERVALO_AVALIACAO`):** a viagem `pending` vira `waiting_data`; fica pronta quando
+  `agora − created_at ≥ VIAGEM_LIMITE_FINAL` (o cálculo sai com o aviso `dados_parciais`) **ou** `contiguous_seq ≥ target_seq` e
+  há `VIAGEM_ESPERA_SEM_LOTE` sem lote novo (`dongle_state.last_ack_at`) ou, no intervalo, chegou um bloco com hora ≥ `t1`.
+- **Cálculo:** `Take` com `FOR UPDATE SKIP LOCKED` e `statement_timeout = VIAGEM_TIMEOUT_CALCULO`; lê o `contiguous_seq` primeiro
+  (vira `calculated_through_seq`), carrega a silver no eixo da análise, chama `Analyze` e troca as linhas da gold numa transação.
+  Erro ou pânico: a viagem nova vira `failed` (libera o nome); o recálculo de uma viagem `ready` mantém o resultado.
+- **Provisórias (`VIAGEM_INTERVALO_PROVISORIAS`):** blocos novos dentro da viagem, boot sem hora que ganhou conversão ou boot de
+  geração nula que chegou marcam `recalc_pending`; havendo prova de completude e nenhum dado novo, `provisional` é limpo.
+- **Concorrência:** as `WORKER_CONCORRENCIA` goroutines de cálculo também drenam `recalc_pending`.
+- **Métricas:** `tccelta_worker_trips_total{result}`, `tccelta_worker_trip_partial_total`,
+  `tccelta_worker_trip_provisional_total{action}`, `tccelta_worker_trip_duration_seconds`, `tccelta_worker_trip_wait_seconds`,
+  `tccelta_worker_trip_queue{state}`. Logs `worker.viagem_calculada`, `worker.viagem_falhou`, `worker.viagem_recalculo_marcado`.
+- **Variáveis:** `VIAGEM_ESPERA_SEM_LOTE` (10 s), `VIAGEM_LIMITE_FINAL` (20 s), `VIAGEM_INTERVALO_AVALIACAO` (1 s),
+  `VIAGEM_INTERVALO_PROVISORIAS` (5 s), `VIAGEM_TIMEOUT_CALCULO` (60 s). Inválido: valor ≤ 0, limite final ≤ espera, avaliação > espera.

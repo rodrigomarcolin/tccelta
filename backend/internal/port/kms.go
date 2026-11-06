@@ -24,3 +24,15 @@ type JWTSigner interface {
 	Sign(ctx context.Context, input []byte) (signature []byte, version int, err error)
 	PublicKeys(ctx context.Context) (map[int]ed25519.PublicKey, error)
 }
+
+// ClientVerifier confere o segredo de um cliente (client credentials) no KMS, que guarda só o hash. O KMS responde
+// false para segredo errado, cliente desconhecido e cliente revogado.
+type ClientVerifier interface {
+	VerifyClient(ctx context.Context, clientID, secret string) (valid bool, err error)
+}
+
+// ClientSigner: chave Ed25519 `cli` dos tokens de cliente, separada da do JWT do app.
+type ClientSigner interface {
+	SignClient(ctx context.Context, input []byte) (signature []byte, version int, err error)
+	ClientPublicKeys(ctx context.Context) (map[int]ed25519.PublicKey, error)
+}
