@@ -112,6 +112,13 @@ O procedimento acima ainda não foi executado contra um Vault de verdade (nem os
 | `app` | Aplicação: código, `.env`, segredos, certificados, `pg_hba`, firewall do banco |
 | `codigo` | Cria a pasta da aplicação e sincroniza o código (rsync) |
 | `dbeaver` | Só o acesso ao banco: `pg_hba.conf` e firewall da 5432. Use para trocar IPs permitidos |
+| `frontend` | Só o dashboard, nos dois playbooks: sincroniza `frontend/`, constrói só a imagem `frontend` e sobe só o contêiner. Não toca na API, no worker nem nas migrações |
+
+Para atualizar só o dashboard (sem parar a ingestão e sem construir o backend):
+`bash deploy/ansible/run.sh site.yml stack.yml --tags frontend`. Os dois playbooks na mesma chamada: o `site.yml`
+envia o código para `/opt/frontend` e o `stack.yml` constrói e recria o contêiner (o Vault precisa estar aberto, por causa
+do cliente de client credentials, que só é criado na primeira vez). A tarefa de build só do front tem a tag `never`: numa
+execução completa, quem constrói é a tarefa de sempre.
 
 Para liberar ou trocar um IP do DBeaver: edite `dbeaver_ips` em `group_vars/all/local.yml` e rode
 `bash deploy/ansible/run.sh site.yml --tags dbeaver`. Sem `rsync`, sem `stack.yml` e sem recriar o banco. No fim, o

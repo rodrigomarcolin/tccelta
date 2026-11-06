@@ -110,7 +110,7 @@
 
     - name: Pasta do frontend (fora da arvore do backend; o compose usa ../frontend)
       ansible.builtin.file: { path: /opt/frontend, state: directory, owner: deploy, group: deploy, mode: "0755" }
-      tags: [codigo]
+      tags: [codigo, frontend]
 
     - name: Frontend (frontend/ do repositorio -> /opt/frontend)
       become: false
@@ -121,7 +121,7 @@
         use_ssh_args: true
         rsync_opts: ["--chmod=D755,F644", "--exclude=node_modules/", "--exclude=.next/",
                      "--exclude=coverage/", "--exclude=.env*", "--exclude=*.tsbuildinfo"]
-      tags: [codigo]
+      tags: [codigo, frontend]
 
     - name: .env a partir do exemplo (so se nao existir)
       ansible.builtin.copy:
