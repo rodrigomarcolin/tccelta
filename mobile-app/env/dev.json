@@ -1,4 +1,4 @@
 {
     "FLAVOR": "dev",
-    "API_BASE_URL": "https://tccelta.malcong.com.br"
+    "API_BASE_URL": "https://tccelta.malcong.com.br/api"
 }
