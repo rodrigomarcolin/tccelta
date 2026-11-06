@@ -32,6 +32,15 @@ export const POLL_FAILURES_NOTICE = 3;
 /** Wait limit in pendente or aguardando_dados (3 times the worker limit). */
 export const WAIT_LIMIT_MS = 60_000;
 
+/** Trips per batch of the list (the API default). */
+export const TRIPS_PAGE_SIZE = 24;
+/** Failed attempts of a list batch before it is shown as failed (the user can retry). */
+export const LIST_RETRIES = 3;
+/** Debounce of the driver search. */
+export const SEARCH_DEBOUNCE_MS = 300;
+/** Longest search the API accepts, in characters. */
+export const SEARCH_MAX_LENGTH = 60;
+
 /** Fraction of the summed part durations that each pause takes on the X axis. */
 export const AXIS_PAUSE_FRACTION = 0.05;
 

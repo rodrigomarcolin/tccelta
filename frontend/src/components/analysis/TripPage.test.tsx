@@ -192,10 +192,12 @@ describe("other states", () => {
     });
     await mount();
     expect(screen.getByText("Viagem não encontrada")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Voltar para processar/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Ver todas as viagens/ })).toHaveAttribute(
       "href",
-      "/processar",
+      "/viagens",
     );
+    // The simple pages carry the navigation too.
+    expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
     await advance(5000);
     expect(count("status")).toBe(1);
   });

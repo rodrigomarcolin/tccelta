@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BASE_PATH } from "@/config";
@@ -297,6 +297,64 @@ describe("submit", () => {
     expect(f).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
     expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("409 viagem_repetida says for whom it was processed and links to that trip and the list", async () => {
+    fetchWith({
+      status: 409,
+      body: {
+        codigo: "viagem_repetida",
+        viagem_id: "7d1f3a10-0001-4c5e-9b1a-000000000008",
+        motorista: { nome: "Maria" },
+      },
+    });
+    renderWithTheme(<ProcessForm />);
+    await fillBoot("João", "8");
+    await submit();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Esta viagem já foi processada para «Maria».");
+    expect(within(alert).getByRole("link", { name: "Abrir a viagem" })).toHaveAttribute(
+      "href",
+      "/viagem/7d1f3a10-0001-4c5e-9b1a-000000000008",
+    );
+    expect(within(alert).getByRole("link", { name: "Ver todas as viagens" })).toHaveAttribute(
+      "href",
+      "/viagens",
+    );
+    // The typed name is not the problem: the field is not flagged, and the form is kept.
+    expect(screen.getByLabelText("Motorista")).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByLabelText("Motorista")).toHaveValue("João");
+    expect(screen.getByRole("button", { name: "Processar viagem" })).toBeEnabled();
+  });
+
+  it("creationError: viagem_repetida without the extras still offers the list", () => {
+    const p = { type: "t", title: "t", status: 409, codigo: "viagem_repetida" };
+    expect(creationError(409, p, null, "Ana", "feira")).toEqual({
+      general: "Esta viagem já foi processada para «Ana».",
+      repeated: { id: null },
+    });
+    expect(
+      creationError(
+        409,
+        { ...p, viagem_id: "abc", motorista: { nome: "Rui" } },
+        null,
+        "Ana",
+        "feira",
+      ),
+    ).toEqual({
+      general: "Esta viagem já foi processada para «Rui».",
+      repeated: { id: "abc" },
+    });
+  });
+
+  it("without viagem_id only the list link shows", async () => {
+    fetchWith({ status: 409, body: { codigo: "viagem_repetida" } });
+    renderWithTheme(<ProcessForm />);
+    await fillBoot("João", "8");
+    await submit();
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("link", { name: "Abrir a viagem" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Ver todas as viagens" })).toBeInTheDocument();
   });
 
   it("creationError does not use title or detail to decide", () => {

@@ -9,6 +9,7 @@ import type { TripEvent, Stop, Route } from "@/domain/trip/types";
 import { formatDuration } from "@/format/numbers";
 import { MapBox } from "@/components/ui/MapBox";
 import { cssColor } from "./colors";
+import { TILE_DARK, TILE_LIGHT } from "./tileClasses";
 
 export type MapProps = {
   route: Route;
@@ -28,10 +29,6 @@ const TILE_ERROR_LIMIT = 3;
 // Markers are Leaflet DOM, so their classes are plain strings (Tailwind finds them here).
 const AB_MARKER =
   "grid size-6 place-items-center rounded-pill border-2 border-primary bg-card font-mono text-[12px] leading-[normal] font-bold text-primary";
-// OpenStreetMap only has a light style: in the dark theme, invert and darken the tiles.
-const TILE_LIGHT = "transition-opacity duration-(--dur-color) ease-value";
-const TILE_DARK =
-  "transition-opacity duration-(--dur-color) ease-value [filter:invert(1)_hue-rotate(180deg)_brightness(0.9)_contrast(0.9)_saturate(0.6)]";
 
 function eventIcon(L: typeof Leaflet, tipo: TripEvent["tipo"]): Leaflet.DivIcon | null {
   if (tipo === "marcha_lenta_longa") return null;

@@ -35,6 +35,8 @@ export function useCreateTrip() {
     retry: false,
     networkMode: "always",
     onSuccess: (res, req) => {
+      // The list has a new trip at the top.
+      void queryClient.invalidateQueries({ queryKey: ["trips"] });
       if (res.status === "pendente" || res.status === "aguardando_dados") {
         queryClient.setQueryData(tripStatusKey(res.viagem_id), initialStatus(req, res));
       }

@@ -45,6 +45,23 @@ describe("normal boot (scenario boot 8)", () => {
     expect(document.body.textContent).not.toMatch(/infra[cç][aã]o|excesso|\bnota\b/i);
   });
 
+  it("the header goes back to the list and has the navigation, which does not print", () => {
+    renderWithTheme(<AnalysisView analysis={analysisFor("normal")} provisional={false} />);
+    const back = screen.getByRole("link", { name: "Voltar para a lista de viagens" });
+    expect(back).toHaveAttribute("href", "/viagens");
+    expect(back).toHaveTextContent("Viagens");
+    const nav = screen.getByRole("navigation", { name: "Principal" });
+    expect(within(nav).getByRole("link", { name: "Viagens" })).toHaveAttribute("href", "/viagens");
+    expect(within(nav).getByRole("link", { name: "Nova viagem" })).toHaveAttribute(
+      "href",
+      "/processar",
+    );
+    // This is not a list or form page: nothing is marked as the current one.
+    expect(nav.querySelector("[aria-current]")).toBeNull();
+    expect(nav.className).toContain("print:hidden");
+    expect(nav.parentElement!.className).toContain("print:hidden");
+  });
+
   it("labels consumption as estimated with the fuel", () => {
     renderWithTheme(<AnalysisView analysis={analysisFor("normal")} provisional={false} />);
     const efficiency = screen.getByRole("region", { name: /Eficiência/ });

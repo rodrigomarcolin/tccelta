@@ -5,18 +5,19 @@ const auth = vi.fn();
 vi.mock("@/auth", () => ({ auth: () => auth(), handlers: { GET: vi.fn(), POST: vi.fn() } }));
 
 import { resetMock } from "@/server/trips/mock/mockDatasource";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 import { GET as GET_STATUS } from "./[id]/route";
 import { GET as GET_ANALYSIS } from "./[id]/analysis/route";
 import { EXAMPLES } from "@/server/trips/mock/scenarios";
 
 const post = (body: string) => POST(new Request("http://x/api/trips", { method: "POST", body }));
+const get = (qs = "") => GET(new Request(`http://x/api/trips${qs}`));
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 const validBody = JSON.stringify({
   motorista: { nome: "Rota" },
   categoria_viagem: "teste",
   combustivel: "diesel",
-  entrada: { tipo: "boot", dongle_id: 1, boot_id: 8 },
+  entrada: { tipo: "boot", dongle_id: 1, boot_id: 20 },
 });
 
 const UUID = "7d1f3a10-0001-4c5e-9b1a-000000000008";
@@ -41,6 +42,12 @@ describe("without a session", () => {
     expect(r.headers.get("Content-Type")).toBe("application/problem+json");
     expect(r.headers.get("Cache-Control")).toBe("no-store");
     expect(await r.json()).toMatchObject({ codigo: "nao_autenticado", status: 401 });
+  });
+
+  it("GET list responds 401 and the data layer is not asked", async () => {
+    const r = await get();
+    expect(r.status).toBe(401);
+    expect(await r.json()).toMatchObject({ codigo: "nao_autenticado" });
   });
 
   it("GET status and analysis respond 401", async () => {
@@ -70,6 +77,7 @@ describe("session outside OPERATOR_EMAILS", () => {
     expect(readBody).not.toHaveBeenCalled();
     expect((await GET_STATUS(new Request("http://x"), ctx(UUID))).status).toBe(403);
     expect((await GET_ANALYSIS(new Request("http://x"), ctx(UUID))).status).toBe(403);
+    expect((await get("?limite=5")).status).toBe(403);
     expect(f).not.toHaveBeenCalled();
   });
 
@@ -129,6 +137,33 @@ describe("with the api source", () => {
     );
   });
 
+  it("GET list forwards only limite, cursor and busca, encoded, and never reaches the API with a bad value", async () => {
+    const f = vi.fn(async (url: string | URL | Request) =>
+      String(url).endsWith("/v1/auth/token")
+        ? tokenOk()
+        : new Response(JSON.stringify({ viagens: [], total: 0, proximo_cursor: null }), {
+            status: 200,
+          }),
+    );
+    vi.stubGlobal("fetch", f);
+    const r = await get("?limite=24&cursor=a%2Bb%3D&busca=Jo%C3%A3o%20%26&x=1");
+    expect(r.status).toBe(200);
+    const calls = f.mock.calls as unknown as [string][];
+    const url = new URL(calls[calls.length - 1][0]);
+    expect(url.pathname).toBe("/v1/viagens");
+    expect(url.searchParams.get("cursor")).toBe("a+b=");
+    expect(url.searchParams.get("busca")).toBe("João &");
+    expect([...url.searchParams.keys()]).toEqual(["limite", "cursor", "busca"]);
+
+    const before = f.mock.calls.length;
+    for (const qs of ["?limite=0", "?limite=51", "?limite=abc", "?busca=" + "a".repeat(61)]) {
+      const bad = await get(qs);
+      expect(bad.status, qs).toBe(400);
+      expect(await bad.json()).toMatchObject({ codigo: "entrada_invalida" });
+    }
+    expect(f.mock.calls.length).toBe(before);
+  });
+
   it("an id that is not a UUID never reaches the API", async () => {
     const f = vi.fn();
     vi.stubGlobal("fetch", f);
@@ -184,9 +219,48 @@ describe("with a session", () => {
 
   it("forwards 409 for a repeated name", async () => {
     await post(validBody);
-    const r = await post(validBody);
+    // Another boot: the same one would be viagem_repetida.
+    const r = await post(
+      JSON.stringify({
+        ...JSON.parse(validBody),
+        entrada: { tipo: "boot", dongle_id: 1, boot_id: 21 },
+      }),
+    );
     expect(r.status).toBe(409);
     expect(await r.json()).toMatchObject({ codigo: "motorista_repetido" });
+  });
+
+  it("GET list returns the first page of the mock, without cache", async () => {
+    const r = await get();
+    expect(r.status).toBe(200);
+    expect(r.headers.get("Cache-Control")).toBe("no-store");
+    const page = await r.json();
+    expect(page.viagens).toHaveLength(24);
+    expect(page.total).toBeGreaterThan(24);
+    expect(page.proximo_cursor).toEqual(expect.any(String));
+    const next = await (await get(`?cursor=${encodeURIComponent(page.proximo_cursor)}`)).json();
+    expect(next.viagens[0].viagem_id).not.toBe(page.viagens[0].viagem_id);
+  });
+
+  it("GET list with a bad cursor gives 400", async () => {
+    const r = await get("?cursor=!!!");
+    expect(r.status).toBe(400);
+    expect(await r.json()).toMatchObject({ codigo: "entrada_invalida" });
+  });
+
+  it("forwards 409 viagem_repetida with the existing trip", async () => {
+    const r = await post(
+      JSON.stringify({
+        ...JSON.parse(validBody),
+        entrada: { tipo: "boot", dongle_id: 1, boot_id: 8 },
+      }),
+    );
+    expect(r.status).toBe(409);
+    expect(await r.json()).toMatchObject({
+      codigo: "viagem_repetida",
+      viagem_id: EXAMPLES[0].id,
+      motorista: { nome: "Exemplo — Boot normal" },
+    });
   });
 
   it("invalid JSON gives 400 corpo_malformado", async () => {

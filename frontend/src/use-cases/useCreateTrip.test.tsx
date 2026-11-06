@@ -57,3 +57,13 @@ describe("useCreateTrip", () => {
     expect(client.getQueryData(tripStatusKey("abc"))).toBeUndefined();
   });
 });
+
+describe("useCreateTrip and the list", () => {
+  it("invalidates the trip list after creating", async () => {
+    stubPost("pendente");
+    const { client, result } = setup();
+    client.setQueryData(["trips", ""], { pages: [], pageParams: [] });
+    await result.current.mutateAsync(REQ);
+    await waitFor(() => expect(client.getQueryState(["trips", ""])?.isInvalidated).toBe(true));
+  });
+});

@@ -399,3 +399,36 @@ describe("Bearer and credential errors", () => {
     expect(calls).toHaveLength(1);
   });
 });
+
+describe("list (GET /v1/viagens)", () => {
+  const page = { viagens: [], total: 0, proximo_cursor: null };
+
+  it("forwards limite, cursor and busca encoded, with the Bearer", async () => {
+    next = { status: 200, body: JSON.stringify(page) };
+    const r = await client().list({ limite: 24, cursor: "a+b/c==", busca: "João & Ana" });
+    expect(r).toEqual({ status: 200, body: page });
+    expect(calls[0]).toMatchObject({ method: "GET", auth: `Bearer ${TOKEN}` });
+    const url = new URL(calls[0].url, "http://x");
+    expect(url.pathname).toBe("/v1/viagens");
+    expect(url.searchParams.get("limite")).toBe("24");
+    expect(url.searchParams.get("cursor")).toBe("a+b/c==");
+    expect(url.searchParams.get("busca")).toBe("João & Ana");
+    expect([...url.searchParams.keys()]).toEqual(["limite", "cursor", "busca"]);
+  });
+
+  it("sends no query string without parameters", async () => {
+    next = { status: 200, body: JSON.stringify(page) };
+    await client().list({});
+    expect(calls[0].url).toBe("/v1/viagens");
+  });
+
+  it("forwards the API problem", async () => {
+    next = {
+      status: 400,
+      contentType: "application/problem+json",
+      body: problemBody(400, "entrada_invalida"),
+    };
+    const r = await client().list({ limite: 24 });
+    expect(r).toMatchObject({ status: 400, body: { codigo: "entrada_invalida" } });
+  });
+});

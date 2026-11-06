@@ -12,7 +12,8 @@ const body = (name = "João", extra: Record<string, unknown> = {}) => ({
   motorista: { nome: name },
   categoria_viagem: "Feira",
   combustivel: "gasolina_e30",
-  entrada: { tipo: "boot", dongle_id: 1, boot_id: 8 },
+  // Boots 8 to 15 belong to the example trips, which would answer viagem_repetida.
+  entrada: { tipo: "boot", dongle_id: 1, boot_id: 20 },
   ...extra,
 });
 
@@ -36,11 +37,16 @@ describe("create", () => {
 
   it("stores the category in lowercase and refuses a repeated name, ignoring case and spaces", async () => {
     expect((await create(body("João"))).status).toBe(202);
-    const r = await create(body("joão", { categoria_viagem: "FEIRA" }));
+    // Another boot: the same trip would answer viagem_repetida first.
+    const other = { tipo: "boot", dongle_id: 1, boot_id: 21 };
+    const r = await create(body("joão", { categoria_viagem: "FEIRA", entrada: other }));
     expect(r.status).toBe(409);
     expect((r.body as Problem).codigo).toBe("motorista_repetido");
     // Another category frees the name.
-    expect((await create(body("João", { categoria_viagem: "teste" }))).status).toBe(202);
+    const third = { tipo: "boot", dongle_id: 1, boot_id: 22 };
+    expect((await create(body("João", { categoria_viagem: "teste", entrada: third }))).status).toBe(
+      202,
+    );
   });
 
   it.each([
@@ -82,7 +88,7 @@ describe("create", () => {
           tipo: "intervalo",
           dongle_id: 1,
           t0: "2026-10-28T09:00:00-03:00",
-          t1: "2026-10-28T08:00:00-03:00",
+          t1: "2026-10-28T09:00:00-03:00",
         },
       }),
     ],
@@ -104,7 +110,7 @@ describe("create", () => {
           tipo: "intervalo",
           dongle_id: 1,
           t0: "2026-13-45T09:00:00-03:00",
-          t1: "2026-10-28T08:00:00-03:00",
+          t1: "2026-10-28T09:00:00-03:00",
         },
       }),
     ],
@@ -114,7 +120,7 @@ describe("create", () => {
         entrada: {
           tipo: "intervalo",
           dongle_id: 1,
-          t0: "2026-10-28T08:00:00-03:00",
+          t0: "2026-10-28T09:00:00-03:00",
           t1: "2026-10-28T09:00:00-03:00",
           boot_id: 8,
         },
@@ -149,14 +155,14 @@ describe("create", () => {
         entrada: {
           tipo: "intervalo",
           dongle_id: 1,
-          t0: "2026-10-28T08:00:00-03:00",
-          t1: "2026-10-28T18:00:00-03:00",
+          t0: "2026-10-28T09:00:00-03:00",
+          t1: "2026-10-28T19:00:00-03:00",
         },
       }),
     );
     expect(i.status).toBe(202);
     const b = await create(
-      body("B", { entrada: { tipo: "boot", dongle_id: 1, boot_id: 8, boot_generation: 3 } }),
+      body("B", { entrada: { tipo: "boot", dongle_id: 1, boot_id: 20, boot_generation: 3 } }),
     );
     expect(b.status).toBe(202);
   });
@@ -317,7 +323,11 @@ describe("example trips", () => {
 
   it("a trip created with each example boot uses the matching scenario", async () => {
     const id = (
-      (await create(body("Gps", { entrada: { tipo: "boot", dongle_id: 1, boot_id: 9 } }))).body as {
+      (
+        await create(
+          body("Gps", { entrada: { tipo: "boot", dongle_id: 1, boot_id: 9, boot_generation: 1 } }),
+        )
+      ).body as {
         viagem_id: string;
       }
     ).viagem_id;

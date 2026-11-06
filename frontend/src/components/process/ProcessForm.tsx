@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FUELS, INITIAL_DONGLE } from "@/config";
 import { ApiError } from "@/domain/trip/apiError";
@@ -35,6 +36,8 @@ type Errors = Partial<
   Record<"driver" | "category" | "dongle" | "bootId" | "bootGeneration" | "t0" | "t1", string>
 > & {
   general?: string;
+  /** The trip already exists (`409 viagem_repetida`): offers to open it. */
+  repeated?: { id: string | null };
   /** The session expired: the form stays and the login opens in another tab. */
   sessionExpired?: boolean;
   /** The next submit is a new attempt (the `POST` never repeats on its own). */
@@ -118,6 +121,14 @@ export function creationError(
   category: string,
 ): Errors {
   const code = p?.codigo;
+  if (status === 409 && code === "viagem_repetida") {
+    // The name is the one the existing trip was processed for, not the one just typed.
+    const owner = p?.motorista?.nome ?? driver;
+    return {
+      general: `Esta viagem já foi processada para «${owner}».`,
+      repeated: { id: typeof p?.viagem_id === "string" && p.viagem_id ? p.viagem_id : null },
+    };
+  }
   if (status === 409 && code === "motorista_repetido") {
     return {
       driver: `Já existe uma viagem de «${driver}» na categoria «${category.toLowerCase()}». Use outro nome.`,
@@ -202,14 +213,14 @@ export function ProcessForm({ initialDongle = INITIAL_DONGLE }: Props) {
     }
   }
 
-  const field = (id: keyof Errors, label: string, input: React.ReactNode) => (
+  const field = (id: Exclude<keyof Errors, "repeated">, label: string, input: React.ReactNode) => (
     <Field>
       <FieldLabel htmlFor={`f-${id}`}>{label}</FieldLabel>
       {input}
       {errors[id] ? <FieldError id={`error-${id}`}>{errors[id]}</FieldError> : null}
     </Field>
   );
-  const ariaError = (id: keyof Errors) =>
+  const ariaError = (id: Exclude<keyof Errors, "repeated">) =>
     errors[id] ? { "aria-invalid": true as const, "aria-describedby": `error-${id}` } : {};
 
   return (
@@ -344,6 +355,20 @@ export function ProcessForm({ initialDongle = INITIAL_DONGLE }: Props) {
       {errors.general ? (
         <FieldError box>
           {errors.general}
+          {errors.repeated ? (
+            <>
+              {" "}
+              {errors.repeated.id ? (
+                <>
+                  <Link href={`/viagem/${encodeURIComponent(errors.repeated.id)}`}>
+                    Abrir a viagem
+                  </Link>
+                  {" · "}
+                </>
+              ) : null}
+              <Link href="/viagens">Ver todas as viagens</Link>
+            </>
+          ) : null}
           {errors.sessionExpired ? (
             <>
               {" "}

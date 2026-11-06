@@ -3,7 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTripMonitor } from "@/use-cases/useTripMonitor";
-import { ThemeToggle } from "@/components/ui/Theme";
+import { HeaderControls } from "@/components/ui/AppNav";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AnalysisView } from "./AnalysisView";
 import {
@@ -23,7 +23,7 @@ function SimplePage({ children, text }: { children: ReactNode; text?: string | n
     <div>
       <PageHeader>
         <h1>Análise de viagem</h1>
-        <ThemeToggle />
+        <HeaderControls />
       </PageHeader>
       {text ? <ConnectionBanner text={text} /> : null}
       {children}

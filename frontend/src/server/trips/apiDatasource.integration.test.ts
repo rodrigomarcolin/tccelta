@@ -1,6 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import type { TripAnalysis, CreateTripResponse, TripStatusResponse } from "@/domain/trip/types";
+import type {
+  TripAnalysis,
+  CreateTripResponse,
+  Problem,
+  TripListResponse,
+  TripStatusResponse,
+} from "@/domain/trip/types";
 import { isProblem } from "@/domain/trip/types";
 import { contractViolations } from "@/tests/contract";
 import { createApiDatasource } from "./apiDatasource";
@@ -34,11 +40,27 @@ describe.skipIf(!API_URL)("real trips API (INT1)", () => {
     combustivel: "gasolina_e30",
     entrada: { tipo: "boot", dongle_id: dongle, boot_id: BOOT },
   });
+  // An interval only this run uses: unlike a boot, it needs no data and is never taken already.
+  const runStart = Date.now();
+  const intervalBody = (name: string, slot: number) => ({
+    ...requestBody(name),
+    entrada: {
+      tipo: "intervalo",
+      dongle_id: DONGLE,
+      t0: new Date(runStart + slot * 60_000).toISOString(),
+      t1: new Date(runStart + (slot + 1) * 60_000).toISOString(),
+    },
+  });
 
   it("creates, follows until ready and reads the analysis against the contract", async () => {
     const c = await client.create(requestBody("Integração"));
-    expect(c.status).toBe(202);
-    const { viagem_id: id } = c.body as CreateTripResponse;
+    // The boot can only be processed once: a previous run leaves it taken, so follow that trip.
+    expect([202, 409]).toContain(c.status);
+    const created = c.status === 202;
+    const id = created
+      ? (c.body as CreateTripResponse).viagem_id
+      : ((c.body as Problem).viagem_id as string);
+    expect(id).toBeTruthy();
 
     // Before it is ready, the analysis does not exist yet.
     const early = await client.analysis(id);
@@ -55,7 +77,7 @@ describe.skipIf(!API_URL)("real trips API (INT1)", () => {
       await new Promise((ok) => setTimeout(ok, 1000));
     }
     expect(st?.status).toBe("pronta");
-    expect(st?.motorista.nome).toBe("Integração");
+    if (created) expect(st?.motorista.nome).toBe("Integração");
     expect(st?.calculada_em).not.toBeNull();
 
     const a = await client.analysis(id);
@@ -68,10 +90,38 @@ describe.skipIf(!API_URL)("real trips API (INT1)", () => {
 
   it("repeated driver in the category: 409 motorista_repetido", async () => {
     const name = `Repetido ${suffix}`;
-    expect((await client.create(requestBody(name))).status).toBe(202);
-    const r = await client.create(requestBody(name.toUpperCase()));
+    expect((await client.create(intervalBody(name, 0))).status).toBe(202);
+    const r = await client.create(intervalBody(name.toUpperCase(), 1));
     expect(r.status).toBe(409);
     expect(isProblem(r.body) && r.body.codigo).toBe("motorista_repetido");
+  });
+
+  it("same trip for another driver: 409 viagem_repetida, pointing to the existing trip", async () => {
+    const name = `Original ${suffix}`;
+    const c = await client.create(intervalBody(name, 2));
+    expect(c.status).toBe(202);
+    const r = await client.create(intervalBody(`Outro ${suffix}`, 2));
+    expect(r.status).toBe(409);
+    expect(r.body).toMatchObject({
+      codigo: "viagem_repetida",
+      viagem_id: (c.body as CreateTripResponse).viagem_id,
+      motorista: { nome: name },
+    });
+  });
+
+  it("lists trips in batches against the contract, without repeating items", async () => {
+    const first = await client.list({ limite: 1 });
+    expect(first.status).toBe(200);
+    const page = first.body as TripListResponse;
+    expect(page.viagens).toHaveLength(1);
+    expect(page.total).toBeGreaterThan(0);
+    if (page.proximo_cursor) {
+      const second = await client.list({ limite: 1, cursor: page.proximo_cursor });
+      expect(second.status).toBe(200);
+      const next = second.body as TripListResponse;
+      expect(next.viagens[0]?.viagem_id).not.toBe(page.viagens[0]?.viagem_id);
+    }
+    expect((await client.list({ limite: 51 })).status).toBe(400);
   });
 
   it("nonexistent dongle: 404 dongle_desconhecido", async () => {

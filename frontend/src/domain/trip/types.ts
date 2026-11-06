@@ -274,7 +274,41 @@ export type Problem = {
   codigo: string;
   detail?: string;
   viagem_status?: TripStatus;
+  /** Extras of `409 viagem_repetida`: the trip that already exists and its driver. */
+  viagem_id?: string;
+  motorista?: { nome: string };
 };
+
+/** Route summary: `[lat, lon]` points grouped in stretches (a GPS gap starts a new stretch). */
+export type RoutePreviewData = [number, number][][];
+
+export type TripListItem = {
+  viagem_id: string;
+  status: TripStatus;
+  provisoria: boolean;
+  motorista: { nome: string };
+  categoria_viagem: string;
+  entrada_tipo: "boot" | "intervalo";
+  dongle_id: number;
+  boot_id: number | null;
+  boot_generation: number | null;
+  inicio_em: string | null;
+  fim_em: string | null;
+  distancia_km: number | null;
+  duracao_s: number | null;
+  criada_em: string;
+  rota_resumo: RoutePreviewData | null;
+};
+
+export type TripListResponse = {
+  viagens: TripListItem[];
+  total: number;
+  /** Opaque; `null` on the last page. */
+  proximo_cursor: string | null;
+};
+
+/** Query of `GET /v1/viagens`. */
+export type ListQuery = { limite?: number; cursor?: string; busca?: string };
 
 /** `retryAfter` (in seconds) comes from the API `Retry-After` header, when sent. */
 export type ApiResponse<T> = { status: number; body: T | Problem; retryAfter?: number };
