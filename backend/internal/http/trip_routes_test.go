@@ -46,6 +46,17 @@ func (f *fakeGetTrip) Run(_ context.Context, id uuid.UUID) (trip.Trip, error) {
 	return f.out, f.err
 }
 
+type fakeListTrips struct {
+	q   trip.ListQuery
+	out trip.Page
+	err error
+}
+
+func (f *fakeListTrips) Run(_ context.Context, q trip.ListQuery) (trip.Page, error) {
+	f.q = q
+	return f.out, f.err
+}
+
 type fakeGetAnalysis struct {
 	out trip.Analysis
 	err error
@@ -68,6 +79,7 @@ type tripEnv struct {
 	create   *fakeCreateTrip
 	get      *fakeGetTrip
 	analysis *fakeGetAnalysis
+	list     *fakeListTrips
 	met      *recorder
 }
 
@@ -77,8 +89,8 @@ func newTripEnv(t *testing.T, env map[string]string) *tripEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &tripEnv{create: &fakeCreateTrip{}, get: &fakeGetTrip{}, analysis: &fakeGetAnalysis{}, met: &recorder{}}
-	e.d = &Deps{Cfg: cfg, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Met: e.met, CreateTrip: e.create, GetTrip: e.get,
+	e := &tripEnv{create: &fakeCreateTrip{}, get: &fakeGetTrip{}, analysis: &fakeGetAnalysis{}, list: &fakeListTrips{}, met: &recorder{}}
+	e.d = &Deps{Cfg: cfg, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Met: e.met, CreateTrip: e.create, GetTrip: e.get, ListTrips: e.list,
 		GetAnalysis: e.analysis, AuthenticateClient: acceptAnyClient{}, Limiter: ratelimit.NewLocal(), Semaphore: ratelimit.NewConcurrency(1, 0)}
 	return e
 }
@@ -194,6 +206,7 @@ func TestCreateTripUseCaseErrors(t *testing.T) {
 	}{
 		{trip.FieldError{Field: "motorista.nome", Reason: "obrigatório"}, 400, "entrada_invalida", "motorista.nome", false},
 		{trip.ErrDriverRepeated, 409, "motorista_repetido", "", false},
+		{trip.ErrTripRepeated, 409, "viagem_repetida", "", false},
 		{trip.ErrBootNotFound, 404, "boot_desconhecido", "", false},
 		{dongle.ErrUnknown, 404, "dongle_desconhecido", "", false},
 		{port.ErrDatabaseBusy, 503, "banco_ocupado", "", true},
@@ -467,7 +480,8 @@ func TestTripMetricsRoutesAndRequestID(t *testing.T) {
 	r1 := req(h, "POST", "/v1/viagens", []byte(validBody), jsonHdr())
 	r2 := req(h, "GET", "/v1/viagens/"+tripID.String(), nil, map[string]string{"X-Request-Id": "abc-123"})
 	r3 := req(h, "GET", "/v1/viagens/"+tripID.String()+"/analise", nil, nil)
-	if strings.Join(e.met.routes, ",") != "trip_create,trip_status,trip_analysis" {
+	req(h, "GET", "/v1/viagens", nil, nil)
+	if strings.Join(e.met.routes, ",") != "trip_create,trip_status,trip_analysis,trip_list" {
 		t.Fatalf("%v", e.met.routes)
 	}
 	if r1.Header().Get("X-Request-Id") == "" || r2.Header().Get("X-Request-Id") != "abc-123" || r3.Header().Get("X-Request-Id") == "" {
@@ -521,6 +535,122 @@ func TestDocumentedPanicRecovery(t *testing.T) {
 	e.d.GetTrip = nil // nil interface: pânico no handler
 	w := req(e.router(), "GET", "/v1/viagens/"+tripID.String(), nil, nil)
 	if w.Code != 500 || code(w) != "erro_interno" {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}
+
+func TestCreateTripRepeatedTrip(t *testing.T) {
+	e := newTripEnv(t, nil)
+	e.create.err = trip.RepeatedTripError{ID: tripID, DriverName: "João"}
+	w := req(e.router(), "POST", "/v1/viagens", []byte(validBody), jsonHdr())
+	m := decode(t, w)
+	if w.Code != 409 || w.Header().Get("Content-Type") != "application/problem+json" || m["codigo"] != "viagem_repetida" ||
+		m["viagem_id"] != tripID.String() || m["status"] != 409.0 || w.Header().Get("Retry-After") != "" {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	mot, ok := m["motorista"].(map[string]any)
+	if !ok || mot["nome"] != "João" || len(mot) != 1 {
+		t.Fatalf("%v", m["motorista"])
+	}
+}
+
+func TestListTripsContract(t *testing.T) {
+	gen, boot := int32(0), int32(8)
+	created := time.Date(2026, 10, 28, 17, 3, 0, 123_000_000, time.UTC)
+	start, end := created.Add(-time.Hour), created.Add(-30*time.Minute)
+	t0, t1 := created.Add(-2*time.Hour), created.Add(-time.Hour)
+	next := trip.ListCursor{CreatedAt: created, ID: tripID}
+	e := newTripEnv(t, nil)
+	e.list.out = trip.Page{Total: 134, Next: &next, Items: []trip.ListItem{
+		{Trip: trip.Trip{ID: tripID, Status: trip.StatusReady, DriverName: "João", Category: "feira", EntryType: trip.EntryTypeBoot, DongleID: 1,
+			BootID: &boot, BootGeneration: &gen, CreatedAt: created}, StartedAt: &start, EndedAt: &end, DistanceKm: f(12.3), DurationS: f(1820),
+			Route: [][]trip.Point{{{-23.55, -46.63}, {-23.56, -46.64}}}},
+		{Trip: trip.Trip{ID: uuid.New(), Status: trip.StatusPending, Provisional: true, DriverName: "Ana", Category: "feira",
+			EntryType: trip.EntryTypeInterval, DongleID: 2, IntervalStart: &t0, IntervalEnd: &t1, BootID: &boot, CreatedAt: created}},
+	}}
+	w := req(e.router(), "GET", "/v1/viagens?limite=2&cursor=&busca=jo", nil, nil)
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("Content-Type") != "application/json" {
+		t.Fatal(w.Code, w.Header(), w.Body.String())
+	}
+	if e.list.q.Limit != 2 || e.list.q.Search != "jo" || e.list.q.Cursor != nil {
+		t.Fatalf("%+v", e.list.q)
+	}
+	m := decode(t, w)
+	if len(m) != 3 || m["total"] != 134.0 || m["proximo_cursor"] != next.Encode() {
+		t.Fatalf("%v", m)
+	}
+	items := m["viagens"].([]any)
+	a, b := items[0].(map[string]any), items[1].(map[string]any)
+	if len(a) != 15 || a["viagem_id"] != tripID.String() || a["status"] != "pronta" || a["provisoria"] != false ||
+		a["motorista"].(map[string]any)["nome"] != "João" || a["categoria_viagem"] != "feira" || a["entrada_tipo"] != "boot" ||
+		a["dongle_id"] != 1.0 || a["boot_id"] != 8.0 || a["boot_generation"] != 0.0 || a["inicio_em"] != "2026-10-28T16:03:00.123Z" ||
+		a["fim_em"] != "2026-10-28T16:33:00.123Z" || a["distancia_km"] != 12.3 || a["duracao_s"] != 1820.0 ||
+		a["criada_em"] != "2026-10-28T17:03:00.123Z" {
+		t.Fatalf("%v", a)
+	}
+	rota := a["rota_resumo"].([]any)[0].([]any)
+	if len(rota) != 2 || rota[0].([]any)[0] != -23.55 || rota[1].([]any)[1] != -46.64 {
+		t.Fatalf("%v", a["rota_resumo"])
+	}
+	// intervalo: início e fim da entrada, sem boot; pendente: sem resumo, mas as chaves presentes
+	if b["status"] != "pendente" || b["provisoria"] != true || b["entrada_tipo"] != "intervalo" || b["inicio_em"] != "2026-10-28T15:03:00.123Z" ||
+		b["fim_em"] != "2026-10-28T16:03:00.123Z" || len(b) != 15 {
+		t.Fatalf("%v", b)
+	}
+	for _, k := range []string{"boot_id", "boot_generation", "distancia_km", "duracao_s", "rota_resumo"} {
+		if v, ok := b[k]; !ok || v != nil {
+			t.Errorf("%s deve ser null: %v", k, b)
+		}
+	}
+}
+
+func TestListTripsEmptyAndLastPage(t *testing.T) {
+	e := newTripEnv(t, nil)
+	w := req(e.router(), "GET", "/v1/viagens", nil, nil)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"viagens":[]`) || !strings.Contains(w.Body.String(), `"proximo_cursor":null`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if e.list.q.Limit != trip.DefaultListLimit || e.list.q.Search != "" {
+		t.Fatalf("%+v", e.list.q)
+	}
+}
+
+func TestListTripsPassesCursor(t *testing.T) {
+	e := newTripEnv(t, nil)
+	c := trip.ListCursor{CreatedAt: time.Date(2026, 10, 28, 17, 3, 0, 123456000, time.UTC), ID: tripID}
+	if w := req(e.router(), "GET", "/v1/viagens?cursor="+c.Encode(), nil, nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if e.list.q.Cursor == nil || !e.list.q.Cursor.CreatedAt.Equal(c.CreatedAt) || e.list.q.Cursor.ID != tripID {
+		t.Fatalf("%+v", e.list.q.Cursor)
+	}
+}
+
+func TestListTripsInvalidInput(t *testing.T) {
+	e := newTripEnv(t, nil)
+	h := e.router()
+	for _, q := range []string{"limite=0", "limite=51", "limite=-1", "limite=abc", "limite=", "limite=1.5", "cursor=lixo", "cursor=" + strings.Repeat("A", 40),
+		"busca=" + strings.Repeat("a", 61), "busca=%00"} {
+		w := req(h, "GET", "/v1/viagens?"+q, nil, nil)
+		if w.Code != 400 || code(w) != "entrada_invalida" || w.Header().Get("Content-Type") != "application/problem+json" {
+			t.Errorf("%s: %d %s", q, w.Code, w.Body.String())
+		}
+	}
+	for _, q := range []string{"limite=1", "limite=50", "busca=" + strings.Repeat("ã", 60)} {
+		if w := req(h, "GET", "/v1/viagens?"+q, nil, nil); w.Code != 200 {
+			t.Errorf("%s: %d %s", q, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestListTripsErrors(t *testing.T) {
+	e := newTripEnv(t, nil)
+	e.list.err = port.ErrDatabaseBusy
+	if w := req(e.router(), "GET", "/v1/viagens", nil, nil); w.Code != 503 || code(w) != "banco_ocupado" {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	e.list.err = errors.New("boom")
+	if w := req(e.router(), "GET", "/v1/viagens", nil, nil); w.Code != 500 || code(w) != "erro_interno" {
 		t.Fatal(w.Code, w.Body.String())
 	}
 }

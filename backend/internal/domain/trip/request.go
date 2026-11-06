@@ -9,6 +9,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+
 	"tccelta/backend/internal/domain/tripanalysis"
 )
 
@@ -18,6 +20,9 @@ var (
 	ErrInvalid = errors.New("entrada_invalida")
 	// ErrDriverRepeated: já existe viagem (não falha) com o mesmo motorista na categoria.
 	ErrDriverRepeated = errors.New("motorista_repetido")
+	// ErrTripRepeated: já existe viagem (não falha nem excluída) com a mesma entrada, de qualquer motorista; RepeatedTripError
+	// traz o id e o motorista dela.
+	ErrTripRepeated = errors.New("viagem_repetida")
 	// ErrBootNotFound: o boot pedido nunca chegou ao servidor (nenhuma geração dele na tabela boot).
 	ErrBootNotFound = errors.New("boot_desconhecido")
 	// ErrNotFound: a viagem não existe ou foi excluída.
@@ -31,6 +36,15 @@ type NotReadyError struct{ Status string }
 
 func (e NotReadyError) Error() string        { return ErrNotReady.Error() + ": " + e.Status }
 func (e NotReadyError) Is(target error) bool { return target == ErrNotReady }
+
+// RepeatedTripError é ErrTripRepeated com a viagem que já existe.
+type RepeatedTripError struct {
+	ID         uuid.UUID
+	DriverName string
+}
+
+func (e RepeatedTripError) Error() string        { return ErrTripRepeated.Error() + ": " + e.ID.String() }
+func (e RepeatedTripError) Is(target error) bool { return target == ErrTripRepeated }
 
 // FieldError diz qual campo da entrada quebrou qual regra.
 type FieldError struct{ Field, Reason string }

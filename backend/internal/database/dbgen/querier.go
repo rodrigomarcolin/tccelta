@@ -24,6 +24,7 @@ type Querier interface {
 	CountPendingBoots(ctx context.Context) (int64, error)
 	CountReadings(ctx context.Context, dongleID int32, fromSeq int64, toSeq int64) (int64, error)
 	CountTripQueue(ctx context.Context) (CountTripQueueRow, error)
+	CountTrips(ctx context.Context, search string) (int64, error)
 	DeleteAnchorGroups(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32) error
 	DeleteBlockPositions(ctx context.Context, arg DeleteBlockPositionsParams) (int64, error)
 	DeleteBlockReadings(ctx context.Context, arg DeleteBlockReadingsParams) (int64, error)
@@ -45,6 +46,9 @@ type Querier interface {
 	FindBootForTrip(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32) (FindBootForTripRow, error)
 	FindChallenge(ctx context.Context, dongleID int32, cS int64) (FindChallengeRow, error)
 	FindDongleByDevID(ctx context.Context, devID []byte) (FindDongleByDevIDRow, error)
+	// A viagem que bloqueia um pedido: mesma entrada (boot com geração, ou intervalo exato) de um dongle, de qualquer motorista,
+	// que não falhou nem foi excluída. Segue os índices trip_boot_unique e trip_interval_unique; prefere a pronta e depois a mais antiga.
+	FindSameTrip(ctx context.Context, arg FindSameTripParams) (GoldTrip, error)
 	FindTrip(ctx context.Context, tripID uuid.UUID) (GoldTrip, error)
 	GetTripSeries(ctx context.Context, tripID uuid.UUID) (GoldTripSeries, error)
 	GetTripSummary(ctx context.Context, tripID uuid.UUID) (GoldTripSummary, error)
@@ -83,8 +87,12 @@ type Querier interface {
 	ListTripGearShifts(ctx context.Context, tripID uuid.UUID) ([]GoldTripGearShift, error)
 	ListTripGears(ctx context.Context, tripID uuid.UUID) ([]GoldTripGear, error)
 	ListTripParts(ctx context.Context, tripID uuid.UUID) ([]GoldTripPart, error)
+	ListTripRoutes(ctx context.Context, tripIds []uuid.UUID) ([]ListTripRoutesRow, error)
 	ListTripSpeedBands(ctx context.Context, tripID uuid.UUID) ([]GoldTripSpeedBand, error)
 	ListTripStops(ctx context.Context, tripID uuid.UUID) ([]GoldTripStop, error)
+	// Uma página da listagem, da mais nova para a mais antiga. O cursor é o (created_at, trip_id) do último item da página
+	// anterior; sem cursor a API passa um par que vem depois de tudo. search já vem normalizada e com os curingas do LIKE (%, _ e a barra invertida) escapados.
+	ListTrips(ctx context.Context, cursorCreatedAt time.Time, cursorTripID uuid.UUID, search string, rowLimit int32) ([]ListTripsRow, error)
 	// Boots sem hora que podem cair no intervalo: a hora real é no máximo o recebimento (max_offset_ms) e a posição por
 	// seq fica entre o último boot convertido que termina antes de t0 e o primeiro que começa em ou depois de t1.
 	ListUnconvertedBoots(ctx context.Context, dongleID int32, t0Ms float64, t1Ms float64) ([]ListUnconvertedBootsRow, error)

@@ -25,7 +25,7 @@ Veja o [README do backend](../README.md) para os alvos do Makefile.
 | `generation` | 1 (o primeiro) | O `boot_id` de 16 bits volta a 1 e o servidor avança a "geração" do boot; o reprocessamento preserva as leituras | Qualquer uma das 4 verificações falha |
 | `asym` | todos do CSV, um por vez (todos `asym`, com `k_sig`) | Blocos assinados com ECDSA P-256 são aceitos; uma tag com 1 bit trocado é rejeitada como `invalid_tag` e o ACK não avança | Qualquer uma das 7 verificações por dongle falha |
 | `trip` | 1 (o primeiro) | O worker calcula as viagens da gold (entrada `boot` e entrada `intervalo`) a partir da silver, com o papel `tccelta_worker` | Qualquer uma das 7 verificações falha |
-| `trip-http` | 1 (o primeiro) | As rotas de viagem da API (`POST`, status e análise), com o worker calculando. Exige `--client`: autentica como o Next.js (client credentials) | Qualquer verificação falha |
+| `trip-http` | 1 (o primeiro) | As rotas de viagem da API (`POST`, listagem, status e análise), a recusa da viagem repetida e a do nome repetido, com o worker calculando. Exige `--client`: autentica como o Next.js (client credentials) | Qualquer verificação falha |
 | `client-auth` | não usa o dongle (o CSV é exigido pelo comando) | `POST /v1/auth/token`, JWKS, Bearer das rotas de viagem, isolamento entre o token do app e o de cliente, `invalid_client` uniforme, bloqueio progressivo e métricas `tccelta_auth_*`; exige `--client` | Qualquer verificação falha |
 | `client-auth-rotation` | não usa o dongle | Depois de `clientjwt rotate --now`: o token antigo segue válido, o novo sai com `cli-v<n+1>` e o JWKS publica as duas versões | Qualquer verificação falha |
 | `reconnection` | `N` do CSV | Um volume grande de blocos acumulados offline é drenado por inteiro | Algum dongle termina com `contiguous_seq` diferente do HEAD |
@@ -184,14 +184,23 @@ e `engine_on_s > 0`. Como o cálculo roda no `worker` (papel `tccelta_worker`), 
 
 ## `trip-http`
 
-Prova as rotas de viagem (API2) de ponta a ponta, sem inserir em `gold.trip`: tudo passa por `POST /v1/viagens`, `GET /v1/viagens/{id}` e
-`GET /v1/viagens/{id}/analise`. Com `--client id:arquivo:ok` (o `make e2e` passa; é obrigatório), obtém o token de client credentials e o usa como Bearer, como o servidor do Next.js. As rotas de viagem sem Bearer respondem `401`; não existe mais modo sem autenticação. Usa o primeiro dongle do CSV
+Prova as rotas de viagem (API2) de ponta a ponta, sem inserir em `gold.trip`: tudo passa por `POST /v1/viagens`, `GET /v1/viagens`,
+`GET /v1/viagens/{id}` e `GET /v1/viagens/{id}/analise`. Com `--client id:arquivo:ok` (o `make e2e` passa; é obrigatório), obtém o token de client credentials e o usa como Bearer, como o servidor do Next.js. As rotas de viagem sem Bearer respondem `401`; não existe mais modo sem autenticação. Usa o primeiro dongle do CSV
 e uma categoria nova por execução (o nome do motorista é único por categoria).
 
+0. Gera 200 blocos e, depois de uma queda de energia, mais 40: o dongle fica com dois boots, o primeiro para a viagem 1 e o segundo
+   para testar o nome repetido sem repetir a viagem.
 1. Erros de contrato: dongle sem estado (`404 dongle_desconhecido`), combustível `personalizado` (`400 entrada_invalida`), id que não é UUID (`404`).
-2. Boot já enviado: `202` com `Location`; o mesmo motorista com outra caixa dá `409 motorista_repetido`; o status chega a `pronta` (limite
-   de 40 s) e a análise traz `viagem.motorista`, `viagem.categoria_viagem`, distância, séries e rota.
-3. Boot inexistente (o próximo ao último e um número absurdo): `404 boot_desconhecido`, sem criar viagem.
+2. Boot já enviado: `202` com `Location`; o mesmo motorista com outra caixa, **em outro boot**, dá `409 motorista_repetido`; o status chega a
+   `pronta` (limite de 40 s) e a análise traz `viagem.motorista`, `viagem.categoria_viagem`, distância, séries e rota.
+3. A mesma viagem de novo (outro motorista, o mesmo nome com outra caixa, outra categoria e `boot_generation` explícita): `409 viagem_repetida`
+   com `viagem_id` igual ao da viagem 1 e `motorista.nome` "Boot enviado". A viagem repetida vence o nome repetido.
+4. Listagem: cria uma segunda viagem (no outro boot, motorista "Boot enviado 2") e lê `GET /v1/viagens?limite=1&busca=…` página a página.
+   A página 1 tem `total` 2, `Cache-Control: no-store`, a viagem mais nova e um `proximo_cursor`; a página 2, pelo cursor, é a última
+   (`proximo_cursor` nulo) e traz a viagem 1 com todos os campos (`pronta`, `entrada_tipo`, `boot_id`, `boot_generation`, `inicio_em`, `fim_em`,
+   `distancia_km`, `duracao_s`, `criada_em` e `rota_resumo` com ao menos um trecho). Uma busca sem resultado devolve `viagens: []` e `total` 0;
+   `limite=0`, `limite=51`, `limite=abc`, `cursor=lixo` e `busca` com 61 caracteres dão `400 entrada_invalida`; sem Bearer, `401`.
+5. Boot inexistente (o próximo ao último e um número absurdo): `404 boot_desconhecido`, sem criar viagem.
 
 ## `client-auth` e `client-auth-rotation`
 

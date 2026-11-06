@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -389,6 +390,11 @@ func (r *tripSources) MaxBlockTime(_ context.Context, dongleID int32, fromSeq, t
 // falharam. Como no banco, o id e created_at são definidos aqui.
 func (r *trips) Insert(_ context.Context, d trip.Draft) (trip.Trip, error) {
 	for _, x := range r.Trips {
+		if sameEntry(x.Trip, d) {
+			return trip.Trip{}, trip.ErrTripRepeated
+		}
+	}
+	for _, x := range r.Trips {
 		if x.Status != trip.StatusFailed && x.Category == d.Category && trip.NormalizeName(x.DriverName) == d.DriverNameNormalized {
 			return trip.Trip{}, trip.ErrDriverRepeated
 		}
@@ -443,4 +449,69 @@ func (r *trips) Analysis(_ context.Context, id uuid.UUID) (trip.Analysis, error)
 		a.Series.Route = raw(s.Route)
 	}
 	return a, nil
+}
+
+// sameEntry diz se a viagem x ocupa a mesma chave dos índices trip_boot_unique e trip_interval_unique que d (a geração nula nunca
+// colide, como o NULL do banco). Só conta quem não falhou.
+func sameEntry(x trip.Trip, d trip.Draft) bool {
+	if x.Status == trip.StatusFailed || x.DongleID != d.DongleID || x.EntryType != d.EntryType {
+		return false
+	}
+	if d.EntryType == trip.EntryTypeBoot {
+		return x.BootGeneration != nil && d.BootGeneration != nil && *x.BootGeneration == *d.BootGeneration &&
+			x.BootID != nil && d.BootID != nil && *x.BootID == *d.BootID
+	}
+	return x.IntervalStart != nil && d.IntervalStart != nil && x.IntervalStart.Equal(*d.IntervalStart) &&
+		x.IntervalEnd != nil && d.IntervalEnd != nil && x.IntervalEnd.Equal(*d.IntervalEnd)
+}
+
+func (r *trips) FindSame(_ context.Context, d trip.Draft) (trip.Trip, bool, error) {
+	var best *TripRow
+	for _, x := range r.Trips {
+		if !sameEntry(x.Trip, d) {
+			continue
+		}
+		if best == nil || (x.Status == trip.StatusReady && best.Status != trip.StatusReady) ||
+			((x.Status == trip.StatusReady) == (best.Status == trip.StatusReady) && x.CreatedAt.Before(best.CreatedAt)) {
+			best = x
+		}
+	}
+	if best == nil {
+		return trip.Trip{}, false, nil
+	}
+	return best.Trip, true, nil
+}
+
+// List imita a consulta do banco: da mais nova para a mais antiga, desempatando pelo id, com o cursor e a busca por trecho do nome.
+func (r *trips) List(_ context.Context, q trip.ListQuery) (trip.Page, error) {
+	var rows []*TripRow
+	for _, x := range r.Trips {
+		if q.Search == "" || strings.Contains(trip.NormalizeName(x.DriverName), q.Search) {
+			rows = append(rows, x)
+		}
+	}
+	total := int64(len(rows))
+	sort.SliceStable(rows, func(i, j int) bool {
+		if !rows[i].CreatedAt.Equal(rows[j].CreatedAt) {
+			return rows[i].CreatedAt.After(rows[j].CreatedAt)
+		}
+		return rows[i].ID.String() > rows[j].ID.String()
+	})
+	var items []trip.ListItem
+	for _, x := range rows {
+		if c := q.Cursor; c != nil && (x.CreatedAt.After(c.CreatedAt) || (x.CreatedAt.Equal(c.CreatedAt) && x.ID.String() >= c.ID.String())) {
+			continue
+		}
+		it := trip.ListItem{Trip: x.Trip}
+		if x.Status == trip.StatusReady && x.Calc != nil {
+			s := x.Calc.Result.Summary
+			it.StartedAt, it.EndedAt, it.DistanceKm, it.DurationS = s.StartedAt, s.EndedAt, s.DistanceKm, s.DurationS
+			it.Route = trip.RoutePreview(x.Calc.Result.Series.Route)
+		}
+		items = append(items, it)
+		if len(items) == q.Limit+1 {
+			break
+		}
+	}
+	return trip.PageOf(items, total, q.Limit), nil
 }

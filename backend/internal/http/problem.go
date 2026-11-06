@@ -74,6 +74,12 @@ func (d *Deps) err(w http.ResponseWriter, err error) {
 		problem(w, 400, "tlv_invalido", err.Error(), 0)
 	case errors.Is(err, trip.ErrInvalid):
 		problem(w, 400, "entrada_invalida", err.Error(), 0)
+	case errors.Is(err, trip.ErrTripRepeated):
+		// viagem_id e motorista.nome são contrato com o front: levam o operador à viagem que já existe.
+		var rt trip.RepeatedTripError
+		_ = errors.As(err, &rt)
+		problemWith(w, 409, "viagem_repetida", "esta viagem já foi processada", 0,
+			map[string]any{"viagem_id": rt.ID.String(), "motorista": map[string]any{"nome": rt.DriverName}})
 	case errors.Is(err, trip.ErrDriverRepeated):
 		problem(w, 409, "motorista_repetido", "já existe viagem desse motorista nesta categoria", 0)
 	case errors.Is(err, trip.ErrBootNotFound):

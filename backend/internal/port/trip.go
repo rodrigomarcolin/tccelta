@@ -35,12 +35,19 @@ type Trips interface {
 	Notify(ctx context.Context) error
 	CountQueue(ctx context.Context) (trip.Queue, error)
 
-	// Insert grava a viagem nova em pending (a API2). trip.ErrDriverRepeated se já há viagem do motorista na categoria.
+	// Insert grava a viagem nova em pending (a API2). trip.ErrDriverRepeated se já há viagem do motorista na categoria e
+	// trip.ErrTripRepeated se a mesma entrada já foi processada (índice único; só numa corrida, pois o chamador confere antes com FindSame).
 	Insert(ctx context.Context, d trip.Draft) (trip.Trip, error)
+	// FindSame devolve a viagem que impede criar d: a mesma entrada (boot com geração, ou intervalo exato) no dongle, de qualquer
+	// motorista, que não falhou nem foi excluída. Prefere a pronta, depois a mais antiga. A geração de d já deve estar resolvida.
+	FindSame(ctx context.Context, d trip.Draft) (t trip.Trip, found bool, err error)
 	// NotifyTrip acorda o worker com o id da viagem criada (trip_pending). Em transação, o sinal só sai no commit.
 	NotifyTrip(ctx context.Context, id uuid.UUID) error
 	// Find devolve trip.ErrNotFound se a viagem não existe ou foi excluída.
 	Find(ctx context.Context, id uuid.UUID) (trip.Trip, error)
+	// List devolve uma página da listagem (da mais nova para a mais antiga, sem as excluídas), com o total que casa com a busca.
+	// Roda numa transação própria REPEATABLE READ somente leitura, para total, linhas e rotas serem consistentes.
+	List(ctx context.Context, q trip.ListQuery) (trip.Page, error)
 	// Analysis lê a viagem e suas tabelas filhas numa transação própria REPEATABLE READ somente leitura, sem misturar linhas de
 	// antes e depois de um recálculo. Com a viagem fora de ready devolve só Analysis.Trip. trip.ErrNotFound se não existe.
 	Analysis(ctx context.Context, id uuid.UUID) (trip.Analysis, error)
