@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BASE_PATH } from "@/config";
 import { ApiError } from "@/domain/trip/apiError";
-import { createTrip, getTripAnalysis, getTripStatus } from "./tripDatasource";
+import { createTrip, getTripAnalysis, getTripStatus, listTrips } from "./tripDatasource";
 
 type Resp = { status: number; body?: unknown; retryAfter?: string };
 
@@ -142,5 +142,35 @@ describe("getTripAnalysis", () => {
   it("200 with a null body is off-contract", async () => {
     stubFetch({ status: 200, body: null });
     expect((await caught(getTripAnalysis("t1"))).status).toBe(200);
+  });
+});
+
+describe("listTrips", () => {
+  const PAGE = { viagens: [], total: 0, proximo_cursor: null };
+
+  it("gets the page with the encoded parameters and no cache", async () => {
+    const f = stubFetch({ status: 200, body: PAGE });
+    expect(await listTrips({ limite: 24, cursor: "a+b==", busca: "João" })).toEqual(PAGE);
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe(`${BASE_PATH}/api/trips?limite=24&cursor=a%2Bb%3D%3D&busca=Jo%C3%A3o`);
+    expect(init).toMatchObject({ cache: "no-store" });
+  });
+
+  it("omits what was not given", async () => {
+    const f = stubFetch({ status: 200, body: PAGE });
+    await listTrips({ limite: 24, busca: "" });
+    expect(f.mock.calls[0][0]).toBe(`${BASE_PATH}/api/trips?limite=24`);
+  });
+
+  it("throws ApiError with the problem on 401 and on 400", async () => {
+    stubFetch({ status: 401, body: { codigo: "nao_autenticado", title: "t", status: 401 } });
+    expect((await caught(listTrips({}))).status).toBe(401);
+    stubFetch({ status: 400, body: { codigo: "entrada_invalida", title: "t", status: 400 } });
+    expect((await caught(listTrips({}))).problem?.codigo).toBe("entrada_invalida");
+  });
+
+  it("a 200 outside the contract is an error", async () => {
+    stubFetch({ status: 200, body: { viagens: "x" } });
+    expect((await caught(listTrips({}))).status).toBe(200);
   });
 });

@@ -22,6 +22,7 @@ type Deps struct {
 	GetConfirmation    GetConfirmation
 	CreateTrip         CreateTrip
 	GetTrip            GetTrip
+	ListTrips          ListTrips
 	GetAnalysis        GetAnalysis
 	Authenticate       Authenticate
 	IssueToken         IssueToken
@@ -62,6 +63,7 @@ func (d *Deps) Router() http.Handler {
 	vip := d.limitIPScope("viagem_ip", d.Cfg.Limits.TripIPMin)
 	tripAuth := func(ms ...mw) []mw { return append(ms, d.authenticateAnalise) }
 	mux.Handle("POST /v1/viagens", base("trip_create", d.createTrip, tripAuth(vip, limitBody(maxTripBody))...))
+	mux.Handle("GET /v1/viagens", base("trip_list", d.listTrips, tripAuth(vip)...))
 	mux.Handle("GET /v1/viagens/{id}", base("trip_status", d.getTrip, tripAuth(vip)...))
 	mux.Handle("GET /v1/viagens/{id}/analise", base("trip_analysis", d.getAnalysis, tripAuth(vip)...))
 	// Client credentials e chaves públicas.

@@ -72,3 +72,8 @@ type AuthenticateClient interface {
 type GetClientKeys interface {
 	Run(ctx context.Context) ([]port.ClientKey, error)
 }
+
+// ListTrips é o caso de uso de GET /v1/viagens.
+type ListTrips interface {
+	Run(ctx context.Context, q trip.ListQuery) (trip.Page, error)
+}

@@ -10,7 +10,7 @@ Três rotas HTTP em `backend/`, ligadas ao worker da API1 por `gold.trip` e `NOT
 
 | Dentro | Fora |
 |---|---|
-| `POST /v1/viagens`, `GET /v1/viagens/{id}`, `GET /v1/viagens/{id}/analise` | `DELETE`, lista de boots, ranking |
+| `POST /v1/viagens`, `GET /v1/viagens`, `GET /v1/viagens/{id}`, `GET /v1/viagens/{id}/analise` | `DELETE`, lista de boots, ranking |
 | Modo `ANALISE_SEM_AUTH` | Bearer, client credentials, JWKS (API3) |
 | Análise só com parâmetros padrão e o combustível da viagem | `de_t_ms`, `ate_t_ms` e parâmetros de Ajustes |
 | Permissões do `tccelta_api` na gold | CORS (ver "Middlewares") |
@@ -25,7 +25,7 @@ Três rotas HTTP em `backend/`, ligadas ao worker da API1 por `gold.trip` e `NOT
 
 ## Endpoints
 
-Erros usam `problem` (`application/problem+json`, campo `codigo`). Códigos novos: `entrada_invalida`, `motorista_repetido`, `viagem_desconhecida`, `analise_indisponivel`. Reaproveitados: `dongle_desconhecido`, `corpo_malformado`, `corpo_grande`, `tipo_conteudo`, `limite_taxa`, `banco_ocupado`, `erro_interno`.
+Erros usam `problem` (`application/problem+json`, campo `codigo`). Códigos novos: `entrada_invalida`, `motorista_repetido`, `viagem_repetida`, `viagem_desconhecida`, `analise_indisponivel`. Reaproveitados: `dongle_desconhecido`, `corpo_malformado`, `corpo_grande`, `tipo_conteudo`, `limite_taxa`, `banco_ocupado`, `erro_interno`.
 
 ### `POST /v1/viagens`
 
@@ -47,16 +47,70 @@ Fluxo do caso de uso, em uma só `InTransaction`:
 1. `States.Read(dongle_id)`. Sem linha em `dongle_state`: `404 dongle_desconhecido`.
 2. `target_seq = head_seq`. Dongle sem handshake tem `head_seq = 0` (coluna `NOT NULL DEFAULT 0`) e a viagem é aceita assim.
 3. Em `boot` sem `boot_generation`: `Boots.LatestGeneration(dongle_id, boot_id)`. Achou: grava a geração. Não achou: grava `NULL`, e o worker resolve quando o boot chegar.
-4. `Trips.Insert` com `status = 'pending'` e os campos de cálculo nulos.
-5. `Trips.Notify(trip_id)`, da API1: `SELECT pg_notify('trip_pending', trip_id::text)`. O `NOTIFY` só sai no commit.
+4. `Trips.FindSame(draft)`, já com a geração resolvida. Achou uma viagem que não falhou nem foi excluída com a mesma entrada, de qualquer motorista e categoria: `409 viagem_repetida`, que vale antes de `motorista_repetido`. Na entrada `boot` a chave é `(dongle_id, boot_generation, boot_id)`; na entrada `intervalo`, `(dongle_id, t0, t1)` exatamente iguais (um intervalo sobreposto, ou que cobre um boot já processado, passa). Havendo mais de uma, vale a `ready` e depois a mais antiga.
+5. `Trips.Insert` com `status = 'pending'` e os campos de cálculo nulos.
+6. `Trips.Notify(trip_id)`, da API1: `SELECT pg_notify('trip_pending', trip_id::text)`. O `NOTIFY` só sai no commit.
 
 | Resposta | Caso |
 |---|---|
 | `202`, `Location: /v1/viagens/{id}` e `{ "viagem_id": "<uuid>", "status": "pendente" }` | Criada |
 | `400 entrada_invalida` | Qualquer regra da tabela; `detail` nomeia o campo |
 | `404 dongle_desconhecido` | Dongle sem `dongle_state` |
+| `409 viagem_repetida` | A mesma entrada já foi processada (passo 4). Corpo com `viagem_id` (a viagem que já existe) e `motorista.nome` (o dela), além dos campos do `problem` |
 | `409 motorista_repetido` | SQLSTATE 23505 em `trip_driver_name_unique`, traduzido no adaptador para `trip.ErrDriverRepeated` |
 | `503 banco_ocupado` | `port.ErrDatabaseBusy` |
+
+```json
+{ "type": "https://tccelta.local/erros/viagem_repetida", "title": "viagem_repetida", "status": 409, "codigo": "viagem_repetida",
+  "detail": "esta viagem já foi processada", "viagem_id": "6f1c1f7e-3f0a-4a53-9d51-0c1d7a1b2c3d", "motorista": { "nome": "João" } }
+```
+
+**Corrida.** Dois pedidos simultâneos podem passar do `FindSame` juntos. Os índices únicos parciais `trip_boot_unique` e `trip_interval_unique` (migration `00011`) deixam passar só um; o `Insert` do outro recebe SQLSTATE 23505, traduzido no adaptador para `trip.ErrTripRepeated`. Como a transação abortou, o caso de uso repete o `FindSame` em outra transação para obter o id e o motorista e responde o mesmo `409 viagem_repetida`. Se a viagem que ganhou já não bloqueia (falhou entre as duas leituras), tenta criar de novo, até 3 vezes.
+
+**Migration `00011_trip_unique_and_list.sql`.** Na ordem: (1) preenche `boot_generation` nula de viagens `boot` com a geração mais recente do boot, quando ele existe; (2) onde já havia duplicatas, mantém uma viagem por chave (a `ready`, depois a mais antiga) e marca as outras com `excluded_at`, sem apagá-las: elas passam a dar `404` e somem da listagem, e o `Down` não as restaura; (3) cria os índices:
+
+```sql
+CREATE UNIQUE INDEX trip_boot_unique ON gold.trip (dongle_id, boot_generation, boot_id)
+  WHERE entry_type = 'boot' AND excluded_at IS NULL AND status <> 'failed';
+CREATE UNIQUE INDEX trip_interval_unique ON gold.trip (dongle_id, interval_start, interval_end)
+  WHERE entry_type = 'interval' AND excluded_at IS NULL AND status <> 'failed';
+CREATE INDEX trip_list ON gold.trip (created_at DESC, trip_id DESC) WHERE excluded_at IS NULL;
+```
+
+Boot com `boot_generation` nula não colide (NULL é distinto no índice); a API resolve a geração antes do `Insert`, então só viagens antigas ficam nesse caso. Rode a migration primeiro numa cópia dos dados e conte as exclusões antes de ir para produção.
+
+### `GET /v1/viagens`
+
+Lista as viagens, da mais nova para a mais antiga (`created_at DESC, trip_id DESC`), de todos os status, exceto as excluídas. Paginação por cursor: com rolagem infinita, o offset repetiria itens quando uma viagem nova entra no topo.
+
+| Parâmetro | Regra |
+|---|---|
+| `limite` | Inteiro de 1 a 50. Padrão 24 |
+| `cursor` | Opcional, opaco (base64url do `created_at` em RFC 3339 com nanossegundos e do `trip_id` do último item). Malformado dá `400 entrada_invalida` |
+| `busca` | Opcional, até 60 runes, sem caracteres de controle. Trecho do nome do motorista, sem diferenciar caixa nem espaços das pontas; `%`, `_` e `\` valem como texto |
+
+Qualquer valor inválido dá `400 entrada_invalida`. Sem `Bearer`, `401`, como nas outras rotas.
+
+```json
+{ "viagens": [{
+    "viagem_id": "…", "status": "pronta", "provisoria": false,
+    "motorista": { "nome": "João" }, "categoria_viagem": "feira",
+    "entrada_tipo": "boot", "dongle_id": 1, "boot_id": 8, "boot_generation": 0,
+    "inicio_em": "2026-10-28T17:03:00.000Z", "fim_em": "2026-10-28T17:33:00.000Z",
+    "distancia_km": 12.3, "duracao_s": 1820, "criada_em": "2026-10-28T17:03:00.123Z",
+    "rota_resumo": [[[-23.55, -46.63], [-23.56, -46.64]]]
+  }],
+  "total": 134, "proximo_cursor": "…" }
+```
+
+- `viagens` nunca é `null`. `total` conta todas as viagens que casam com a `busca`, não só as da página. `proximo_cursor` é `null` na última página. A consulta busca `limite + 1` linhas só para saber se há próxima.
+- `status` e `provisoria` como no status. `entrada_tipo` é `boot` ou `intervalo`.
+- `boot_id` e `boot_generation` são `null` na entrada por intervalo (ela pode cobrir vários boots), e `boot_generation` também enquanto o worker não a resolve.
+- `inicio_em` e `fim_em` vêm de `trip_summary` (`started_at`, `ended_at`); sem eles, de `interval_start` e `interval_end`; senão `null`. A escolha é feita em Go.
+- `distancia_km` e `duracao_s` vêm de `trip_summary` e são `null` antes de a viagem ficar pronta (ou se forem `NaN`/infinito).
+- `rota_resumo` é uma lista de trechos `[lat, lon]`, calculada na leitura por `domain/trip/route_preview.go` a partir de `gold.trip_series.route`: os trechos são cortados onde `segmentos.faixa` é `falha_gps` (a `faixa` tem um item por par de pontos consecutivos), para não desenhar reta sobre um buraco de GPS; Douglas-Peucker com tolerância relativa à diagonal do trajeto, no máximo 120 pontos no total e 5 casas decimais. Trajeto parado (diagonal zero) vira um trecho de um único ponto. É `null` sem GPS e antes de a viagem ficar `pronta`. O custo é decodificar até 50 rotas `jsonb` por requisição.
+- O adaptador lê total, linhas e rotas numa transação `REPEATABLE READ` somente leitura, como a análise, para os três serem do mesmo instante.
+- `Cache-Control: no-store`.
 
 ### `GET /v1/viagens/{id}`
 
@@ -111,6 +165,7 @@ Fluxo do caso de uso, em uma só `InTransaction`:
 | Rota | Cadeia |
 |---|---|
 | `POST /v1/viagens` | `recoverPanics`, `instrument("trip_create")`, `limitIP`, `limitBody(4096)` |
+| `GET /v1/viagens` | `recoverPanics`, `instrument("trip_list")`, `limitIP` |
 | `GET /v1/viagens/{id}` | `recoverPanics`, `instrument("trip_status")`, `limitIP` |
 | `GET /v1/viagens/{id}/analise` | `recoverPanics`, `instrument("trip_analysis")`, `limitIP` |
 
@@ -131,12 +186,12 @@ Fluxo do caso de uso, em uma só `InTransaction`:
 
 | Camada | Conteúdo |
 |---|---|
-| `domain/trip` | Entrada, normalização de nome e categoria, `Status`, `ErrDriverRepeated`, `ErrNotFound`, `ErrNotReady` |
-| `port` | A porta `Trips` da API1 ganha `Insert`, `Find` e `Analysis`; `Boots.LatestGeneration` |
-| `usecase/trip` | `create_trip.go`, `get_trip.go`, `get_analysis.go`, um `Run` por arquivo |
+| `domain/trip` | Entrada, normalização de nome e categoria, `Status`, `ErrDriverRepeated`, `ErrTripRepeated`/`RepeatedTripError`, `ErrNotFound`, `ErrNotReady`; `list.go` (`ListQuery`, cursor, `ListItem`, `Page`) e `route_preview.go` (função pura do resumo da rota) |
+| `port` | A porta `Trips` da API1 ganha `Insert`, `FindSame`, `Find`, `List` e `Analysis`; `Boots.LatestGeneration` |
+| `usecase/trip` | `create_trip.go`, `get_trip.go`, `list_trips.go`, `get_analysis.go`, um `Run` por arquivo |
 | `adapter/postgres` | `trips.go`, `queries/trip.sql` (sqlc), `LatestGeneration` em `boots`, tradução do 23505 |
 | `adapter/memory` | `Trips` em memória para os testes |
-| `http` | Um arquivo por rota; interfaces em `usecases.go`; `Deps` ganha `CreateTrip`, `GetTrip`, `GetAnalysis`; `d.err` mapeia os erros novos; `problemWith` acrescenta campos ao corpo |
+| `http` | Um arquivo por rota; interfaces em `usecases.go`; `Deps` ganha `CreateTrip`, `GetTrip`, `ListTrips`, `GetAnalysis`; `d.err` mapeia os erros novos; `problemWith` acrescenta campos ao corpo |
 | `config`, `cmd/tccelta/api.go` | `AnalysisNoAuth`, `Limits.TripIPMin`; composição |
 
 - `States.Read` do adaptador `postgres` passa a devolver `dongle.ErrUnknown` em `pgx.ErrNoRows` (hoje devolve o erro cru).
@@ -148,6 +203,10 @@ Fluxo do caso de uso, em uma só `InTransaction`:
 | Decisão | Motivo |
 |---|---|
 | `{id}` que não é UUID dá `404 viagem_desconhecida` | Uma resposta só para "não existe" e "malformado"; o navegador não monta ids |
+| A mesma viagem só é processada uma vez, para qualquer motorista e categoria | "Mesma viagem" é uma só; quem quiser reutilizá-la a procura na listagem |
+| Viagens `failed` e excluídas não bloqueiam | Mesma regra do nome do motorista: a falha libera o reprocessamento |
+| A chave do boot inclui `boot_generation` | O `boot_id` é de 16 bits e dá a volta; sem a geração um boot novo colidiria com um antigo |
+| Paginação da listagem por cursor | O offset repetiria itens com a rolagem infinita |
 | `409 analise_indisponivel` leva `viagem_status`, não `status` | `status` do `problem` é o código HTTP |
 | Nome até 60 runes, categoria até 40, intervalo até 7 dias, corpo até 4 KiB | Limites não cobertos pela arquitetura; ajustar se a feira exigir |
 | Categoria gravada em minúsculas | O índice único usa `trip_category` sem normalização; "Feira" não deve abrir outro grupo |

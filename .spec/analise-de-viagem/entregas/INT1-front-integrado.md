@@ -159,3 +159,10 @@ Para obter `ANALISE_DONGLE_ID` e `boot_id`, consulte `dongle` e `boot` no banco 
 12. Cada linha da tabela de estados tem tela correspondente, inclusive "Aguardando dados" e `dados_parciais`.
 13. O roteiro manual passa nos itens 1 a 13, ou os desvios ficam registrados com a causa (em especial o bloqueio da USP no item 1).
 14. Uma viagem pelo caminho "tela cheia" mostra dados dos sete PIDs da spec 02 na tela.
+
+## Lista de viagens na integração
+
+- `GET /api/trips?limite=&cursor=&busca=` repassa a `GET /v1/viagens` só esses três parâmetros, já validados no BFF (`limite` de 1 a 50, `busca` até 60 caracteres, `cursor` opaco devolvido como veio). Valor inválido responde `400 entrada_invalida` sem chamar a API. Passa por `withSession` como as demais rotas.
+- `useTrips` usa `useInfiniteQuery` (chave `["trips", busca]`, `getNextPageParam` por `proximo_cursor`) e refaz todos os lotes carregados a cada 5 s enquanto houver viagem `pendente` ou `aguardando_dados`. `useCreateTrip` invalida `["trips"]`.
+- `409 viagem_repetida` (extras `viagem_id` e `motorista`) é repassado pelo BFF e tratado em `ProcessForm`.
+- Verificação manual extra: abrir `/viagens`, rolar até carregar mais de um lote sem repetir itens, abrir uma viagem e voltar (mesma posição), buscar um motorista e tentar processar de novo um boot já processado.

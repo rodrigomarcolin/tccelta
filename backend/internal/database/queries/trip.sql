@@ -255,3 +255,32 @@ SELECT * FROM gold.trip_gear_shift WHERE trip_id = @trip_id ORDER BY shift_no;
 
 -- name: GetTripSeries :one
 SELECT * FROM gold.trip_series WHERE trip_id = @trip_id;
+
+-- name: FindSameTrip :one
+-- A viagem que bloqueia um pedido: mesma entrada (boot com geração, ou intervalo exato) de um dongle, de qualquer motorista,
+-- que não falhou nem foi excluída. Segue os índices trip_boot_unique e trip_interval_unique; prefere a pronta e depois a mais antiga.
+SELECT * FROM gold.trip
+WHERE excluded_at IS NULL AND status <> 'failed' AND dongle_id = @dongle_id AND entry_type = @entry_type
+  AND ((entry_type = 'boot' AND boot_generation = @boot_generation AND boot_id = @boot_id)
+    OR (entry_type = 'interval' AND interval_start = @interval_start AND interval_end = @interval_end))
+ORDER BY (status = 'ready') DESC, created_at, trip_id
+LIMIT 1;
+
+-- name: ListTrips :many
+-- Uma página da listagem, da mais nova para a mais antiga. O cursor é o (created_at, trip_id) do último item da página
+-- anterior; sem cursor a API passa um par que vem depois de tudo. search já vem normalizada e com os curingas do LIKE (%, _ e a barra invertida) escapados.
+SELECT t.*, s.started_at, s.ended_at, s.distance_km, s.duration_s
+FROM gold.trip t LEFT JOIN gold.trip_summary s USING (trip_id)
+WHERE t.excluded_at IS NULL
+  AND (t.created_at, t.trip_id) < (@cursor_created_at::timestamptz, @cursor_trip_id::uuid)
+  AND (@search::text = '' OR t.driver_name_normalized LIKE '%' || @search::text || '%')
+ORDER BY t.created_at DESC, t.trip_id DESC
+LIMIT @row_limit;
+
+-- name: CountTrips :one
+SELECT count(*) FROM gold.trip t
+WHERE t.excluded_at IS NULL
+  AND (@search::text = '' OR t.driver_name_normalized LIKE '%' || @search::text || '%');
+
+-- name: ListTripRoutes :many
+SELECT trip_id, route FROM gold.trip_series WHERE trip_id = ANY(@trip_ids::uuid[]);

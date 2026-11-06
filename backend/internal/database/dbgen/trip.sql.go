@@ -97,6 +97,19 @@ func (q *Queries) CountTripQueue(ctx context.Context) (CountTripQueueRow, error)
 	return i, err
 }
 
+const countTrips = `-- name: CountTrips :one
+SELECT count(*) FROM gold.trip t
+WHERE t.excluded_at IS NULL
+  AND ($1::text = '' OR t.driver_name_normalized LIKE '%' || $1::text || '%')
+`
+
+func (q *Queries) CountTrips(ctx context.Context, search string) (int64, error) {
+	row := q.db.QueryRow(ctx, countTrips, search)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteTripEvents = `-- name: DeleteTripEvents :exec
 DELETE FROM gold.trip_event WHERE trip_id = $1
 `
@@ -218,6 +231,63 @@ func (q *Queries) FindBootForTrip(ctx context.Context, dongleID int32, bootGener
 		&i.B,
 		&i.BaseUncertaintyMs,
 		&i.TimeSource,
+	)
+	return i, err
+}
+
+const findSameTrip = `-- name: FindSameTrip :one
+SELECT trip_id, trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, boot_generation, boot_id, interval_start, interval_end, status, target_seq, first_seq, last_seq, calculated_through_seq, provisional, recalc_pending, calculation_version, created_at, calculated_at, excluded_at FROM gold.trip
+WHERE excluded_at IS NULL AND status <> 'failed' AND dongle_id = $1 AND entry_type = $2
+  AND ((entry_type = 'boot' AND boot_generation = $3 AND boot_id = $4)
+    OR (entry_type = 'interval' AND interval_start = $5 AND interval_end = $6))
+ORDER BY (status = 'ready') DESC, created_at, trip_id
+LIMIT 1
+`
+
+type FindSameTripParams struct {
+	DongleID       int32
+	EntryType      string
+	BootGeneration *int32
+	BootID         *int32
+	IntervalStart  *time.Time
+	IntervalEnd    *time.Time
+}
+
+// A viagem que bloqueia um pedido: mesma entrada (boot com geração, ou intervalo exato) de um dongle, de qualquer motorista,
+// que não falhou nem foi excluída. Segue os índices trip_boot_unique e trip_interval_unique; prefere a pronta e depois a mais antiga.
+func (q *Queries) FindSameTrip(ctx context.Context, arg FindSameTripParams) (GoldTrip, error) {
+	row := q.db.QueryRow(ctx, findSameTrip,
+		arg.DongleID,
+		arg.EntryType,
+		arg.BootGeneration,
+		arg.BootID,
+		arg.IntervalStart,
+		arg.IntervalEnd,
+	)
+	var i GoldTrip
+	err := row.Scan(
+		&i.TripID,
+		&i.TripCategory,
+		&i.DriverName,
+		&i.DriverNameNormalized,
+		&i.Fuel,
+		&i.DongleID,
+		&i.EntryType,
+		&i.BootGeneration,
+		&i.BootID,
+		&i.IntervalStart,
+		&i.IntervalEnd,
+		&i.Status,
+		&i.TargetSeq,
+		&i.FirstSeq,
+		&i.LastSeq,
+		&i.CalculatedThroughSeq,
+		&i.Provisional,
+		&i.RecalcPending,
+		&i.CalculationVersion,
+		&i.CreatedAt,
+		&i.CalculatedAt,
+		&i.ExcludedAt,
 	)
 	return i, err
 }
@@ -1050,6 +1120,35 @@ func (q *Queries) ListTripParts(ctx context.Context, tripID uuid.UUID) ([]GoldTr
 	return items, nil
 }
 
+const listTripRoutes = `-- name: ListTripRoutes :many
+SELECT trip_id, route FROM gold.trip_series WHERE trip_id = ANY($1::uuid[])
+`
+
+type ListTripRoutesRow struct {
+	TripID uuid.UUID
+	Route  []byte
+}
+
+func (q *Queries) ListTripRoutes(ctx context.Context, tripIds []uuid.UUID) ([]ListTripRoutesRow, error) {
+	rows, err := q.db.Query(ctx, listTripRoutes, tripIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTripRoutesRow{}
+	for rows.Next() {
+		var i ListTripRoutesRow
+		if err := rows.Scan(&i.TripID, &i.Route); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTripSpeedBands = `-- name: ListTripSpeedBands :many
 SELECT trip_id, band_id, from_kmh, to_kmh, time_s, distance_km, distance_pct FROM gold.trip_speed_band WHERE trip_id = $1 ORDER BY from_kmh
 `
@@ -1103,6 +1202,99 @@ func (q *Queries) ListTripStops(ctx context.Context, tripID uuid.UUID) ([]GoldTr
 			&i.EngineOn,
 			&i.Lat,
 			&i.Lon,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrips = `-- name: ListTrips :many
+SELECT t.trip_id, t.trip_category, t.driver_name, t.driver_name_normalized, t.fuel, t.dongle_id, t.entry_type, t.boot_generation, t.boot_id, t.interval_start, t.interval_end, t.status, t.target_seq, t.first_seq, t.last_seq, t.calculated_through_seq, t.provisional, t.recalc_pending, t.calculation_version, t.created_at, t.calculated_at, t.excluded_at, s.started_at, s.ended_at, s.distance_km, s.duration_s
+FROM gold.trip t LEFT JOIN gold.trip_summary s USING (trip_id)
+WHERE t.excluded_at IS NULL
+  AND (t.created_at, t.trip_id) < ($1::timestamptz, $2::uuid)
+  AND ($3::text = '' OR t.driver_name_normalized LIKE '%' || $3::text || '%')
+ORDER BY t.created_at DESC, t.trip_id DESC
+LIMIT $4
+`
+
+type ListTripsRow struct {
+	TripID               uuid.UUID
+	TripCategory         string
+	DriverName           string
+	DriverNameNormalized string
+	Fuel                 string
+	DongleID             int32
+	EntryType            string
+	BootGeneration       *int32
+	BootID               *int32
+	IntervalStart        *time.Time
+	IntervalEnd          *time.Time
+	Status               string
+	TargetSeq            int64
+	FirstSeq             *int64
+	LastSeq              *int64
+	CalculatedThroughSeq *int64
+	Provisional          bool
+	RecalcPending        bool
+	CalculationVersion   *string
+	CreatedAt            time.Time
+	CalculatedAt         *time.Time
+	ExcludedAt           *time.Time
+	StartedAt            *time.Time
+	EndedAt              *time.Time
+	DistanceKm           *float64
+	DurationS            *float64
+}
+
+// Uma página da listagem, da mais nova para a mais antiga. O cursor é o (created_at, trip_id) do último item da página
+// anterior; sem cursor a API passa um par que vem depois de tudo. search já vem normalizada e com os curingas do LIKE (%, _ e a barra invertida) escapados.
+func (q *Queries) ListTrips(ctx context.Context, cursorCreatedAt time.Time, cursorTripID uuid.UUID, search string, rowLimit int32) ([]ListTripsRow, error) {
+	rows, err := q.db.Query(ctx, listTrips,
+		cursorCreatedAt,
+		cursorTripID,
+		search,
+		rowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTripsRow{}
+	for rows.Next() {
+		var i ListTripsRow
+		if err := rows.Scan(
+			&i.TripID,
+			&i.TripCategory,
+			&i.DriverName,
+			&i.DriverNameNormalized,
+			&i.Fuel,
+			&i.DongleID,
+			&i.EntryType,
+			&i.BootGeneration,
+			&i.BootID,
+			&i.IntervalStart,
+			&i.IntervalEnd,
+			&i.Status,
+			&i.TargetSeq,
+			&i.FirstSeq,
+			&i.LastSeq,
+			&i.CalculatedThroughSeq,
+			&i.Provisional,
+			&i.RecalcPending,
+			&i.CalculationVersion,
+			&i.CreatedAt,
+			&i.CalculatedAt,
+			&i.ExcludedAt,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.DistanceKm,
+			&i.DurationS,
 		); err != nil {
 			return nil, err
 		}

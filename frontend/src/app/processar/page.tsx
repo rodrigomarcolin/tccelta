@@ -1,7 +1,7 @@
 import { ProcessForm } from "@/components/process/ProcessForm";
 import { Page } from "@/components/ui/Page";
 import { PageHeader, PageHeaderTitle } from "@/components/ui/PageHeader";
-import { ThemeToggle } from "@/components/ui/Theme";
+import { HeaderControls } from "@/components/ui/AppNav";
 import { requireSession } from "@/server/session";
 import { initialDongle } from "@/server/trips/datasource";
 
@@ -16,7 +16,7 @@ export default async function ProcessPage() {
           <h1>Processar viagem</h1>
           <p className="text-secondary">Informe o motorista, o combustível e a viagem.</p>
         </PageHeaderTitle>
-        <ThemeToggle />
+        <HeaderControls current="nova" />
       </PageHeader>
       <ProcessForm initialDongle={initialDongle()} />
     </Page>

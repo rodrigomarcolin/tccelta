@@ -4,6 +4,8 @@ import type {
   CreateTripResponse,
   ApiResponse,
   TripStatusResponse,
+  ListQuery,
+  TripListResponse,
 } from "@/domain/trip/types";
 import { isProblem } from "@/domain/trip/types";
 import { buildProblem } from "@/domain/trip/problem";
@@ -145,6 +147,14 @@ export function createApiDatasource(opts: ApiOptions): TripsDatasource {
     async analysis(id: string) {
       if (!UUID.test(id)) return unknown<TripAnalysis>();
       return call<TripAnalysis>("GET", `/v1/viagens/${id.toLowerCase()}/analise`);
+    },
+    async list(query: ListQuery) {
+      const params = new URLSearchParams();
+      if (query.limite !== undefined) params.set("limite", String(query.limite));
+      if (query.cursor) params.set("cursor", query.cursor);
+      if (query.busca) params.set("busca", query.busca);
+      const qs = params.toString();
+      return call<TripListResponse>("GET", `/v1/viagens${qs ? `?${qs}` : ""}`);
     },
   };
 }

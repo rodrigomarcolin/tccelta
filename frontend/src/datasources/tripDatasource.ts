@@ -3,7 +3,9 @@ import { ApiError } from "@/domain/trip/apiError";
 import type {
   CreateTripRequest,
   CreateTripResponse,
+  ListQuery,
   Problem,
+  TripListResponse,
   TripAnalysis,
   TripStatusResponse,
 } from "@/domain/trip/types";
@@ -54,6 +56,25 @@ export async function createTrip(body: CreateTripRequest): Promise<CreateTripRes
     202,
     (b) => isObject(b) && typeof b.viagem_id === "string",
   )) as CreateTripResponse;
+}
+
+/** One page of `GET /api/trips`; the cursor is opaque and goes back exactly as it came. */
+export async function listTrips(query: ListQuery, signal?: AbortSignal): Promise<TripListResponse> {
+  const params = new URLSearchParams();
+  if (query.limite !== undefined) params.set("limite", String(query.limite));
+  if (query.cursor) params.set("cursor", query.cursor);
+  if (query.busca) params.set("busca", query.busca);
+  const qs = params.toString();
+  return (await request(
+    `/api/trips${qs ? `?${qs}` : ""}`,
+    { signal },
+    200,
+    (b) =>
+      isObject(b) &&
+      Array.isArray(b.viagens) &&
+      typeof b.total === "number" &&
+      (typeof b.proximo_cursor === "string" || b.proximo_cursor === null),
+  )) as TripListResponse;
 }
 
 export async function getTripStatus(id: string, signal?: AbortSignal): Promise<TripStatusResponse> {

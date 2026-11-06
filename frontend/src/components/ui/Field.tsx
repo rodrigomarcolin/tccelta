@@ -26,10 +26,9 @@ const CONTROL =
 type InputProps = ComponentPropsWithRef<"input"> & { mono?: boolean };
 
 /** Text-like input. Numbers and dates are data, so they use the mono face. */
-export function Input({ mono, ...rest }: InputProps) {
-  return (
-    <input className={`${CONTROL} h-10 ${mono ? "font-mono tabular-nums" : "font-ui"}`} {...rest} />
-  );
+export function Input({ mono, className, ...rest }: InputProps) {
+  const base = `${CONTROL} h-10 ${mono ? "font-mono tabular-nums" : "font-ui"}`;
+  return <input className={className ? `${base} ${className}` : base} {...rest} />;
 }
 
 export function Select(props: ComponentPropsWithoutRef<"select">) {

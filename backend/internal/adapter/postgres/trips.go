@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -279,8 +280,14 @@ func (r *trips) Insert(ctx context.Context, d trip.Draft) (trip.Trip, error) {
 		BootGeneration: d.BootGeneration, BootID: d.BootID, IntervalStart: d.IntervalStart, IntervalEnd: d.IntervalEnd,
 		TargetSeq: d.TargetSeq})
 	var pe *pgconn.PgError
-	if errors.As(err, &pe) && pe.Code == "23505" && pe.ConstraintName == driverNameUnique {
-		return trip.Trip{}, trip.ErrDriverRepeated
+	if errors.As(err, &pe) && pe.Code == "23505" {
+		switch pe.ConstraintName {
+		case driverNameUnique:
+			return trip.Trip{}, trip.ErrDriverRepeated
+		case bootUnique, intervalUnique:
+			// A transação abortou: o id da viagem que ganhou a corrida fica para o chamador, com FindSame em outra transação.
+			return trip.Trip{}, trip.ErrTripRepeated
+		}
 	}
 	if err != nil {
 		return trip.Trip{}, err
@@ -475,4 +482,96 @@ func summaryFrom(s dbgen.GoldTripSummary) tripanalysis.Summary {
 		}
 	}
 	return out
+}
+
+// Índices únicos da mesma viagem (gold.trip): um para a entrada boot e outro para a entrada por intervalo.
+const (
+	bootUnique     = "trip_boot_unique"
+	intervalUnique = "trip_interval_unique"
+)
+
+func (r *trips) FindSame(ctx context.Context, d trip.Draft) (trip.Trip, bool, error) {
+	g, err := r.q.FindSameTrip(ctx, dbgen.FindSameTripParams{DongleID: d.DongleID, EntryType: d.EntryType,
+		BootGeneration: d.BootGeneration, BootID: d.BootID, IntervalStart: d.IntervalStart, IntervalEnd: d.IntervalEnd})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return trip.Trip{}, false, nil
+	}
+	if err != nil {
+		return trip.Trip{}, false, err
+	}
+	return tripFrom(g), true, nil
+}
+
+// Sem cursor a consulta recebe um par que vem depois de qualquer viagem.
+var (
+	noCursorAt = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
+	noCursorID = uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+)
+
+// likeEscaper escapa os curingas do LIKE (o escape padrão do Postgres é a barra invertida).
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// List lê uma página da listagem. Fora de transação abre uma REPEATABLE READ somente leitura, para o total, as linhas e as rotas
+// serem do mesmo instante.
+func (r *trips) List(ctx context.Context, q trip.ListQuery) (trip.Page, error) {
+	if r.pool == nil {
+		return readList(ctx, r.q, q)
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return trip.Page{}, err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	p, err := readList(ctx, dbgen.New(tx), q)
+	if err != nil {
+		return trip.Page{}, err
+	}
+	return p, tx.Commit(ctx)
+}
+
+func readList(ctx context.Context, q dbgen.Querier, lq trip.ListQuery) (trip.Page, error) {
+	search := likeEscaper.Replace(lq.Search)
+	total, err := q.CountTrips(ctx, search)
+	if err != nil {
+		return trip.Page{}, err
+	}
+	at, id := noCursorAt, noCursorID
+	if lq.Cursor != nil {
+		at, id = lq.Cursor.CreatedAt, lq.Cursor.ID
+	}
+	rows, err := q.ListTrips(ctx, at, id, search, int32(lq.Limit+1)) //nolint:gosec // G115: Limit vai até MaxListLimit
+	if err != nil {
+		return trip.Page{}, err
+	}
+	items := make([]trip.ListItem, len(rows))
+	var ready []uuid.UUID
+	for i, x := range rows {
+		g := dbgen.GoldTrip{TripID: x.TripID, TripCategory: x.TripCategory, DriverName: x.DriverName, DriverNameNormalized: x.DriverNameNormalized,
+			Fuel: x.Fuel, DongleID: x.DongleID, EntryType: x.EntryType, BootGeneration: x.BootGeneration, BootID: x.BootID,
+			IntervalStart: x.IntervalStart, IntervalEnd: x.IntervalEnd, Status: x.Status, TargetSeq: x.TargetSeq, FirstSeq: x.FirstSeq,
+			LastSeq: x.LastSeq, CalculatedThroughSeq: x.CalculatedThroughSeq, Provisional: x.Provisional, RecalcPending: x.RecalcPending,
+			CalculationVersion: x.CalculationVersion, CreatedAt: x.CreatedAt, CalculatedAt: x.CalculatedAt, ExcludedAt: x.ExcludedAt}
+		items[i] = trip.ListItem{Trip: tripFrom(g), StartedAt: x.StartedAt, EndedAt: x.EndedAt,
+			DistanceKm: finite(x.DistanceKm), DurationS: finite(x.DurationS)}
+		if x.Status == trip.StatusReady && i < lq.Limit { // a linha a mais só diz que há próxima página
+			ready = append(ready, x.TripID)
+		}
+	}
+	if len(ready) > 0 {
+		routes, err := q.ListTripRoutes(ctx, ready)
+		if err != nil {
+			return trip.Page{}, err
+		}
+		byID := make(map[uuid.UUID][][]trip.Point, len(routes))
+		for _, rt := range routes {
+			var route tripanalysis.Route
+			if json.Unmarshal(rt.Route, &route) == nil {
+				byID[rt.TripID] = trip.RoutePreview(route)
+			}
+		}
+		for i := range items {
+			items[i].Route = byID[items[i].ID]
+		}
+	}
+	return trip.PageOf(items, total, lq.Limit), nil
 }

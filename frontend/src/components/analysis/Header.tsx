@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { TripAnalysis } from "@/domain/trip/types";
 import { headerDescription } from "@/domain/trip/analysis";
 import { IconBack } from "@/components/icons/Icons";
-import { ThemeToggle } from "@/components/ui/Theme";
+import { HeaderControls } from "@/components/ui/AppNav";
 import { buttonClass } from "@/components/ui/Button";
 import { DataValue } from "@/components/ui/DataValue";
 import { PageHeader, PageHeaderTitle } from "@/components/ui/PageHeader";
@@ -20,12 +20,12 @@ export function Header({
     <PageHeader sticky ref={headerRef}>
       <PageHeaderTitle>
         <Link
-          href="/processar"
-          className={buttonClass({ variant: "link", className: "print:hidden" })}
-          aria-label="Voltar para processar viagem"
+          href="/viagens"
+          className={buttonClass({ variant: "link", className: "justify-self-start print:hidden" })}
+          aria-label="Voltar para a lista de viagens"
         >
           <IconBack />
-          Nova viagem
+          Viagens
         </Link>
         <h1>Análise de viagem</h1>
         <p className="m-0 flex flex-wrap gap-4 text-secondary">
@@ -37,9 +37,7 @@ export function Header({
           <span className="text-secondary">categoria {analysis.viagem.categoria_viagem}</span>
         </p>
       </PageHeaderTitle>
-      <div className="shrink-0 print:hidden">
-        <ThemeToggle />
-      </div>
+      <HeaderControls navHiddenOnPhone />
     </PageHeader>
   );
 }

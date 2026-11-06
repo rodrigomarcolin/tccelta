@@ -106,3 +106,48 @@ export const EXAMPLES: Example[] = [
     },
   },
 ];
+
+export type Variant = {
+  id: string;
+  scenario: ScenarioId;
+  driver: string;
+  input: TripInput;
+  /** Turns the route, so the seeded list shows different shapes. */
+  rotationDeg: number;
+};
+
+const FIRST_NAMES = [
+  "Ana",
+  "Bruno",
+  "Carla",
+  "Diego",
+  "Elisa",
+  "Fábio",
+  "Gabriela",
+  "Henrique",
+  "Isabela",
+  "Jorge",
+];
+const LAST_NAMES = ["Menezes", "Albuquerque", "Tavares", "Siqueira"];
+const VARIANT_SCENARIOS: ScenarioId[] = [
+  "normal",
+  "normal",
+  "gps_falhas",
+  "normal",
+  "sem_gps",
+  "normal",
+  "sem_hora",
+  "normal",
+];
+
+/**
+ * Extra seeded trips so the list spans more than one batch (24 per page). They are real store
+ * entries, so opening one works. Boots start at 100, clear of the example boots (8 to 15).
+ */
+export const VARIANTS: Variant[] = Array.from({ length: 40 }, (_, i) => ({
+  id: `7d1f3a10-1000-4c5e-9b1a-${String(100 + i).padStart(12, "0")}`,
+  scenario: VARIANT_SCENARIOS[i % VARIANT_SCENARIOS.length],
+  driver: `${FIRST_NAMES[i % FIRST_NAMES.length]} ${LAST_NAMES[Math.floor(i / FIRST_NAMES.length) % LAST_NAMES.length]}`,
+  input: boot(100 + i),
+  rotationDeg: (i * 47) % 360,
+}));

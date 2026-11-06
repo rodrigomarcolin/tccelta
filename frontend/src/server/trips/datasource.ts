@@ -5,6 +5,8 @@ import type {
   CreateTripResponse,
   ApiResponse,
   TripStatusResponse,
+  ListQuery,
+  TripListResponse,
 } from "@/domain/trip/types";
 import { createApiDatasource } from "./apiDatasource";
 import { createMockDatasource } from "./mock/mockDatasource";
@@ -21,6 +23,8 @@ export interface TripsDatasource {
   status(id: string): Promise<ApiResponse<TripStatusResponse>>;
   /** `GET /v1/viagens/{id}/analise`. */
   analysis(id: string): Promise<ApiResponse<TripAnalysis>>;
+  /** `GET /v1/viagens`. `query` arrives already validated by the route. */
+  list(query: ListQuery): Promise<ApiResponse<TripListResponse>>;
 }
 
 export type DataSource = "mock" | "api";

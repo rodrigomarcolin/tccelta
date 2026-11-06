@@ -67,18 +67,24 @@ export function NotFoundState() {
   return (
     <State role="alert">
       <StateTitle>Viagem não encontrada</StateTitle>
-      <Link href="/processar" className={buttonClass()}>
+      <Link href="/viagens" className={buttonClass()}>
         <IconBack />
-        Voltar para processar
+        Ver todas as viagens
       </Link>
     </State>
   );
 }
 
-export function ErrorState({ onRetry }: { onRetry: () => void }) {
+export function ErrorState({
+  onRetry,
+  text = "Não foi possível carregar a viagem.",
+}: {
+  onRetry: () => void;
+  text?: string;
+}) {
   return (
     <State role="alert">
-      <StateTitle>Não foi possível carregar a viagem.</StateTitle>
+      <StateTitle>{text}</StateTitle>
       <Button icon={<IconReload />} onClick={onRetry}>
         Tentar de novo
       </Button>

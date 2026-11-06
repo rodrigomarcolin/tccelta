@@ -659,7 +659,7 @@ func TestTripRoutesRequireBearer(t *testing.T) {
 	e := newAuthEnv(t, nil, kms)
 	e.create.out = trip.Trip{ID: tripID, Status: trip.StatusPending}
 	id := "/v1/viagens/" + tripID.String()
-	routes := [][2]string{{"POST", "/v1/viagens"}, {"GET", id}, {"GET", id + "/analise"}}
+	routes := [][2]string{{"POST", "/v1/viagens"}, {"GET", id}, {"GET", id + "/analise"}, {"GET", "/v1/viagens"}}
 	call := func(authz string) []int {
 		var out []int
 		for _, r := range routes {
@@ -683,13 +683,13 @@ func TestTripRoutesRequireBearer(t *testing.T) {
 	if w.Code != 401 || code(w) != "token_invalido" || w.Header().Get("WWW-Authenticate") != `Bearer error="invalid_token"` {
 		t.Errorf("%d %s %v", w.Code, w.Body.String(), w.Header())
 	}
-	if got := call("Bearer lixo"); got[0] != 401 || got[1] != 401 || got[2] != 401 {
+	if got := call("Bearer lixo"); got[0] != 401 || got[1] != 401 || got[2] != 401 || got[3] != 401 {
 		t.Fatal(got)
 	}
 	// token válido: 202 na criação e 200 nas leituras
 	tok := oauthToken(t, e)
 	e.get.out = trip.Trip{ID: tripID, Status: trip.StatusPending}
-	if got := call("Bearer " + tok); got[0] != 202 || got[1] != 200 {
+	if got := call("Bearer " + tok); got[0] != 202 || got[1] != 200 || got[3] != 200 {
 		t.Fatalf("com token válido: %v", got)
 	}
 	// token_expirado: o validador anda 2 h no tempo
@@ -735,7 +735,7 @@ func TestAppAndClientTokensDoNotCross(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{"/v1/viagens/" + tripID.String(), "/v1/viagens/" + tripID.String() + "/analise"} {
+	for _, p := range []string{"/v1/viagens/" + tripID.String(), "/v1/viagens/" + tripID.String() + "/analise", "/v1/viagens"} {
 		w := req(e.h, "GET", p, nil, map[string]string{"Authorization": "Bearer " + appTok.Token})
 		if w.Code != 401 || code(w) != "token_invalido" {
 			t.Errorf("token do app em %s: %d %s", p, w.Code, w.Body.String())

@@ -24,6 +24,9 @@ vi.mock("next/font/google", () => ({
 vi.mock("@/components/analysis/TripPage", () => ({
   TripPage: ({ id }: { id: string }) => <div data-testid="trip">{id}</div>,
 }));
+vi.mock("@/components/trips/TripsScreen", () => ({
+  TripsScreen: ({ search }: { search: string }) => <div data-testid="trips">{search}</div>,
+}));
 vi.mock("@/components/process/ProcessForm", () => ({
   ProcessForm: () => <form data-testid="form" />,
 }));
@@ -32,6 +35,7 @@ import RootPage from "./page";
 import SignInPage from "./entrar/page";
 import ProcessPage from "./processar/page";
 import TripRoute from "./viagem/[id]/page";
+import TripsRoute from "./viagens/page";
 import RootLayout, { metadata } from "./layout";
 import { requireSession } from "@/server/session";
 
@@ -55,6 +59,9 @@ describe("page protection", () => {
     auth.mockResolvedValue(null);
     expect(await expectRedirect(RootPage())).toBe("/entrar?retorno=%2F");
     expect(await expectRedirect(ProcessPage())).toBe("/entrar?retorno=%2Fprocessar");
+    expect(await expectRedirect(TripsRoute({ searchParams: Promise.resolve({}) }))).toBe(
+      "/entrar?retorno=%2Fviagens",
+    );
     expect(await expectRedirect(TripRoute({ params: Promise.resolve({ id: "abc" }) }))).toBe(
       "/entrar?retorno=%2Fviagem%2Fabc",
     );
@@ -72,6 +79,45 @@ describe("page protection", () => {
     expect(screen.getByRole("heading", { name: "Processar viagem" })).toBeInTheDocument();
     expect(screen.getByTestId("form")).toBeInTheDocument();
   }, 15000);
+
+  it("the list keeps the search in the return path, and renders with it", async () => {
+    auth.mockResolvedValue(null);
+    expect(
+      await expectRedirect(
+        TripsRoute({ searchParams: Promise.resolve({ busca: " José & Ana " }) }),
+      ),
+    ).toBe(
+      `/entrar?retorno=${encodeURIComponent("/viagens?busca=" + encodeURIComponent("José & Ana"))}`,
+    );
+    auth.mockResolvedValue({ user: { email: "ana@usp.br" } });
+    render(await TripsRoute({ searchParams: Promise.resolve({ busca: " joão " }) }));
+    expect(screen.getByTestId("trips")).toHaveTextContent("joão");
+  });
+
+  it("the list takes the first search, caps it at 60 characters and ignores an empty one", async () => {
+    auth.mockResolvedValue({ user: { email: "ana@usp.br" } });
+    const text = (sp: Record<string, string | string[] | undefined>) =>
+      TripsRoute({ searchParams: Promise.resolve(sp) }).then((jsx) => {
+        const { unmount } = render(jsx);
+        const t = screen.getByTestId("trips").textContent;
+        unmount();
+        return t;
+      });
+    expect(await text({ busca: ["a", "b"] })).toBe("a");
+    expect(await text({ busca: "x".repeat(80) })).toBe("x".repeat(60));
+    expect(await text({ busca: "   " })).toBe("");
+    expect(await text({})).toBe("");
+  });
+
+  it("processar has the navigation with the form marked as current", async () => {
+    auth.mockResolvedValue({ user: { email: "ana@usp.br" } });
+    render(await ProcessPage());
+    expect(screen.getByRole("link", { name: "Nova viagem" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Viagens" })).toHaveAttribute("href", "/viagens");
+  });
 
   it("viagem renders the component with the id", async () => {
     auth.mockResolvedValue({ user: { email: "ana@usp.br" } });

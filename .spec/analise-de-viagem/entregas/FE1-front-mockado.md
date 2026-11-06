@@ -310,3 +310,15 @@ Código desconhecido aparece com o texto "Aviso: «codigo»", sem quebrar a tela
 - **Licença dos tiles:** conferir o uso do CARTO na feira e a necessidade de internet no estande; trocar o provedor é mudar uma constante.
 - **Sessão `Auth.js` v5:** reavaliar a versão estável ao iniciar a implementação.
 - **INT1:** implementar `ViagensCliente` real e usar `ANALISE_FONTE_DADOS=api` no ambiente da feira.
+
+## Lista de viagens (`/viagens`)
+
+Acréscimo posterior a esta entrega. Telas e rotas novas: `/viagens` (lista) e `GET /api/trips` (BFF). `/` continua indo para `/processar`.
+
+- **Navegação:** `AppNav` ("Viagens" e "Nova viagem", com `aria-current`) ao lado do botão de tema em `/viagens`, `/processar` e no cabeçalho de `/viagem/[id]`, sem aparecer na impressão. O link de voltar da análise passa a ser "Viagens" e o "não encontrada" aponta para a lista.
+- **Lista:** cabeçalho fixo com título, total, atribuição do OpenStreetMap e busca por motorista (debounce de 300 ms, `?busca=` na URL, volta ao topo). Cards horizontais (minimapa de 220 px à esquerda, 110 px no celular), grade `auto-fill` de 2 colunas no desktop e 1 em telas menores, `content-visibility: auto` com tamanho intrínseco de 132 px. O card inteiro é um link para `/viagem/{id}`, sem prefetch.
+- **Rolagem infinita:** `IntersectionObserver` num sentinela com `rootMargin` de 600 px, lotes de 24 por cursor, `role="feed"`. Falha de lote: "Tentar de novo" sem limpar a lista (3 tentativas automáticas antes). Sem `IntersectionObserver`: botão "Carregar mais". No fim: "Todas as N viagens foram carregadas."
+- **Minimapa sem Leaflet:** tiles `<img loading="lazy">` (no máximo 4) com o trajeto em SVG por cima; projeção e posição dos tiles em `domain/trip/preview.ts`. Sem rota: "Sem GPS", "Processando" ou "Falhou".
+- **Estados:** esqueletos, vazia ("Nenhuma viagem ainda"), busca sem resultado ("Limpar busca"), erro no primeiro lote (`ErrorState`), erro numa atualização (`ConnectionBanner`), 401 para `/entrar`.
+- **Mock:** o datasource semeia 40 viagens além dos 9 exemplos (boots a partir de 100, rotas giradas) para a lista passar de um lote, e devolve `409 viagem_repetida` (com `viagem_id` e `motorista`) antes de `motorista_repetido`. Os boots 8 a 15 (geração 0) já pertencem aos exemplos.
+- **Formulário:** `409 viagem_repetida` mostra "Esta viagem já foi processada para «nome»." com "Abrir a viagem" e "Ver todas as viagens".
