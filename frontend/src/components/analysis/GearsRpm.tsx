@@ -138,14 +138,18 @@ export function GearsRpm({ analysis, formatT, onMarkInstant }: Props) {
               points={scatter.points}
               lines={m.patamares
                 .filter((p) => p.marcha > 0)
-                .map((p) => ({
-                  x1: 8,
-                  y1: p.rpm_por_kmh * 8,
-                  x2: scatter.vMax,
-                  y2: Math.min(scatter.rMax, p.rpm_por_kmh * scatter.vMax),
-                  color: gearVar(p.marcha),
-                  label: `${p.marcha}ª`,
-                }))}
+                .map((p) => {
+                  // a reta rpm = k·v termina onde cruza o topo do gráfico, sem alterar a inclinação
+                  const x2 = Math.min(scatter.vMax, scatter.rMax / p.rpm_por_kmh);
+                  return {
+                    x1: 8,
+                    y1: Math.min(scatter.rMax, p.rpm_por_kmh * 8),
+                    x2,
+                    y2: p.rpm_por_kmh * x2,
+                    color: gearVar(p.marcha),
+                    label: `${p.marcha}ª`,
+                  };
+                })}
               domainX={[0, scatter.vMax]}
               domainY={[0, scatter.rMax]}
               ticksX={Array.from({ length: scatter.vMax / 20 + 1 }, (_, i) => ({
