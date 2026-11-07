@@ -50,9 +50,15 @@ describe("auth.ts", () => {
     expect(captured.factory!().callbacks.signIn({ profile })).toBe(true);
     expect(
       captured.factory!().callbacks.signIn({
-        profile: { email: "ana@gmail.com", email_verified: true },
+        profile: { email: "carla@gmail.com", email_verified: true },
       }),
     ).toBe(`${BASE_PATH}/entrar?erro=conta_nao_liberada`);
+    vi.stubEnv("OPERATOR_EMAILS", "ana@gmail.com");
+    expect(
+      captured.factory!().callbacks.signIn({
+        profile: { email: "ana@gmail.com", email_verified: true },
+      }),
+    ).toBe(true);
   });
 });
 

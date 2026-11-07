@@ -9,7 +9,7 @@ export function operatorList(raw: string | undefined | null): string[] {
 }
 
 /**
- * Decides whether the Google account may sign in: `email_verified`, `usp.br` domain and
+ * Decides whether the Google account may sign in: `email_verified`, a single `@` and
  * e-mail in the operator list. An empty or missing list lets nobody in.
  */
 export function accountAllowed(
@@ -19,7 +19,7 @@ export function accountAllowed(
   if (!profile || profile.email_verified !== true || typeof profile.email !== "string")
     return false;
   const email = profile.email.trim().toLowerCase();
-  if (!email.endsWith("@usp.br") || email.indexOf("@") !== email.lastIndexOf("@")) return false;
+  if (email.indexOf("@") !== email.lastIndexOf("@")) return false;
   return operatorList(raw).includes(email);
 }
 

@@ -11,16 +11,17 @@ describe("accountAllowed", () => {
     expect(accountAllowed({ email: "BETO@usp.br", email_verified: true }, list)).toBe(true);
     expect(accountAllowed({ email: " ana@usp.br ", email_verified: true }, list)).toBe(true);
   });
-  it("rejects a different domain", () => {
+  it("allows an e-mail from any domain if it is in the list", () => {
     expect(accountAllowed({ email: "ana@gmail.com", email_verified: true }, "ana@gmail.com")).toBe(
-      false,
+      true,
     );
     expect(
       accountAllowed({ email: "ana@usp.br.evil.com", email_verified: true }, "ana@usp.br.evil.com"),
-    ).toBe(false);
+    ).toBe(true);
   });
-  it("rejects a USP e-mail outside the list", () => {
+  it("rejects an e-mail outside the list, whatever its domain", () => {
     expect(accountAllowed({ email: "carla@usp.br", email_verified: true }, list)).toBe(false);
+    expect(accountAllowed({ email: "carla@gmail.com", email_verified: true }, list)).toBe(false);
   });
   it("rejects an unverified e-mail", () => {
     expect(accountAllowed({ email: "ana@usp.br", email_verified: false }, list)).toBe(false);
