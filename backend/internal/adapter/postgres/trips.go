@@ -310,6 +310,14 @@ func (r *trips) Find(ctx context.Context, id uuid.UUID) (trip.Trip, error) {
 	return tripFrom(g), nil
 }
 
+func (r *trips) Exclude(ctx context.Context, id uuid.UUID) error {
+	_, err := r.q.ExcludeTrip(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return trip.ErrNotFound
+	}
+	return err
+}
+
 func (r *trips) Analysis(ctx context.Context, id uuid.UUID) (trip.Analysis, error) {
 	if r.pool == nil {
 		return readAnalysis(ctx, r.q, id)

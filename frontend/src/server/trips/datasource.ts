@@ -25,6 +25,8 @@ export interface TripsDatasource {
   analysis(id: string): Promise<ApiResponse<TripAnalysis>>;
   /** `GET /v1/viagens`. `query` arrives already validated by the route. */
   list(query: ListQuery): Promise<ApiResponse<TripListResponse>>;
+  /** `DELETE /v1/viagens/{id}`: `204` with a `null` body; `404` if it does not exist or was already deleted. */
+  remove(id: string): Promise<ApiResponse<null>>;
 }
 
 export type DataSource = "mock" | "api";

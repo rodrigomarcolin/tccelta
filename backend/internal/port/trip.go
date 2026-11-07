@@ -48,6 +48,9 @@ type Trips interface {
 	// List devolve uma página da listagem (da mais nova para a mais antiga, sem as excluídas), com o total que casa com a busca.
 	// Roda numa transação própria REPEATABLE READ somente leitura, para total, linhas e rotas serem consistentes.
 	List(ctx context.Context, q trip.ListQuery) (trip.Page, error)
+	// Exclude marca a viagem como excluída (exclusão lógica: excluded_at). trip.ErrNotFound se ela não existe ou já foi excluída.
+	// Espera a trava de uma viagem em cálculo; com o lock_timeout da transação vira ErrDatabaseBusy.
+	Exclude(ctx context.Context, id uuid.UUID) error
 	// Analysis lê a viagem e suas tabelas filhas numa transação própria REPEATABLE READ somente leitura, sem misturar linhas de
 	// antes e depois de um recálculo. Com a viagem fora de ready devolve só Analysis.Trip. trip.ErrNotFound se não existe.
 	Analysis(ctx context.Context, id uuid.UUID) (trip.Analysis, error)

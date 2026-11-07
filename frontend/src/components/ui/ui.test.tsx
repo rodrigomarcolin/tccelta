@@ -22,6 +22,16 @@ describe("Button", () => {
   });
 });
 
+describe("Button danger", () => {
+  it("uses the alert color with the accent-on text", () => {
+    render(<Button variant="danger">Excluir</Button>);
+    expect(screen.getByRole("button", { name: "Excluir" })).toHaveClass(
+      "bg-danger",
+      "text-accent-on",
+    );
+  });
+});
+
 describe("Badge", () => {
   it("pulses only when requested", () => {
     const { container, rerender } = render(<Badge tone="live">Ao vivo</Badge>);

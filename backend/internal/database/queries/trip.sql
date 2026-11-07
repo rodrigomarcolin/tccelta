@@ -1,7 +1,7 @@
 -- trip.sql: fila e gravação da análise da viagem (schema gold) e leitura da silver para o cálculo (API1).
 
 -- name: ListWaitingTrips :many
-SELECT * FROM gold.trip WHERE status IN ('pending', 'waiting_data') ORDER BY created_at;
+SELECT * FROM gold.trip WHERE status IN ('pending', 'waiting_data') AND excluded_at IS NULL ORDER BY created_at;
 
 -- name: MarkTripWaiting :exec
 UPDATE gold.trip SET status = 'waiting_data' WHERE trip_id = @trip_id AND status = 'pending';
@@ -15,12 +15,12 @@ RETURNING t.boot_generation;
 
 -- name: TakeTrip :one
 SELECT * FROM gold.trip
-WHERE trip_id = @trip_id AND status IN ('pending', 'waiting_data')
+WHERE trip_id = @trip_id AND status IN ('pending', 'waiting_data') AND excluded_at IS NULL
 FOR UPDATE SKIP LOCKED;
 
 -- name: TakeRecalcTrip :one
 SELECT * FROM gold.trip
-WHERE status = 'ready' AND recalc_pending
+WHERE status = 'ready' AND recalc_pending AND excluded_at IS NULL
 ORDER BY created_at
 LIMIT 1
 FOR UPDATE SKIP LOCKED;
@@ -118,7 +118,7 @@ WHERE trip_id = @trip_id;
 -- name: ListProvisionalTrips :many
 SELECT t.*, s.warnings AS summary_warnings
 FROM gold.trip t LEFT JOIN gold.trip_summary s USING (trip_id)
-WHERE t.status = 'ready' AND t.provisional AND NOT t.recalc_pending
+WHERE t.status = 'ready' AND t.provisional AND NOT t.recalc_pending AND t.excluded_at IS NULL
 ORDER BY t.created_at;
 
 -- name: MarkTripsRecalcByID :exec
@@ -130,7 +130,7 @@ UPDATE gold.trip SET provisional = false WHERE trip_id = @trip_id AND status = '
 -- name: MarkTripsRecalc :exec
 -- reprocess: as viagens prontas cuja faixa de seq cruza a reprocessada.
 UPDATE gold.trip SET recalc_pending = true
-WHERE dongle_id = @dongle_id AND status = 'ready' AND first_seq <= @to_seq AND last_seq >= @from_seq;
+WHERE dongle_id = @dongle_id AND status = 'ready' AND excluded_at IS NULL AND first_seq <= @to_seq AND last_seq >= @from_seq;
 
 -- name: NotifyTripPending :exec
 SELECT pg_notify('trip_pending', '');
@@ -138,7 +138,7 @@ SELECT pg_notify('trip_pending', '');
 -- name: CountTripQueue :one
 SELECT count(*) FILTER (WHERE status IN ('pending', 'waiting_data')) AS waiting,
        count(*) FILTER (WHERE recalc_pending) AS recalc
-FROM gold.trip WHERE status IN ('pending', 'waiting_data') OR recalc_pending;
+FROM gold.trip WHERE excluded_at IS NULL AND (status IN ('pending', 'waiting_data') OR recalc_pending);
 
 -- Leitura da silver (papel tccelta_worker: SELECT em reading, position e boot).
 
@@ -284,3 +284,8 @@ WHERE t.excluded_at IS NULL
 
 -- name: ListTripRoutes :many
 SELECT trip_id, route FROM gold.trip_series WHERE trip_id = ANY(@trip_ids::uuid[]);
+
+-- name: ExcludeTrip :one
+UPDATE gold.trip SET excluded_at = now()
+WHERE trip_id = @trip_id AND excluded_at IS NULL
+RETURNING trip_id;

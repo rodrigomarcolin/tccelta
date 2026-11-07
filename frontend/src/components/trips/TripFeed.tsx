@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import type { TripListItem } from "@/domain/trip/types";
 import { formatNumber } from "@/format/numbers";
@@ -11,6 +11,7 @@ import { Note } from "@/components/ui/Note";
 import { IconReload } from "@/components/icons/Icons";
 import { ConnectionBanner, ErrorState } from "@/components/analysis/States";
 import { TripCard } from "./TripCard";
+import { DeleteTripDialog } from "./DeleteTripDialog";
 
 type Props = {
   query: ReturnType<typeof useTrips>;
@@ -18,6 +19,8 @@ type Props = {
   search: string;
   onClearSearch: () => void;
 };
+
+type FeedProps = Props & { onDelete: (trip: TripListItem) => void };
 
 /** Distance below the last card at which the next batch is requested. */
 const LOOKAHEAD = "600px 0px";
@@ -37,8 +40,17 @@ function Skeletons({ n }: { n: number }) {
   return Array.from({ length: n }, (_, i) => <Skeleton key={i} />);
 }
 
-/** The trip list with infinite scroll: the next batch loads as the end comes near. */
-export function TripFeed({ query, search, onClearSearch }: Props) {
+/** The loaded trips in order, a trip that a refresh brought twice kept once. */
+function uniqueTrips(data: ReturnType<typeof useTrips>["data"]): TripListItem[] {
+  // Batches are cursor-based, but a refresh may still bring a trip twice: keep the first.
+  const seen = new Map<string, TripListItem>();
+  for (const page of data?.pages ?? []) {
+    for (const trip of page.viagens) if (!seen.has(trip.viagem_id)) seen.set(trip.viagem_id, trip);
+  }
+  return [...seen.values()];
+}
+
+function Feed({ query, search, onClearSearch, onDelete }: FeedProps) {
   const {
     data,
     isPending,
@@ -51,15 +63,7 @@ export function TripFeed({ query, search, onClearSearch }: Props) {
     refetch,
   } = query;
 
-  const trips = useMemo(() => {
-    // Batches are cursor-based, but a refresh may still bring a trip twice: keep the first.
-    const seen = new Map<string, TripListItem>();
-    for (const page of data?.pages ?? []) {
-      for (const trip of page.viagens)
-        if (!seen.has(trip.viagem_id)) seen.set(trip.viagem_id, trip);
-    }
-    return [...seen.values()];
-  }, [data]);
+  const trips = useMemo(() => uniqueTrips(data), [data]);
   const total = data?.pages[0]?.total ?? 0;
 
   const observable = useSyncExternalStore(never, supportsObserver, () => true);
@@ -131,7 +135,13 @@ export function TripFeed({ query, search, onClearSearch }: Props) {
         className={GRID}
       >
         {trips.map((trip, i) => (
-          <TripCard key={trip.viagem_id} trip={trip} position={i + 1} size={total} />
+          <TripCard
+            key={trip.viagem_id}
+            trip={trip}
+            position={i + 1}
+            size={total}
+            onDelete={onDelete}
+          />
         ))}
         {isFetchingNextPage ? <Skeletons n={SKELETONS} /> : null}
       </div>
@@ -164,5 +174,53 @@ export function TripFeed({ query, search, onClearSearch }: Props) {
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * The trip list with infinite scroll: the next batch loads as the end comes near. Each card's
+ * trash button opens one confirmation dialog; after a deletion the focus moves to the next card
+ * (or the previous one, for the last) and a status region announces it.
+ */
+export function TripFeed({ query, search, onClearSearch }: Props) {
+  const [target, setTarget] = useState<TripListItem | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  const root = useRef<HTMLDivElement>(null);
+  // The card that receives the focus once the deleted one has left the list.
+  const focusId = useRef<string | null>(null);
+
+  const askToDelete = (trip: TripListItem) => {
+    const trips = uniqueTrips(query.data);
+    const i = trips.findIndex((t) => t.viagem_id === trip.viagem_id);
+    focusId.current = (trips[i + 1] ?? trips[i - 1])?.viagem_id ?? null;
+    setAnnouncement("");
+    setTarget(trip);
+  };
+
+  useEffect(() => {
+    const id = focusId.current;
+    if (!id || !announcement) return;
+    focusId.current = null;
+    root.current?.querySelector<HTMLElement>(`[data-trip-id="${id}"] a`)?.focus();
+  });
+
+  return (
+    <div ref={root}>
+      <Feed query={query} search={search} onClearSearch={onClearSearch} onDelete={askToDelete} />
+      <DeleteTripDialog
+        open={target !== null}
+        tripId={target?.viagem_id ?? ""}
+        driverName={target?.motorista.nome ?? null}
+        returnTo={search ? `/viagens?busca=${encodeURIComponent(search)}` : "/viagens"}
+        onClose={() => setTarget(null)}
+        onDeleted={() => {
+          setTarget(null);
+          setAnnouncement("Viagem excluída");
+        }}
+      />
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
+    </div>
   );
 }

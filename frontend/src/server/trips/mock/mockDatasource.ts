@@ -256,6 +256,14 @@ export function createMockDatasource(now: () => number = Date.now): TripsDatasou
       };
     },
 
+    /** Removing the entry is the whole exclusion: it leaves the list, the status and the analysis, and frees the name and the entry. */
+    async remove(id: string): Promise<ApiResponse<null>> {
+      const r = lookup(id);
+      if (!r) return { status: 404, body: buildProblem(404, "viagem_desconhecida") };
+      getStore(now()).delete(r.id);
+      return { status: 204, body: null };
+    },
+
     async list(query: ListQuery): Promise<ApiResponse<TripListResponse>> {
       const invalid = (detail: string) => ({
         status: 400,

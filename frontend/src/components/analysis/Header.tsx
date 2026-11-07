@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import Link from "next/link";
 import type { TripAnalysis } from "@/domain/trip/types";
 import { headerDescription } from "@/domain/trip/analysis";
@@ -11,22 +11,28 @@ import { PageHeader, PageHeaderTitle } from "@/components/ui/PageHeader";
 export function Header({
   analysis,
   headerRef,
+  actions,
 }: {
   analysis: TripAnalysis;
   headerRef?: Ref<HTMLElement>;
+  /** Page actions (delete), on the right of the back link. */
+  actions?: ReactNode;
 }) {
   const { identification, when } = headerDescription(analysis);
   return (
     <PageHeader sticky ref={headerRef}>
       <PageHeaderTitle>
-        <Link
-          href="/viagens"
-          className={buttonClass({ variant: "link", className: "justify-self-start print:hidden" })}
-          aria-label="Voltar para a lista de viagens"
-        >
-          <IconBack />
-          Viagens
-        </Link>
+        <div className="flex items-center justify-between gap-3 print:hidden">
+          <Link
+            href="/viagens"
+            className={buttonClass({ variant: "link" })}
+            aria-label="Voltar para a lista de viagens"
+          >
+            <IconBack />
+            Viagens
+          </Link>
+          {actions}
+        </div>
         <h1>Análise de viagem</h1>
         <p className="m-0 flex flex-wrap gap-4 text-secondary">
           <DataValue>{identification}</DataValue>

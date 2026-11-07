@@ -98,3 +98,21 @@ export async function getTripAnalysis(id: string, signal?: AbortSignal): Promise
     isObject,
   )) as TripAnalysis;
 }
+
+/**
+ * `DELETE /api/trips/{id}`. Resolves on `204` and on `404` (the trip no longer exists, which is
+ * what the operator wanted); any other answer throws `ApiError`.
+ */
+export async function deleteTrip(id: string): Promise<void> {
+  const response = await fetch(`${BASE_PATH}/api/trips/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    cache: "no-store",
+  });
+  if (response.status === 204 || response.status === 404) return;
+  const body: unknown = await response.json().catch(() => null);
+  throw new ApiError(
+    response.status,
+    asProblem(body),
+    parseRetryAfter(response.headers?.get("Retry-After")),
+  );
+}

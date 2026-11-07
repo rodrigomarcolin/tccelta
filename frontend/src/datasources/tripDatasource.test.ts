@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BASE_PATH } from "@/config";
 import { ApiError } from "@/domain/trip/apiError";
-import { createTrip, getTripAnalysis, getTripStatus, listTrips } from "./tripDatasource";
+import {
+  createTrip,
+  deleteTrip,
+  getTripAnalysis,
+  getTripStatus,
+  listTrips,
+} from "./tripDatasource";
 
 type Resp = { status: number; body?: unknown; retryAfter?: string };
 
@@ -172,5 +178,42 @@ describe("listTrips", () => {
   it("a 200 outside the contract is an error", async () => {
     stubFetch({ status: 200, body: { viagens: "x" } });
     expect((await caught(listTrips({}))).status).toBe(200);
+  });
+});
+
+describe("deleteTrip", () => {
+  const PROBLEM = (status: number, codigo: string) => ({ codigo, title: codigo, status });
+
+  it("sends DELETE to the BFF without cache and resolves on 204", async () => {
+    const f = stubFetch({ status: 204 });
+    await expect(deleteTrip("abc/1")).resolves.toBeUndefined();
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe(`${BASE_PATH}/api/trips/abc%2F1`);
+    expect(init).toMatchObject({ method: "DELETE", cache: "no-store" });
+  });
+
+  it("resolves on 404: the trip is already gone", async () => {
+    stubFetch({ status: 404, body: PROBLEM(404, "viagem_desconhecida") });
+    await expect(deleteTrip("x")).resolves.toBeUndefined();
+  });
+
+  it("other statuses throw ApiError with the problem and Retry-After", async () => {
+    stubFetch({ status: 503, body: PROBLEM(503, "banco_ocupado"), retryAfter: "3" });
+    const error = await caught(deleteTrip("x"));
+    expect(error.status).toBe(503);
+    expect(error.problem?.codigo).toBe("banco_ocupado");
+    expect(error.retryAfter).toBe(3);
+  });
+
+  it("a failure without a JSON body still throws ApiError", async () => {
+    stubFetch({ status: 502 });
+    const error = await caught(deleteTrip("x"));
+    expect(error.status).toBe(502);
+    expect(error.problem).toBeNull();
+  });
+
+  it("a network failure propagates as it is", async () => {
+    stubFetch(new TypeError("fetch failed"));
+    await expect(deleteTrip("x")).rejects.toBeInstanceOf(TypeError);
   });
 });

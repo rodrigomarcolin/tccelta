@@ -24,6 +24,7 @@ type Deps struct {
 	GetTrip            GetTrip
 	ListTrips          ListTrips
 	GetAnalysis        GetAnalysis
+	DeleteTrip         DeleteTrip
 	Authenticate       Authenticate
 	IssueToken         IssueToken
 	AuthenticateClient AuthenticateClient
@@ -66,6 +67,7 @@ func (d *Deps) Router() http.Handler {
 	mux.Handle("GET /v1/viagens", base("trip_list", d.listTrips, tripAuth(vip)...))
 	mux.Handle("GET /v1/viagens/{id}", base("trip_status", d.getTrip, tripAuth(vip)...))
 	mux.Handle("GET /v1/viagens/{id}/analise", base("trip_analysis", d.getAnalysis, tripAuth(vip)...))
+	mux.Handle("DELETE /v1/viagens/{id}", base("trip_delete", d.deleteTrip, tripAuth(vip)...))
 	// Client credentials e chaves públicas.
 	mux.Handle("POST /v1/auth/token", base("auth_token", d.issueToken, noStore, d.limitIP, limitBody(maxTokenBody)))
 	mux.Handle("GET /.well-known/jwks.json", base("jwks", d.jwks, d.limitIP))

@@ -20,6 +20,8 @@ import (
 type TripRow struct {
 	trip.Trip
 	Calc *trip.Calculation
+	// ExcludedAt é o excluded_at de gold.trip: a linha segue no banco, mas some de tudo (EXC1).
+	ExcludedAt *time.Time
 	// Saves conta as gravações do resultado.
 	Saves int
 }
@@ -102,10 +104,13 @@ func (r *anchorGroups) List(_ context.Context, k timeline.BootKey) ([]timeline.G
 
 type trips Database
 
+// live diz se a linha existe para o resto do sistema (não foi excluída).
+func (x *TripRow) live() bool { return x.ExcludedAt == nil }
+
 func (r *trips) ListWaiting(context.Context) ([]trip.Trip, error) {
 	var out []trip.Trip
 	for _, x := range r.Trips {
-		if x.Status == trip.StatusPending || x.Status == trip.StatusWaitingData {
+		if x.live() && (x.Status == trip.StatusPending || x.Status == trip.StatusWaitingData) {
 			out = append(out, x.Trip)
 		}
 	}
@@ -139,7 +144,7 @@ func (r *trips) ResolveGeneration(_ context.Context, id uuid.UUID, dongleID, boo
 }
 
 func (r *trips) Take(_ context.Context, id uuid.UUID) (trip.Trip, bool, error) {
-	if x := (*Database)(r).TripByID(id); x != nil && (x.Status == trip.StatusPending || x.Status == trip.StatusWaitingData) {
+	if x := (*Database)(r).TripByID(id); x != nil && x.live() && (x.Status == trip.StatusPending || x.Status == trip.StatusWaitingData) {
 		return x.Trip, true, nil
 	}
 	return trip.Trip{}, false, nil
@@ -148,7 +153,7 @@ func (r *trips) Take(_ context.Context, id uuid.UUID) (trip.Trip, bool, error) {
 func (r *trips) TakeRecalc(context.Context) (trip.Trip, bool, error) {
 	var best *TripRow
 	for _, x := range r.Trips {
-		if x.Status == trip.StatusReady && x.RecalcPending && (best == nil || x.CreatedAt.Before(best.CreatedAt)) {
+		if x.live() && x.Status == trip.StatusReady && x.RecalcPending && (best == nil || x.CreatedAt.Before(best.CreatedAt)) {
 			best = x
 		}
 	}
@@ -174,7 +179,7 @@ func (r *trips) Save(_ context.Context, id uuid.UUID, c trip.Calculation) error 
 }
 
 func (r *trips) Fail(_ context.Context, id uuid.UUID) error {
-	if x := (*Database)(r).TripByID(id); x != nil {
+	if x := (*Database)(r).TripByID(id); x != nil && x.live() {
 		if x.Status != trip.StatusReady {
 			x.Status = trip.StatusFailed
 		}
@@ -186,7 +191,7 @@ func (r *trips) Fail(_ context.Context, id uuid.UUID) error {
 func (r *trips) ListProvisional(context.Context) ([]trip.Provisional, error) {
 	var out []trip.Provisional
 	for _, x := range r.Trips {
-		if x.Status != trip.StatusReady || !x.Provisional || x.RecalcPending {
+		if !x.live() || x.Status != trip.StatusReady || !x.Provisional || x.RecalcPending {
 			continue
 		}
 		p := trip.Provisional{Trip: x.Trip}
@@ -226,7 +231,7 @@ func (r *trips) ClearProvisional(_ context.Context, id uuid.UUID) error {
 
 func (r *trips) MarkRecalcByRange(_ context.Context, dongleID int32, fromSeq, toSeq int64) error {
 	for _, x := range r.Trips {
-		if x.DongleID == dongleID && x.Status == trip.StatusReady && x.FirstSeq != nil && x.LastSeq != nil &&
+		if x.live() && x.DongleID == dongleID && x.Status == trip.StatusReady && x.FirstSeq != nil && x.LastSeq != nil &&
 			*x.FirstSeq <= toSeq && *x.LastSeq >= fromSeq {
 			x.RecalcPending = true
 		}
@@ -242,10 +247,10 @@ func (r *trips) Notify(context.Context) error {
 func (r *trips) CountQueue(context.Context) (trip.Queue, error) {
 	var q trip.Queue
 	for _, x := range r.Trips {
-		if x.Status == trip.StatusPending || x.Status == trip.StatusWaitingData {
+		if x.live() && (x.Status == trip.StatusPending || x.Status == trip.StatusWaitingData) {
 			q.Waiting++
 		}
-		if x.RecalcPending {
+		if x.live() && x.RecalcPending {
 			q.Recalc++
 		}
 	}
@@ -390,12 +395,12 @@ func (r *tripSources) MaxBlockTime(_ context.Context, dongleID int32, fromSeq, t
 // falharam. Como no banco, o id e created_at são definidos aqui.
 func (r *trips) Insert(_ context.Context, d trip.Draft) (trip.Trip, error) {
 	for _, x := range r.Trips {
-		if sameEntry(x.Trip, d) {
+		if x.live() && sameEntry(x.Trip, d) {
 			return trip.Trip{}, trip.ErrTripRepeated
 		}
 	}
 	for _, x := range r.Trips {
-		if x.Status != trip.StatusFailed && x.Category == d.Category && trip.NormalizeName(x.DriverName) == d.DriverNameNormalized {
+		if x.live() && x.Status != trip.StatusFailed && x.Category == d.Category && trip.NormalizeName(x.DriverName) == d.DriverNameNormalized {
 			return trip.Trip{}, trip.ErrDriverRepeated
 		}
 	}
@@ -412,7 +417,7 @@ func (r *trips) NotifyTrip(_ context.Context, id uuid.UUID) error {
 }
 
 func (r *trips) Find(_ context.Context, id uuid.UUID) (trip.Trip, error) {
-	if x := (*Database)(r).TripByID(id); x != nil {
+	if x := (*Database)(r).TripByID(id); x != nil && x.live() {
 		return x.Trip, nil
 	}
 	return trip.Trip{}, trip.ErrNotFound
@@ -421,7 +426,7 @@ func (r *trips) Find(_ context.Context, id uuid.UUID) (trip.Trip, error) {
 // Analysis monta a leitura a partir do resultado guardado por Save.
 func (r *trips) Analysis(_ context.Context, id uuid.UUID) (trip.Analysis, error) {
 	x := (*Database)(r).TripByID(id)
-	if x == nil {
+	if x == nil || !x.live() {
 		return trip.Analysis{}, trip.ErrNotFound
 	}
 	a := trip.Analysis{Trip: x.Trip}
@@ -468,7 +473,7 @@ func sameEntry(x trip.Trip, d trip.Draft) bool {
 func (r *trips) FindSame(_ context.Context, d trip.Draft) (trip.Trip, bool, error) {
 	var best *TripRow
 	for _, x := range r.Trips {
-		if !sameEntry(x.Trip, d) {
+		if !x.live() || !sameEntry(x.Trip, d) {
 			continue
 		}
 		if best == nil || (x.Status == trip.StatusReady && best.Status != trip.StatusReady) ||
@@ -486,7 +491,7 @@ func (r *trips) FindSame(_ context.Context, d trip.Draft) (trip.Trip, bool, erro
 func (r *trips) List(_ context.Context, q trip.ListQuery) (trip.Page, error) {
 	var rows []*TripRow
 	for _, x := range r.Trips {
-		if q.Search == "" || strings.Contains(trip.NormalizeName(x.DriverName), q.Search) {
+		if x.live() && (q.Search == "" || strings.Contains(trip.NormalizeName(x.DriverName), q.Search)) {
 			rows = append(rows, x)
 		}
 	}
@@ -514,4 +519,15 @@ func (r *trips) List(_ context.Context, q trip.ListQuery) (trip.Page, error) {
 		}
 	}
 	return trip.PageOf(items, total, q.Limit), nil
+}
+
+// Exclude imita ExcludeTrip: trip.ErrNotFound se a viagem não existe ou já foi excluída.
+func (r *trips) Exclude(_ context.Context, id uuid.UUID) error {
+	x := (*Database)(r).TripByID(id)
+	if x == nil || !x.live() {
+		return trip.ErrNotFound
+	}
+	now := time.Now().UTC()
+	x.ExcludedAt = &now
+	return nil
 }

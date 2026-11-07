@@ -46,7 +46,7 @@ export function createApiDatasource(opts: ApiOptions): TripsDatasource {
   const log = opts.log ?? ((m: string) => console.error(`[trips] ${m}`));
 
   async function request(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "DELETE",
     path: string,
     token: string,
     body?: unknown,
@@ -81,7 +81,7 @@ export function createApiDatasource(opts: ApiOptions): TripsDatasource {
   });
 
   async function call<T>(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "DELETE",
     path: string,
     body?: unknown,
   ): Promise<ApiResponse<T>> {
@@ -115,6 +115,8 @@ export function createApiDatasource(opts: ApiOptions): TripsDatasource {
     }
 
     const retryAfter = parseRetryAfter(resp.headers.get("Retry-After"));
+    // 204 No Content (DELETE) has no body to parse.
+    if (resp.status === 204) return { status: 204, body: null as T };
     let json: unknown;
     try {
       json = JSON.parse(text);
@@ -147,6 +149,10 @@ export function createApiDatasource(opts: ApiOptions): TripsDatasource {
     async analysis(id: string) {
       if (!UUID.test(id)) return unknown<TripAnalysis>();
       return call<TripAnalysis>("GET", `/v1/viagens/${id.toLowerCase()}/analise`);
+    },
+    async remove(id: string) {
+      if (!UUID.test(id)) return unknown<null>();
+      return call<null>("DELETE", `/v1/viagens/${id.toLowerCase()}`);
     },
     async list(query: ListQuery) {
       const params = new URLSearchParams();

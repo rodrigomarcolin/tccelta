@@ -92,3 +92,12 @@ export const IconMoon = (p: Props) => (
     <path d="M16.5 11.8A6.8 6.8 0 0 1 8.2 3.5a6.8 6.8 0 1 0 8.3 8.3z" />
   </Base>
 );
+
+export const IconTrash = (p: Props) => (
+  <Base viewBox="0 0 18 18" strokeWidth={1.6} {...p}>
+    <path d="M2.5 4.5h13" />
+    <path d="M6.5 4.5V3a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1.5" />
+    <path d="M4 4.5l.7 9.6a1.5 1.5 0 0 0 1.5 1.4h5.6a1.5 1.5 0 0 0 1.5-1.4l.7-9.6" />
+    <path d="M7.5 8v4.5M10.5 8v4.5" />
+  </Base>
+);

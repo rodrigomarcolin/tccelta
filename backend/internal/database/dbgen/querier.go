@@ -37,6 +37,7 @@ type Querier interface {
 	DeleteTripStops(ctx context.Context, tripID uuid.UUID) error
 	DeleteTripSummary(ctx context.Context, tripID uuid.UUID) error
 	EnsurePendingBoot(ctx context.Context, dongleID int32, bootGeneration int32, bootID int32, now time.Time) error
+	ExcludeTrip(ctx context.Context, tripID uuid.UUID) (uuid.UUID, error)
 	// Job periódico do worker (spec 06).
 	ExpireChallenges(ctx context.Context, now time.Time) (int64, error)
 	// Uma viagem nova que falha vira failed (e libera o nome); um recálculo que falha mantém o resultado anterior.

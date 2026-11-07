@@ -5,7 +5,7 @@ import { operatorList } from "@/auth/operators";
 import type { Problem, ApiResponse } from "@/domain/trip/types";
 import { buildProblem } from "@/domain/trip/problem";
 
-const NO_CACHE = { "Cache-Control": "no-store" };
+export const NO_CACHE = { "Cache-Control": "no-store" };
 
 /** Forwards status, body and `Retry-After` from the data layer, without caching. */
 export function respond(resp: ApiResponse<unknown>): NextResponse {

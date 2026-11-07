@@ -766,3 +766,15 @@ func devID(t *testing.T) protocol.DevID {
 	}
 	return id
 }
+
+func TestDeleteTripRequiresBearer(t *testing.T) {
+	kms := newKMS()
+	e := newAuthEnv(t, nil, kms)
+	w := req(e.h, "DELETE", "/v1/viagens/"+tripID.String(), nil, nil)
+	if w.Code != 401 || code(w) != "token_ausente" {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if e.del.id == tripID {
+		t.Fatal("sem Bearer a exclusão não chega ao caso de uso")
+	}
+}

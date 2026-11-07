@@ -22,7 +22,10 @@ vi.mock("next/link", () => ({
 }));
 
 const card = (extra: Parameters<typeof listItem>[1] = {}, theme: "dark" | "light" = "dark") =>
-  renderWithTheme(<TripCard trip={listItem(8, extra)} position={1} size={10} />, theme);
+  renderWithTheme(
+    <TripCard trip={listItem(8, extra)} position={1} size={10} onDelete={vi.fn()} />,
+    theme,
+  );
 
 describe("TripCard", () => {
   it("is a single link to the analysis, without prefetch", () => {
@@ -176,8 +179,20 @@ describe("minimap", () => {
     expect(screen.getByTestId("preview-wide").querySelectorAll("path")).toHaveLength(4);
   });
 
+  it("has a delete button beside the link, not inside it, named after the driver", () => {
+    const onDelete = vi.fn();
+    const trip = listItem(8);
+    renderWithTheme(<TripCard trip={trip} position={1} size={10} onDelete={onDelete} />);
+    const button = screen.getByRole("button", { name: "Excluir a viagem de Motorista 8" });
+    expect(screen.getByRole("link").contains(button)).toBe(false);
+    expect(button.closest("article")).toBe(screen.getByRole("article"));
+    expect(button).toHaveAttribute("type", "button");
+    fireEvent.click(button);
+    expect(onDelete).toHaveBeenCalledExactlyOnceWith(trip);
+  });
+
   it("renders without a theme provider too (dark by default)", () => {
-    render(<TripCard trip={listItem(1)} position={1} size={1} />);
+    render(<TripCard trip={listItem(1)} position={1} size={1} onDelete={vi.fn()} />);
     expect(screen.getByTestId("preview-wide")).toBeInTheDocument();
   });
 });

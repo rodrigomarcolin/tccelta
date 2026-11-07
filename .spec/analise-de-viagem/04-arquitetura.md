@@ -161,7 +161,7 @@ CREATE UNIQUE INDEX trip_driver_name_unique
 | Papel | Permissão |
 |---|---|
 | `tccelta_worker` | `SELECT` em `reading`, `position`; `SELECT, INSERT, UPDATE, DELETE` nas tabelas da gold |
-| `tccelta_api` | `SELECT, INSERT` em `gold.trip`; `SELECT` no restante da gold |
+| `tccelta_api` | `SELECT, INSERT` e `UPDATE (excluded_at)` em `gold.trip` (o `UPDATE` vem da EXC1); `SELECT` no restante da gold |
 | `tccelta_reader` | `SELECT` na gold |
 
 ## Ranking (implementação futura)
@@ -267,7 +267,7 @@ Os erros seguem o formato atual de `internal/http/problem.go`. A exceção é `P
 | `GET /v1/viagens/{id}/analise` | Contrato da spec 02, montado a partir da gold | API2 |
 | `POST /v1/auth/token` | Emite o token | API3 |
 | `GET /.well-known/jwks.json` | Chaves públicas da chave nova | API3 |
-| `DELETE /v1/viagens/{id}` | Exclui a viagem, preenchendo `excluded_at`, e libera o nome | Futura |
+| `DELETE /v1/viagens/{id}` | Exclui a viagem, preenchendo `excluded_at`, e libera o nome e a entrada | EXC1 |
 | `GET /v1/dongles/{id}/boots` | Boots recentes, para o operador escolher | Futura |
 | `GET /v1/rankings?categoria=&contexto=` | Última rodada | Futura |
 
@@ -376,8 +376,9 @@ As specs 01 e 02 não foram editadas. Estes complementos valem para as entregas:
 | [INT1](entregas/INT1-front-integrado.md) | Front ligado à API, sem client credentials | FE1, API2 |
 | [API3](entregas/API3-client-credentials.md) | Client credentials, JWKS, assinatura no KMS e bloqueio progressivo | API2 |
 | [INT2](entregas/INT2-front-client-credentials.md) | Front usando o token e fim do modo sem autenticação | INT1, API3 |
+| [EXC1](entregas/EXC1-excluir-viagem.md) | Excluir viagem pela lista e pela análise, com o worker ignorando excluídas | API2, INT2 |
 
-**Fora destas entregas:** ranking, exclusão de viagem, lista de boots, Ajustes e seleção de trecho.
+**Fora destas entregas:** ranking, lista de boots, Ajustes e seleção de trecho. A exclusão de viagem é a EXC1.
 
 ## Follow-ups
 

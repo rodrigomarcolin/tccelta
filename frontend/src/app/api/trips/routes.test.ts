@@ -6,7 +6,7 @@ vi.mock("@/auth", () => ({ auth: () => auth(), handlers: { GET: vi.fn(), POST: v
 
 import { resetMock } from "@/server/trips/mock/mockDatasource";
 import { GET, POST } from "./route";
-import { GET as GET_STATUS } from "./[id]/route";
+import { GET as GET_STATUS, DELETE as DELETE_TRIP } from "./[id]/route";
 import { GET as GET_ANALYSIS } from "./[id]/analysis/route";
 import { EXAMPLES } from "@/server/trips/mock/scenarios";
 
@@ -284,5 +284,93 @@ describe("with a session", () => {
   it("unknown id gives 404", async () => {
     const r = await GET_STATUS(new Request("http://x"), ctx("zzz"));
     expect(r.status).toBe(404);
+  });
+});
+
+describe("DELETE /api/trips/{id}", () => {
+  const del = (id: string) => DELETE_TRIP(new Request("http://x", { method: "DELETE" }), ctx(id));
+
+  it("without a session responds 401 and the data layer is not asked", async () => {
+    auth.mockResolvedValue(null);
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    const r = await del(UUID);
+    expect(r.status).toBe(401);
+    expect(await r.json()).toMatchObject({ codigo: "nao_autenticado" });
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("a session outside OPERATOR_EMAILS responds 403", async () => {
+    auth.mockResolvedValue({ user: { email: "intrusa@usp.br" } });
+    vi.stubEnv("ANALISE_FONTE_DADOS", "api");
+    vi.stubEnv("ANALISE_DONGLE_ID", "1");
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    const r = await del(UUID);
+    expect(r.status).toBe(403);
+    expect(await r.json()).toMatchObject({ codigo: "nao_autorizado" });
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("an id that is not a UUID responds 404 and never reaches the data layer", async () => {
+    auth.mockResolvedValue({ user: { email: "ana@usp.br" } });
+    vi.stubEnv("ANALISE_FONTE_DADOS", "api");
+    vi.stubEnv("ANALISE_DONGLE_ID", "1");
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    for (const id of ["zzz", "../health", `${UUID}/analysis`]) {
+      const r = await del(id);
+      expect(r.status).toBe(404);
+      expect(await r.json()).toMatchObject({ codigo: "viagem_desconhecida" });
+    }
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("204 with no body, not cached, and the trip is gone (mock source)", async () => {
+    auth.mockResolvedValue({ user: { email: "ana@usp.br" } });
+    const r = await del(UUID);
+    expect(r.status).toBe(204);
+    expect(r.headers.get("Cache-Control")).toBe("no-store");
+    expect(await r.text()).toBe("");
+    expect((await GET_STATUS(new Request("http://x"), ctx(UUID))).status).toBe(404);
+    // A second deletion is a 404 with a problem.
+    const again = await del(UUID);
+    expect(again.status).toBe(404);
+    expect(again.headers.get("Content-Type")).toBe("application/problem+json");
+  });
+
+  it("with the api source forwards the 204 and the API problems", async () => {
+    auth.mockResolvedValue({ user: { email: "ana@usp.br" } });
+    vi.stubEnv("ANALISE_FONTE_DADOS", "api");
+    vi.stubEnv("ANALISE_API_URL", "http://api.teste:8080");
+    vi.stubEnv("ANALISE_DONGLE_ID", "3");
+    vi.stubEnv("ANALISE_CLIENT_ID", "next-test");
+    vi.stubEnv("ANALISE_CLIENT_SECRET", "segredo-de-teste");
+    let status = 204;
+    const f = vi.fn(async (url: string | URL | Request) =>
+      String(url).endsWith("/v1/auth/token")
+        ? tokenOk()
+        : status === 204
+          ? new Response(null, { status: 204 })
+          : new Response(
+              JSON.stringify({ type: "t", title: "b", status: 503, codigo: "banco_ocupado" }),
+              {
+                status: 503,
+                headers: { "Content-Type": "application/problem+json", "Retry-After": "3" },
+              },
+            ),
+    );
+    vi.stubGlobal("fetch", f);
+    const ok = await del(UUID);
+    expect(ok.status).toBe(204);
+    expect(await ok.text()).toBe("");
+    const call = f.mock.calls[1] as unknown as [string, RequestInit];
+    expect(call[0]).toBe(`http://api.teste:8080/v1/viagens/${UUID}`);
+    expect(call[1].method).toBe("DELETE");
+    status = 503;
+    const busy = await del(UUID);
+    expect(busy.status).toBe(503);
+    expect(busy.headers.get("Retry-After")).toBe("3");
+    expect(await busy.json()).toMatchObject({ codigo: "banco_ocupado" });
   });
 });
