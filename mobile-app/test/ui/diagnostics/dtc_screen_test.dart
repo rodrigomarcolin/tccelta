@@ -56,6 +56,12 @@ class _ControllableObd2Repository implements Obd2Repository {
   Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) async => const [];
 
   @override
+  Stream<List<Obd2Reading>> watchReadings() => const Stream.empty();
+
+  @override
+  void setFocus(Iterable<Obd2Pid> focus) {}
+
+  @override
   Future<DtcSnapshot> readDtc() {
     readDtcCalls++;
     _completer = Completer<DtcSnapshot>();

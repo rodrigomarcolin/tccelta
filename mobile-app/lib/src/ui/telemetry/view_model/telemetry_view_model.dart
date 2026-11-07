@@ -71,102 +71,59 @@ abstract final class Obd2ReadingHistory {
   static const int maxSamples = 50;
 }
 
-/// ViewModel do painel: mantém dois ciclos de leitura independentes e cada um
-/// não-sobreposto (só agenda a própria próxima volta depois que a anterior
-/// termina) enquanto a tela estiver montada — um ciclo **rápido** (800ms) que
-/// lê só os indicadores que o usuário tem no Painel agora, para essas leituras
-/// ficarem responsivas, e um ciclo **completo** (5s) que varre todos os PIDs
-/// suportados, para descobrir/atualizar sensores mesmo quando não estão no
-/// Painel (ex.: a tela de busca de sensores). Toda a lógica vive aqui; a tela
-/// só observa e renderiza.
+/// ViewModel do painel: enquanto a tela está montada, consome a leitura
+/// agendada do repository ([Obd2Repository.watchReadings]), que lê cada PID
+/// do Painel no período dele e os demais suportados a cada 5 s (catálogo da
+/// busca de sensores). Mantém o foco do repository igual aos indicadores do
+/// painel ativo. Toda a lógica vive aqui; a tela só observa e renderiza.
 class TelemetryViewModel extends Notifier<TelemetryState> {
   late final Obd2Repository _repo;
 
-  /// Sinaliza o encerramento dos loops (a tela saiu / provider descartado).
+  /// Sinaliza o encerramento (a tela saiu / provider descartado).
   bool _stopped = false;
 
-  /// Timer do próximo ciclo rápido — cancelável no dispose.
-  Timer? _fastTimer;
-
-  /// Timer do próximo ciclo completo — cancelável no dispose.
-  Timer? _fullTimer;
-
-  /// Intervalo do ciclo rápido: só os indicadores do Painel.
-  static const Duration _fastInterval = Duration(milliseconds: 800);
-
-  /// Intervalo do ciclo completo: todos os PIDs suportados.
-  static const Duration _fullInterval = Duration(seconds: 5);
+  /// Assinatura da leitura agendada — cancelada no dispose.
+  StreamSubscription<List<Obd2Reading>>? _readingsSub;
 
   @override
   TelemetryState build() {
     _repo = ref.read(obd2RepositoryProvider);
-    ref.onDispose(() {
-      _stopped = true;
-      _fastTimer?.cancel();
-      _fullTimer?.cancel();
-    });
+    ref
+      ..onDispose(() {
+        _stopped = true;
+        unawaited(_readingsSub?.cancel());
+      })
+      ..listen<List<Obd2Pid>>(
+        panelViewModelProvider.select((p) => p.value?.indicators ?? const []),
+        (_, pids) => _repo.setFocus(pids),
+      );
     unawaited(_start());
     return const TelemetryState(isPolling: true);
   }
 
-  /// Descobre os PIDs suportados uma vez (best-effort — se falhar, o ciclo
-  /// completo cai no fallback de todos os curados) e então inicia os dois
-  /// loops de leitura.
+  /// Descobre os PIDs suportados uma vez (best-effort — se falhar, o catálogo
+  /// cai no fallback de todos os curados) e então assina a leitura agendada,
+  /// já com o foco no painel atual.
   Future<void> _start() async {
     try {
       final supported = await _repo.discoverSupported();
       if (_stopped) return;
       state = state.copyWith(supportedPids: supported);
     } on Object {
-      // Descoberta é best-effort; segue para o polling mesmo assim.
-    }
-    unawaited(_fastCycle());
-    unawaited(_fullCycle());
-  }
-
-  /// Ciclo rápido: lê só os PIDs que o usuário tem no Painel neste exato
-  /// momento — consulta o [panelViewModelProvider] a cada volta (não uma vez
-  /// no `build()`), para sempre refletir add/remove sem precisar reiniciar o
-  /// loop. Painel vazio pula a leitura mas mantém o cadenciamento.
-  Future<void> _fastCycle() async {
-    if (_stopped) return;
-    final panelPids =
-        ref.read(panelViewModelProvider).value?.indicators ?? const [];
-    if (panelPids.isEmpty) {
-      _fastTimer = Timer(_fastInterval, () => unawaited(_fastCycle()));
-      return;
-    }
-    try {
-      final readings = await _repo.readMany(panelPids);
-      if (_stopped) return;
-      _applyReadings(readings);
-    } on Failure catch (f) {
-      if (_stopped) return;
-      state = state.copyWith(failure: f);
-    } on Object {
-      // Erro inesperado: não derruba o loop.
+      // Descoberta é best-effort; segue para a leitura mesmo assim.
     }
     if (_stopped) return;
-    _fastTimer = Timer(_fastInterval, () => unawaited(_fastCycle()));
-  }
-
-  /// Ciclo completo: varre todos os PIDs suportados (ou curados, no fallback
-  /// sem descoberta), independentemente do que está no Painel — mantém o
-  /// catálogo de sensores atualizado.
-  Future<void> _fullCycle() async {
-    if (_stopped) return;
-    try {
-      final readings = await _repo.readAll();
-      if (_stopped) return;
-      _applyReadings(readings);
-    } on Failure catch (f) {
-      if (_stopped) return;
-      state = state.copyWith(failure: f);
-    } on Object {
-      // Erro inesperado: não derruba o loop.
-    }
-    if (_stopped) return;
-    _fullTimer = Timer(_fullInterval, () => unawaited(_fullCycle()));
+    _repo.setFocus(
+      ref.read(panelViewModelProvider).value?.indicators ?? const [],
+    );
+    _readingsSub = _repo.watchReadings().listen(
+      (readings) {
+        if (!_stopped) _applyReadings(readings);
+      },
+      onError: (Object e) {
+        if (!_stopped && e is Failure) state = state.copyWith(failure: e);
+      },
+    );
   }
 
   /// Funde [readings] no estado por PID + ECU. Assim, duas ECUs que respondem

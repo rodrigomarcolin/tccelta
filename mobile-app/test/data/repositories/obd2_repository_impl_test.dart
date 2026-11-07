@@ -288,6 +288,83 @@ void main() {
     });
   });
 
+  group('Obd2RepositoryImpl.watchReadings', () {
+    test('lê o foco primeiro e depois o catálogo suportado', () async {
+      final conn = ScriptedBleConnection(
+        responses: {
+          ..._mockResponses,
+          '0100': '41 00 00 18 00 00\r>', // só rpm+speed
+        },
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+      await repo.discoverSupported();
+      repo.setFocus(const [Obd2Pid.speed]);
+
+      final events = await repo
+          .watchReadings()
+          .take(2)
+          .toList()
+          .timeout(const Duration(seconds: 2));
+
+      expect(events.map((e) => e.single.pid), [Obd2Pid.speed, Obd2Pid.rpm]);
+      expect(events[0].single.value, 60);
+      expect(events[1].single.value, 1500);
+      // Só o suportado entra no catálogo.
+      expect(conn.written.where((c) => c == '0105'), isEmpty);
+    });
+
+    test('PID que entra no foco passa ao período dele sem reiniciar a '
+        'stream', () async {
+      final conn = ScriptedBleConnection(
+        responses: {..._mockResponses, '0100': '41 00 00 18 00 00\r>'},
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+      await repo.discoverSupported();
+
+      final pids = <Obd2Pid>[];
+      final sub = repo.watchReadings().listen(
+        (e) => pids.addAll(e.map((r) => r.pid)),
+      );
+      addTearDown(sub.cancel);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // Catálogo: uma leitura de cada; a próxima só em 5 s.
+      expect(pids, [Obd2Pid.rpm, Obd2Pid.speed]);
+
+      // No Painel, a velocidade passa a 250 ms (a partir da última leitura).
+      repo.setFocus(const [Obd2Pid.speed]);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+
+      expect(pids.where((p) => p == Obd2Pid.speed).length, greaterThan(1));
+      expect(pids.where((p) => p == Obd2Pid.rpm), hasLength(1));
+    });
+
+    test('PID do Painel que o dongle não suporta não é agendado', () async {
+      final conn = ScriptedBleConnection(
+        responses: {..._mockResponses, '0100': '41 00 00 10 00 00\r>'}, // rpm
+      );
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(conn));
+      await repo.discoverSupported();
+      repo.setFocus(const [Obd2Pid.coolantTemp]);
+
+      final sub = repo.watchReadings().listen((_) {});
+      addTearDown(sub.cancel);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(conn.written, contains('010C'));
+      expect(conn.written, isNot(contains('0105')));
+    });
+
+    test('sem conexão emite ObdCommandFailure como erro', () async {
+      final repo = Obd2RepositoryImpl(_FakeDongleRepository(null))
+        ..setFocus(const [Obd2Pid.rpm]);
+
+      await expectLater(
+        repo.watchReadings(),
+        emitsError(isA<ObdCommandFailure>()),
+      );
+    });
+  });
+
   group('Obd2RepositoryImpl.readDtc', () {
     test('"43 00"/"47 00"/"4A 00" devolve retrato vazio', () async {
       final conn = ScriptedBleConnection(
