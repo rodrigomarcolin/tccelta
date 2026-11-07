@@ -72,6 +72,19 @@ class FakeObd2Repository implements Obd2Repository {
     return readings.where((r) => pids.contains(r.pid)).toList();
   }
 
+  /// Último foco recebido por [setFocus].
+  Set<Obd2Pid> focus = const {};
+
+  @override
+  Stream<List<Obd2Reading>> watchReadings() {
+    final f = failure;
+    if (f != null) return Stream.error(f);
+    return readings.isEmpty ? const Stream.empty() : Stream.value(readings);
+  }
+
+  @override
+  void setFocus(Iterable<Obd2Pid> focus) => this.focus = focus.toSet();
+
   @override
   Future<DtcSnapshot> readDtc() async {
     readDtcCalls++;

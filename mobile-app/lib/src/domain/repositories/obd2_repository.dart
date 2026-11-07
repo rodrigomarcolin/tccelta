@@ -45,10 +45,22 @@ abstract interface class Obd2Repository {
 
   /// Lê só os [pids] informados, sequencialmente — mesma semântica de
   /// [readAll] (um comando por vez, PIDs sem resposta omitidos), mas
-  /// restrita a um subconjunto explícito. Usado pelo ciclo rápido do painel,
-  /// que consulta apenas os indicadores que o usuário tem exibidos, em vez
-  /// de varrer o catálogo inteiro a cada volta.
+  /// restrita a um subconjunto explícito. Leitura avulsa; a telemetria
+  /// contínua usa [watchReadings].
   Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids);
+
+  /// Leitura contínua com período por PID, no mesmo escalonador do coletor do
+  /// firmware: os PIDs de [setFocus] no período deles (RPM a 250 ms,
+  /// temperatura a 5 s...) e os demais suportados a cada 5 s, para o catálogo
+  /// de sensores. Cada evento traz as leituras de um PID (uma por ECU).
+  ///
+  /// A leitura começa na escuta e para no cancelamento. Sem conexão, a stream
+  /// emite `ObdCommandFailure` como erro e segue tentando.
+  Stream<List<Obd2Reading>> watchReadings();
+
+  /// Troca os PIDs prioritários (os do Painel) de [watchReadings], inclusive
+  /// durante a leitura.
+  void setFocus(Iterable<Obd2Pid> focus);
 
   /// Lê o retrato atual de diagnóstico (códigos confirmados/pendentes/
   /// permanentes + MIL), Modos 03/07/0A (+ 02 para congelamento). Lança

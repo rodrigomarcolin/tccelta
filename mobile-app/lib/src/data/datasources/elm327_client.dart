@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert' show ascii;
 
+import 'package:flutter/foundation.dart';
+
 import 'package:tccelta_mobile/src/core/errors/obd_failure.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 
@@ -59,6 +61,22 @@ class Elm327Client {
       );
     }
     final completer = Completer<String>();
+    if (kDebugMode) {
+      // Ida e volta de cada comando (escrita até o prompt), para medir o
+      // `Tmax` real do canal BLE.
+      final watch = Stopwatch()..start();
+      unawaited(
+        completer.future.then(
+          (r) => debugPrint(
+            'ELM rtt=${watch.elapsedMilliseconds}ms cmd=$cmd '
+            'resp=${r.length > 24 ? '${r.substring(0, 24)}…' : r}',
+          ),
+          onError: (Object e) => debugPrint(
+            'ELM rtt=${watch.elapsedMilliseconds}ms cmd=$cmd falhou: $e',
+          ),
+        ),
+      );
+    }
     _pending = completer;
     _buffer.clear();
     _timeout = Timer(timeout, () {

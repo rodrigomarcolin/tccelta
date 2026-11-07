@@ -48,6 +48,13 @@ class _FakeObd2Repository implements Obd2Repository {
       readings.where((r) => pids.contains(r.pid)).toList();
 
   @override
+  Stream<List<Obd2Reading>> watchReadings() =>
+      readings.isEmpty ? const Stream.empty() : Stream.value(readings);
+
+  @override
+  void setFocus(Iterable<Obd2Pid> focus) {}
+
+  @override
   Future<DtcSnapshot> readDtc() async =>
       const DtcSnapshot(active: [], milOn: false);
 }

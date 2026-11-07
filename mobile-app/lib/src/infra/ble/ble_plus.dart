@@ -369,6 +369,16 @@ class _FbpConnection implements BleConnection {
       } on Object {
         // O MTU padrão do connect() já cobre; seguimos mesmo se falhar.
       }
+      // Intervalo de conexão curto (~7,5–15 ms, contra ~30–50 ms do padrão
+      // "balanced"): cada comando ELM327 é uma escrita + uma notificação, então
+      // o intervalo domina a ida e volta. No iOS não há API.
+      try {
+        await device.requestConnectionPriority(
+          connectionPriorityRequest: ConnectionPriority.high,
+        );
+      } on Object {
+        // Melhor esforço: segue no intervalo padrão.
+      }
     }
 
     _stageTo(BleConnectionPhase.discovering);

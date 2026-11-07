@@ -1,11 +1,15 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:tccelta_mobile/src/core/errors/dtc_failure.dart';
 import 'package:tccelta_mobile/src/core/errors/obd_failure.dart';
+import 'package:tccelta_mobile/src/core/time/monotonic_clock.dart';
 import 'package:tccelta_mobile/src/data/datasources/collector_command_datasource.dart';
 import 'package:tccelta_mobile/src/data/datasources/dtc_datasource.dart';
 import 'package:tccelta_mobile/src/data/datasources/elm327_client.dart';
 import 'package:tccelta_mobile/src/data/datasources/obd2_datasource.dart';
+import 'package:tccelta_mobile/src/data/datasources/pid_schedule.dart';
+import 'package:tccelta_mobile/src/data/datasources/scheduled_pid_datasource.dart';
 import 'package:tccelta_mobile/src/domain/ble/ble_connection.dart';
 import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/obd2/dtc_active_entry.dart';
@@ -35,7 +39,8 @@ import 'package:tccelta_mobile/src/domain/repositories/obd2_repository.dart';
 class Obd2RepositoryImpl implements Obd2Repository {
   /// Cria o repository sobre o [_dongle] (fonte da conexão ativa) e passa a
   /// observar as fases de conexão para teardown proativo.
-  Obd2RepositoryImpl(this._dongle) {
+  Obd2RepositoryImpl(this._dongle, {MonotonicClock? clock})
+    : _clock = clock ?? SystemMonotonicClock() {
     // Teardown proativo: quando o link cai (failed/disconnected), desmonta o
     // Elm327Client sem esperar a próxima leitura. `reconnecting` NÃO desmonta —
     // a recuperação é transparente e reaproveita a mesma conexão/cliente.
@@ -48,6 +53,13 @@ class Obd2RepositoryImpl implements Obd2Repository {
   }
 
   final DongleRepository _dongle;
+  final MonotonicClock _clock;
+
+  /// PIDs prioritários da leitura agendada (o Painel).
+  Set<Obd2Pid> _focus = const {};
+
+  /// Laço da leitura agendada em curso, se houver.
+  ScheduledPidDatasource? _scheduled;
 
   /// PIDs congelados pelo Modo 02 (freeze frame) — fixo, sem descoberta via
   /// PID 0x00 (confirmado no handoff do firmware): carga do motor, temp. do
@@ -153,6 +165,7 @@ class Obd2RepositoryImpl implements Obd2Repository {
     final raw = await ds.readSupportedPids();
     final supported = <Obd2Pid>{for (final n in raw) ?Obd2Pid.fromByte(n)};
     _supported = supported;
+    _scheduled?.reconfigure(_scheduleConfig()); // catálogo passa a ser o real
     // A descoberta faz uma troca OBD (0100), então o protocolo já é detectável.
     _protocol ??= await ds.describeProtocol();
     return supported;
@@ -237,6 +250,84 @@ class Obd2RepositoryImpl implements Obd2Repository {
     // consultado uma única vez, após a primeira leitura bem-sucedida.
     if (_protocol == null && readings.isNotEmpty) {
       _protocol = await ds.describeProtocol();
+    }
+    return readings;
+  }
+
+  @override
+  Stream<List<Obd2Reading>> watchReadings() {
+    final source = ScheduledPidDatasource(
+      reader: _ConnectionPidReader(this),
+      config: _scheduleConfig(),
+      clock: _clock,
+    );
+    _scheduled = source;
+    unawaited(
+      source.done.then((_) {
+        if (identical(_scheduled, source)) _scheduled = null;
+      }),
+    );
+    return source.samples
+        .map(_toReadings)
+        .where((readings) => readings.isNotEmpty);
+  }
+
+  @override
+  void setFocus(Iterable<Obd2Pid> focus) {
+    final next = focus.toSet();
+    if (setEquals(next, _focus)) return;
+    _focus = next;
+    _scheduled?.reconfigure(_scheduleConfig());
+  }
+
+  /// Tabela do escalonador: o Painel no período do firmware e o catálogo
+  /// (suportados, ou todos os curados antes da descoberta) a cada 5 s.
+  ///
+  /// Depois da descoberta, PIDs do Painel que o dongle não suporta ficam de
+  /// fora: no modo Coletor ele responde `?` a qualquer PID fora da config
+  /// dele, e lê-los a cada 1 s só gastaria idas e voltas BLE.
+  PidScheduleConfig _scheduleConfig() {
+    final supported = _supported;
+    return PidScheduleConfig.telemetry(
+      focus: supported == null ? _focus : _focus.where(supported.contains),
+      catalog: supported == null ? pids : pids.where(supported.contains),
+    );
+  }
+
+  /// Leitura de um PID para o laço agendado. Falha só sem conexão; um PID sem
+  /// resposta devolve lista vazia e é reagendado.
+  Future<List<ElmResponse>> _readScheduled(Obd2Pid pid) async {
+    final ds = _ensureDatasource();
+    if (ds == null) throw const ObdCommandFailure('Sem conexão BLE pronta');
+    if (!_initialized) await initialize();
+    final List<ElmResponse> responses;
+    try {
+      responses = await ds.readPidResponses(pid);
+    } on Object {
+      return const [];
+    }
+    // Mesmo critério de [_readEach]: o protocolo só aparece após uma troca.
+    if (_protocol == null && responses.any((r) => r.payload.isNotEmpty)) {
+      _protocol = await ds.describeProtocol();
+    }
+    return responses;
+  }
+
+  static List<Obd2Reading> _toReadings(PidSample sample) {
+    final readings = <Obd2Reading>[];
+    for (final response in sample.responses) {
+      if (response.payload.isEmpty) continue;
+      try {
+        readings.add(
+          Obd2Reading(
+            pid: sample.pid,
+            value: sample.pid.decode(response.payload),
+            ecuId: response.ecuId,
+          ),
+        );
+      } on Object {
+        // Resposta curta demais para a fórmula: descarta só ela.
+      }
     }
     return readings;
   }
@@ -420,4 +511,15 @@ class Obd2RepositoryImpl implements Obd2Repository {
     final integerPart = '$sign$buffer';
     return parts.length > 1 ? '$integerPart,${parts[1]}' : integerPart;
   }
+}
+
+/// [PidReader] sobre a conexão atual do [Obd2RepositoryImpl]: resolve o
+/// datasource a cada leitura, então sobrevive a reconexões.
+class _ConnectionPidReader implements PidReader {
+  _ConnectionPidReader(this._repo);
+
+  final Obd2RepositoryImpl _repo;
+
+  @override
+  Future<List<ElmResponse>> read(Obd2Pid pid) => _repo._readScheduled(pid);
 }

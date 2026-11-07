@@ -113,6 +113,12 @@ class _FakeObd2Repository implements Obd2Repository {
   ];
 
   @override
+  Stream<List<Obd2Reading>> watchReadings() => Stream.fromFuture(readAll());
+
+  @override
+  void setFocus(Iterable<Obd2Pid> focus) {}
+
+  @override
   Future<DtcSnapshot> readDtc() async =>
       const DtcSnapshot(active: [], milOn: false);
 }
@@ -145,6 +151,12 @@ class _HangingObd2Repository implements Obd2Repository {
 
   @override
   Future<List<Obd2Reading>> readMany(List<Obd2Pid> pids) => _never.future;
+
+  @override
+  Stream<List<Obd2Reading>> watchReadings() => const Stream.empty();
+
+  @override
+  void setFocus(Iterable<Obd2Pid> focus) {}
 
   @override
   Future<DtcSnapshot> readDtc() => _never.future;
