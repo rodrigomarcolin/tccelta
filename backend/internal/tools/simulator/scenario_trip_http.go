@@ -14,7 +14,7 @@ import (
 // tripHTTPScenario passa pela API de viagens (API2), sem tocar em gold.trip: cria a viagem por POST /v1/viagens, consulta o
 // status até ficar pronta e confere a análise. Casos: (1) boot já enviado, que vira viagem pronta; (2) a mesma viagem de novo, que a API
 // recusa com 409 viagem_repetida (e, em outro boot, o mesmo motorista com 409 motorista_repetido); (3) a listagem GET /v1/viagens, com busca
-// e cursor; (4) boot inexistente, que a API recusa com 404 boot_desconhecido. O dongle tem dois boots (uma queda de energia depois dos
+// e cursor; (4) boot inexistente, que a API recusa com 404 boot_desconhecido; (5) a exclusão, que tira a viagem de tudo e libera o nome e a entrada. O dongle tem dois boots (uma queda de energia depois dos
 // primeiros blocos), para o nome repetido poder ser testado sem repetir a viagem. Exige --client
 // (client credentials): usa o Bearer, como o servidor do Next.js. O worker precisa das esperas curtas do compose de teste.
 func tripHTTPScenario(ctx context.Context, o Options) error {
@@ -142,6 +142,24 @@ func tripHTTPScenario(ctx context.Context, o Options) error {
 		st, body, _ = api.do(ctx, "POST", "/v1/viagens", tripBody(fmt.Sprintf("Boot ausente %d", bootID), category, est.DongleID, bootID))
 		v.ok(st == 404 && jstr(body, "codigo") == "boot_desconhecido", "boot %d inexistente: %d %s", bootID, st, jstr(body, "codigo"))
 	}
+
+	// 4. exclusão (EXC1): a viagem 2 some do status, da análise e da listagem, uma segunda exclusão dá 404 e a mesma entrada com o
+	// mesmo nome volta a ser aceita (202, não 409).
+	st, body, _ = api.do(ctx, "DELETE", "/v1/viagens/"+id2, "")
+	v.ok(st == 204 && body == nil, "exclusão da viagem 2: %d", st)
+	for _, path := range []string{"/v1/viagens/" + id2, "/v1/viagens/" + id2 + "/analise"} {
+		st, body, _ = api.do(ctx, "GET", path, "")
+		v.ok(st == 404 && jstr(body, "codigo") == "viagem_desconhecida", "GET %s da excluída: %d %s", path, st, jstr(body, "codigo"))
+	}
+	st, body, _ = api.do(ctx, "DELETE", "/v1/viagens/"+id2, "")
+	v.ok(st == 404 && jstr(body, "codigo") == "viagem_desconhecida", "segunda exclusão: %d %s", st, jstr(body, "codigo"))
+	st, body, _ = api.do(ctx, "GET", "/v1/viagens?busca=boot%20enviado", "")
+	v.ok(st == 200 && jnum(body, "total") == 1 && jlen(body, "viagens") == 1 && jstr(listItem(body, 0), "viagem_id") == id,
+		"listagem sem a excluída: %d total=%v", st, jraw(body, "total"))
+	st, body, _ = (&tripAPI{base: o.API, http: api.http}).do(ctx, "DELETE", "/v1/viagens/"+id, "")
+	v.ok(st == 401, "exclusão sem Bearer: %d %s", st, jstr(body, "codigo"))
+	id3, _, err := api.create(ctx, tripBody("Boot enviado 2", category, est.DongleID, secondBoot))
+	v.ok(err == nil && id3 != id2, "mesma entrada e mesmo nome depois de excluir: 202 (viagem %s, erro %v)", id3, err)
 	return v.result()
 }
 

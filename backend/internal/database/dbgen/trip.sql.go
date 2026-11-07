@@ -82,7 +82,7 @@ func (q *Queries) ClearTripProvisional(ctx context.Context, tripID uuid.UUID) er
 const countTripQueue = `-- name: CountTripQueue :one
 SELECT count(*) FILTER (WHERE status IN ('pending', 'waiting_data')) AS waiting,
        count(*) FILTER (WHERE recalc_pending) AS recalc
-FROM gold.trip WHERE status IN ('pending', 'waiting_data') OR recalc_pending
+FROM gold.trip WHERE excluded_at IS NULL AND (status IN ('pending', 'waiting_data') OR recalc_pending)
 `
 
 type CountTripQueueRow struct {
@@ -180,6 +180,19 @@ DELETE FROM gold.trip_summary WHERE trip_id = $1
 func (q *Queries) DeleteTripSummary(ctx context.Context, tripID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteTripSummary, tripID)
 	return err
+}
+
+const excludeTrip = `-- name: ExcludeTrip :one
+UPDATE gold.trip SET excluded_at = now()
+WHERE trip_id = $1 AND excluded_at IS NULL
+RETURNING trip_id
+`
+
+func (q *Queries) ExcludeTrip(ctx context.Context, tripID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, excludeTrip, tripID)
+	var trip_id uuid.UUID
+	err := row.Scan(&trip_id)
+	return trip_id, err
 }
 
 const failTrip = `-- name: FailTrip :exec
@@ -910,7 +923,7 @@ func (q *Queries) ListIntervalBoots(ctx context.Context, dongleID int32, fromMs 
 const listProvisionalTrips = `-- name: ListProvisionalTrips :many
 SELECT t.trip_id, t.trip_category, t.driver_name, t.driver_name_normalized, t.fuel, t.dongle_id, t.entry_type, t.boot_generation, t.boot_id, t.interval_start, t.interval_end, t.status, t.target_seq, t.first_seq, t.last_seq, t.calculated_through_seq, t.provisional, t.recalc_pending, t.calculation_version, t.created_at, t.calculated_at, t.excluded_at, s.warnings AS summary_warnings
 FROM gold.trip t LEFT JOIN gold.trip_summary s USING (trip_id)
-WHERE t.status = 'ready' AND t.provisional AND NOT t.recalc_pending
+WHERE t.status = 'ready' AND t.provisional AND NOT t.recalc_pending AND t.excluded_at IS NULL
 ORDER BY t.created_at
 `
 
@@ -1370,7 +1383,7 @@ func (q *Queries) ListUnconvertedBoots(ctx context.Context, dongleID int32, t0Ms
 
 const listWaitingTrips = `-- name: ListWaitingTrips :many
 
-SELECT trip_id, trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, boot_generation, boot_id, interval_start, interval_end, status, target_seq, first_seq, last_seq, calculated_through_seq, provisional, recalc_pending, calculation_version, created_at, calculated_at, excluded_at FROM gold.trip WHERE status IN ('pending', 'waiting_data') ORDER BY created_at
+SELECT trip_id, trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, boot_generation, boot_id, interval_start, interval_end, status, target_seq, first_seq, last_seq, calculated_through_seq, provisional, recalc_pending, calculation_version, created_at, calculated_at, excluded_at FROM gold.trip WHERE status IN ('pending', 'waiting_data') AND excluded_at IS NULL ORDER BY created_at
 `
 
 // trip.sql: fila e gravação da análise da viagem (schema gold) e leitura da silver para o cálculo (API1).
@@ -1536,7 +1549,7 @@ func (q *Queries) MarkTripWaiting(ctx context.Context, tripID uuid.UUID) error {
 
 const markTripsRecalc = `-- name: MarkTripsRecalc :exec
 UPDATE gold.trip SET recalc_pending = true
-WHERE dongle_id = $1 AND status = 'ready' AND first_seq <= $2 AND last_seq >= $3
+WHERE dongle_id = $1 AND status = 'ready' AND excluded_at IS NULL AND first_seq <= $2 AND last_seq >= $3
 `
 
 // reprocess: as viagens prontas cuja faixa de seq cruza a reprocessada.
@@ -1650,7 +1663,7 @@ func (q *Queries) SaveTripResult(ctx context.Context, arg SaveTripResultParams) 
 
 const takeRecalcTrip = `-- name: TakeRecalcTrip :one
 SELECT trip_id, trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, boot_generation, boot_id, interval_start, interval_end, status, target_seq, first_seq, last_seq, calculated_through_seq, provisional, recalc_pending, calculation_version, created_at, calculated_at, excluded_at FROM gold.trip
-WHERE status = 'ready' AND recalc_pending
+WHERE status = 'ready' AND recalc_pending AND excluded_at IS NULL
 ORDER BY created_at
 LIMIT 1
 FOR UPDATE SKIP LOCKED
@@ -1688,7 +1701,7 @@ func (q *Queries) TakeRecalcTrip(ctx context.Context) (GoldTrip, error) {
 
 const takeTrip = `-- name: TakeTrip :one
 SELECT trip_id, trip_category, driver_name, driver_name_normalized, fuel, dongle_id, entry_type, boot_generation, boot_id, interval_start, interval_end, status, target_seq, first_seq, last_seq, calculated_through_seq, provisional, recalc_pending, calculation_version, created_at, calculated_at, excluded_at FROM gold.trip
-WHERE trip_id = $1 AND status IN ('pending', 'waiting_data')
+WHERE trip_id = $1 AND status IN ('pending', 'waiting_data') AND excluded_at IS NULL
 FOR UPDATE SKIP LOCKED
 `
 

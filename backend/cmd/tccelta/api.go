@@ -121,6 +121,7 @@ func cmdAPI(ctx context.Context) error {
 		GetTrip:            tripUC.NewGetTrip(tripRepos),
 		ListTrips:          tripUC.NewListTrips(tripRepos),
 		GetAnalysis:        tripUC.NewGetAnalysis(tripRepos),
+		DeleteTrip:         tripUC.NewDeleteTrip(tx),
 		Authenticate:       session.NewAuthenticate(val, repos.Dongles, cfg.AllowNoneProfile),
 		IssueToken:         clientUC.NewIssueToken(kms, cliIssuer, blocker, met.AuthPort(), log),
 		AuthenticateClient: clientUC.NewAuthenticate(cliVal),

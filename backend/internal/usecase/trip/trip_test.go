@@ -454,3 +454,77 @@ func (r raceTrips) Insert(ctx context.Context, d domain.Draft) (domain.Trip, err
 	}
 	return r.Trips.Insert(ctx, d)
 }
+
+// countingTx conta as transações abertas e repassa ao banco em memória.
+type countingTx struct {
+	db  *memory.Database
+	txs int
+}
+
+func (c *countingTx) InTransaction(ctx context.Context, fn func(ctx context.Context, r port.Repositories) error) error {
+	c.txs++
+	return c.db.InTransaction(ctx, fn)
+}
+
+func TestDeleteTrip(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tr, err := e.create.Run(ctx, bootIn("João"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := &countingTx{db: e.db}
+	del := NewDeleteTrip(tx)
+	if err := del.Run(ctx, tr.ID); err != nil || tx.txs != 1 {
+		t.Fatalf("%v, transações: %d", err, tx.txs)
+	}
+	if _, err := e.get.Run(ctx, tr.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("a viagem excluída some: %v", err)
+	}
+	if _, err := e.an.Run(ctx, tr.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("a análise some: %v", err)
+	}
+	// a exclusão libera o nome e a entrada
+	if _, err := e.create.Run(ctx, bootIn("João")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeleteTripNotFound(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	del := NewDeleteTrip(e.db)
+	if err := del.Run(ctx, uuid.New()); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("%v", err)
+	}
+	tr, _ := e.create.Run(ctx, bootIn("João"))
+	if err := del.Run(ctx, tr.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := del.Run(ctx, tr.ID); !errors.Is(err, domain.ErrNotFound) { // repetir a exclusão
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestDeleteTripHidesFromWorkerAndList(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tr, _ := e.create.Run(ctx, bootIn("João"))
+	if err := NewDeleteTrip(e.db).Run(ctx, tr.ID); err != nil {
+		t.Fatal(err)
+	}
+	r := e.db.Repositories().Trips
+	if w, _ := r.ListWaiting(ctx); len(w) != 0 {
+		t.Fatal("ListWaiting traz a excluída")
+	}
+	if _, found, _ := r.Take(ctx, tr.ID); found {
+		t.Fatal("Take pega a excluída")
+	}
+	if q, _ := r.CountQueue(ctx); q.Waiting != 0 {
+		t.Fatal("CountQueue conta a excluída")
+	}
+	page, err := r.List(ctx, domain.ListQuery{Limit: 10})
+	if err != nil || page.Total != 0 || len(page.Items) != 0 {
+		t.Fatalf("%v %+v", err, page)
+	}
+}

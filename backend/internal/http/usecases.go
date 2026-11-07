@@ -53,6 +53,11 @@ type GetTrip interface {
 	Run(ctx context.Context, id uuid.UUID) (trip.Trip, error)
 }
 
+// DeleteTrip é o caso de uso de DELETE /v1/viagens/{id}.
+type DeleteTrip interface {
+	Run(ctx context.Context, id uuid.UUID) error
+}
+
 // GetAnalysis é o caso de uso de GET /v1/viagens/{id}/analise.
 type GetAnalysis interface {
 	Run(ctx context.Context, id uuid.UUID) (trip.Analysis, error)

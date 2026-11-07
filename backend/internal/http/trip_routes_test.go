@@ -64,6 +64,16 @@ type fakeGetAnalysis struct {
 
 func (f *fakeGetAnalysis) Run(context.Context, uuid.UUID) (trip.Analysis, error) { return f.out, f.err }
 
+type fakeDeleteTrip struct {
+	id  uuid.UUID
+	err error
+}
+
+func (f *fakeDeleteTrip) Run(_ context.Context, id uuid.UUID) error {
+	f.id = id
+	return f.err
+}
+
 // recorder guarda as rotas e os estados das métricas HTTP.
 type recorder struct {
 	porttest.Nop
@@ -80,6 +90,7 @@ type tripEnv struct {
 	get      *fakeGetTrip
 	analysis *fakeGetAnalysis
 	list     *fakeListTrips
+	del      *fakeDeleteTrip
 	met      *recorder
 }
 
@@ -89,9 +100,9 @@ func newTripEnv(t *testing.T, env map[string]string) *tripEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &tripEnv{create: &fakeCreateTrip{}, get: &fakeGetTrip{}, analysis: &fakeGetAnalysis{}, list: &fakeListTrips{}, met: &recorder{}}
+	e := &tripEnv{create: &fakeCreateTrip{}, get: &fakeGetTrip{}, analysis: &fakeGetAnalysis{}, list: &fakeListTrips{}, del: &fakeDeleteTrip{}, met: &recorder{}}
 	e.d = &Deps{Cfg: cfg, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Met: e.met, CreateTrip: e.create, GetTrip: e.get, ListTrips: e.list,
-		GetAnalysis: e.analysis, AuthenticateClient: acceptAnyClient{}, Limiter: ratelimit.NewLocal(), Semaphore: ratelimit.NewConcurrency(1, 0)}
+		GetAnalysis: e.analysis, DeleteTrip: e.del, AuthenticateClient: acceptAnyClient{}, Limiter: ratelimit.NewLocal(), Semaphore: ratelimit.NewConcurrency(1, 0)}
 	return e
 }
 
@@ -651,6 +662,45 @@ func TestListTripsErrors(t *testing.T) {
 	}
 	e.list.err = errors.New("boom")
 	if w := req(e.router(), "GET", "/v1/viagens", nil, nil); w.Code != 500 || code(w) != "erro_interno" {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}
+
+func TestDeleteTrip(t *testing.T) {
+	e := newTripEnv(t, nil)
+	w := req(e.router(), "DELETE", "/v1/viagens/"+tripID.String(), []byte(`{"ignorado":true}`), jsonHdr())
+	if w.Code != 204 || w.Body.Len() != 0 || w.Header().Get("Content-Type") != "" || e.del.id != tripID {
+		t.Fatal(w.Code, w.Header(), w.Body.String(), e.del.id)
+	}
+	if strings.Join(e.met.routes, ",") != "trip_delete" {
+		t.Fatalf("%v", e.met.routes)
+	}
+}
+
+func TestDeleteTripErrors(t *testing.T) {
+	e := newTripEnv(t, nil)
+	h := e.router()
+	for _, id := range []string{"abc", "6f1c1f7e3f0a4a539d510c1d7a1b2c3d", "urn:uuid:" + tripID.String()} {
+		if w := req(h, "DELETE", "/v1/viagens/"+id, nil, nil); w.Code != 404 || code(w) != "viagem_desconhecida" {
+			t.Errorf("%s: %d %s", id, w.Code, w.Body.String())
+		}
+	}
+	if e.del.id != uuid.Nil {
+		t.Fatal("o id inválido não chega ao caso de uso")
+	}
+	// inexistente e já excluída: o caso de uso devolve ErrNotFound nos dois
+	e.del.err = trip.ErrNotFound
+	for range 2 {
+		if w := req(h, "DELETE", "/v1/viagens/"+tripID.String(), nil, nil); w.Code != 404 || code(w) != "viagem_desconhecida" {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	e.del.err = port.ErrDatabaseBusy
+	if w := req(h, "DELETE", "/v1/viagens/"+tripID.String(), nil, nil); w.Code != 503 || code(w) != "banco_ocupado" || w.Header().Get("Retry-After") == "" {
+		t.Fatal(w.Code, w.Header(), w.Body.String())
+	}
+	e.del.err = errors.New("boom")
+	if w := req(h, "DELETE", "/v1/viagens/"+tripID.String(), nil, nil); w.Code != 500 || code(w) != "erro_interno" {
 		t.Fatal(w.Code, w.Body.String())
 	}
 }
