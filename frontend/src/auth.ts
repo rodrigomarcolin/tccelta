@@ -8,7 +8,7 @@ import { BASE_PATH } from "@/config";
  * login (runtime), never at build time.
  */
 export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
-  providers: [Google({ authorization: { params: { hd: "usp.br" } } })],
+  providers: [Google({})],
   session: { strategy: "jwt" },
   trustHost: true,
   pages: { signIn: `${BASE_PATH}/entrar`, error: `${BASE_PATH}/entrar` },
