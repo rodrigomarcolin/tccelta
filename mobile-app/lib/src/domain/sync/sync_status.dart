@@ -42,6 +42,7 @@ class SyncStatus {
   const SyncStatus({
     this.phase = SyncPhase.offline,
     this.devId,
+    this.bootId,
     this.headSeq,
     this.appAck,
     this.lastRead,
@@ -63,6 +64,9 @@ class SyncStatus {
 
   /// Identidade do dongle, quando já avisada.
   final DevId? devId;
+
+  /// `boot_id` do dongle no último handshake.
+  final int? bootId;
 
   /// Último `seq` gravado no dongle.
   final int? headSeq;
@@ -113,6 +117,7 @@ class SyncStatus {
   SyncStatus copyWith({
     SyncPhase? phase,
     Object? devId = _keep,
+    Object? bootId = _keep,
     Object? headSeq = _keep,
     Object? appAck = _keep,
     Object? lastRead = _keep,
@@ -130,6 +135,7 @@ class SyncStatus {
   }) => SyncStatus(
     phase: phase ?? this.phase,
     devId: identical(devId, _keep) ? this.devId : devId as DevId?,
+    bootId: identical(bootId, _keep) ? this.bootId : bootId as int?,
     headSeq: identical(headSeq, _keep) ? this.headSeq : headSeq as int?,
     appAck: identical(appAck, _keep) ? this.appAck : appAck as int?,
     lastRead: identical(lastRead, _keep) ? this.lastRead : lastRead as int?,

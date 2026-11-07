@@ -221,6 +221,7 @@ class _StatusSummary extends ConsumerWidget {
     final lines = <String>[
       'Fase: ${syncPhaseLabel(st.phase)}',
       'DevId: ${st.devId ?? "-"}',
+      'Boot ID: ${st.bootId ?? "-"}',
       'HEAD ${st.headSeq ?? "-"} · ACK ${st.appAck ?? "-"}',
       'Último lido: ${st.lastRead ?? "-"}',
       'Buffer ${st.buffered}/${st.bufferCapacity} · em POST ${st.inFlight}',

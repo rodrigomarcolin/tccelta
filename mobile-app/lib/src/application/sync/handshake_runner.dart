@@ -174,7 +174,7 @@ class HandshakeRunner {
       log(6, ' cS=${info.cS}');
 
       // Passo 7.
-      return outcome;
+      return outcome.withBootId(response.info.bootId);
     } finally {
       unawaited(sub.cancel());
     }
