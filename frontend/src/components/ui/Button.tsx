@@ -1,6 +1,6 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
-type Variant = "primary" | "secondary" | "tonal" | "link";
+type Variant = "primary" | "secondary" | "tonal" | "link" | "danger";
 type Size = "default" | "small";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -8,6 +8,7 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: Size;
   icon?: ReactNode;
   fullWidth?: boolean;
+  ref?: Ref<HTMLButtonElement>;
 };
 
 const BASE =
@@ -20,6 +21,7 @@ const VARIANT: Record<Variant, string> = {
   secondary: "border-strong bg-transparent text-primary",
   tonal: "border-accent bg-accent-wash text-accent",
   link: "border-transparent bg-transparent text-accent",
+  danger: "border-transparent bg-danger text-accent-on",
 };
 
 // The link variant is shorter and narrower; `small` wins over both, as it did before.

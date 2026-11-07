@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BASE_PATH } from "@/config";
 import type { TripStatusResponse, TripStatus } from "@/domain/trip/types";
@@ -741,5 +741,133 @@ describe("navigation and restarts", () => {
     await advance(1000);
     await advance(2000);
     expect(screen.getByText(NETWORK_NOTICE)).toBeInTheDocument();
+  });
+});
+
+describe("delete", () => {
+  /** Installs the script, then makes DELETE flip the trip to 404, like the API. */
+  function installDeletable(script: Script) {
+    install(script);
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    const methods: string[] = [];
+    const failWith: { status: number; body?: unknown }[] = [];
+    let deleted = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "DELETE") {
+          methods.push(`DELETE ${url}`);
+          const failure = failWith.shift();
+          if (failure) {
+            return {
+              status: failure.status,
+              json: async () => failure.body,
+              headers: new Headers(),
+            };
+          }
+          deleted = true;
+          return {
+            status: 204,
+            json: async () => Promise.reject(new SyntaxError("no body")),
+            headers: new Headers(),
+          };
+        }
+        if (deleted) {
+          return {
+            status: 404,
+            json: async () => ({ codigo: "viagem_desconhecida", title: "t", status: 404 }),
+            headers: new Headers(),
+          };
+        }
+        return base(url, init);
+      }),
+    );
+    return { methods, failWith };
+  }
+
+  const open = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Excluir viagem" }));
+    await advance(0);
+    return screen.getByRole("dialog", { name: "Excluir a viagem de Maria?" });
+  };
+
+  it("a ready analysis: confirms, deletes and goes to the list without showing the not-found state", async () => {
+    const { methods } = installDeletable({
+      status: () => ({ status: 200, body: status("pronta", false, "2026-10-28T17:05:00.000Z") }),
+      analysis: () => ({ status: 200, body: analysisFor("normal") }),
+    });
+    await mount();
+    const dialog = await open();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Excluir" }));
+    await advance(0);
+    expect(methods).toEqual([`DELETE ${BASE_PATH}/api/trips/${ID}`]);
+    expect(router.replace).toHaveBeenCalledExactlyOnceWith("/viagens");
+    // The page may stay on screen a moment while the navigation happens: no polling, no 404.
+    await advance(10_000);
+    expect(screen.queryByText("Viagem não encontrada")).toBeNull();
+  });
+
+  it("while waiting: deleting goes to the list and the polling stops", async () => {
+    const { methods } = installDeletable({
+      status: () => ({ status: 200, body: status("pendente") }),
+      analysis: () => ({ status: 409 }),
+    });
+    await mount();
+    const dialog = await open();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Excluir" }));
+    await advance(0);
+    expect(methods).toHaveLength(1);
+    expect(router.replace).toHaveBeenCalledExactlyOnceWith("/viagens");
+    await advance(10_000);
+    expect(screen.queryByText("Viagem não encontrada")).toBeNull();
+  });
+
+  it("the failed state has the button too", async () => {
+    install({
+      status: () => ({ status: 200, body: status("falhou") }),
+      analysis: () => ({ status: 409 }),
+    });
+    await mount();
+    expect(screen.getByRole("button", { name: "Excluir viagem" })).toBeInTheDocument();
+  });
+
+  it("the wait limit has the button too", async () => {
+    install({
+      status: () => ({ status: 200, body: status("pendente") }),
+      analysis: () => ({ status: 409 }),
+    });
+    await mount();
+    await advance(61_000);
+    expect(screen.getByRole("button", { name: "Continuar esperando" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Excluir viagem" })).toBeInTheDocument();
+  });
+
+  it("not found has no delete button", async () => {
+    install({
+      status: () => ({ status: 404, body: { codigo: "viagem_desconhecida" } }),
+      analysis: () => ({ status: 404 }),
+    });
+    await mount();
+    expect(screen.getByText("Viagem não encontrada")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Excluir viagem" })).toBeNull();
+  });
+
+  it("an error keeps the dialog open and the polling going", async () => {
+    const { failWith } = installDeletable({
+      status: () => ({ status: 200, body: status("pendente") }),
+      analysis: () => ({ status: 409 }),
+    });
+    failWith.push({ status: 503, body: { codigo: "banco_ocupado", title: "t", status: 503 } });
+    await mount();
+    const dialog = await open();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Excluir" }));
+    await advance(0);
+    expect(
+      within(dialog).getByText("Não foi possível excluir. Tente de novo."),
+    ).toBeInTheDocument();
+    expect(router.replace).not.toHaveBeenCalled();
+    const before = count("status");
+    await advance(2000);
+    expect(count("status")).toBeGreaterThan(before);
   });
 });

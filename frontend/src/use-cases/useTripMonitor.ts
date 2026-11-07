@@ -93,7 +93,15 @@ const fresh = (id: string): Session => ({
 });
 
 /** Waiting, polling and display of the analysis of a trip, for `TripPage`. */
-export function useTripMonitor(id: string, goTo: (url: string) => void): TripMonitor {
+/**
+ * `paused` stops the polling (a deletion is under way, and the `404` it causes must not reach the
+ * screen as "trip not found").
+ */
+export function useTripMonitor(
+  id: string,
+  goTo: (url: string) => void,
+  paused = false,
+): TripMonitor {
   const queryClient = useQueryClient();
   const hasAnalysis = useRef(false);
   const [session, setSession] = useState<Session>(() => fresh(id));
@@ -149,7 +157,7 @@ export function useTripMonitor(id: string, goTo: (url: string) => void): TripMon
   const analysisFailed = analysisQuery.isError && analysis === undefined;
 
   let nextDelay: number | false;
-  if (statusFailed || analysisFailed || waitLimit) nextDelay = false;
+  if (paused || statusFailed || analysisFailed || waitLimit) nextDelay = false;
   else if (!status || waiting) nextDelay = POLL_WAITING_MS;
   else if (status.status === "falhou") nextDelay = false;
   else if (analysis === undefined) nextDelay = POLL_WAITING_MS;

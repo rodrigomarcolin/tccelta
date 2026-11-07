@@ -432,3 +432,88 @@ describe("list (GET /v1/viagens)", () => {
     expect(r).toMatchObject({ status: 400, body: { codigo: "entrada_invalida" } });
   });
 });
+
+describe("remove (DELETE /v1/viagens/{id})", () => {
+  it("204 without a body is a success: no JSON.parse, status 204 and a null body", async () => {
+    next = { status: 204, contentType: "", body: "" };
+    const r = await client().remove(ID.toUpperCase());
+    expect(r).toEqual({ status: 204, body: null });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      method: "DELETE",
+      url: `/v1/viagens/${ID}`,
+      auth: `Bearer ${TOKEN}`,
+      body: "",
+    });
+    // No request body, so no content type either.
+    expect(calls[0].contentType).toBeUndefined();
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("404 viagem_desconhecida is forwarded", async () => {
+    next = {
+      status: 404,
+      contentType: "application/problem+json",
+      body: problemBody(404, "viagem_desconhecida"),
+    };
+    const r = await client().remove(ID);
+    expect(r.status).toBe(404);
+    expect(isProblem(r.body) && r.body.codigo).toBe("viagem_desconhecida");
+  });
+
+  it("503 forwards Retry-After", async () => {
+    next = {
+      status: 503,
+      contentType: "application/problem+json",
+      body: problemBody(503, "banco_ocupado"),
+      headers: { "Retry-After": "2" },
+    };
+    const r = await client().remove(ID);
+    expect(r.status).toBe(503);
+    expect(r.retryAfter).toBe(2);
+    expect(isProblem(r.body) && r.body.codigo).toBe("banco_ocupado");
+  });
+
+  it("an id outside the canonical format never reaches the API", async () => {
+    for (const id of ["abc", "../x", `${ID}/analise`, ""]) {
+      const r = await client().remove(id);
+      expect(r.status).toBe(404);
+      expect(isProblem(r.body) && r.body.codigo).toBe("viagem_desconhecida");
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("401: renews the token and repeats the DELETE once", async () => {
+    let n = 0;
+    tokens = {
+      getToken: vi.fn(async () => ({ ok: true as const, token: `t${++n}` })),
+      invalidate: vi.fn(),
+    };
+    const fetchFn = vi.fn(async (_u: unknown, init?: RequestInit) =>
+      fetchFn.mock.calls.length === 1
+        ? new Response(problemBody(401, "token_expirado"), {
+            status: 401,
+            headers: { "Content-Type": "application/problem+json" },
+          })
+        : new Response(null, {
+            status: 204,
+            headers: { "x-auth": (init?.headers as Record<string, string>).Authorization },
+          }),
+    );
+    const c = createApiDatasource({ baseUrl: base, timeoutMs: 1000, tokens, fetchFn, log });
+    expect(await c.remove(ID)).toEqual({ status: 204, body: null });
+    expect(tokens.invalidate).toHaveBeenCalledExactlyOnceWith("t1");
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect((fetchFn.mock.calls[1][1]?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer t2",
+    );
+  });
+
+  it("a network failure becomes 503 api_indisponivel", async () => {
+    const fetchFn = vi.fn(async () => Promise.reject(new TypeError("fetch failed")));
+    const c = createApiDatasource({ baseUrl: base, timeoutMs: 1000, tokens, fetchFn, log });
+    const r = await c.remove(ID);
+    expect(r.status).toBe(503);
+    expect(isProblem(r.body) && r.body.codigo).toBe("api_indisponivel");
+  });
+});

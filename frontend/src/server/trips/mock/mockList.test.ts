@@ -256,3 +256,30 @@ describe("list", { timeout: 30_000 }, () => {
     expect((r.body as unknown as Problem).codigo).toBe("entrada_invalida");
   });
 });
+
+describe("list after remove", () => {
+  it("the removed trip leaves the list and the total drops, with or without a search", async () => {
+    const id = ((await create(body("Zelia Unica"))).body as { viagem_id: string }).viagem_id;
+    const before = (await datasource.list({})).body as TripListResponse;
+    const found = (await datasource.list({ busca: "zelia" })).body as TripListResponse;
+    expect(found.total).toBe(1);
+
+    expect((await datasource.remove(id)).status).toBe(204);
+    const after = (await datasource.list({})).body as TripListResponse;
+    expect(after.total).toBe(before.total - 1);
+    expect(after.viagens.map((v) => v.viagem_id)).not.toContain(id);
+    const none = (await datasource.list({ busca: "zelia" })).body as TripListResponse;
+    expect(none).toMatchObject({ total: 0, viagens: [], proximo_cursor: null });
+  });
+
+  it("the name and the entry are free again", async () => {
+    const id = ((await create(body("Zelia"))).body as { viagem_id: string }).viagem_id;
+    await datasource.remove(id);
+    const again = await create(body("zelia"));
+    expect(again.status).toBe(202);
+    const found = (await datasource.list({ busca: "zelia" })).body as TripListResponse;
+    expect(found.viagens.map((v) => v.viagem_id)).toEqual([
+      (again.body as { viagem_id: string }).viagem_id,
+    ]);
+  });
+});

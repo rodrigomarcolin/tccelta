@@ -467,3 +467,174 @@ describe("requests go through the BFF", () => {
     expect(String(f.mock.calls[0][0]).startsWith(`${BASE_PATH}/api/trips?`)).toBe(true);
   });
 });
+
+describe("delete", () => {
+  let remaining: TripListItem[] = [];
+  let deleteReply: { status: number; body?: unknown } = { status: 204 };
+  const deletes: string[] = [];
+
+  /** A tiny API: GET lists what remains, DELETE removes the trip (unless the reply is an error). */
+  function api(initial: TripListItem[]) {
+    remaining = [...initial];
+    deleteReply = { status: 204 };
+    deletes.length = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "DELETE") {
+          const id = decodeURIComponent(url.split("/").pop()!);
+          deletes.push(id);
+          if (deleteReply.status === 204 || deleteReply.status === 404) {
+            remaining = remaining.filter((t) => t.viagem_id !== id);
+          }
+          return {
+            status: deleteReply.status,
+            json: async () => {
+              if (deleteReply.body === undefined) throw new SyntaxError("no body");
+              return deleteReply.body;
+            },
+            headers: new Headers(),
+          };
+        }
+        return {
+          status: 200,
+          json: async () => listPage(remaining, remaining.length),
+          headers: new Headers(),
+        };
+      }),
+    );
+  }
+
+  const trash = (n: number) =>
+    screen.getByRole("button", { name: `Excluir a viagem de Motorista ${n}` });
+  const confirmDialog = () => screen.getByRole("dialog", { name: /^Excluir a viagem de/ });
+
+  it("the trash button opens the dialog; Cancelar closes it and the card stays", async () => {
+    api(items(1, 3));
+    renderWithTheme(<TripsScreen search="" />);
+    await screen.findByRole("feed");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await userEvent.click(trash(2));
+    const dialog = confirmDialog();
+    expect(dialog).toHaveAccessibleName("Excluir a viagem de Motorista 2?");
+    expect(within(dialog).getByRole("button", { name: "Cancelar" })).toHaveFocus();
+    expect(dialog).toHaveTextContent("Ela some da lista e da análise");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(deletes).toEqual([]);
+    expect(cards()).toHaveLength(3);
+  });
+
+  it("confirming removes the card at once, updates the total, moves the focus and announces", async () => {
+    api(items(1, 3));
+    renderWithTheme(<TripsScreen search="" />);
+    await screen.findByRole("feed");
+    expect(cards()[1]).toHaveAttribute("aria-setsize", "3");
+    expect(screen.getByText(/3 viagens · Mapas ©/)).toBeInTheDocument();
+
+    await userEvent.click(trash(2));
+    await userEvent.click(within(confirmDialog()).getByRole("button", { name: "Excluir" }));
+
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    expect(deletes).toEqual(["7d1f3a10-2000-4c5e-9b1a-000000000002"]);
+    expect(screen.queryByText("Motorista 2")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // The total follows (the next card, 3, is now the second of two).
+    expect(cards()[1]).toHaveAttribute("aria-setsize", "2");
+    expect(cards()[1]).toHaveAttribute("aria-posinset", "2");
+    expect(screen.getByText(/2 viagens · Mapas ©/)).toBeInTheDocument();
+    expect(screen.getByText("Todas as 2 viagens foram carregadas.")).toBeInTheDocument();
+    // The focus goes to the card that took its place.
+    expect(within(cards()[1]).getByRole("link")).toHaveFocus();
+    expect(screen.getByText("Viagem excluída")).toHaveAttribute("role", "status");
+    // The refresh that follows keeps it out.
+    await waitFor(() => expect(cards()).toHaveLength(2));
+  });
+
+  it("deleting the last card moves the focus to the previous one", async () => {
+    api(items(1, 3));
+    renderWithTheme(<TripsScreen search="" />);
+    await screen.findByRole("feed");
+    await userEvent.click(trash(3));
+    await userEvent.click(within(confirmDialog()).getByRole("button", { name: "Excluir" }));
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    expect(within(cards()[1]).getByRole("link")).toHaveFocus();
+    expect(within(cards()[1]).getByText("Motorista 2")).toBeInTheDocument();
+  });
+
+  it("deleting the only trip shows the empty state", async () => {
+    api(items(1, 1));
+    renderWithTheme(<TripsScreen search="" />);
+    await screen.findByRole("feed");
+    await userEvent.click(trash(1));
+    await userEvent.click(within(confirmDialog()).getByRole("button", { name: "Excluir" }));
+    expect(await screen.findByText("Nenhuma viagem ainda")).toBeInTheDocument();
+    expect(screen.getByText("Viagem excluída")).toBeInTheDocument();
+  });
+
+  it("a 404 means it is already gone: the card leaves as a success", async () => {
+    api(items(1, 2));
+    deleteReply = { status: 404, body: { codigo: "viagem_desconhecida", title: "t", status: 404 } };
+    renderWithTheme(<TripsScreen search="" />);
+    await screen.findByRole("feed");
+    await userEvent.click(trash(1));
+    await userEvent.click(within(confirmDialog()).getByRole("button", { name: "Excluir" }));
+    await waitFor(() => expect(screen.queryByText("Motorista 1")).toBeNull());
+    expect(screen.getByText("Viagem excluída")).toBeInTheDocument();
+  });
+
+  it("a failure keeps the card and the dialog, with the error", async () => {
+    api(items(1, 2));
+    deleteReply = { status: 503, body: { codigo: "banco_ocupado", title: "t", status: 503 } };
+    renderWithTheme(<TripsScreen search="" />);
+    await screen.findByRole("feed");
+    await userEvent.click(trash(1));
+    await userEvent.click(within(confirmDialog()).getByRole("button", { name: "Excluir" }));
+    expect(await screen.findByText("Não foi possível excluir. Tente de novo.")).toBeInTheDocument();
+    expect(confirmDialog()).toHaveAttribute("open");
+    expect(cards()).toHaveLength(2);
+    expect(screen.queryByText("Viagem excluída")).toBeNull();
+    expect(router.replace).not.toHaveBeenCalled();
+    // The operator can try again.
+    deleteReply = { status: 204 };
+    await userEvent.click(within(confirmDialog()).getByRole("button", { name: "Excluir" }));
+    await waitFor(() => expect(cards()).toHaveLength(1));
+  });
+
+  it("a 401 sends the operator to the login, back to the list", async () => {
+    api(items(1, 2));
+    deleteReply = { status: 401, body: { codigo: "nao_autenticado", title: "t", status: 401 } };
+    renderWithTheme(<TripsScreen search="" />);
+    await screen.findByRole("feed");
+    await userEvent.click(trash(1));
+    await userEvent.click(within(confirmDialog()).getByRole("button", { name: "Excluir" }));
+    await waitFor(() =>
+      expect(router.replace).toHaveBeenCalledWith(
+        `/entrar?retorno=${encodeURIComponent("/viagens")}`,
+      ),
+    );
+  });
+
+  it("while the request runs the buttons are disabled and say Excluindo…", async () => {
+    api(items(1, 2));
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((ok) => (release = ok));
+    const inner = vi.mocked(fetch).getMockImplementation()!;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "DELETE") await gate;
+        return inner(url, init);
+      }),
+    );
+    renderWithTheme(<TripsScreen search="" />);
+    await screen.findByRole("feed");
+    await userEvent.click(trash(1));
+    await userEvent.click(within(confirmDialog()).getByRole("button", { name: "Excluir" }));
+    const dialog = confirmDialog();
+    expect(within(dialog).getByRole("button", { name: "Excluindo…" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Cancelar" })).toBeDisabled();
+    await act(async () => release());
+    await waitFor(() => expect(cards()).toHaveLength(1));
+  });
+});

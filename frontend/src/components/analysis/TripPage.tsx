@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTripMonitor } from "@/use-cases/useTripMonitor";
 import { HeaderControls } from "@/components/ui/AppNav";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { DeleteTripAction } from "@/components/trips/DeleteTripAction";
 import { AnalysisView } from "./AnalysisView";
 import {
   LoadingState,
@@ -18,7 +19,16 @@ import {
 
 type Props = { id: string };
 
-function SimplePage({ children, text }: { children: ReactNode; text?: string | null }) {
+function SimplePage({
+  children,
+  text,
+  actions,
+}: {
+  children: ReactNode;
+  text?: string | null;
+  /** Page actions (delete), above the state card. */
+  actions?: ReactNode;
+}) {
   return (
     <div>
       <PageHeader>
@@ -26,6 +36,7 @@ function SimplePage({ children, text }: { children: ReactNode; text?: string | n
         <HeaderControls />
       </PageHeader>
       {text ? <ConnectionBanner text={text} /> : null}
+      {actions ? <div className="mb-5 flex print:hidden">{actions}</div> : null}
       {children}
     </div>
   );
@@ -34,8 +45,14 @@ function SimplePage({ children, text }: { children: ReactNode; text?: string | n
 /** Waiting, polling and display of the analysis for `/viagem/[id]`. */
 export function TripPage({ id }: Props) {
   const router = useRouter();
-  const trip = useTripMonitor(id, router.replace);
-  const { analysis, provisional, provisionalExpired, notice, updatedAt } = trip;
+  // A deletion under way stops the polling: its `404` must not show the "trip not found" state.
+  const [deleting, setDeleting] = useState(false);
+  const trip = useTripMonitor(id, router.replace, deleting);
+  const { analysis, provisional, provisionalExpired, notice, updatedAt, driverName } = trip;
+  const actions = useMemo(
+    () => <DeleteTripAction tripId={id} driverName={driverName} onDeleting={setDeleting} />,
+    [id, driverName],
+  );
   // The same element between polls that bring nothing new: the analysis is not rendered again.
   const view = useMemo(
     () =>
@@ -46,9 +63,10 @@ export function TripPage({ id }: Props) {
           provisionalExpired={provisionalExpired}
           notice={notice}
           updatedAt={updatedAt}
+          actions={actions}
         />
       ) : null,
-    [analysis, provisional, provisionalExpired, notice, updatedAt],
+    [analysis, provisional, provisionalExpired, notice, updatedAt, actions],
   );
 
   switch (trip.phase) {
@@ -60,19 +78,19 @@ export function TripPage({ id }: Props) {
       );
     case "waiting":
       return (
-        <SimplePage text={trip.notice}>
+        <SimplePage text={trip.notice} actions={actions}>
           <WaitingState driverName={trip.driverName} />
         </SimplePage>
       );
     case "limit":
       return (
-        <SimplePage>
+        <SimplePage actions={actions}>
           <WaitLimitState onContinue={trip.keepWaiting} />
         </SimplePage>
       );
     case "failed":
       return (
-        <SimplePage>
+        <SimplePage actions={actions}>
           <FailedState />
         </SimplePage>
       );

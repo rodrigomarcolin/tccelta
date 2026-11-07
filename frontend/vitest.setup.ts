@@ -21,3 +21,21 @@ afterEach(() => {
 notifyManager.setScheduler(queueMicrotask);
 
 afterEach(() => cleanup());
+
+// jsdom has `<dialog>` but not `showModal()`/`close()`. This stand-in opens and closes it the way
+// the browser does for what the tests observe: the `open` attribute, the `close` event and the
+// focus given back to the element that was focused before.
+const previousFocus = new WeakMap<HTMLDialogElement, Element | null>();
+if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    previousFocus.set(this, document.activeElement);
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    if (!this.open) return;
+    this.removeAttribute("open");
+    const back = previousFocus.get(this);
+    if (back instanceof HTMLElement && back.isConnected) back.focus();
+    this.dispatchEvent(new Event("close"));
+  };
+}

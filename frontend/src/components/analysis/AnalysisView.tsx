@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TripAnalysis, TripEvent } from "@/domain/trip/types";
 import {
   analysisAxis,
@@ -35,6 +35,8 @@ type Props = {
   notice?: string | null;
   /** Time (HH:MM) of the latest version that replaced the screen. */
   updatedAt?: string | null;
+  /** Page actions, shown in the header. */
+  actions?: ReactNode;
 };
 
 const SECTION = "mb-9 print:break-inside-avoid";
@@ -56,6 +58,7 @@ export function AnalysisView({
   provisionalExpired = false,
   notice = null,
   updatedAt = null,
+  actions,
 }: Props) {
   const theme = useTheme();
   const [cursor, setCursorState] = useState<Cursor>({ t: null, source: "chart" });
@@ -96,7 +99,7 @@ export function AnalysisView({
 
   return (
     <div>
-      <Header analysis={analysis} headerRef={headerRef} />
+      <Header analysis={analysis} headerRef={headerRef} actions={actions} />
       {notice ? <ConnectionBanner text={notice} /> : null}
       {provisional ? <ProvisionalBanner expired={provisionalExpired} /> : null}
       {updatedAt ? <Note role="status">Resultado atualizado às {updatedAt}</Note> : null}

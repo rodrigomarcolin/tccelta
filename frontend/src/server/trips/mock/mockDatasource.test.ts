@@ -358,3 +358,38 @@ describe("fuel", () => {
     });
   });
 });
+
+describe("remove", () => {
+  it("204; status and analysis then give 404, and a second remove too", async () => {
+    const id = ((await create(body())).body as { viagem_id: string }).viagem_id;
+    expect(await datasource.remove(id)).toEqual({ status: 204, body: null });
+    for (const r of [await datasource.status(id), await datasource.analysis(id)]) {
+      expect(r.status).toBe(404);
+      expect(isProblem(r.body) && r.body.codigo).toBe("viagem_desconhecida");
+    }
+    const again = await datasource.remove(id);
+    expect(again.status).toBe(404);
+    expect(isProblem(again.body) && again.body.codigo).toBe("viagem_desconhecida");
+  });
+
+  it("an unknown or malformed id gives 404", async () => {
+    for (const id of ["zzz", "7d1f3a10-0001-4c5e-9b1a-0000000000ff"]) {
+      expect((await datasource.remove(id)).status).toBe(404);
+    }
+  });
+
+  it("frees the name and the entry for a new trip", async () => {
+    const id = ((await create(body("João"))).body as { viagem_id: string }).viagem_id;
+    expect((await create(body("João"))).status).toBe(409);
+    await datasource.remove(id);
+    // The same name and the same boot, now accepted.
+    const again = await create(body("João"));
+    expect(again.status).toBe(202);
+    expect((again.body as { viagem_id: string }).viagem_id).not.toBe(id);
+  });
+
+  it("an example can be removed too", async () => {
+    expect((await datasource.remove(EXAMPLES[0].id)).status).toBe(204);
+    expect((await datasource.status(EXAMPLES[0].id)).status).toBe(404);
+  });
+});

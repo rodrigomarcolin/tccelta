@@ -10,6 +10,7 @@ import {
 } from "@/format/numbers";
 import { Badge } from "@/components/ui/Badge";
 import { DataValue } from "@/components/ui/DataValue";
+import { IconTrash } from "@/components/icons/Icons";
 import { RoutePreview } from "./RoutePreview";
 
 /** Height of a card; also what the browser assumes for a card it has not rendered yet. */
@@ -59,24 +60,30 @@ function StatusBadge({ trip }: { trip: TripListItem }) {
 
 /**
  * One trip of the list: minimap on the left, text on the right, the whole card a link to the
- * analysis. Horizontal on every screen width, so more trips fit on a phone too.
+ * analysis. Horizontal on every screen width, so more trips fit on a phone too. The delete button
+ * is the link's sibling (a button inside a link is invalid HTML), over its top-right corner and always
+ * visible, so it works on a phone without hover.
  */
 export function TripCard({
   trip,
   position,
   size,
+  onDelete,
 }: {
   trip: TripListItem;
   position: number;
   size: number;
+  /** The delete button was pressed; the confirmation is the parent's. */
+  onDelete: (trip: TripListItem) => void;
 }) {
   const metrics = metricsText(trip);
   return (
     <article
       aria-posinset={position}
       aria-setsize={size}
+      data-trip-id={trip.viagem_id}
       // Cards off screen skip rendering; the remembered size keeps the scrollbar from jumping.
-      className="[contain-intrinsic-size:auto_132px] [content-visibility:auto]"
+      className="relative [contain-intrinsic-size:auto_132px] [content-visibility:auto]"
     >
       <Link
         href={`/viagem/${trip.viagem_id}`}
@@ -86,7 +93,7 @@ export function TripCard({
         <div className="w-[220px] shrink-0 border-r border-hairline phone:w-[110px]">
           <RoutePreview route={trip.rota_resumo} status={trip.status} />
         </div>
-        <div className="grid min-w-0 flex-1 content-center gap-0.5 px-4 py-[10px]">
+        <div className="grid min-w-0 flex-1 content-center gap-0.5 py-[10px] pr-14 pl-4">
           <div className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate type-title">{trip.motorista.nome}</span>
             <span className="shrink-0">
@@ -101,6 +108,14 @@ export function TripCard({
           </span>
         </div>
       </Link>
+      <button
+        type="button"
+        onClick={() => onDelete(trip)}
+        aria-label={`Excluir a viagem de ${trip.motorista.nome}`}
+        className="absolute top-2 right-2 grid size-9 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-secondary transition-[background,color] duration-(--dur-color) ease-value hover:bg-danger-wash hover:text-danger phone:size-11"
+      >
+        <IconTrash />
+      </button>
     </article>
   );
 }
