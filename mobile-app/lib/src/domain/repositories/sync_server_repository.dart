@@ -23,6 +23,7 @@ class HandshakeOutcome {
     required this.ack,
     required this.token,
     this.suggestedLatency,
+    this.bootId,
   });
 
   /// ACK 0x04 a escrever no dongle.
@@ -33,6 +34,17 @@ class HandshakeOutcome {
 
   /// `T_lat` sugerido pelo servidor.
   final Duration? suggestedLatency;
+
+  /// `boot_id` do dongle na Resposta 0x02; preenchido pelo `HandshakeRunner`.
+  final int? bootId;
+
+  /// Cópia com o [bootId] informado.
+  HandshakeOutcome withBootId(int bootId) => HandshakeOutcome(
+    ack: ack,
+    token: token,
+    suggestedLatency: suggestedLatency,
+    bootId: bootId,
+  );
 }
 
 /// Resultado do envio de um lote.

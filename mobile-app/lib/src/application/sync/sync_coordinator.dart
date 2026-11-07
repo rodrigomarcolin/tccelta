@@ -76,6 +76,7 @@ class SyncCoordinator {
   int _generation = 0;
   DevId? _devId;
   int? _headSeq;
+  int? _bootId;
   NoticeFlags? _flags;
   _Session _session = _Session.none;
   bool _resyncing = false;
@@ -169,6 +170,7 @@ class SyncCoordinator {
   SyncStatus _build({SyncPhase? phase}) => SyncStatus(
     phase: phase ?? _phase,
     devId: _devId,
+    bootId: _bootId,
     headSeq: _headSeq,
     appAck: _appAck,
     lastRead: _lastRead,
@@ -241,6 +243,7 @@ class SyncCoordinator {
       _lastRead = _appAck;
     } else {
       _linkUp = false;
+      _bootId = null;
       _session = _Session.none;
       _awaitingBatch = false;
       _resyncing = false;
@@ -445,6 +448,7 @@ class SyncCoordinator {
         return false;
       }
       _suggested = outcome.suggestedLatency;
+      _bootId = outcome.bootId;
       _openingAck = outcome.ack;
       _rewroteOpeningAck = false;
       _onAck(outcome.ack, fromRunner: true);
