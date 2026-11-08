@@ -139,6 +139,10 @@
       },
       {
         "netclass": "Potencia",
+        "pattern": "+12V_FUS"
+      },
+      {
+        "netclass": "Potencia",
         "pattern": "+12V_PROT"
       },
       {

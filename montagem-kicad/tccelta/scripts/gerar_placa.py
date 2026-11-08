@@ -99,7 +99,7 @@ SN65_ORDEM_PINOS = ("CAN_TX", "CAN_RX", "GND", "3V3")
 #  PROJETO DA PLACA / REGRAS DE CORROSAO CASEIRA
 # =====================================================================
 LARG_SINAL = 1.0              # CAN_TX, CAN_RX, CAN_H, CAN_L, +3V3
-LARG_POTENCIA = 1.5           # +12V_IN, +12V_PROT, +5V
+LARG_POTENCIA = 1.5           # +12V_IN, +12V_FUS, +12V_PROT, +5V
 ISOLAMENTO = 0.6              # clearance minimo
 FOLGA_BORDA = 1.0             # cobre-borda
 ZONA_FOLGA = 0.8
@@ -120,9 +120,13 @@ X_CORREDOR_12V = -45.5        # trilha +12V_PROT sobe pela esquerda ate o IN+ do
 Y_5V = -6.0                   # linha de furos de baixo do LM2596 (IN+/OUT+)
 Y_BORNE = 40.0                # linha dos pads do borne
 X_BORNE_PIN5 = -20.5          # x do pino 5 (CAN_L) do borne; os outros vem a cada 5,08
-C1_POS = (-45.5, 29.3)        # pino + do C1 (em cima do corredor de +12V_PROT)
-Y_D1K = 34.4                  # catodo do D1
+C1_POS = (-41.6, 29.88)       # pino + do C1 (a leste do D1, ligado ao catodo por uma diagonal)
+Y_D1K = 25.98                 # catodo do D1 (anodo 7,62 mm abaixo)
+F1_POS = (-45.5, 42.3)        # pino 1 do F1 (+12V_IN, vem do borne); pino 2 fica 5,08 mm acima
 FURO_M3 = 3.2
+PTC_PASSO = 5.08              # distancia entre os terminais do PTC
+PTC_LARGURA = 7.6             # disco do PTC (ao longo dos terminais)
+PTC_ESPESSURA = 3.4           # disco do PTC (espessura)
 
 # =====================================================================
 #  CAMINHOS
@@ -170,11 +174,13 @@ FP_ESP = "tccelta:ESP32_DevKitV1_30_Soquete"
 FP_LM = "tccelta:LM2596_Modulo_Soquete"
 FP_SN = "tccelta:SN65HVD230_Waveshare_EmPe"
 FP_PINH2 = "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
+FP_F1 = "tccelta:PTC_Radial_P5.08_Vertical"
 
 # ref -> dados
 COMPONENTES = {
     "J1": dict(lib_id="Connector:Screw_Terminal_01x02", valor="Borne_2_vias_5.08", fp=FP_BORNE2),
     "J2": dict(lib_id="Connector:Screw_Terminal_01x03", valor="Borne_3_vias_5.08", fp=FP_BORNE3),
+    "F1": dict(lib_id="Device:Polyfuse", valor="PTC_0.5A_60V", fp=FP_F1),
     "D1": dict(lib_id="Device:D_Schottky", valor="1N5819", fp=FP_D1),
     "C1": dict(lib_id="Device:C_Polarized", valor="100uF/25V", fp=FP_C1),
     "U1": dict(lib_id="tccelta:LM2596_Modulo", valor="LM2596_5V", fp=FP_LM),
@@ -192,7 +198,8 @@ COMPONENTES = {
 LIGACOES = {
     ("J1", "1"): "+12V_IN", ("J1", "2"): "GND",
     ("J2", "1"): "GND", ("J2", "2"): "CAN_H", ("J2", "3"): "CAN_L",
-    ("D1", "2"): "+12V_IN", ("D1", "1"): "+12V_PROT",       # 2 = anodo, 1 = catodo
+    ("F1", "1"): "+12V_IN", ("F1", "2"): "+12V_FUS",
+    ("D1", "2"): "+12V_FUS", ("D1", "1"): "+12V_PROT",      # 2 = anodo, 1 = catodo
     ("C1", "1"): "+12V_PROT", ("C1", "2"): "GND",
     ("U1", "1"): "+12V_PROT", ("U1", "2"): "GND", ("U1", "3"): "+5V", ("U1", "4"): "GND",
     ("U2", "15"): "+5V", ("U2", "14"): "GND", ("U2", "29"): "GND",
@@ -200,9 +207,9 @@ LIGACOES = {
     ("U3", "1"): "+3V3", ("U3", "2"): "GND", ("U3", "3"): "CAN_RX", ("U3", "4"): "CAN_TX",
     ("J3", "1"): "CAN_H", ("J3", "2"): "CAN_L", ("J4", "1"): "CAN_H", ("J4", "2"): "CAN_L",
 }
-REDES = ["+12V_IN", "+12V_PROT", "+5V", "+3V3", "GND", "CAN_TX", "CAN_RX", "CAN_H", "CAN_L"]
+REDES = ["+12V_IN", "+12V_FUS", "+12V_PROT", "+5V", "+3V3", "GND", "CAN_TX", "CAN_RX", "CAN_H", "CAN_L"]
 REDES_SINAL = ["CAN_TX", "CAN_RX", "CAN_H", "CAN_L", "+3V3"]
-REDES_POTENCIA = ["+12V_IN", "+12V_PROT", "+5V"]
+REDES_POTENCIA = ["+12V_IN", "+12V_FUS", "+12V_PROT", "+5V"]
 
 # Pinos do DOIT ESP32 DevKit V1 (vista de cima, antena para cima, numeracao de cima para baixo)
 ESP_ESQ = ["EN", "VP(IO36)", "VN(IO39)", "D34", "D35", "D32", "D33", "D25", "D26", "D27", "D14",
@@ -562,6 +569,28 @@ def gera_fp_sn65():
     fp.salva()
 
 
+def gera_fp_ptc():
+    """Fusivel rearmavel PTC radial (RXEF050 / MF-R050 e similares), terminais a 5,08 mm."""
+    fp = FP("PTC_Radial_P5.08_Vertical",
+            "Fusivel rearmavel PTC radial em pe (disco ~7,5 x 3 mm), terminais a 5,08 mm. "
+            "Origem = pino 1; pino 2 em -Y.")
+    yc = -PTC_PASSO / 2.0
+    w, h = PTC_ESPESSURA, PTC_LARGURA
+    fp.prop("Reference", "REF**", -2.6, yc, "F.SilkS", tam=1.0, rot=90)
+    fp.prop("Value", "PTC_Radial_P5.08_Vertical", 2.6, yc, "F.Fab", rot=90)
+    fp.prop("Datasheet", "", 0, 0, "F.Fab", True)
+    fp.prop("Description", "", 0, 0, "F.Fab", True)
+    fp.ret(-w / 2, yc - h / 2, w / 2, yc + h / 2, "F.SilkS", 0.15)
+    fp.ret(-w / 2, yc - h / 2, w / 2, yc + h / 2, "F.Fab", 0.1)
+    fp.ret(-w / 2 - 0.25, yc - h / 2 - 0.25, w / 2 + 0.25, yc + h / 2 + 0.25, "F.CrtYd", 0.05)
+    fp.pad("1", 0, 0, PAD_LM2596, PAD_LM2596, FURO_SOQUETE, "circle")
+    fp.pad("2", 0, -PTC_PASSO, PAD_LM2596, PAD_LM2596, FURO_SOQUETE, "circle")
+    # modelo 3D so para o render: disco de 7,5 mm (mesmo formato de um PTC radial), girado para os pinos em -Y
+    fp.l.append('	(model "${KICAD10_3DMODEL_DIR}/Capacitor_THT.3dshapes/C_Disc_D7.5mm_W2.5mm_P5.00mm.step" '
+                '(offset (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 -90)))')
+    fp.salva()
+
+
 def gera_footprints():
     if os.path.isdir(D_PRETTY):
         shutil.rmtree(D_PRETTY)
@@ -569,6 +598,7 @@ def gera_footprints():
     gera_fp_esp32()
     gera_fp_lm2596()
     gera_fp_sn65()
+    gera_fp_ptc()
     with open(os.path.join(PROJ, "sym-lib-table"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write('(sym_lib_table\n\t(version 7)\n\t(lib (name "tccelta")(type "KiCad")'
                  '(uri "${KIPRJMOD}/tccelta.kicad_sym")(options "")(descr "Simbolos do dongle OBD-II"))\n)\n')
@@ -696,6 +726,7 @@ def gera_esquematico(proprios):
                         ("Connector:Screw_Terminal_01x03", "Connector.kicad_sym"),
                         ("Connector_Generic:Conn_01x02", "Connector_Generic.kicad_sym"),
                         ("Device:D_Schottky", "Device.kicad_sym"),
+                        ("Device:Polyfuse", "Device.kicad_sym"),
                         ("Device:C_Polarized", "Device.kicad_sym"),
                         ("Mechanical:MountingHole", "Mechanical.kicad_sym")]:
         s.simbolos_lib[lib_id] = qualifica(simbolo_padrao(arq, lib_id.split(":")[1]), lib_id)
@@ -707,12 +738,14 @@ def gera_esquematico(proprios):
     s.bloco("1. Entrada e protecao (cabo OBD-II)", 8, 12, 170, 78)
     s.componente("J1", 40.64, 38.1, 0, ref_at=(40.64, 31.75), val_at=(40.64, 45.72))
     s.componente("J2", 40.64, 58.42, 0, ref_at=(40.64, 52.07), val_at=(40.64, 66.04))
+    s.componente("F1", 71.12, 55.88, 90, ref_at=(71.12, 51.82), val_at=(71.12, 60.2))
     s.componente("D1", 101.6, 38.1, 180, ref_at=(101.6, 33.02), val_at=(101.6, 43.18))
     s.componente("C1", 144.78, 50.8, 0, ref_at=(152.4, 48.26), val_at=(152.4, 53.34))
     s.texto("Cabo OBD-II: pino 16 = +12V, pinos 4 e 5 = GND, pino 6 = CAN_H, pino 14 = CAN_L",
             11, 72, 1.3)
-    s.texto("D1 (1N5819): protecao contra inversao de polaridade. J1 + J2 formam um borne de 5 vias.",
+    s.texto("F1 (PTC rearmavel 0,5 A / 60 V): abre num curto na placa. D1 (1N5819): inversao de polaridade.",
             11, 76, 1.3)
+    s.texto("J1 + J2 formam um borne de 5 vias.", 11, 68, 1.3)
 
     # ---- bloco 2: regulacao
     s.bloco("2. Regulacao 5 V (modulo LM2596)", 176, 12, 290, 78)
@@ -876,6 +909,7 @@ def constroi_pcb():
     std("J2", BORNE_X[2], Y_BORNE)
     std("D1", X_CORREDOR_12V, Y_D1K, 270)
     std("C1", C1_POS[0], C1_POS[1])
+    coloca("F1", D_PRETTY, "PTC_Radial_P5.08_Vertical", "tccelta", F1_POS[0], F1_POS[1])
 
     # bornes colados: courtyard = corpo exato, para os dois blocos nao se sobreporem
     for ref, vias in (("J1", 2), ("J2", 3)):
@@ -894,8 +928,8 @@ def constroi_pcb():
         fp.Add(r)
 
     # referencias legiveis (nao se sobrepoem entre si)
-    for ref, (dx, dy) in {"J1": (2.54, 3.6), "J2": (5.08, 3.6), "C1": (7.0, 0.0),
-                          "D1": (-2.6, 3.9), "J3": (0.0, -2.4)}.items():
+    for ref, (dx, dy) in {"J1": (2.54, 3.6), "J2": (5.08, 3.6), "C1": (6.6, 0.0),
+                          "D1": (-2.6, 3.9), "J3": (0.0, -2.4), "F1": (-2.6, -2.54)}.items():
         fps[ref].Reference().SetPosition(pcbnew.VECTOR2I(fps[ref].GetPosition().x + FromMM(dx),
                                                           fps[ref].GetPosition().y + FromMM(dy)))
         fps[ref].Reference().SetTextAngleDegrees(0)
@@ -1028,15 +1062,20 @@ def constroi_pcb():
             t.SetNet(nets[rede])
             b.Add(t)
 
-    # +12V_IN: borne via 1 -> anodo do D1
+    # +12V_IN: borne via 1 -> pino 1 do F1 (PTC)
     j1_1 = pos("J1", 1)
+    f1_1, f1_2 = pos("F1", 1), pos("F1", 2)
     d1_a = pos("D1", 2)
     d1_k = pos("D1", 1)
-    trilha("+12V_IN", LARG_POTENCIA, [j1_1, (d1_a[0] + (d1_a[1] - j1_1[1]), j1_1[1]), d1_a], 0)
-    # +12V_PROT: catodo do D1 -> sobe o corredor ate o IN+ do buck (com derivacao para o C1)
+    trilha("+12V_IN", LARG_POTENCIA, [j1_1, (f1_1[0] + (f1_1[1] - j1_1[1]), j1_1[1]), f1_1], 0)
+    # +12V_FUS: pino 2 do F1 -> anodo do D1 (mesma coluna)
+    trilha("+12V_FUS", LARG_POTENCIA, [f1_2, d1_a], 0)
+    # +12V_PROT: catodo do D1 -> sobe o corredor ate o IN+ do buck; derivacao em diagonal para o C1
     c1_p = pos("C1", 1)
     u1_inp = pos("U1", 1)
-    trilha("+12V_PROT", LARG_POTENCIA, [d1_k, u1_inp], 0)      # passa pelo + do C1 (c1_p)
+    trilha("+12V_PROT", LARG_POTENCIA, [d1_k, u1_inp], 0)
+    dd = c1_p[0] - d1_k[0]
+    trilha("+12V_PROT", LARG_POTENCIA, [d1_k, (c1_p[0], d1_k[1] + dd), c1_p], 0)
     # +5V: OUT+ -> pino VIN do ESP32 (por cima da fileira de cima)
     u1_outp = pos("U1", 3)
     p5v = pos("U2", 15)
@@ -1094,7 +1133,7 @@ def constroi_pcb():
     texto_serigrafia("L", J3_POS[0] + 2.0, J3_POS[1] + 2.54, 1.0)
     rotulos = ["+12V", "GND", "GND", "CANH", "CANL"]
     for k, nome in enumerate(rotulos):
-        texto_cobre(nome, BORNE_X[k], Y_BORNE - 6.5, 1.2, 0.3, 90)
+        texto_cobre(nome, BORNE_X[k], Y_BORNE - (5.6 if k == 0 else 6.5), 1.2, 0.3, 90)
         texto_serigrafia(nome, BORNE_X[k], Y_BORNE - 3.0, 1.0)
 
     # --- plano de GND -----------------------------------------------------------

@@ -2,10 +2,16 @@
 
 Projeto KiCad 10 em `tccelta/`. A placa liga o cabo OBD-II (12 V + CAN) a um ESP32 e a um transceptor CAN
 SN65HVD230 (placa Waveshare "SN65HVD230 CAN Board"), com um buck LM2596 para gerar os 5 V. Os **módulos não são
-soldados**: encaixam em soquetes fêmea (barras de pinos fêmea de 2,54 mm). Só os soquetes, os bornes, o D1, o C1
-e a barra macho J3 são soldados.
+soldados**: encaixam em soquetes fêmea (barras de pinos fêmea de 2,54 mm). Só os soquetes, os bornes, o F1, o D1,
+o C1 e a barra macho J3 são soldados.
+
+Entrada de 12 V, na ordem: borne -> **F1** (fusível rearmável PTC 0,5 A) -> **D1** (1N5819, inversão de polaridade)
+-> **C1** (100 uF) -> LM2596.
 
 Tamanho da placa: **54,1 x 72,4 mm** (cantos arredondados de 2 mm). Cobre só em B.Cu, **sem vias, sem jumpers**.
+
+O procedimento completo de fabricação e montagem está em [PASSO_A_PASSO.md](PASSO_A_PASSO.md), e a lista de
+ferramentas e materiais em [MATERIAIS.md](MATERIAIS.md).
 
 ## Arquivos
 
@@ -33,6 +39,7 @@ Tamanho da placa: **54,1 x 72,4 mm** (cantos arredondados de 2 mm). Cobre só em
 | 2 | Jumper dupont fêmea, até 10 cm, trançados entre si | liga J3 aos pinos CANH/CANL do módulo (ou ao borne dele) |
 | 1 | Borne de parafuso 2 vias, passo 5,08 mm (Phoenix MKDS 1,5/2) | J1: 12 V e GND |
 | 1 | Borne de parafuso 3 vias, passo 5,08 mm (MKDS 1,5/3) | J2: GND, CAN_H, CAN_L; encaixa no J1 formando 5 vias |
+| 1 | F1: fusível rearmável PTC radial, 0,5 A de manutenção, **60 V ou mais** (RXEF050, MF-R050 ou similar), terminais a 5,1 mm | abre num curto na placa e volta sozinho depois de esfriar. Não use os de 16 V |
 | 1 | D1: diodo Schottky 1N5819 (DO-41) | proteção contra inversão de polaridade |
 | 1 | C1: capacitor eletrolítico 100 uF / 25 V (radial, D 6,3 mm, passo 2,5 mm) | |
 | 3 | Parafuso M3 + porca (ou espaçador) | furos de fixação H1, H2, H3 |
@@ -109,8 +116,8 @@ Pontos pretos no arquivo marcam os furos (marcas pequenas): servem de guia para 
 1. Corroa em percloreto de ferro morno (cerca de 40 C), agitando. Retire quando todo o cobre exposto sumir.
 2. Lave, remova o toner com acetona e passe palha de aço fina.
 3. Fure da face do cobre:
-   - **1,0 mm**: soquetes do ESP32 (29), do transceptor (4), do LM2596 (4) e J3 (2): 39 furos.
-   - **1,0 mm** também para os pads do D1 (2) e **0,8 a 1,0 mm** para o C1 (2): alargue se as pernas não entrarem.
+   - **1,0 mm**: soquetes do ESP32 (29), do transceptor (4), do LM2596 (4), J3 (2) e F1 (2): 41 furos.
+   - **1,0 a 1,1 mm** para os pads do D1 (2) e **0,8 a 1,0 mm** para o C1 (2): alargue se as pernas não entrarem.
    - **1,3 mm**: bornes J1 e J2 (5 furos).
    - **3,2 mm**: furos de fixação M3 (3).
    Veja `tccelta/fabricacao/furacao.txt` para a lista completa (e `tccelta.drl`, formato Excellon).
@@ -121,8 +128,11 @@ A serigrafia (referências e rótulos dos pinos) está em `serigrafia_F_Silk.pdf
 ## Montagem
 
 1. Solde **somente**: as barras fêmea (ESP32 1x15 + 1x14, transceptor), os 4 soquetes do LM2596, os bornes J1 e J2, a barra
-   macho J3, o D1 e o C1. Componentes por cima; solda e cobre embaixo.
-   - D1: **faixa (catodo) voltada para cima** na placa (pad de cima), anodo para baixo, ligado ao J1.
+   macho J3, o F1, o D1 e o C1. Componentes por cima; solda e cobre embaixo.
+   - F1: não tem polaridade. Fica no canto de baixo à esquerda, entre o borne e o D1. Solde com o disco **uns 3 a 4 mm
+     acima da placa** (as dobras dos terminais já seguram nessa altura), para a cabeça do parafuso do furo H2 passar
+     por baixo da borda dele.
+   - D1: **faixa (catodo) voltada para cima** na placa (pad de cima), anodo para baixo, ligado ao F1.
    - C1: perna longa (+) no pad da esquerda, marcada no desenho.
    - Encaixe o J2 ao lado do J1 (borne de 5 vias): `+12V, GND, GND, CAN_H, CAN_L`. A entrada dos fios
      fica voltada para a borda de baixo da placa.
@@ -156,9 +166,15 @@ O firmware usa TX = GPIO21 e RX = GPIO22 (pinos D21 e D22 do ESP32 DevKit V1). O
   ESP32 fica sem contato (use a barra 1x14 na fileira de baixo).
 - Dois pads de GND (GND do transceptor e C1 -) usam conexão sólida ao plano em vez de alívio térmico: só há espaço
   para um raio no primeiro e o C1 é o capacitor de entrada. Os demais mantêm alívio térmico de 0,8 mm.
-- C1 ficou junto do D1/borne (parte de baixo-esquerda): sequência curta borne -> D1 -> C1 (C1 + sobre a própria trilha
-  de +12 V_PROT). Colocá-lo junto ao IN+ do buck custaria cerca de 8 mm a mais de largura.
-- Não use a placa em carro sem fusível de 1 A em série no +12 V.
+- C1 ficou logo à direita do D1 (parte de baixo-esquerda), ligado ao catodo por uma diagonal curta de +12 V_PROT.
+  Colocá-lo junto ao IN+ do buck custaria cerca de 8 mm a mais de largura.
+- **F1 (PTC)** é o primeiro componente depois do borne, então protege tudo o que vem depois (D1, C1, buck, ESP32,
+  transceptor) contra curto. O consumo normal é de ~0,15 A em 12 V; o PTC só abre perto de 1 A e, num carro quente
+  (~70 °C), ainda segura uns 0,35 A. Quando abre, esquenta (é assim que ele corta) e volta sozinho alguns minutos
+  depois de desligar. Ele não protege o cabo entre o conector OBD-II e a placa: esse trecho continua só com o
+  fusível do próprio carro.
+- O furo de fixação H2 fica colado ao F1: a cabeça de um parafuso M3 comum (5,5 mm) avança ~0,5 mm sob a borda do
+  disco do PTC visto de cima. Por isso o F1 vai soldado um pouco alto (ver Montagem).
 
 ## Validação (resultado atual)
 
