@@ -11,7 +11,8 @@ Entrada de 12 V, na ordem: borne -> **F1** (fusível rearmável PTC 0,5 A) -> **
 Tamanho da placa: **54,1 x 72,4 mm** (cantos arredondados de 2 mm). Cobre só em B.Cu, **sem vias, sem jumpers**.
 
 O procedimento completo de fabricação e montagem está em [PASSO_A_PASSO.md](PASSO_A_PASSO.md), e a lista de
-ferramentas e materiais em [MATERIAIS.md](MATERIAIS.md).
+ferramentas e materiais em [MATERIAIS.md](MATERIAIS.md). A função e a posição de cada elemento estão explicadas em
+[ESCOLHAS_DO_PROJETO.md](ESCOLHAS_DO_PROJETO.md).
 
 ## Arquivos
 
