@@ -3,6 +3,12 @@
 \section{Dongle}
 \subsection{Hardware}
 \subsection{Firmware}
+
+Enquanto do lado do servidor o KMS garante a proteção das chaves, o dongle conta com o armazenamento das chaves no NVS (Non-Volatile Storage) com encriptação. Para garantir maior segurança
+dessa encriptação, também conta com: Secure Boot V2 para rodar apenas \textit{firmware} assinado e não permitir injeção arbitrária de código; \textit{flash encryption} para cifrar as partições
+da flash e a chave de encriptação do NVS; \textit{eFuse}, memória gravável e não editável que guarda configurações da placa como o bloqueio do uso de JTAG e download pela UART, evitando depuração, 
+e também guardar a chave de encriptação da flash, contando com bloqueio total de leitura. Mesmo com todas essas camadas de proteção, ainda há risco de ataques com atacantes extremamente qualificados.
+
 \subsection{Montagem}
 
 \section{Companion App}

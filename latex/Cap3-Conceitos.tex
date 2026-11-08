@@ -29,7 +29,7 @@ Com isso, estão dispostas todas as camadas que compõem o cenário do projeto, 
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.6\textwidth]{assets/cap2-conceitos/camadas.png}
+    \includegraphics[width=0.6\textwidth]{assets/cap3-conceitos/camadas.png}
     \caption{Camadas que compõem o cenário do projeto}
     \label{fig:camadas}
     \fonte{Os autores (2026)}
@@ -57,7 +57,7 @@ Um quadro de dados possui os campos listados abaixo e explicitados na imagem \au
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/quadro-dados.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/quadro-dados.png}
     \caption{Campos de um quadro de dados CAN.}
     \label{fig:sinalizacao-diferencial}
     \fonte{Adaptado de \cite{csselectronics_can_intro}}
@@ -80,7 +80,7 @@ Uma ECU conectada ao barramento consiste em 3 elementos principais: um microcont
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/diagrama-barramento-can.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/diagrama-barramento-can.png}
     \caption{Diagrama de um barramento CAN com ECUs}
     \label{fig:barramento-can}
     \fonte{Adaptado de \cite{Bozdal2020CAN}}
@@ -119,7 +119,7 @@ O OBD-II define um modelo requisição-resposta. Um equipamento de diagnóstico,
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/quadros-can-campos-obd2.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/quadros-can-campos-obd2.png}
     \caption{Campos CAN especificados pelo OBD-II}
     \fonte{Os Autores}
 \end{figure}
@@ -158,7 +158,7 @@ O protocolo ISO-TP, definido pela ISO 15765-2, permite transmitir mensagens que 
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/isotp-campos.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/isotp-campos.png}
     \caption{Tipos de Mensagem ISO-TP}
     \fonte{CSS Electronics}
     \label{fig:iso-tp-msg-kinds}
@@ -174,7 +174,7 @@ Uma requisição OBD-II sempre cabe em uma mensagem \textit{Single Frame}. Os 8 
 // TODO: ADAPTAR
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/obs2oncan.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/obs2oncan.png}
     \caption{Mensagem OBD-II no CAN}
     \fonte{CSS Electronics}
     \label{fig:mensagem-obd2-can}
@@ -184,7 +184,7 @@ O OBD-II define 10 serviços padronizados, também chamados de "modos". O servi�
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/example-obd2-req.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/example-obd2-req.png}
     \caption{Exemplo de Requisição OBD-II}
     \fonte{Adaptado de CSS Electronics}
     \label{fig:exemplo-obd2-req}
@@ -221,7 +221,7 @@ Com essas informações, é possível ter o seguinte entendimento da resposta na
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/cap2-conceitos/example-obd2-resp.png}
+    \includegraphics[width=0.7\textwidth]{assets/cap3-conceitos/example-obd2-resp.png}
     \caption{Exemplo de Resposta OBD-II}
     \fonte{Adaptado de CSS Electronics}
     \label{fig:exemplo-obd2-resp}
@@ -241,7 +241,7 @@ Mas também pode ocorrer de uma resposta não caber em um único quadro, já que
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{assets/cap2-conceitos/isotp-single-ecu.png}
+    \includegraphics[width=0.8\textwidth]{assets/cap3-conceitos/isotp-single-ecu.png}
     \caption{Troca de quadros ISO-TP com uma ECU}
     \fonte{Elaborado pelo autor}
     \label{fig:isotp-seq}
@@ -254,7 +254,7 @@ Se mais de uma ECU responder, o cliente receberá mais de um \textit{First Frame
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{assets/cap2-conceitos/isotp-multi-ecu.png}
+    \includegraphics[width=0.8\textwidth]{assets/cap3-conceitos/isotp-multi-ecu.png}
     \caption{Troca de quadros ISO-TP com múltiplas ECUs}
     \fonte{Elaborado pelo autor}
     \label{fig:isotp-seq-multi}
@@ -351,8 +351,147 @@ TX & \texttt{6E400003-B5A3-F393-E0A9-E50E24DCCA9E} & \textit{Notify} & dongle $\
 \end{tabular}
 \end{table}
 
+
+\subsection{BLE Secure Connections} 
+
+O LE Secure Connections (LESC) é um método de pareamento introduzido no Bluetooth 4.2 para substituir o esquema de chave temporária de baixa entropia no pareamento legado
+do BLE, que era facilmente quebrada por força bruta. Para isso, o LESC estabelece a chave do enlace com uma troca de chaves Diffie-Hellman em curva elíptica (ECDH)
+na curva P-256. Com essa chave de enlace, cada um dos aparelhos deriva uma chave de sessão com a qual o enlace é cifrado e autenticado usando AES-CCM, o que garante 
+confidencialidade e integridade na comunicação. Quando os dois aparelhos são pareados, ou seja, geram a chave de enlace válida, é feito o \textit{bonding}: a chave de sessão
+é salva em cada um dos aparelhos para futuras conexões, de modo que não seja necessário repetir o processo de pareamento.
+
+Esse pareamento é feito com um total de 3 fases. Na primeira fase, os aparelhos declaram suas capacidades e requisitos de autenticação como, por exemplo, se têm capacidade
+de entrada e saída e se suportam LESC. Trocadas as capacidades, os dispositivos decidem se continuam o pareamento e é escolhido um método de associação, os quais estão especificados
+na tabela \ref{lesc:metodos}, na qual considera-se implícita a pré-condição de que ambos os lados suportam LESC.
+
+
+\begin{table}[H] 	\label{lesc:metodos}
+	\centering
+	\caption{Métodos de associação do LESC}
+	\begin{tabular}{|>{\centering\arraybackslash}m{0.2\textwidth}|>{\raggedright\arraybackslash}m{0.25\textwidth}|>{\raggedright\arraybackslash}m{0.45\textwidth}|}
+		\hline
+		\textbf{Método} & \textbf{Pré-condição} & \textbf{Descrição} \\
+		\hline
+		Just Works & - & Não há autenticação do outro lado, apenas a troca de chaves ECDH. Vulnerável a MITM. \\
+		\hline
+		Numeric Comparison & Ambos têm display e entrada & Um número é gerado e exibido em ambos os lados, que devem confirmar se são iguais. \\
+		\hline
+		Passkey Entry & Um tem display e outro tem entrada & Um lado gera um número de 6 dígitos e o outro deve digitá-lo. \\
+		\hline
+		OOB \newline (Out of Band) & Canal seguro externo entre os dispositivos & Dados de autenticação são trocados por um canal seguro externo, como NFC. \\
+		\hline
+	\end{tabular}
+\end{table}
+
+
 \subsection{Implicações para o projeto}
 
 O \textit{dongle} atuará como periférico GAP e servidor GATT, expondo o NUS, enquanto o cliente atuará como cliente GATT. Os UUIDS do NUS serão adotados por serem amplamente reconhecidos. 
 
 Cada escrita na característica RX será encaminhada ao interpretador de comandos compatível com o ELM327 (\autoref{sec:ELM}), e cada resposta será enviada ao cliente por meio de uma notificação da característica TX.
+
+
+\section{HTTP/TLS} \label{sec:conceitos-tls}
+
+\subseciton{Visão Geral}
+
+O \textit{Hypertext Transfer Protocol Secure} (HTTPS) consiste na utilização do HTTP sobre uma conexão protegida pelo \textit{Transport Layer Security} (TLS). O TLS estabelece um canal que oferece confidencialidade e integridade para os dados transmitidos e permite autenticar o servidor por meio de certificados digitais. No TLS 1.3, o estabelecimento da conexão negocia chaves de sessão, utilizadas posteriormente na proteção dos dados transmitidos \cite{RFC9846}.
+
+
+\subsection{Implicações para o projeto}
+
+O HTTPS deverá ser utilizado para proteger o envio dos dados coletados ao servidor, o que irá impedir que terceiros na rede consigam ler ou modificar o tráfego sem que isto seja detectado, desde que a conexão seja corretamente estabelecida e o certificado do servidor seja validado. No entando, o HTTPS/TLS não fornece garantias de que os dados gerados são provenientes do dongle. Por isto, a autenticação é tratada na camada de aplicação.
+
+
+\section{Códigos de Autenticação de Mensagens (MAC) e Assinaturas Digitais} \label{sec:conceitos-mac}
+
+\subsection{Visão Geral}
+Um MAC (código de autenticação de mensagens, do inglês\textit{Message Authentication Code}) é um valor calculado a partir de uma mensagem e de uma chave secreta compartilhada entre os participantes legítimos da comunicação. Quem conhece a chave pode gerar e verificar este valor. Assim, a verificação do MAC permite detectar alterações na mensagem e confirmar que ela foi autenticada por alguém que possui a chave, porém não permite a distinção entre qual dos participantes que a gerou \cite{RFC2104}.
+
+O HMAC é uma construção de MAC baseado em uma função de \textit{hash} criptográfica. Para uma chave $K$ e uma mensagem $m$, o HMAC é definico como:
+
+\begin{equation}
+    \operatorname{HMAC}_{K}(m) =
+    H\!\left((K'\oplus\mathrm{opad})\,\|\,
+    H\!\left((K'\oplus\mathrm{ipad})\,\|\,m\right)\right),
+    \label{eq:conceitos-hmac}
+\end{equation}
+
+\noindent em que $H$ é a função de \textit{hash}, $K'$ é a chave ajustada ao tamanho de bloco da função, $\oplus$ representa XOR, $\|$ representa concatenação e $\mathrm{ipad}$ e $\mathrm{opad}$ são constantes definidas pelo algoritmo. Com SHA-256, a saída possui 256 bits.
+
+As assinaturas digitais, por outro lado, oferecem propriedades semelhantes de autenticidade e integridade, mas também oferecem irretratabilidade a partir do uso de criptografia assimétrica. O emissor gera uma assinatura com a própria chave privada, mantida secreta, e qualquer parte que possua a chave pública correspondente pode verificá-la. O ECDSA é um algoritmo de assinatura digital baseado em curvas elípticas, padronizado pelo NIST \cite{FIPS1865}.
+
+\subsection{Implicações para o projeto}
+
+Há a necessidade dos dados serem tratados de tal forma que o servidor consiga verificar que eles realmente foram gerados pelo \textit{dongle}. Nesse contexto, tanto o HMAC quanto o ECDSA com a curva P-256 são alternativas consideradas para autenticar os dados de telemetria. A diferença relevante é que, com HMAC, o verificador também possui capacidade criptográfica de gerar blocos válidos se tiver acesso à chave; com ECDSA, a verificação exige apenas a chave pública. Importante notar que nenhum desses mecanismos, isoladamente, impede a repetição ou a omissão de mensagens; essas propriedades dependem de outras regras definidas no sistema.
+
+
+
+\section{Algoritmo de Cristian} \label{sec:conceitos-cristian}
+
+\subsection{Visão Geral}
+
+O algoritmo de Cristian permite estimar a correspondência entre relógios de dois sistemas a partir de uma troca de mensagens. Como a comunicação possui atraso, o instante associado à resposta não é conhecido exatamente; ele é estimado a partir dos instantes de envio e recebimento, assumindo-se, como aproximação, que o evento remoto ocorreu exatamente no meio do intervalo \cite{Cristian1989}.
+
+Na ilustração abaixo encontra-se um exemplo do funcionamento deste algoritmo. O servidor registra $S_1$ e $S_2$, respectivamente, antes do envio de um desafio e após o recebimento de uma resposta autenticada. O \textit{dongle} inclui, na resposta, o tempo $t_{ms}$ decorrido desde seu \tetit{boot}. A correspondência temporal é então estimada por:
+
+\begin{equation}
+    (t_{ms},\widehat{S}),\qquad
+    \widehat{S}=\frac{S_1+S_2}{2},\qquad
+    \varepsilon=\frac{S_2-S_1}{2},
+    \label{eq:conceitos-cristian}
+\end{equation}
+
+\noindent em que $\varepsilon$ representa o limite de incerteza da correspondência, desconsiderados o erro do relógio do servidor e sua deriva durante o intervalo. A Figura~\ref{fig:conceitos-cristian} ilustra a troca de mensagens, omitindo a intermediação do aplicativo.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[>=Latex, font=\small]
+        \node at (0,0.35) {Servidor};
+        \node at (9,0.35) {Dongle};
+        \draw[->, gray] (0,0) -- (0,-4.5) node[below,black]{tempo};
+        \draw[->, gray] (9,0) -- (9,-4.5) node[below,black]{tempo};
+        \fill (0,-0.65) circle (1.5pt);
+        \node[left] at (0,-0.65) {$S_1$};
+        \draw[->,thick] (0,-0.65) -- (9,-1.55)
+            node[midway,above,sloped,font=\scriptsize]{Desafio};
+        \fill (9,-2.15) circle (1.5pt);
+        \node[right] at (9,-2.15) {$t_{ms}$};
+        \draw[->,thick] (9,-2.15) -- (0,-3.55)
+            node[midway,above,sloped,font=\scriptsize]{Resposta autenticada};
+        \fill (0,-3.55) circle (1.5pt);
+        \node[left] at (0,-3.55) {$S_2$};
+        \draw[<->] (-1.35,-0.65) -- (-1.35,-3.55)
+            node[midway,left,align=center,font=\scriptsize]{$S_2-S_1$};
+    \end{tikzpicture}
+    \caption{Troca de mensagens utilizada para estabelecer uma âncora temporal.}
+    \label{fig:conceitos-cristian}
+    \par\smallskip{\footnotesize Fonte: elaborado pelos autores.}
+\end{figure}
+
+
+\subsection{Implicações para o projeto}
+
+O \textit{dongle} e o servidor deverão executar um \textit{handshake} com o algoritmo de Cristian de modo a sincronizarem os relógios.
+
+\section{Go Back N}
+
+\subsection{Visão Geral}
+
+\subsection{Implicações para o projeto}
+
+
+
+\section{eFuses e proteção da memória flash da ESP32}
+
+\subsection{Visão Geral}
+
+\subsection{Implicações para o projeto}
+
+
+\section{Sistemas de Gerenciamento de Chaves (KMS)}
+
+\subsection{Visão Geral}
+
+\subsection{Implicações para o projeto}
+
