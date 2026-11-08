@@ -1,0 +1,926 @@
+\documentclass[12pt]{article}
+\usepackage{graphicx} % Required for inserting images
+
+\usepackage[portuguese]{babel}
+\usepackage{natbib}
+\usepackage{url}
+\usepackage[utf8x]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{siunitx}
+\sisetup{output-decimal-marker={,}, per-mode=symbol}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\graphicspath{{images/}}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{mathtools}
+\usepackage[T1]{fontenc}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+\usepackage{vmargin}
+\usepackage{float}
+\sloppy
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{bytefield}
+
+\title{Estratégia da Coleta do TCCELTA}
+
+\usetikzlibrary{arrows.meta,patterns,decorations.pathreplacing,calc,positioning}
+\begin{document}
+
+\maketitle
+
+\section{Introdução}
+
+O objetivo deste documento é discutir a estratégia de coleta do Dongle OBD-II do TCCELTA. Anteriormente, o Dongle era um dispositivo passivo, que simplesmente respondia às requisições do aplicativo. Com a mudança do foco para coleta de telemetria, o Dongle passa a proativamente requisitar e registrar os dados do CAN. Isto gera dificuldades que serão apresentadas aqui, bem como a solução proposta.
+
+
+
+O Dongle estará conectado ao barramento CAN e realizará leituras de PIDs. Essas leituras serão agrupadas em \textbf{amostras}, e enriquecidas com o timestamp da coleta e com informações de GPS (latitude, longitude e altitude). As amostras coletadas devem ser enviadas ao servidor por intermédio de um aplicativo, que pode não ser confiável. O servidor que deve ser capaz de verificar a autenticidade dos dados, ou seja, que eles foram gerados pelo Dongle.
+
+Há uma série de dúvidas que surgem em relação à coleta. O que aconteceria no caso do Dongle funcionar sem conexão com um aplicativo, e portanto, sem Internet? O Dongle não possuirá módulo de GPS, e nem conexão direta à Internet; assim, como que as amostras poderão conter dados de GPS e timestamp? Qual será a frequência de coleta dos dados? Qual será o tamanho de cada amostra? Quanto tempo o Dongle consegue funcionar antes de ocorrer perda de dados por não possuir mais armazenamento livre? Como detectar perda de dados?
+
+Há, ainda, certas dúvidas acerca do barramento CAN. Não temos carro para testá-lo, e ainda que tivéssemos, não poderíamos supor que seu funcionamento seria representativo de todos os modelos existentes. Logo, para projetar a comunicação, devemos nos ater à Teoria, com o suporte das especificações.
+
+Será apresentada uma proposta de implementação para a coleta do Dongle. Existem quatro principais problemas que guiam toda a implementação. Eles serão apresentados a seguir.
+
+\subsection{Uma coisa de cada vez} \label{umacoisadecadavez}
+
+A ISO 15765-4 define que a taxa de transferência do barramento CAN é, no máximo, 500kbps. Além disso, as leituras de PIDs provém de requisições OBD-II. Em teoria, cada requisição pode pedir até 6 PIDs de uma só vez; no entanto, não encontrei documentação o suficiente sobre como isso funciona.
+
+Se não há garantia de que pedir vários PIDs em uma única requisição terá uma resposta adequada, uma alternativa seria contar com a concorrência. Ou seja: colocar sucessivamente no barramento uma requisição para cada PID desejado, e depois escutar e coletar as respostas conforme fossem aparecendo. No entanto, também não há garantia alguma que isto funcione. Algumas ECUs podem simplesmente atender somente a requisição mais recente. 
+
+Logo, para evitar retrabalhos, o caminho que se apresenta é o de assumir o pior caso, ou seja, que não será possível contar nem com a leitura de múltiplos PIDs em uma única requisição, nem com o atendimento de várias requisições concorrentes. A comunicação modelada será, portanto, estritamente sequencial, representando assim o pior desempenho possível e garantindo que o Dongle funcionará mesmo neste caso. A negação de qualquer uma dessas hipóteses (não-concorrência e somente pedidos únicos) representaria uma boa notícia e uma oportunidade de melhorar o desempenho do projeto em uma futura evolução.
+
+Ter a esperança de uma possível boa notícia no futuro não alivia a má notícia no presente. Estar restrito a uma comunicação sequencial representa um grande desafio. No datasheet do ELM327 encontra-se a informação de que, para cada leitura, ele pode esperar até 200ms antes de declarar um timeout. Supondo que esse seja o tempo de resposta médio para as requisições do nosso projeto, isso significaria a leitura de somente 5 PIDs por segundo, com grande diferença temporal entre a aquisição dos PIDs!
+
+Quanto mais PIDs desejarmos adicionar às amostras, maior será o tempo necessário para gerar uma amostra, e maior será o período representado por uma coleta. Isto pode apresentar severas distorções. Por exemplo, durante uma frenagem, o RPM pode ser lido no início do ciclo, ainda elevado, e a velocidade no final, já reduzida. Como os dois valores correspondem a instantes diferentes, a razão entre velocidade e RPM fica inconsistente, o que poderia ser interpretado erroneamente como uma troca de marcha. Ademais, neste cenário, qual seria um timestamp adequado? O da primeira coleta? O da última? Um para cada PID coletado?
+
+Estes problemas são consequência do fato de que a arquitetura parece inadequada à solução. Os sensores não estão conectados diretamente no nosso coletor; ele deve acessá-los por intermédio de um barramento no qual seus pedidos são de baixa prioridade. Isto pode funcionar para diagnóstico; para telemetria, implica em uma grande complexidade. Devemos fazer milagre.
+
+\subsection{Uma questão de tempo} \label{questaodetempo}
+
+O Dongle não possuirá acesso direto à Internet, nem possuirá módulo RTC. Isto por si só já representa uma limitação ao projeto, que deveremos justificar perante à banca. Mas, supondo a ausência, precisamos lidar com ela.
+
+Poderíamos simplesmente aceitar o timestamp que o aplicativo enviar. Mas já estabelecemos que ele não é confiável. Como contornar isto?
+
+Infelizmente, sem um RTC, há somente soluções parciais e sujeitas a serem prejudicadas pelo intermediário não confiável. É possível garantir a preservação da ordem correta dos dados e do intervalo de tempo entre eles; mas o instante de tempo absoluto, não. Eu não considero este um problema tão grave; algo similar poderia acontecer mesmo se tivéssemos um RTC, caso um atacante descarregasse sua bateria ou o reiniciasse de alguma forma. 
+
+A garantia do ordenamento e do intervalo de tempo entre os dados será discutida na proposta de implementação.
+
+\subsection{Desconectado} \label{conectividade}
+
+Se o Dongle não estiver conectado a um aplicativo, ou se o aplicativo estiver sem acesso à Internet, os dados não serão enviados ao servidor. Ou seja, para evitar perda de dados, será necessário armazená-los localmente até que haja conectividade.
+
+Isto gera problemas de sincronização. É necessário saber quais dados não foram recebidos pelo servidor. E, se o armazenamento encher, haverá perda de dados. É necessário detectar e reportar esta perda.
+
+Além disso, no cenário em que há conexão com a Internet, pode haver dados antigos no armazenamento local aguardando envio enquanto novos dados continuam sendo gerados. Se for priorizado o envio dos dados recentes, o servidor deve ser capaz de detectar a lacuna entre eles e os dados antigos ainda não recebidos. E, se a conectividade for perdida novamente nesse cenário, surgirá uma segunda lacuna, ou potencialmente várias, tornando o controle do que já foi recebido cada vez mais complexo.
+
+\begin{center}
+\begin{tikzpicture}[
+  font=\small,
+  ok/.style={draw, fill=green!22},
+  falta/.style={draw, pattern=north east lines, pattern color=gray!70},
+  rot/.style={font=\footnotesize, align=center},
+  chave/.style={decorate, decoration={brace, amplitude=5pt, mirror}, thick},
+]
+  % Faixa de dados
+  \draw[ok]    (0,0)   rectangle (3,0.8)   node[midway, rot] {enviado antes\\da queda};
+  \draw[falta] (3,0)   rectangle (6,0.8)   node[midway, rot, fill=white, inner sep=1pt] {gerado offline\\(só na flash)};
+  \draw[ok]    (6,0)   rectangle (8.5,0.8) node[midway, rot] {enviado\\ao vivo};
+  \draw[falta] (8.5,0) rectangle (10,0.8)  node[midway, rot, fill=white, inner sep=1pt] {nova\\queda};
+  \draw[ok]    (10,0)  rectangle (12,0.8)  node[midway, rot] {enviado\\ao vivo};
+
+  % Lacunas
+  \draw[chave] (3,-0.1)   -- node[below=6pt, rot] {lacuna 1} (6,-0.1);
+  \draw[chave] (8.5,-0.1) -- node[below=6pt, rot] {lacuna 2} (10,-0.1);
+
+  % Eixo
+  \draw[-{Stealth[length=2.5mm]}, thick] (0,-1.3) -- (12,-1.3)
+       node[pos=0.5, below, font=\footnotesize] {ordem de geração};
+
+  % Legenda
+  \draw[ok]    (0,-2.35) rectangle (0.5,-2.0);
+  \node[anchor=west, font=\footnotesize] at (0.6,-2.17) {recebido pelo servidor};
+  \draw[falta] (5,-2.35) rectangle (5.5,-2.0);
+  \node[anchor=west, font=\footnotesize] at (5.6,-2.17) {ainda só na flash do Dongle};
+\end{tikzpicture}
+\end{center}
+
+
+
+\subsection{Cachorro com dois donos morre de fome} \label{doissenhores}
+
+Como foi discutido na \autoref{umacoisadecadavez}, a taxa de leitura de PIDs é potencialmente baixa, o que ocasiona problemas na geração de amostras. 
+
+Porém, uma das premissas do projeto é possuir um aplicativo que permita a visualização dos dados em tempo real. O aplicativo irá periodicamente solicitar a leitura PIDs, e utilizará as respostas para gerar suas visualizações.
+
+Assim, além de fazer as requisições necessárias para gerar amostras, o Dongle também atender prontamente aos pedidos arbitrários do aplicativo, sem que uma tarefa prejudique a outra!
+
+\subsection{Vai se criando um clima terrível...}
+
+Os problemas apresentados não são simples e não temos muito tempo para endereçá-los completamente. Então simplesmente não iremos. Optaremos pela simplificação das coisas, e o que ficar descoberto será documentado como limitação. A prioridade é ter algo com alguma garantia que funcionará caso tenhamos a possibilidade de conectar o Dongle a um carro real. 
+
+Uma solução é apresentada a seguir.
+
+\section{Uma possível solução}
+
+\subsection{Agradando a dois senhores}
+
+O Dongle contará com dois modos de operação: Coletor e Diagnóstico. O modo Diagnóstico corresponde ao que já temos e dá suporte a um aplicativo de leitura em tempo real. Sua segurança é dada pelo BLE Secure. Simples assim.
+
+O modo Coletor corresponde à geração de telemetria. O pressuposto deste modo é que será definida uma lista de PIDs, que serão consultados de modo a gerar as amostras. Durante este modo de operação, o Dongle responderá somente a pedidos do app que forem referentes à leitura de PIDs contidos na lista de PIDs coletados para telemetria. Qualquer outro pedido não será atendido, excetuando-se o pedido de troca de modo. 
+
+Em uma versão comercial, o modo de operação padrão do Dongle após um reinicio seria o modo Coletor, e um pedido de troca de modo só deveria ser aceito pelo Dongle se fosse acompanhado do MAC do servidor e de um número X, com teto máximo Y. Após X minutos ou após um reinicio, o dongle voltaria ao modo Coletor. Isto permitiria a utilização avançada de diagnóstico (e portanto interrupção na coleta de telemetria) somente mediante prévia autorização do servidor, e com tempo limite. No entanto, para fins de facilitar demonstração do projeto, simplesmente sempre aceitaremos um pedido de troca de modo. Esta decisão será documentada.
+
+Esta abordagem endereça o problema dos Dois Senhores, apresentado na \autoref{doissenhores}. Cada modo de operação prioriza uma estratégia de leitura e permite simplificar o código e desafogar o barramento.
+
+\subsection{Ordem e Progresso} \label{ordemeprogresso}
+
+O Dongle possuirá um número de sequência monotônico crescente, chamado \textbf{seq}. Ao gerar uma amostra, atribuirá este número a ela, e depois o incrementará. Este número será armazenado na memória não-volátil para sobreviver a reinicializações.
+
+O servidor irá armazenar o maior número recebido sem lacunas, que será enviado como ACK ao Dongle.
+
+Isto permite a utilização da estratégia offline-first write-through. Dados coletados são escritos na memória local. Quando há conectividade, uma tarefa acorda e lê os dados em lotes, a partir do número recebido no último ACK do servidor.
+
+
+\begin{tikzpicture}[
+  font=\small,
+  ok/.style={draw, fill=green!22},
+  falta/.style={draw, pattern=north east lines, pattern color=gray!70},
+  rot/.style={font=\footnotesize, align=center},
+  chave/.style={decorate, decoration={brace, amplitude=5pt, mirror}, thick},
+]
+  \def\h{0.8}
+ 
+  % ---------- Online-first ----------
+  \node[anchor=west, font=\bfseries] at (0,3.3) {Online-first};
+  \def\y{1.9}
+  \draw[ok]    (0,\y)    rectangle (3,\y+\h)    node[midway, rot] {enviado antes\\da queda};
+  \draw[falta] (3,\y)    rectangle (6,\y+\h)    node[midway, rot, fill=white, inner sep=1pt] {gerado offline\\(só na flash)};
+  \draw[ok]    (6,\y)    rectangle (8.5,\y+\h)  node[midway, rot] {enviado\\ao vivo};
+  \draw[falta] (8.5,\y)  rectangle (10,\y+\h)   node[midway, rot, fill=white, inner sep=1pt] {nova\\queda};
+  \draw[ok]    (10,\y)   rectangle (12,\y+\h)   node[midway, rot] {enviado\\ao vivo};
+  \draw[chave] (3,\y-0.1) -- node[below=6pt, rot] {lacuna 1} (6,\y-0.1);
+  \draw[chave] (8.5,\y-0.1) -- node[below=6pt, rot] {lacuna 2} (10,\y-0.1);
+  \node[anchor=west, rot, align=left] at (12.3,\y+\h/2)
+       {servidor rastreia\\várias lacunas};
+ 
+  % ---------- Offline-first ----------
+  \node[anchor=west, font=\bfseries] at (0,0.1) {Offline-first};
+  \def\y{-1.3}
+  \draw[ok]    (0,\y)   rectangle (7.5,\y+\h) node[midway, rot] {recebido pelo servidor, em ordem};
+  \draw[falta] (7.5,\y) rectangle (12,\y+\h)  node[midway, rot, fill=white, inner sep=1pt] {na flash, aguardando envio};
+  \draw[very thick, red!70!black] (7.5,\y-0.35) -- (7.5,\y+\h+0.35);
+  \node[below, rot, text=red!70!black] at (7.5,\y-0.35) {último seq confirmado:\\única fronteira};
+  \node[anchor=west, rot, align=left] at (12.3,\y+\h/2)
+       {servidor guarda\\só um número};
+ 
+  % ---------- Eixo ----------
+  \draw[-{Stealth[length=2.5mm]}, thick] (0,-3.2) -- (12,-3.2)
+       node[pos=0.5, below, font=\footnotesize] {número de sequência (ordem de geração)};
+ 
+  % ---------- Legenda ----------
+  \draw[ok]    (0,-4.3) rectangle (0.5,-3.95);
+  \node[anchor=west, font=\footnotesize] at (0.6,-4.12) {recebido pelo servidor};
+  \draw[falta] (4.2,-4.3) rectangle (4.7,-3.95);
+  \node[anchor=west, font=\footnotesize] at (4.8,-4.12) {ainda só na flash do Dongle};
+\end{tikzpicture}
+
+Isso força todos os dados a passarem pelo armazenamento local, o que atrasa sua chegada ao servidor. Parte do atraso vem do próprio caminho pela memória não volátil, já que um dado só é enviado depois que o bloco que o contém é fechado e gravado. A maior parte, porém, ocorre quando há dados antigos acumulados: os novos só são enviados depois que o envio dos antigos alcança a fronteira dos dados recém-gerados.
+
+Considerando:
+
+\begin{itemize}
+    \item $r$: taxa de geração de dados, em B/s
+    \item $C$: vazão efetiva de envio até servidor, passando por BLE, aplicativo e Internet, em B/s
+    \item \textbf{$t_{\mathrm{off}}$}: tempo que o Dongle passou sem conexão
+\end{itemize}
+
+Durante o tempo offline, acumulam-se $B = r \cdot t_{\mathrm{off}}$ bytes. Quando a conexão volta, o envio escoa a uma taxa $C$, mas novos dados continuam chegando a uma taxa $r$. Então, o acúmulo diminui a uma taxa $C-r$ e o tempo para a fronteira chegar até os novos dados em "tempo real" é:
+
+\begin{equation}
+t_c =  \frac{B}{C - r} = \frac{r \, t_{\mathrm{off}}}{C - r}
+\label{eq:tempo_recuperacao}
+\end{equation}
+
+Uma estimativa conservadora é de cerca de 1 minuto a cada hora de coleta ininterrupta offline. Naturalmente, no TCC justificaremos a estimativa e podemos até calcular uma mais embasada utilizando medidas reais. 
+
+A abordagem offline-first simplifica muito o código e será a adotada. Isto endereça a questão da conectividade levantada na \autoref{conectividade}.
+
+\subsection{Sincronizando os Relógios}
+
+Não é o escopo deste documento discutir segurança. A premissa é que, na presença de Internet, o Dongle irá autenticar-se junto ao servidor, e irá adquirir uma chave de sessão. Ela será utilizada para gerar o MAC dos dados enviado, mas também pode ser utilizada para validar dados provenientes do servidor. Isto será útil no contexto a seguir.
+
+Dado que o Dongle não tem relógio, ele irá proceder da seguinte forma. O Dongle manterá um número interno chamado de Boot Number. A cada reinicialização e portanto novo boot (que pode ser ocasionado por desconexão, deep sleep, entre outros), seu timer interno, que conta a quantidade de milissegundos desde o boot, reseta. Ao realizar a primeira coleta de um novo boot, irá gerar um novo Boot Number a partir do Boot Number anterior mais 1. 
+
+Todos os dados gerados serão enriquecidos com o Boot Number atual e com a quantidade de ms desde o boot. Com isso, junto com o \textbf{seq} citado na \autoref{ordemeprogresso}, garante-se o ordenamento e o intervalo de tempo entre os dados!
+
+Para se obter o timestamp absoluto, é possível utilizar o Algoritmo de Cristian, que permite a sincronização de relógios de sistemas distribuídos. 
+
+
+\begin{tikzpicture}[
+  font=\small,
+  ator/.style={draw, rounded corners=3pt, minimum width=3cm, minimum height=0.95cm,
+               align=center, font=\small\bfseries},
+  vida/.style={densely dashed, gray},
+  msg/.style={-{Stealth[length=2.5mm]}, thick},
+  acao/.style={draw, fill=gray!10, rounded corners=2pt, align=center,
+               inner sep=4pt, font=\footnotesize},
+  rot/.style={font=\footnotesize, fill=white, inner sep=1.5pt},
+]
+  \def\xD{0} \def\xA{5} \def\xS{10}
+  \node[ator] at (\xD,0) {Dongle};
+  \node[ator] at (\xA,0) {Aplicativo\\[-1pt]{\footnotesize\normalfont(apenas repassa)}};
+  \node[ator] at (\xS,0) {Servidor};
+  \foreach \x in {\xD,\xA,\xS} \draw[vida] (\x,-0.6) -- (\x,-10.0);
+ 
+  % 1. Pedido
+  \node[acao] at (\xD,-1.3) {anota $t_1$\\(ex.: 10\,000 ms)};
+  \draw[msg] (\xD,-2.1) -- (\xA,-2.5) -- (\xS,-2.9);
+  \node[rot] at (\xA,-1.95) {pedido de hora (boot\_id, $t_1$)};
+ 
+  % 2. Resposta
+  \node[acao] at (\xS,-3.8) {lê o relógio: $S$\\(ex.: 14:30:00,000)};
+  \draw[msg] (\xS,-4.7) -- (\xA,-5.1) -- (\xD,-5.5);
+  \node[rot] at (\xA,-4.55) {$S$};
+ 
+  \node[acao] at (\xD,-6.3) {anota $t_2$\\(ex.: 10\,400 ms)};
+ 
+  % Ida e volta
+  \draw[decorate, decoration={brace, amplitude=6pt}, thick]
+       (-1.5,-6.3) -- node[left=7pt, align=right, font=\footnotesize]
+       {ida e volta\\$t_2 - t_1$\\(ex.: 400 ms)} (-1.5,-1.3);
+ 
+  % 3. Envio das marcas
+  \draw[msg] (\xD,-7.2) -- (\xA,-7.6) -- (\xS,-8.0);
+  \node[rot] at (\xA,-7.05) {$t_1$, $t_2$ (protegidos pelo MAC)};
+ 
+  % 4. Âncora
+  \node[acao, anchor=north] at (\xS,-8.35)
+       {$t_{\mathrm{meio}} = (t_1+t_2)/2$\\ incerteza $= \pm(t_2-t_1)/2$\\
+        grava a âncora:\\(boot\_id, $t_{\mathrm{meio}}$, $S$, incerteza)};
+\end{tikzpicture}
+
+Em resumo, trocam-se mensagens. O servidor recebe a leitura do relógio interno do Dongle duas vezes, e, com base na demora entre as requisições, estima a qual horário cada leitura do relógio do dongle daquele Boot Number corresponde, atribuindo uma incerteza que cresce com a demora entre as requisições. Quanto mais rápida a troca, menor a incerteza.
+
+Na figura acima, a troca levou 400 ms, mas não dá para saber exatamente quando o servidor leu o relógio dentro desse intervalo. A melhor aposta é o meio: no instante t = 10 200 ms do Dongle, eram 14:30:00 no servidor. O erro máximo é metade da ida e volta, ±200 ms.
+
+Com isso, o servidor passa a armazenar a correspondência Tempo Dongle <-> Tempo real, para aquele Boot Number. Assim, o servidor consegue atribuir um horário a todos os dados referentes ao Boot Number!
+
+Um problema é que a comunicação sempre passa pelo App. Se este não for idôneo, pode atrasar as mensagens de propósito, aumentando a incerteza. Ou pode também simplesmente nunca repassar as mensagens. Nesses casos, assim como nos casos em que nunca há conexão com App ou Internet durante um boot, os dados nunca serão localizados no tempo pelo servidor, que tomará conhecimento somente da ordem e do intervalo de tempo entre dados de um mesmo Boot Number.
+
+Isto endereça a questão de tempo levantada na \autoref{questaodetempo}
+
+\subsection{A hora da colheita (ou da coleta)}
+\subsubsection{O que queremos} \label{oquequeremos}
+Inicialmente, é necessário definir os PIDs desejados. Proponho os seguinte 7:
+
+\begin{table}[htbp]
+  \centering
+  \caption{PIDs coletados pelo Dongle.}
+  \label{tab:pids}
+  \begin{tabular}{ccl}
+    \toprule
+    PID & Bytes & Descrição \\
+    \midrule
+    \texttt{04} & 1 & Carga calculada do motor (\%) \\
+    \texttt{05} & 1 & Temperatura do líquido de arrefecimento (\si{\celsius}) \\
+    \texttt{0C} & 2 & Rotação do motor (RPM) \\
+    \texttt{0D} & 1 & Velocidade do veículo (\si{\kilo\metre\per\hour}) \\
+    \texttt{10} & 2 & Vazão mássica de ar, MAF (\si{\gram\per\second}) \\
+    \texttt{2F} & 1 & Nível de combustível (\%) \\
+    \texttt{11 / 45 / 49} & 1 & Posição do Pedal de acelerador (\%) \\
+    \midrule
+    Total & 9 & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Eles devem ser o suficiente para realizar análises interessantes como: distribuição de RPM, velocidade, e posição do pedal; agressividade na condução; comportamento de troca de marchas;  estimativa do consumo de combustível; detecção de Engine Lugging;  etc.
+
+Uma reflexão importante é que a frequência de coleta desses PIDs pode ser diferente! RPM e Velocidade mudam rapidamente; logo, é desejável que sejam amostrados com alta frequência; mais ainda, como um ponto de interesse é observar a relação entre eles para definir a marcha atual, também é desejável que sejam amostrados um após o outro. 
+
+Já Temperatura do Líquido de Arrefecimento e Nível de Combustível podem ser amostrados muito menos frequentemente, pois mudam muito menos rapidamente.
+
+\subsubsection{Leituras}
+
+Conforme a \autoref{umacoisadecadavez}, dado que somente um PID será lido por vez, o tempo entre eles pode ser grande, o que prejudica a precisão de uma amostra, que deve esperar a leitura de todos os PIDs para ser gerada. 
+
+Para resolver isso, o Dongle adotará um comportamento simplificado de geração de leituras individuais, e não de amostras. Cada leitura conterá o valor de um PID específico, bem como o instante de tempo e a localização do GPS. O processamento delas ficará a cargo do Servidor.
+
+Cada PID a ser coletado corresponde a uma linha de uma tabela mantida em memória, construída segundo o modelo de \emph{Current Value Table} (CVT). Além do valor mais recente e do instante em que foi recebido, cada linha guarda as informações de escalonamento do PID, conforme a \autoref{tab:cvt}. A tabela é, assim, o ponto central da aquisição: o escalonador a consulta para decidir qual PID ler em seguida e a atualiza a cada resposta, enquanto o aplicativo apenas lê os valores, sem gerar novas requisições no barramento.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Campos de cada linha da CVT.}
+  \label{tab:cvt}
+  \begin{tabular}{lll}
+    \toprule
+    Campo & Uso & Descrição \\
+    \midrule
+    PID          & ---           & Identificador do parâmetro \\
+    Período      & Escalonamento & Intervalo desejado entre leituras \\
+    Próxima leitura & Escalonamento & Instante em que o PID volta a vencer \\
+    Valor        & Valor         & Último valor recebido \\
+    Atualizado em & Valor        & Instante da última resposta válida \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+O fluxo é então o seguinte: 
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{\textwidth}{!}{%
+
+\begin{tikzpicture}[
+  font=\fontsize{9}{11}\selectfont,
+  caixa/.style={draw, rounded corners=3pt, minimum width=2.6cm, minimum height=1.15cm, align=center},
+  seta/.style={-{Stealth[length=2.3mm]}, thick},
+  rot/.style={font=\fontsize{7.5}{9}\selectfont, align=center},
+]
+  % ---------- Linha de cima: escalonador, CVT, aplicativo ----------
+  \node[caixa, fill=blue!8, thick] (esc) at (0,0) {\textbf{Escalonador}\\[-1pt]{\fontsize{7.5}{9}\selectfont tarefa de aquisição}};
+ 
+  \node[draw, very thick, rounded corners=3pt, fill=orange!6, inner sep=4pt] (cvt) at (7,0) {%
+    \fontsize{7.5}{9}\selectfont
+    \begin{tabular}{@{}lllll@{}}
+      \multicolumn{5}{c}{\fontsize{9}{11}\selectfont\textbf{CVT}}\\[1pt]
+      \toprule
+      PID & Período & Próxima & Valor & Atualizado \\
+      \midrule
+      \texttt{0C} & 0,5 s & 12,50 s & 2150 & 12,02 s \\
+      \texttt{0D} & 0,5 s & 12,55 s & 64   & 12,07 s \\
+      \texttt{05} & 5 s   & 15,10 s & 88   & 10,11 s \\
+      \bottomrule
+    \end{tabular}};
+ 
+  \node[caixa, fill=gray!10] (app) at (14.3,0) {Aplicativo\\[-1pt]{\fontsize{7.5}{9}\selectfont (via BLE)}};
+ 
+  % escalonador <-> CVT
+  \draw[seta] ($(cvt.west)+(0,0.25)$) -- node[above, rot] {próximo PID\\vencido} ($(esc.east)+(0,0.25)$);
+  \draw[seta] ($(esc.east)+(0,-0.25)$) -- node[below, rot] {valor e\\instante} ($(cvt.west)+(0,-0.25)$);
+ 
+  % aplicativo <-> CVT
+  \draw[seta] ($(app.west)+(0,0.25)$) -- node[above, rot] {pede um PID} ($(cvt.east)+(0,0.25)$);
+  \draw[seta] ($(cvt.east)+(0,-0.25)$) -- node[below, rot] {valor atual\\(sem usar o CAN)} ($(app.west)+(0,-0.25)$);
+ 
+  % ---------- Linha de baixo: CAN, buffer, flash ----------
+  \def\yb{-3.4}
+  \node[caixa, fill=gray!10] (can) at (0,\yb) {Barramento\\CAN (ECU)};
+ 
+  % escalonador <-> CAN
+  \draw[seta] ($(esc.south)+(-0.3,0)$) -- node[left, rot] {requisição\\(1 PID)} ($(can.north)+(-0.3,0)$);
+  \draw[seta] ($(can.north)+(0.3,0)$) -- node[pos=0.25, right, rot] {resposta} ($(esc.south)+(0.3,0)$);
+ 
+  % Buffer duplo
+  \draw[dashed, rounded corners=3pt] (3.6,\yb-0.75) rectangle (7.2,\yb+1.1);
+  \node[font=\fontsize{8}{10}\selectfont\bfseries] at (5.4,\yb+0.8) {Buffer duplo (RAM)};
+  \draw[fill=green!20] (3.8,\yb-0.55) rectangle (5.3,\yb+0.45);
+  \node[rot] at (4.55,\yb-0.05) {bloco A\\(enchendo)};
+  \draw[fill=gray!15] (5.5,\yb-0.55) rectangle (7.0,\yb+0.45);
+  \node[rot] at (6.25,\yb-0.05) {bloco B\\(gravando)};
+ 
+  % escalonador -> buffer
+  \draw[seta] ($(esc.south east)+(-0.2,0)$) |- (4.2,-1.7) -- (4.2,\yb+1.1);
+  \node[rot, above] at (3.05,-1.7) {cada leitura (PID, instante, valor)};
+ 
+  % Flash
+  \node[caixa, fill=gray!10, minimum width=2.8cm] (flash) at (10.2,\yb+0.15) {Memória flash\\[-1pt]{\fontsize{7.5}{9}\selectfont log de blocos}};
+  \draw[seta] (7.2,\yb+0.15) -- node[above, rot] {bloco cheio} (flash.west);
+ 
+  % Envio
+  \draw[seta, dashed] (flash.east) -| node[pos=0.75, right, rot] {lotes para\\o Servidor} (app.south);
+\end{tikzpicture}
+
+}
+  \caption{Fluxo da aquisição em torno da CVT.}
+  \label{fig:cvt}
+\end{figure}
+
+A tarefa de aquisição decide qual próximo PID a ser lido. Quando a leitura termina, ela atualiza a CVT e coloca a leitura em um buffer duplo. Se isto enche o buffer, ele dispara a tarefa de escrita na flash, que fará o flush do bloco contendo várias leituras. Após isso, a tarefa de upload poderá executar, caso tenha conectividade.
+
+
+A estrutura que será armazenada no buffer é a seguinte:
+
+\begin{table}[htbp]
+  \centering
+  \caption{Registro de leitura de PID (13 bytes).}
+  \label{tab:reg-leitura}
+  \begin{tabular}{llcl}
+    \toprule
+    Campo & Tipo & Bytes & Descrição \\
+    \midrule
+    \texttt{seq}     & \texttt{uint32} & 4 & Número do registro, global e persistente \\
+    \texttt{boot\_id} & \texttt{uint16} & 2 & Boot em que o registro foi gerado \\
+    \texttt{t\_ms}   & \texttt{uint32} & 4 & Milissegundos desde o boot \\
+    \texttt{tipo}    & \texttt{uint8}  & 1 & PID lido (\texttt{0x00} a \texttt{0xFE}) \\
+    \texttt{valor}   & 2 bytes         & 2 & Bytes da resposta; PIDs de 1 byte usam só o primeiro \\
+    \midrule
+    Total & & 13 & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+A posição do GPS será tratada como um PID customizado, de valor 0xFF. Será gerado um registro por segundo, com a seguinte estrutura:
+
+\begin{table}[htbp]
+  \centering
+  \caption{Registro de posição GPS (23 bytes).}
+  \label{tab:reg-gps}
+  \begin{tabular}{llcl}
+    \toprule
+    Campo & Tipo & Bytes & Descrição \\
+    \midrule
+    \texttt{seq}     & \texttt{uint32} & 4 & Número do registro, global e persistente \\
+    \texttt{boot\_id} & \texttt{uint16} & 2 & Boot em que o registro foi gerado \\
+    \texttt{t\_ms}   & \texttt{uint32} & 4 & Milissegundos desde o boot \\
+    \texttt{tipo}    & \texttt{uint8}  & 1 & Sempre \texttt{0xFF} \\
+    \texttt{lat}     & \texttt{int32}  & 4 & Latitude, em graus $\times 10^7$ \\
+    \texttt{lon}     & \texttt{int32}  & 4 & Longitude, em graus $\times 10^7$ \\
+    \texttt{alt}     & \texttt{int32}  & 4 & Altitude, em milímetros \\
+    \midrule
+    Total & & 23 & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+Entendido como será o formato e o tamanho dos dados gerados pelo Dongle, é necessário modelar a comunicação para entender suas limitações.
+
+\subsubsection{Capacidade do Canal}
+
+Todos os dados vêm de uma única fonte: o barramento CAN. Já foi estabelecido na \autoref{umacoisadecadavez} que o modelo de requisição será sequencial, com um PID por requisição. Para entender como isto pode dar certo, vamos modelar o problema.
+
+É importante relembrar que o que será modelado é um abstrato ''Canal de Requisições'' usado pelo Dongle, e não o barramento CAN em si. O CAN tem sua lógica de prioridade e N ECUs podem se comunicar entre si, sem ser afetadas por nossa utilização, que é de baixa prioridade. Além disso, é possível que as ECUs, comunicando-se entre si, utilizem-se da concorrência para aumentar o desempenho. No entando, o Dongle enxerga o CAN como um canal que só pode receber uma requisição por vez, e é isto que está sendo modelado.
+
+Suponha que cada requisição demora um tempo $T_{\mathrm{max}}$ para ser atendida. A capacidade é de $\lambda_{\mathrm{canal}} = \frac{1}{T_{\mathrm{max}}}$ requisições por segundo.
+
+\subsubsection{Utilização do Canal}
+
+Considere $n$ PIDs. Para cada PID $i$:
+ 
+\begin{itemize}
+  \item $P_i$ é o período de leitura desejado;
+  \item $T_i$ é o tempo de serviço da requisição, isto é, o intervalo entre o envio do pedido e a chegada da resposta, limitado pelo prazo $T_{\max}$;
+  \item $d_i$ é o tamanho, em bytes, do valor retornado.
+\end{itemize}
+
+O Dongle aguarda cada resposta por no máximo $T_{\max}$, o prazo configurado. Como uma requisição sem resposta também ocupa o canal até o fim desse prazo, vale sempre $T_i \le T_{\max}$, e substituir $T_i$ por $T_{\max}$ fornece o pior caso. Quando conveniente, supõe-se um tempo de serviço comum $T$ para todos os PIDs.
+ 
+
+Numa janela de duração $W$, o PID $i$ é lido $W/P_i$ vezes, e cada leitura ocupa o barramento por $T_i$. O tempo ocupado por ele é, portanto, $W\,T_i/P_i$, e a fração do tempo total, $T_i/P_i$, independentemente do tamanho da janela. Somando as frações de todos os PIDs, obtém-se a fração do tempo em que o barramento está ocupado:
+
+\begin{equation}
+  U = \sum_{i=1}^{n} \frac{T_i}{P_i},
+  \label{eq:util}
+\end{equation}
+e uma configuração é considerada viável quando $U \le U_{\max}$, com $U_{\max} < 1$ reservando folga para atrasos no próprio Dongle. Neste projeto, adota-se $U_{\max} = 0{,}8$.
+
+Uma intuição é a seguinte. Suponha que um único PID seja amostrado a cada \SI{100}{\milli\second}, mas que cada requisição demore \SI{200}{\milli\second} para ser atendida. Quando chegar o momento da segunda leitura, a primeira ainda estará na metade. Como as requisições são atendidas uma de cada vez, a segunda só poderá começar depois que a primeira terminar, e assim sucessivamente. O PID será lido, na prática, a cada \SI{200}{\milli\second}, e não a cada \SI{100}{\milli\second}: metade das leituras pretendidas nunca acontecerá. Em termos da \autoref{eq:util}, $U = 200/100 = 2$, ou seja, o PID precisaria de 200\% do tempo disponível.
+
+Se o período fosse de \SI{200}{\milli\second}, teríamos $U = 1$: o canal ficaria ocupado o tempo todo, sem nenhum intervalo livre. Funcionaria apenas em condições ideais, pois qualquer resposta um pouco mais lenta atrasaria todas as seguintes. Daí a necessidade de $U_{\max} < 1$: a folga absorve as variações no tempo de resposta e os atrasos do próprio Dongle.
+
+\subsubsection{Taxa de geração de dados}
+
+
+Seja $f_i = 1/P_i$ a frequência de leitura do PID $i$, $\rho_i$ a fração de requisições sem resposta e $f_G$ a frequência com que o aplicativo envia posições GPS. O número de registros gerados por segundo é
+\begin{equation}
+  \Lambda_r = \sum_{i=1}^{n} f_i\,(1 - \rho_i) + f_G ,
+  \label{eq:registros}
+\end{equation}
+e a taxa de geração de dados, em bytes por segundo, é
+\begin{equation}
+  R = s_L \sum_{i=1}^{n} f_i\,(1 - \rho_i) + s_G\,f_G .
+  \label{eq:taxa}
+\end{equation}
+
+\subsubsection{Tempo até esgotar a memória}
+
+Seja $F$ a capacidade, em bytes, da partição usada para os registros. Se nenhum dado for enviado ao Servidor, a memória se esgota após
+\begin{equation}
+  t_{\mathrm{mem}} = \frac{F}{R}
+  \label{eq:tmem}
+\end{equation}
+segundos de coleta. A partir desse ponto, para continuar coletando, o Dongle precisa descartar os registros mais antigos.
+
+A memória flash também tem vida útil limitada: cada setor suporta um número $E$ de ciclos de apagamento, tipicamente da ordem de $10^5$. Como o sistema de arquivos distribui as gravações por toda a partição, ela é inteiramente regravada a cada $F/R$ segundos de coleta, e a vida útil é
+\begin{equation}
+  t_{\mathrm{vida}} = \frac{E\,F}{R} .
+  \label{eq:tvida}
+\end{equation}
+
+\subsubsection{Tempo até esgotar os contadores}
+
+O número de sequência é um inteiro de 32 bits, incrementado a cada registro. Ele se esgota após
+\begin{equation}
+  t_{\mathrm{seq}} = \frac{2^{32}}{\Lambda_r}
+  \label{eq:tseq}
+\end{equation}
+segundos de coleta. 
+
+Também é possível obter um limite que vale para qualquer configuração viável. Pela \autoref{eq:util}, com tempo de serviço comum $T$, a viabilidade exige $\sum_i f_i \le U_{\max}/T$. Desprezando o GPS, segue que
+\begin{equation}
+  t_{\mathrm{seq}} \ge \frac{2^{32}\,T}{U_{\max}} .
+  \label{eq:tseqmin}
+\end{equation}
+Mesmo com uma ECU muito rápida, com $T = \SI{10}{\milli\second}$, o número de sequência dura mais de 1,7 ano de coleta ininterrupta.
+
+Os demais contadores têm limites próprios. O campo \texttt{t\_ms}, de 32 bits em milissegundos, se esgota após $2^{32}\,\si{\milli\second} \approx 49{,}7$ dias sem reinicialização; ao se aproximar desse valor, o Dongle inicia um novo boot. O campo \texttt{boot\_id}, de 16 bits, suporta $2^{16} = 65\,536$ boots: com $b$ boots por dia, ele dura $65\,536/b$ dias, ou cerca de 36 anos para $b = 5$.
+
+A \autoref{tab:limites} resume essas relações.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Taxa de dados e limites de armazenamento e de contadores.}
+  \label{tab:limites}
+  \begin{tabular}{ll}
+    \toprule
+    Grandeza & Fórmula \\
+    \midrule
+    Registros por segundo & $\Lambda_r = \sum_i f_i\,(1-\rho_i) + f_G$ \\
+    Taxa de dados & $R = s_L \sum_i f_i\,(1-\rho_i) + s_G\,f_G$ \\
+    Tempo até esgotar a memória & $t_{\mathrm{mem}} = F/R$ \\
+    Vida útil da flash & $t_{\mathrm{vida}} = E\,F/R$ \\
+    Tempo até esgotar o número de sequência & $t_{\mathrm{seq}} = 2^{32}/\Lambda_r$ \\
+    Tempo até esgotar o \texttt{t\_ms} & $2^{32}\,\si{\milli\second}$ \\
+    Tempo até esgotar o \texttt{boot\_id} & $2^{16}/b$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+\subsubsection{Parâmetros e comandos}
+\label{sec:parametros}
+
+Com a modelagem matemática pronta, fica claro que há decisões que precisam ser tomadas. Por exemplo, a listagem de PIDs já foi definida na \autoref{oquequeremos}. No entanto é necessário definir a frequência de coleta de cada um. Além disso, outras questões como: bitrate do CAN e tamanho do CAN ID, que serão utilizados na configuração de cada um; e o tempo máximo de espera antes do Timeout, ou $T_{\mathrm{max}}$.
+
+O pequeno conjunto de parâmetros será configurado pelo aplicativo e gravado na memória não volátil (NVS), de modo que sobrevivem a reinicializações (\autoref{tab:parametros}). Os demais valores são constantes de projeto, fixadas no firmware (\autoref{tab:constantes}).
+ 
+\begin{table}[htbp]
+  \centering
+  \caption{Parâmetros configuráveis do Dongle.}
+  \label{tab:parametros}
+  \begin{tabular}{llll}
+    \toprule
+    Parâmetro & Valores & Padrão & Ao alterar \\
+    \midrule
+    Taxa do barramento   & \SI{250}{kbps} ou \SI{500}{kbps} & \SI{500}{kbps} & Reinicia o Dongle \\
+    Tamanho do CAN ID    & 11 ou 29 bits                     & 11 bits        & Reinicia o Dongle \\
+    Prazo de resposta $T_{\max}$ & múltiplos de \SI{4}{\milli\second} & \SI{50}{\milli\second} & Aplicado imediatamente \\
+    Lista de PIDs        & até 16 PIDs do serviço 01         & ---            & Reconstrói a CVT \\
+    Período de cada PID  & em milissegundos                  & ---            & Reconstrói a CVT \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+A taxa do barramento e o tamanho do identificador não são independentes: a ISO~15765-4 prevê exatamente quatro combinações, e o ELM327 já as identifica como protocolos numerados. Por isso, os dois parâmetros são configurados juntos, por um único comando. Como reconfigurar o controlador CAN com as tarefas em execução é arriscado, o Dongle grava a nova configuração e reinicia, o que também gera um novo \texttt{boot\_id} e separa, nos dados, o antes e o depois da mudança.
+ 
+Toda alteração na lista de PIDs ou nos períodos é validada antes de ser aceita: o Dongle calcula a utilização pela \autoref{eq:util}, com $T_i = T_{\max}$, e rejeita a configuração se $U > U_{\max}$.
+ 
+\begin{table}[htbp]
+  \centering
+  \caption{Constantes de projeto.}
+  \label{tab:constantes}
+  \begin{tabular}{lll}
+    \toprule
+    Constante & Valor & Justificativa \\
+    \midrule
+    Utilização máxima $U_{\max}$ & 0{,}8 & Folga para atrasos (\autoref{eq:util}) \\
+    Tamanho de cada bloco do buffer & \SI{1}{KB} & Equilíbrio entre RAM e número de gravações \\
+    Intervalo máximo de flush & \SI{10}{\second} & Limita a perda num desligamento brusco \\
+    Capacidade da CVT & 16 PIDs & Folga sobre os 7 PIDs previstos \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+\subsubsection{Comandos AT}
+ 
+O aplicativo se comunica com o Dongle por comandos de texto no padrão do ELM327. A \autoref{tab:comandos} lista os comandos suportados.
+ 
+\begin{table}[htbp]
+  \centering
+  \caption{Comandos AT suportados pelo Dongle.}
+  \label{tab:comandos}
+  \begin{tabular}{lll}
+    \toprule
+    Comando & Origem & Função \\
+    \midrule
+    \texttt{AT Z}        & ELM327  & Reinicia o Dongle \\
+    \texttt{AT I}        & ELM327  & Identificação do dispositivo \\
+    \texttt{AT E0}, \texttt{AT E1} & ELM327 & Desativa ou ativa o eco dos comandos \\
+    \texttt{AT SP h}     & ELM327  & Define o protocolo (\autoref{tab:protocolos}) \\
+    \texttt{AT DP}       & ELM327  & Informa o protocolo em uso \\
+    \texttt{AT ST hh}    & ELM327  & Define $T_{\max} = \mathtt{hh} \times \SI{4}{\milli\second}$ \\
+    \texttt{AT RV}       & ELM327  & Lê a tensão da bateria \\
+    \midrule
+    \texttt{AT\#PID pp mmmm} & Projeto & Adiciona ou altera o PID \texttt{pp} com período \texttt{mmmm} ms \\
+    \texttt{AT\#DEL pp}  & Projeto & Remove o PID \texttt{pp} \\
+    \texttt{AT\#LIST}    & Projeto & Lista os PIDs, os períodos e a utilização \\
+    \texttt{AT\#DIAG b}  & Projeto & Ativa (\texttt{1}) ou desativa (\texttt{0}) o modo diagnóstico \\
+    \texttt{AT\#NET b}   & Projeto & Informa se o aplicativo tem acesso à Internet \\
+    \texttt{AT\#GPS lat lon alt} & Projeto & Envia a posição atual (graus $\times 10^7$ e mm) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+\begin{table}[htbp]
+  \centering
+  \caption{Protocolos CAN aceitos pelo comando \texttt{AT SP}.}
+  \label{tab:protocolos}
+  \begin{tabular}{ccc}
+    \toprule
+    Código & Tamanho do ID & Taxa \\
+    \midrule
+    \texttt{6} & 11 bits & \SI{500}{kbps} \\
+    \texttt{7} & 29 bits & \SI{500}{kbps} \\
+    \texttt{8} & 11 bits & \SI{250}{kbps} \\
+    \texttt{9} & 29 bits & \SI{250}{kbps} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+Um comando com PID ou período inválido, ou que tornaria a configuração inviável, é respondido com \texttt{?}, como no ELM327. Fora do modo diagnóstico, requisições de PIDs presentes na CVT são respondidas a partir da tabela, sem acessar o barramento.
+
+
+\subsubsection{Arquitetura Final}
+
+\begin{tikzpicture}[
+  font=\fontsize{9}{11}\selectfont,
+  pq/.style={font=\fontsize{7.5}{9}\selectfont},
+  tarefa/.style={draw, thick, rounded corners=4pt, fill=blue!10, minimum width=2.8cm,
+                 minimum height=1.1cm, align=center},
+  dado/.style={draw, rounded corners=2pt, fill=orange!12, minimum width=2.6cm,
+               minimum height=0.85cm, align=center},
+  externo/.style={draw, fill=gray!12, minimum width=2.4cm, minimum height=1.0cm, align=center},
+  fila/.style={draw, fill=green!12, minimum width=2.0cm, minimum height=0.5cm,
+    path picture={\foreach \p in {0.2,0.4,0.6,0.8}
+      \draw[green!45!black] ($(path picture bounding box.south west)!\p!(path picture bounding box.south east)$)
+        -- ($(path picture bounding box.north west)!\p!(path picture bounding box.north east)$);}},
+  evento/.style={draw, thick, fill=violet!10, rounded corners=2pt, align=left, inner sep=4pt},
+  seta/.style={-{Stealth[length=2.2mm]}, thick},
+  dupla/.style={{Stealth[length=2.2mm]}-{Stealth[length=2.2mm]}, thick},
+  sinal/.style={-{Stealth[length=2mm]}, densely dashed, thick, violet!70!black},
+]
+  % ===================== Regiões dos núcleos =====================
+  \foreach \xa/\xb/\nome in {0.45/3.55/Núcleo 1, 8.95/12.25/Núcleo 0} {
+    \fill[blue!3] (\xa,-3.05) rectangle (\xb,3.75);
+    \draw[dashed, blue!50] (\xa,-3.05) rectangle (\xb,3.75);
+    \node[anchor=south, font=\fontsize{8}{10}\selectfont\bfseries, blue!50!black] at ({(\xa+\xb)/2},-3.02) {\nome};
+  }
+ 
+  % ===================== Externos =====================
+  \node[externo] (can) at (2,5.0) {Barramento CAN\\[-1pt]{\fontsize{7.5}{9}\selectfont TWAI: interrupção na IRAM e fila RX}};
+  \node[externo, minimum width=1.7cm, minimum height=6.2cm] (app) at (14.2,0.5) {Aplicativo\\[-1pt]{\fontsize{7.5}{9}\selectfont (via BLE)}};
+ 
+  % ===================== Tarefas =====================
+  \node[tarefa] (aq)  at (2,2.6)    {\textbf{Aquisição}\\[-1pt]{\fontsize{7.5}{9}\selectfont prioridade alta}};
+  \node[tarefa] (fl)  at (2,-1.95)  {\textbf{Flush}\\[-1pt]{\fontsize{7.5}{9}\selectfont prioridade média}};
+  \node[tarefa] (ble) at (10.6,2.6) {\textbf{BLE / comandos}\\[-1pt]{\fontsize{7.5}{9}\selectfont prioridade média}};
+  \node[tarefa] (ses) at (10.6,0.3) {\textbf{Sessão}\\[-1pt]{\fontsize{7.5}{9}\selectfont handshake e Cristian}};
+  \node[tarefa] (up)  at (10.6,-1.95) {\textbf{Upload}\\[-1pt]{\fontsize{7.5}{9}\selectfont prioridade baixa}};
+ 
+  % ===================== Compartilhados =====================
+  \node[dado] (cvt) at (6.25,3.6) {\textbf{CVT}\\[-1pt]{\fontsize{7.5}{9}\selectfont protegida por mutex}};
+  \node[fila] (fdiag) at (6.25,2.2) {};
+  \node[pq, above=0pt of fdiag] {fila de diagnóstico};
+ 
+  \node[evento] (eg) at (6.25,0.05) {%
+    \textbf{Grupo de eventos}\\[-1pt]
+    {\fontsize{7.5}{9}\selectfont\texttt{APP\_CONECTADO} (BLE)}\\[-3pt]
+    {\fontsize{7.5}{9}\selectfont\texttt{INTERNET} (BLE)}\\[-3pt]
+    {\fontsize{7.5}{9}\selectfont\texttt{SESSAO\_OK} (Sessão)}\\[-3pt]
+    {\fontsize{7.5}{9}\selectfont\texttt{MODO\_DIAG} (BLE)}};
+ 
+  \node[externo] (flash) at (6.25,-1.95) {Flash\\[-1pt]{\fontsize{7.5}{9}\selectfont LittleFS}};
+ 
+  \node[dado, minimum width=2.8cm] (buf) at (2,0.9) {Buffer duplo\\[-1pt]{\fontsize{7.5}{9}\selectfont 2 blocos de 1 KB}};
+  \node[fila] (fblo) at (2,-0.5) {};
+  \node[pq, right=2pt of fblo, align=left] {blocos\\cheios};
+ 
+  % ===================== Fluxo de dados =====================
+  \draw[seta] ($(aq.north)+(-0.3,0)$) -- node[left, pq] {requisição} ($(can.south)+(-0.3,0)$);
+  \draw[seta] ($(can.south)+(0.3,0)$) -- node[right, pq] {resposta} ($(aq.north)+(0.3,0)$);
+ 
+  \draw[seta] ($(aq.east)+(0,0.35)$) -- ++(0.55,0) |- node[pos=0.75, above, pq] {escreve} (cvt.west);
+  \draw[seta] (cvt.east) -| node[pos=0.3, above, pq] {lê} (ble.north);
+ 
+  \draw[seta] ($(ble.west)+(0,-0.4)$) -- (fdiag.east);
+  \draw[seta] (fdiag.west) -- (fdiag.west -| aq.east);
+ 
+  \draw[seta] (aq.south) -- node[left, pq] {append} (buf.north);
+  \draw[seta] (buf.south) -- (fblo.north);
+  \draw[seta] (fblo.south) -- node[left, pq] {acorda} (fl.north);
+  \draw[seta] (fl.east) -- node[above, pq] {grava} (flash.west);
+  \draw[seta] ($(flash.east)+(0,0.2)$) -- node[above, pq] {lê lotes} ($(up.west)+(0,0.2)$);
+  \draw[seta] ($(up.west)+(0,-0.2)$) -- node[below, pq] {apaga} ($(flash.east)+(0,-0.2)$);
+ 
+  % ===================== Sinais =====================
+  \draw[sinal] ($(ble.south west)+(0.3,0)$) -- ($(eg.north east)+(-0.15,0)$);
+  \draw[sinal, {Stealth[length=2mm]}-{Stealth[length=2mm]}] (ses.west) -- (ses.west -| eg.east);
+  \draw[sinal] ($(eg.south east)+(-0.15,0)$) -- ($(up.north west)+(0.3,0)$);
+  \draw[sinal] ($(eg.west)+(0,0.3)$) -- ($(aq.south east)+(-0.1,0)$);
+ 
+  % ===================== Aplicativo =====================
+  \foreach \t in {ble, ses, up} \draw[dupla] (\t.east) -- (\t.east -| app.west);
+ 
+  % ===================== Legenda =====================
+  \begin{scope}[shift={(0.5,-3.75)}]
+    \node[tarefa, minimum width=0.7cm, minimum height=0.35cm] at (0.35,0) {};
+    \node[anchor=west, pq] at (0.8,0) {tarefa};
+    \node[fila, minimum width=0.8cm, minimum height=0.35cm] at (2.4,0) {};
+    \node[anchor=west, pq] at (2.9,0) {fila};
+    \node[dado, minimum width=0.7cm, minimum height=0.35cm] at (4.1,0) {};
+    \node[anchor=west, pq] at (4.55,0) {dado compartilhado};
+    \draw[seta] (7.6,0) -- (8.3,0);
+    \node[anchor=west, pq] at (8.4,0) {fluxo de dados};
+    \draw[sinal] (10.6,0) -- (11.3,0);
+    \node[anchor=west, pq] at (11.4,0) {sinal};
+  \end{scope}
+\end{tikzpicture}
+
+\subsection{Procedimento}
+
+Para configurar o Dongle em um veículo, é preciso definir o prazo de resposta $T_{\max}$ e o período $P_i$ de cada PID.
+ 
+\subsubsection{Definição de $T_{\max}$}
+ 
+Com o motor ligado, o Dongle envia 20 requisições de cada PID e mede o tempo até cada resposta. Adota-se como prazo o maior percentil 99 entre os PIDs, com uma margem de 30\%:
+\begin{equation}
+  T_{\max} = 1{,}3 \cdot \max_i \, T_i^{(99)} .
+\end{equation}
+
+ 
+\subsubsection{Definição dos períodos}
+ 
+Cada período é definido como um múltiplo de $T_{\max}$, $P_i = k_i\,T_{\max}$, com $k_i$ menor para os PIDs que precisam de leituras mais frequentes (\autoref{tab:periodos}). Assim, a utilização $U = \sum_i T_{\max}/P_i = \sum_i 1/k_i$ não depende de $T_{\max}$: com os valores propostos, $U \approx 0{,}78$, próximo de $U_{\max} = 0{,}8$, em qualquer veículo. Os PIDs mais frequentes usam $k_i = 5$, o menor multiplicador inteiro que mantém $U \le U_{\max}$: com $k_i = 4$, a utilização ultrapassaria 0{,}9.
+ 
+\begin{table}[htbp]
+  \centering
+  \caption{Períodos propostos em função de $T_{\max}$.}
+  \label{tab:periodos}
+  \begin{tabular}{clc}
+    \toprule
+    PID & Grandeza & $P_i$ \\
+    \midrule
+    \texttt{0C} & Rotação do motor          & $5\,T_{\max}$ \\
+    \texttt{0D} & Velocidade do veículo     & $5\,T_{\max}$ \\
+    \texttt{49} & Posição do pedal          & $5\,T_{\max}$ \\
+    \texttt{04} & Carga calculada do motor  & $12\,T_{\max}$ \\
+    \texttt{10} & Vazão mássica de ar (MAF) & $12\,T_{\max}$ \\
+    \texttt{05} & Temperatura do líquido    & $100\,T_{\max}$ \\
+    \texttt{2F} & Nível de combustível      & $200\,T_{\max}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+\subsubsection{Valores resultantes}
+ 
+A \autoref{tab:resultados} aplica as equações anteriores a três valores de $T_{\max}$, considerando uma posição GPS por segundo e uma partição de \SI{2}{MB}.
+ 
+\begin{table}[htbp]
+  \centering
+  \caption{Períodos e limites para diferentes valores de $T_{\max}$.}
+  \label{tab:resultados}
+  \begin{tabular}{lccc}
+    \toprule
+    & $T_{\max} = \SI{50}{\milli\second}$ & $T_{\max} = \SI{100}{\milli\second}$ & $T_{\max} = \SI{200}{\milli\second}$ \\
+    \midrule
+    Período de \texttt{0C}, \texttt{0D}, \texttt{49} & \SI{0.25}{\second} & \SI{0.5}{\second} & \SI{1}{\second} \\
+    Período de \texttt{04}, \texttt{10}              & \SI{0.6}{\second} & \SI{1.2}{\second} & \SI{2.4}{\second} \\
+    Período de \texttt{05}                           & \SI{5}{\second}   & \SI{10}{\second}  & \SI{20}{\second} \\
+    Período de \texttt{2F}                           & \SI{10}{\second}  & \SI{20}{\second}  & \SI{40}{\second} \\
+    \midrule
+    Utilização $U$                        & 0{,}78 & 0{,}78 & 0{,}78 \\
+    Registros por segundo $\Lambda_r$     & 16{,}6 & 8{,}8  & 4{,}9 \\
+    Taxa de dados $R$                     & \SI{226}{B/s} & \SI{125}{B/s} & \SI{74}{B/s} \\
+    Dados por hora                        & \SI{814}{kB}  & \SI{449}{kB}  & \SI{266}{kB} \\
+    Tempo até esgotar a memória $t_{\mathrm{mem}}$ & \SI{2.6}{h} & \SI{4.7}{h} & \SI{7.9}{h} \\
+    Tempo até esgotar o \texttt{seq} $t_{\mathrm{seq}}$ & 8 anos & 15 anos & 28 anos \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Os períodos da \autoref{tab:resultados} são conservadores, pois supõem que toda requisição consome o prazo completo $T_{\max}$. Na prática, a ECU pode responder bem antes, mas como os períodos continuam fixos, o canal pode passar boa parte do tempo ocioso. Pode ser interessante pensarmos em como mudar para que ele fique adaptativo.
+
+\subsection{Possíveis futuras otimizações}
+
+Por fim, algumas otimizações ficam como possíveis evoluções do projeto.
+
+\subsubsection{Otimizando o tamanho das leituras}
+
+ A mais direta é reduzir o tamanho dos registros: em vez de repetir \texttt{seq}, \texttt{boot\_id} e \texttt{t\_ms} em cada leitura, esses campos poderiam ser gravados uma única vez no cabeçalho de cada bloco. O cabeçalho guardaria o instante de início do bloco, e cada registro guardaria apenas a diferença de tempo em relação ao início do bloco. Como o bloco dura no máximo 10 segundos antes de ser armazenado, a diferença caberia em 2 bytes, em milissegundos. O registro de leitura, com o PID, o valor e a diferença de tempo, cairia de 13 para 5 bytes, reduzindo a taxa de dados em cerca de 60\% e aumentando na mesma proporção a autonomia da memória. O custo é uma lógica de gravação e recuperação mais complexa.
+
+\subsubsection{Uma otimização otimista}
+No comportamento atual, o reagendamento é calculado a partir de $T_{\max}$. Sempre que a ECU responde antes do prazo o escalonador termina as leituras vencidas e permanece parado até o próximo vencimento, gerando ociosidade. Para evitar esse desperdício, cada linha da CVT pode passar a ter mais duas colunas: um intervalo mínimo $P_i^{\min}$ entre leituras do mesmo PID e o instante da última leitura realizada.
+
+A regra do escalonador passaria a ser a seguinte: se houver PIDs vencidos, atende-se o vencido há mais tempo, como antes; se não houver, em vez de esperar, lê-se antecipadamente o PID com o vencimento mais próximo entre aqueles cuja última leitura ocorreu há pelo menos $P_i^{\min}$; somente se nenhum PID atender a essa condição o escalonador aguarda. Após uma leitura antecipada, o próximo vencimento é contado a partir dela. Dessa forma, os períodos $P_i$ passam a ser intervalos máximos, que continuam garantidos, enquanto $P_i^{\min}$ limita a frequência de cada PID. 
+
+A utilização do canal aumenta sempre que a ECU responde rapidamente, e a taxa de dados, embora variável, fica limitada a $s_L \sum_i 1/P_i^{\min} + s_G\,f_G$, valor que passa a ser usado no cálculo da autonomia da memória.
+
+
+\subsubsection{Estimativas com as otimizações}
+\label{sec:estimativas-otimizadas}
+ 
+Esta seção refaz as estimativas supondo as duas otimizações: registros agrupados em blocos e leitura antecipada com intervalo mínimo por PID.
+ 
+\subsubsection{Formato em blocos}
+ 
+O número de sequência, o \texttt{boot\_id} e o instante de início passam a ser gravados uma única vez, no cabeçalho de cada bloco. Cada registro guarda apenas o tempo decorrido desde o início do bloco, em milissegundos. Como um bloco é fechado em no máximo $T_{\mathrm{flush}} = \SI{10}{\second}$, esse valor cabe em 2 bytes (\autoref{tab:formato-blocos}).
+
+\begin{table}[htbp]
+  \centering
+  \caption{Estruturas do formato em blocos.}
+  \label{tab:formato-blocos}
+  \begin{tabular}{llc}
+    \toprule
+    Estrutura & Campos & Bytes \\
+    \midrule
+    Cabeçalho (um por bloco) & \texttt{seq} (4), \texttt{boot\_id} (2), \texttt{t\_ms} inicial (4), tamanho (2) & $H = 12$ \\
+    \midrule
+    \multicolumn{3}{l}{\textit{Registros (vários por bloco)}} \\
+    \quad Leitura de PID & \texttt{tipo} (1), $\Delta t$ (2), \texttt{valor} (2) & $s_L = 5$ \\
+    \quad Posição GPS    & \texttt{tipo} (1), $\Delta t$ (2), \texttt{lat}, \texttt{lon}, \texttt{alt} (12) & $s_G = 15$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+\subsubsection{Intervalo mínimo}
+ 
+Cada PID passa a ter, além do período $P_i$, um intervalo mínimo $P_i^{\min}$, que por padrão é igual a $P_i$ e pode ser reduzido, respeitando um piso absoluto de \SI{100}{\milli\second}. Para os PIDs que se beneficiam de leituras mais frequentes, propõe-se $P_i^{\min} = \max(P_i/2,\ \SI{100}{\milli\second})$; para os demais, mantém-se $P_i^{\min} = P_i$, pois leituras adicionais só repetiriam valores (\autoref{tab:pmin}).
+ 
+\begin{table}[htbp]
+  \centering
+  \caption{Período e intervalo mínimo de cada PID.}
+  \label{tab:pmin}
+  \begin{tabular}{clcc}
+    \toprule
+    PID & Grandeza & $P_i$ & $P_i^{\min}$ \\
+    \midrule
+    \texttt{0C} & Rotação do motor          & $5\,T_{\max}$   & $\max(P_i/2,\ \SI{100}{\milli\second})$ \\
+    \texttt{0D} & Velocidade do veículo     & $5\,T_{\max}$   & $\max(P_i/2,\ \SI{100}{\milli\second})$ \\
+    \texttt{49} & Posição do pedal          & $5\,T_{\max}$   & $\max(P_i/2,\ \SI{100}{\milli\second})$ \\
+    \texttt{04} & Carga calculada do motor  & $12\,T_{\max}$  & $\max(P_i/2,\ \SI{100}{\milli\second})$ \\
+    \texttt{10} & Vazão mássica de ar (MAF) & $12\,T_{\max}$  & $\max(P_i/2,\ \SI{100}{\milli\second})$ \\
+    \texttt{05} & Temperatura do líquido    & $100\,T_{\max}$ & $P_i$ \\
+    \texttt{2F} & Nível de combustível      & $200\,T_{\max}$ & $P_i$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+Com a leitura antecipada, o número de leituras por segundo deixa de ser fixo e passa a variar entre um valor nominal, quando a ECU é lenta e cada PID é lido no seu período, e um valor máximo, quando a ECU é rápida e cada PID é lido no seu intervalo mínimo:
+\begin{equation}
+  \Lambda^{\mathrm{nom}} = \sum_{i=1}^{n} \frac{1}{P_i}
+  \;\le\; \Lambda \;\le\;
+  \Lambda^{\max} = \sum_{i=1}^{n} \frac{1}{P_i^{\min}} .
+\end{equation}
+ 
+\subsubsection{Equações}
+ 
+A taxa de dados dos registros é $R_{\mathrm{reg}} = s_L\,\Lambda + s_G\,f_G$. Como cada bloco tem $S = \SI{1024}{B}$ e é fechado ao encher ou após $T_{\mathrm{flush}}$, o número de blocos por segundo e a taxa total são
+\begin{equation}
+  b = \max\!\left( \frac{R_{\mathrm{reg}}}{S - H},\ \frac{1}{T_{\mathrm{flush}}} \right),
+  \qquad
+  R = R_{\mathrm{reg}} + H\,b .
+\end{equation}
+O tempo até esgotar a memória continua sendo $t_{\mathrm{mem}} = F/R$. Já o número de sequência passa a ser incrementado por bloco, e não por registro:
+\begin{equation}
+  t_{\mathrm{seq}} = \frac{2^{32}}{b} .
+\end{equation}
+Como cada bloco reúne dezenas de registros, $b$ é muito menor que o número de leituras por segundo: nos cenários a seguir, ele fica entre 0{,}1 e 0{,}17 bloco por segundo, e $t_{\mathrm{seq}}$ supera 800 anos. O \texttt{boot\_id} não muda: continua limitado a $2^{16}$ boots.
+ 
+\subsubsection{Resultados}
+ 
+A \autoref{tab:estimativas-otimizadas} aplica as equações aos mesmos valores de $T_{\max}$ da \autoref{tab:resultados}, com uma posição GPS por segundo e uma partição de \SI{2}{MB}. A última linha repete, para comparação, a autonomia do formato anterior, com 13 bytes por registro e sem leitura antecipada.
+ 
+\begin{table}[htbp]
+  \centering
+  \caption{Estimativas com registros em blocos e intervalo mínimo.}
+  \label{tab:estimativas-otimizadas}
+  \begin{tabular}{lccc}
+    \toprule
+    & $T_{\max} = \SI{50}{\milli\second}$ & $T_{\max} = \SI{100}{\milli\second}$ & $T_{\max} = \SI{200}{\milli\second}$ \\
+    \midrule
+    $P_i$ / $P_i^{\min}$ de \texttt{0C}, \texttt{0D}, \texttt{49} & \num{250} / \SI{125}{\milli\second} & \num{500} / \SI{250}{\milli\second} & \num{1000} / \SI{500}{\milli\second} \\
+    $P_i$ / $P_i^{\min}$ de \texttt{04}, \texttt{10}              & \num{600} / \SI{300}{\milli\second} & \num{1200} / \SI{600}{\milli\second} & \num{2400} / \SI{1200}{\milli\second} \\
+    \midrule
+    Leituras por segundo, nominal / máximo & 15{,}6 / 31{,}0 & 7{,}8 / 15{,}5 & 3{,}9 / 7{,}7 \\
+    Taxa de dados $R$, nominal / máximo    & \num{94} / \SI{172}{B/s} & \num{55} / \SI{94}{B/s} & \num{36} / \SI{55}{B/s} \\
+    Dados por hora, nominal / máximo       & \num{340} / \SI{619}{kB} & \num{199} / \SI{337}{kB} & \num{129} / \SI{198}{kB} \\
+    $t_{\mathrm{mem}}$, nominal / pior caso & \SI{6.2}{} / \SI{3.4}{h} & \SI{10.5}{} / \SI{6.2}{h} & \SI{16.3}{} / \SI{10.6}{h} \\
+    $t_{\mathrm{seq}}$                      & $> 800$ anos & $> 1000$ anos & $> 1000$ anos \\
+    \midrule
+    $t_{\mathrm{mem}}$ no formato anterior  & \SI{2.6}{h} & \SI{4.7}{h} & \SI{7.9}{h} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+A comparação mostra que as duas otimizações se compensam com folga. A leitura antecipada pode dobrar a frequência dos PIDs mais importantes e, no pior caso, quase dobrar o volume de dados; ainda assim, graças ao formato em blocos, a autonomia no pior caso continua maior que a do formato anterior sem leitura antecipada. O número máximo de leituras por segundo só é atingido se a ECU responder rápido o suficiente: com $\Lambda^{\max} = 31$ leituras por segundo, por exemplo, é preciso um tempo de resposta médio inferior a \SI{32}{\milli\second}.
+
+
+\end{document}
