@@ -67,6 +67,18 @@ está em [PASSO_A_PASSO.md](PASSO_A_PASSO.md).
 
 - Breu e álcool (verniz), ou só estanho, para estanhar as trilhas.
 
+### Serigrafia na face de cima (opcional)
+
+Além do material da transferência do cobre (impressora a laser, papel couché, ferro de passar):
+
+- Lixa d'água fina (400 a 600), para tirar o brilho da fenolite.
+- Agulha e alfinetes (ou pinos macho soltos), para alinhar o papel pelos furos.
+- Lanterna ou janela clara, para ver os furos através do papel.
+- Caneta permanente de ponta fina, para retoques.
+- Verniz spray transparente, para proteger o desenho.
+
+O procedimento está em [PASSO_A_PASSO_SERIGRAFIA.md](PASSO_A_PASSO_SERIGRAFIA.md).
+
 ## Soldagem e montagem
 
 - Ferro de solda de 30 a 60 W, de preferência estação com temperatura ajustável (~330 a 350 °C), com ponta fina.

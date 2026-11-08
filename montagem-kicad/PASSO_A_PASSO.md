@@ -157,6 +157,11 @@ Use luvas, óculos e roupa velha, em local ventilado. O percloreto mancha roupa,
 1. A linha do contorno sai impressa e corroída junto com as trilhas. Corte a sobra por ela e lixe a borda.
 2. **Do lado da antena do ESP32**, a borda fica a apenas 2 mm do pino 1. Não corte para dentro dessa linha.
 
+### Opcional: serigrafia na face de cima
+
+Se quiser os contornos, as referências e os nomes dos pinos impressos na face de cima da placa, faça agora, antes
+de proteger o cobre. O processo está em [PASSO_A_PASSO_SERIGRAFIA.md](PASSO_A_PASSO_SERIGRAFIA.md).
+
 ### 11. Proteger o cobre (recomendado)
 
 Sem proteção o cobre oxida em semanas e fica difícil de soldar. Escolha uma opção:

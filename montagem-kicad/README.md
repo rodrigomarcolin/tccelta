@@ -126,7 +126,8 @@ sem cobre que o plano de GND deixa em volta.
    Veja `tccelta/fabricacao/furacao.txt` para a lista completa (e `tccelta.drl`, formato Excellon).
 
 A serigrafia (referências e rótulos dos pinos) está em `serigrafia_F_Silk.pdf` como guia de montagem, e em
-`serigrafia_F_Silk_espelhada.pdf` para quem quiser transferi-la por toner no lado dos componentes.
+`serigrafia_F_Silk_espelhada.pdf` para quem quiser transferi-la por toner no lado dos componentes (veja
+[PASSO_A_PASSO_SERIGRAFIA.md](PASSO_A_PASSO_SERIGRAFIA.md)).
 
 ## Montagem
 
