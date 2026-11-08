@@ -10,7 +10,7 @@ Divergências em relação ao plano original:
 ## O que a fase entrega
 
 - O dongle só aceita enlaces cifrados por LTK de pareamento **LESC Just Works** guardada como bond (verificado no bond: `sc == 1`, chave de 16 B); NUS e SYNC só entregam e notificam à **conexão autorizada**.
-- Pareamento **só** na janela de 45 s aberta pelo botão BOOT (GPIO0) segurado 5 s; **um bond por vez**; o botão derruba todas as conexões e apaga todos os bonds.
+- Pareamento **só** na janela de 45 s aberta pelo botão de pareamento (GPIO19, header `SW1` das PCBs; BOOT/GPIO0 no DevKit solto) segurado 5 s; **um bond por vez**; o botão derruba todas as conexões e apaga todos os bonds.
 - Anúncio com dados de fabricante (`0xFFFF`: janela aberta, há bond) usados pelo app só como dica.
 - Eventos de toda transição (`PAIR_*`, `BOND_*`, `LINK_*`, `CONN_REJECT`, `ADV`) e testes nativos da política com relógio falso.
 - App: pareamento conduzido pelo SO (Android `createBond`; iOS alerta do sistema), telas para segurar o botão, janela expirada, recusa, bond perdido (Android remove e pareia de novo; iOS orienta esquecer) e reconexão automática com bond.
@@ -20,7 +20,7 @@ Divergências em relação ao plano original:
 ```mermaid
 flowchart LR
     subgraph FW["Dongle"]
-        BTN[PairingTask<br/>PairButton GPIO0] --> PC[PairingController]
+        BTN[PairingTask<br/>PairButton GPIO19] --> PC[PairingController]
         PC <--> PP[PairingPolicy<br/>janela + tabela de conexões]
         PC <-->|ILinkControl| BC[BleConnectivity]
         BC --> BSEC[BleSecurity<br/>SM LESC, gate de bond, BondStoreGuard]

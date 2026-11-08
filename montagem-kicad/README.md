@@ -47,6 +47,8 @@ ferramentas e materiais em [MATERIAIS.md](MATERIAIS.md). A função e a posiçã
 | 1 | R1: resistor de filme metálico 120 ohms, 1/4 W, 1 % (axial, montado em pé) | terminação CAN (dissipa ~33 mW) |
 | 1 | Barra de pinos **macho** 1x2, 2,54 mm, vertical | JP1 "TERM 120R" (sai da mesma barra 1x40 do J3) |
 | 1 | Jumper de encaixe (shunt) 2,54 mm | fecha o JP1: colocado na bancada, retirado no carro |
+| 1 | Barra de pinos **macho** 1x2, 2,54 mm, vertical | SW1 "PAIR" (botão de pareamento externo: pino 1 = GPIO19, pino 2 = GND) |
+| 1 | Botão táctil (ex.: 12x12 mm com capinha) com 2 fios dupont fêmea soldados em pernas de lados opostos | liga ao SW1; segurar 5 s com o dongle ligado abre a janela de pareamento (sem caixa: botão solto na ponta dos fios) |
 | 1 | Borne de parafuso 2 vias, passo 5,08 mm (Phoenix MKDS 1,5/2) | J1: 12 V e GND |
 | 1 | Borne de parafuso 3 vias, passo 5,08 mm (MKDS 1,5/3) | J2: GND, CAN_H, CAN_L; encaixa no J1 formando 5 vias |
 | 1 | F1: fusível rearmável PTC radial, **0,4 A** de manutenção (desarma a 0,8 A), **60 V ou mais** (RXEF040, MF-R040 ou similar), terminais a 5,1 mm | abre num curto na placa e volta sozinho depois de esfriar. Não use os de 16 V. Se desarmar à toa no calor, troque pelo RXEF050 (0,5 A), no mesmo lugar |
@@ -55,7 +57,7 @@ ferramentas e materiais em [MATERIAIS.md](MATERIAIS.md). A função e a posiçã
 | 3 | Parafuso M3 + porca (ou espaçador) | furos de fixação H1, H2, H3 |
 | - | Fenolite de face simples, ~60 x 76 mm | |
 
-Total de pinos de soquete e barra a soldar: 29 (ESP32) + 4 (transceptor) + 4 (LM2596) + 2 (J3) + 2 (JP1) = 41,
+Total de pinos de soquete e barra a soldar: 29 (ESP32) + 4 (transceptor) + 4 (LM2596) + 2 (J3) + 2 (JP1) + 2 (SW1) = 43,
 mais as 2 pernas do R1.
 
 Sobre o módulo Waveshare: a barra de 4 pinos de 90 graus que ele já traz é justamente o que permite a montagem em
@@ -129,7 +131,7 @@ sem cobre que o plano de GND deixa em volta.
 1. Corroa em percloreto de ferro morno (cerca de 40 C), agitando. Retire quando todo o cobre exposto sumir.
 2. Lave, remova o toner com acetona e passe palha de aço fina.
 3. Fure da face do cobre:
-   - **1,0 mm**: soquetes do ESP32 (29), do transceptor (4), do LM2596 (4), J3 (2), JP1 (2), R1 (2) e F1 (2): 45 furos.
+   - **1,0 mm**: soquetes do ESP32 (29), do transceptor (4), do LM2596 (4), J3 (2), JP1 (2), SW1 (2), R1 (2) e F1 (2): 47 furos.
    - **1,0 a 1,1 mm** para os pads do D1 (2) e **0,8 a 1,0 mm** para o C1 (2): alargue se as pernas não entrarem.
    - **1,3 mm**: bornes J1 e J2 (5 furos).
    - **3,2 mm**: furos de fixação M3 (3).
@@ -167,7 +169,7 @@ A serigrafia (referências e rótulos dos pinos) está em `serigrafia_F_Silk.pdf
    Veja o passo a passo.
 8. Cabo OBD-II: pino 16 = +12 V, pinos 4 e 5 = GND, pino 6 = CAN_H, pino 14 = CAN_L, nos 5 vias do borne.
 
-O firmware usa TX = GPIO21 e RX = GPIO22 (pinos D21 e D22 do ESP32 DevKit V1). O VIN do ESP32 recebe os 5 V do buck.
+O firmware usa TX = GPIO21 e RX = GPIO22 (pinos D21 e D22 do ESP32 DevKit V1) e lê o botão de pareamento (SW1) no GPIO19 (D19), ativo em nível baixo (o BOOT/GPIO0 do DevKit não sai no soquete). O VIN do ESP32 recebe os 5 V do buck.
 
 ## Avisos
 

@@ -31,5 +31,5 @@ Eventos de depuração do SYNC e do handshake: `docs/debug-events.md` (§5.7).
 - `APP_CONNECTED`/`CONN up=1` significam "sessão autorizada", não "conexão crua".
 - A decisão é de `pairing::PairingPolicy` (`pairing/`), ligada à NimBLE por
   `PairingController` e `BleConnectivity` (`ILinkControl`); `BleSecurity` guarda as chamadas
-  à pilha. O botão BOOT (5 s) abre a janela de 45 s (`[pairing]` no `platformio.ini`).
+  à pilha. O botão de pareamento (5 s) abre a janela de 45 s (`[pairing]` no `platformio.ini`).
 - Eventos: `docs/debug-events.md` §5.9.

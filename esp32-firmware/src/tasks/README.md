@@ -18,7 +18,7 @@ stateDiagram-v2
 
 ## PairingTask (Fase 2)
 
-Núcleo 0, prioridade 2, pilha 4096 B, período 20 ms (`vTaskDelayUntil`). Lê o GPIO0 (BOOT),
+Núcleo 0, prioridade 2, pilha 4096 B, período 20 ms (`vTaskDelayUntil`). Lê o botão de pareamento (GPIO19 nas PCBs; GPIO0/BOOT no DevKit solto),
 alimenta o `PairButton` e, ao segurar `PAIR_BUTTON_HOLD_MS`, chama
 `PairingController::onButtonHold()` (derruba conexões, apaga bonds, abre a janela). Também
 dá o `tick()` da política (prazos da janela e de autenticação) e anima o LED opcional

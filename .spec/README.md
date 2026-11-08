@@ -12,7 +12,7 @@ bancada com a placa.
 | Fase | Pasta | Entrega |
 |---|---|---|
 | 1 | `fase-1-seguranca-telemetria/` | Firmware + app: build único Arduino + ESP-IDF, chaves na partição `secnvs`, bloco autenticado (HMAC/ECDSA + CRC32) em segmentos v2, reserva de `seq` + BOOT, serviço BLE SYNC (TLV + fragmentação), handshake app↔dongle, cursor de envio, buffer e `SyncCoordinator` no app, GPS periódico, port do servidor com stub e servidor de bancada. Fluxos: leitura contínua (Fig. 15) e handshake (Fig. 5, perna app↔dongle). |
-| 2 | `fase-2-lesc/` | Firmware + app: pareamento BLE LESC Just Works fim a fim, janela de pareamento por botão (GPIO0, 5 s ⇒ 45 s), um bond por vez, derrubada de bonds e conexões. |
+| 2 | `fase-2-lesc/` | Firmware + app: pareamento BLE LESC Just Works fim a fim, janela de pareamento por botão (GPIO19 nas PCBs, GPIO0 no DevKit solto; 5 s ⇒ 45 s), um bond por vez, derrubada de bonds e conexões. |
 | 3 | `fase-3-servidor/` | `backend/` (um módulo Go, dois binários): API (`tccelta api`) com handshake, ingestão de lotes e confirmação; worker de tempo e reprocessamento; KMS próprio (`tccelta-kms`, único cliente do Vault Transit: `K_auth` gerar+verificar, `K_rec` só verificar, JWT Ed25519 com rotação); PostgreSQL/TimescaleDB/PostGIS; Redis, Caddy/túnel, Docker Compose (dev, prodlike, teste); simulador e `make e2e`. App: `HttpsSyncServerGateway` atrás do port da Fase 1. |
 | 4 | `fase-4-ecdsa/` | **Implementada (falta a bancada com a placa).** Perfil `asym` fim a fim: verificação ECDSA P-256 local na ingestão (despacho por perfil, `none` incluso), `provision new/import` com `k_sig`, simulador e cenário `asym` no `make e2e`, vetor de assinatura RFC 6979 cruzado firmware ↔ servidor, falha de assinatura explícita no firmware. |
 
