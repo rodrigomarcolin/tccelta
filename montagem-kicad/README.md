@@ -110,7 +110,9 @@ O script reescreve símbolos, footprints, esquemático, PCB e `fabricacao/`, e i
 3. Transfira com ferro quente (algumas passadas firmes) ou laminadora. Deixe esfriar e solte o papel na água.
 4. Retoque falhas com caneta de retroprojetor ou esmalte.
 
-Pontos pretos no arquivo marcam os furos (marcas pequenas): servem de guia para o punção.
+Cada pad tem no centro um ponto branco de 0,35 mm, sem toner: depois da corrosão ele vira um pontinho sem cobre que
+marca o centro do furo e serve de guia para o punção. Os furos M3 não têm pad: o centro deles é o centro do círculo
+sem cobre que o plano de GND deixa em volta.
 
 ## Corrosão e furação
 

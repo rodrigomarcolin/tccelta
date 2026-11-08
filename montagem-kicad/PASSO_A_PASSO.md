@@ -53,8 +53,9 @@ de novo e não transfere.
 
 1. Coloque o papel sobre a placa com **o lado impresso (o desenho preto) encostado no cobre**, e o verso do papel
    para cima. Funciona como um carimbo: a face com o desenho encosta na placa.
-2. Centralize o desenho na placa e prenda o papel com fita adesiva dobrada para o verso da placa, para ele não
-   escorregar.
+2. Centralize o desenho na placa. Dobre as margens do papel por cima das bordas da placa, como quem embrulha um
+   presente, e prenda essas abas com fita adesiva **no verso da placa** (a face sem cobre). Assim o papel não
+   escorrega e a fita fica longe do ferro, sem derreter sobre o desenho.
 3. Apoie a placa numa superfície firme e que aguente calor (uma tábua de madeira com um pano fino por cima).
 4. Ferro na temperatura de **algodão**, **sem vapor** e sem água no reservatório.
 5. Passe o ferro por **3 a 5 minutos**:
@@ -78,8 +79,12 @@ placa vai **inteira para a água, com o papel ainda grudado**.
 4. Se o papel resistir, devolva a placa à água por mais alguns minutos e tente de novo.
 5. Pode sobrar uma película fina e esbranquiçada de papel **por cima das trilhas**. Tudo bem, ela não atrapalha.
 6. O que **não pode** sobrar é papel **entre as trilhas** (onde o cobre deve sumir): ali ele bloqueia o percloreto.
-   Olhe com atenção nos espaços estreitos entre pads vizinhos e entre as trilhas e o plano de GND, e esfregue
-   esses pontos de leve até ver o cobre limpo.
+   Olhe com atenção nos vãos mais estreitos, onde a fibra do papel costuma ficar presa:
+   - entre **pads vizinhos**: pad é o círculo ou oval de cobre onde vai a perna de um componente; nos soquetes
+     do ESP32 eles ficam a 2,54 mm um do outro, e o vão entre dois deles tem menos de 1 mm;
+   - entre as trilhas e o plano de GND (a área grande de cobre), separados por 0,6 a 0,8 mm.
+
+   Esfregue esses pontos de leve até ver o cobre limpo no vão.
 7. Seque a placa com papel-toalha, sem esfregar o desenho.
 
 ### 6. Conferir e retocar
@@ -128,8 +133,12 @@ Use luvas, óculos e roupa velha, em local ventilado. O percloreto mancha roupa,
 
 ### 9. Furar
 
-1. Marque o centro de cada furo com um punção ou prego e uma batida leve. Os pontos no meio dos pads servem de
-   guia e evitam que a broca escorregue.
+1. Marque o centro de cada furo com um punção ou prego e uma batida leve. O desenho já indica onde:
+   - cada pad (o círculo ou oval de cobre onde vai uma perna) tem no centro um **pontinho sem cobre**, de
+     0,35 mm. Ele vem de um ponto branco no PDF, onde não há toner, e o percloreto abre esse furinho no cobre;
+   - apoie a ponta do punção nesse pontinho e bata de leve: a marca guia a broca e evita que ela escorregue;
+   - os 3 furos de fixação M3 não têm pad. O centro deles é o centro do círculo sem cobre que o plano de GND
+     deixa em volta de cada um.
 2. Fure **pelo lado do cobre**, com a broca a 90° (use suporte vertical na microretífica ou furadeira de bancada):
 
    | Broca | Onde | Quantidade |
