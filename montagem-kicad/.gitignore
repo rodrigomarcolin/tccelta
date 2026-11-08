@@ -1,0 +1,6 @@
+# Estado local do KiCad (janelas, camadas visíveis) e arquivos temporários
+*.kicad_prl
+*-backups/
+fp-info-cache
+*.lck
+__pycache__/

@@ -1,0 +1,4 @@
+(sym_lib_table
+	(version 7)
+	(lib (name "tccelta")(type "KiCad")(uri "${KIPRJMOD}/tccelta.kicad_sym")(options "")(descr "Simbolos do dongle OBD-II"))
+)
