@@ -1,7 +1,7 @@
 # Passo a passo: serigrafia na face de cima (opcional)
 
 Como transferir para a face de cima da placa (a fenolite, sem cobre) os contornos dos módulos, as referências
-(U1, U2, U3, F1, D1, C1, J3), os nomes dos pinos e as marcas de orientação (o "+" do C1, a seta do transceptor).
+(U1, U2, U3, F1, D1, C1, R1, J3, JP1), os nomes dos pinos e as marcas de orientação (o "+" do C1, a seta do transceptor).
 É o mesmo método de toner e ferro de passar usado no cobre, descrito em [PASSO_A_PASSO.md](PASSO_A_PASSO.md).
 
 A serigrafia não tem função elétrica: é só um guia de montagem impresso na própria placa. Se preferir pular esta
@@ -111,7 +111,8 @@ Igual ao cobre: o papel fica grudado e não sai a seco sem arrancar o toner junt
    - o **"+" do C1**;
    - a **faixa do D1** (catodo);
    - a **seta "COMPONENTES E BORNE PARA DENTRO"** do transceptor;
-   - o **pino 1** e os nomes 3V3/GND/CTX/CRX do soquete do transceptor.
+   - o **pino 1** e os nomes 3V3/GND/CTX/CRX do soquete do transceptor;
+   - o texto **"TERM 120R / jumper: bancada / sem: carro"** junto ao JP1.
 3. Se a transferência ficou ruim no geral, tire o toner com acetona **só na face de cima** (sem encostar no
    cobre se ele já estiver protegido) e repita os passos 2 a 5.
 

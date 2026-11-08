@@ -10,12 +10,14 @@ está em [PASSO_A_PASSO.md](PASSO_A_PASSO.md).
 |---|---|---|
 | 1 | Placa de fenolite face simples, pelo menos 60 x 76 mm (compre umas duas, caso precise refazer) | a placa |
 | 2 | Barra de pinos **fêmea** 1x40, passo 2,54 mm | soquetes do ESP32 (1x15 e 1x14), do transceptor (1x4) e 4 soquetes avulsos do LM2596. Cortar barra fêmea desperdiça posições, por isso duas |
-| 1 | Barra de pinos **macho** 1x40, passo 2,54 mm | J3 (1x2) e os 4 pinos do LM2596 |
+| 1 | Barra de pinos **macho** 1x40, passo 2,54 mm | J3 (1x2), JP1 (1x2) e os 4 pinos do LM2596 |
 | 1 | Borne de parafuso KRE/KF301, 2 vias, passo 5,08 mm | J1: +12 V e GND |
 | 1 | Borne de parafuso KRE/KF301, 3 vias, passo 5,08 mm | J2: GND, CAN_H e CAN_L |
 | 1 | Fusível rearmável PTC radial 0,5 A, **60 V ou mais** (RXEF050, MF-R050 ou "PTC 72V 0,5A"), terminais a 5,1 mm | F1: abre num curto na placa e volta sozinho. Não use os de 16 V |
 | 1 | Diodo Schottky 1N5819 | D1: proteção contra inversão de polaridade |
 | 1 | Capacitor eletrolítico 100 uF / 25 V (radial, 6,3 mm de diâmetro) | C1: filtro da entrada |
+| 1 | Resistor de filme metálico 120 ohms, 1/4 W, 1 % | R1: terminação CAN, montado em pé |
+| 1 | Jumper de encaixe (shunt) 2,54 mm | fecha o JP1: colocado na bancada, retirado no carro |
 
 ## Fixação e ligação
 

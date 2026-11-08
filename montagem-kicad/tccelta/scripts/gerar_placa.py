@@ -98,7 +98,7 @@ SN65_ORDEM_PINOS = ("CAN_TX", "CAN_RX", "GND", "3V3")
 # =====================================================================
 #  PROJETO DA PLACA / REGRAS DE CORROSAO CASEIRA
 # =====================================================================
-LARG_SINAL = 1.0              # CAN_TX, CAN_RX, CAN_H, CAN_L, +3V3
+LARG_SINAL = 1.0              # CAN_TX, CAN_RX, CAN_H, CAN_L, TERM, +3V3
 LARG_POTENCIA = 1.5           # +12V_IN, +12V_FUS, +12V_PROT, +5V
 ISOLAMENTO = 0.6              # clearance minimo
 FOLGA_BORDA = 1.0             # cobre-borda
@@ -174,6 +174,7 @@ FP_ESP = "tccelta:ESP32_DevKitV1_30_Soquete"
 FP_LM = "tccelta:LM2596_Modulo_Soquete"
 FP_SN = "tccelta:SN65HVD230_Waveshare_EmPe"
 FP_PINH2 = "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
+FP_R1 = "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical"
 FP_F1 = "tccelta:PTC_Radial_P5.08_Vertical"
 
 # ref -> dados
@@ -187,6 +188,8 @@ COMPONENTES = {
     "U2": dict(lib_id="tccelta:ESP32_DevKitV1_30", valor="ESP32-DevKit-V1", fp=FP_ESP),
     "U3": dict(lib_id="tccelta:SN65HVD230_Waveshare", valor="SN65HVD230_CAN_Board", fp=FP_SN),
     "J3": dict(lib_id="Connector_Generic:Conn_01x02", valor="CAN_p/_modulo", fp=FP_PINH2),
+    "R1": dict(lib_id="Device:R", valor="120R_1/4W", fp=FP_R1),
+    "JP1": dict(lib_id="Jumper:Jumper_2_Open", valor="TERM_120R", fp=FP_PINH2),
     "J4": dict(lib_id="Connector:Screw_Terminal_01x02", valor="Borne_CAN_do_modulo_SN65", fp="",
                no_bom=True, no_board=True),
     "H1": dict(lib_id="Mechanical:MountingHole", valor="M3", fp=FP_FURO),
@@ -206,9 +209,10 @@ LIGACOES = {
     ("U2", "30"): "+3V3", ("U2", "20"): "CAN_TX", ("U2", "17"): "CAN_RX",
     ("U3", "1"): "+3V3", ("U3", "2"): "GND", ("U3", "3"): "CAN_RX", ("U3", "4"): "CAN_TX",
     ("J3", "1"): "CAN_H", ("J3", "2"): "CAN_L", ("J4", "1"): "CAN_H", ("J4", "2"): "CAN_L",
+    ("R1", "1"): "TERM", ("R1", "2"): "CAN_L", ("JP1", "1"): "TERM", ("JP1", "2"): "CAN_H",
 }
-REDES = ["+12V_IN", "+12V_FUS", "+12V_PROT", "+5V", "+3V3", "GND", "CAN_TX", "CAN_RX", "CAN_H", "CAN_L"]
-REDES_SINAL = ["CAN_TX", "CAN_RX", "CAN_H", "CAN_L", "+3V3"]
+REDES = ["+12V_IN", "+12V_FUS", "+12V_PROT", "+5V", "+3V3", "GND", "CAN_TX", "CAN_RX", "CAN_H", "CAN_L", "TERM"]
+REDES_SINAL = ["CAN_TX", "CAN_RX", "CAN_H", "CAN_L", "TERM", "+3V3"]
 REDES_POTENCIA = ["+12V_IN", "+12V_FUS", "+12V_PROT", "+5V"]
 
 # Pinos do DOIT ESP32 DevKit V1 (vista de cima, antena para cima, numeracao de cima para baixo)
@@ -253,6 +257,17 @@ LM_TL = (LM_IN_X - LM2596_FUROS["IN+"]["xy"][0], LM_IN_Y - LM2596_FUROS["IN+"]["
 Y_SN = 40.5                                     # linha dos pads do soquete do transceptor
 SN_P1 = (-8.89, Y_SN)                           # pino mais a oeste (CAN_TX)
 J3_POS = (-14.5, 37.46)                         # J3 (macho 1x2 CAN_H/CAN_L): pino 2 na linha do borne
+# Terminacao CAN selecionavel: CAN_H -- JP1 -- TERM -- R1 (120 ohms, em pe) -- CAN_L.
+R1_POS = (-12.4, 31.2)                          # pino 1 do R1 (TERM); pino 2 (CAN_L) 2,54 mm abaixo
+JP1_POS = (-16.0, 31.2)                         # pino 1 do JP1 (TERM); pino 2 (CAN_H) 2,54 mm abaixo
+X_CAN_L_R1 = -11.9                              # corredor do CAN_L ate o R1 (a leste dos pads do J3)
+PAD_TERM = 1.9                                  # pads redondos do R1/JP1, furo 1,0
+J3_REF_DX, J3_REF_DY = 0.0, 4.8
+R1_REF_DX, R1_REF_DY = 2.6, 1.3
+JP1_REF_DX, JP1_REF_DY = -2.6, -2.4
+TXT_TERM = (-25.5, 29.2)
+TXT_TERM2 = (-25.5, 30.4)
+TXT_TERM3 = (-25.5, 31.6)
 Y_FAIXA_3V3 = 43.0                              # faixa abaixo do soquete por onde o +3V3 vai a oeste
 Y_DIAG = 32.0                                   # fim das diagonais CAN_TX/CAN_RX (abaixo dos pads)
 X_FURO_BL = -49.5                               # furo M3 inferior esquerdo
@@ -543,7 +558,7 @@ def gera_fp_sn65():
             "uma linha fina.")
     c = 1.5 * P
     L, E = SN65_MODULO_LARGURA, SN65_MODULO_ESPESSURA
-    fp.prop("Reference", "REF**", c, -13.2, "F.SilkS", tam=1.0)
+    fp.prop("Reference", "REF**", c, -13.8, "F.SilkS", tam=1.0)
     fp.prop("Value", "SN65HVD230_Waveshare_EmPe", c, 3.5, "F.Fab")
     fp.prop("Datasheet", "", 0, 0, "F.Fab", True)
     fp.prop("Description", "", 0, 0, "F.Fab", True)
@@ -559,8 +574,8 @@ def gera_fp_sn65():
     fp.linha(c, -1.9, c, -8.6, "F.SilkS", 0.15)
     fp.linha(c, -8.6, c - 0.7, -7.5, "F.SilkS", 0.15)
     fp.linha(c, -8.6, c + 0.7, -7.5, "F.SilkS", 0.15)
-    fp.texto("COMPONENTES E BORNE", c, -10.2, "F.SilkS", 0.7)
-    fp.texto("PARA DENTRO", c, -11.2, "F.SilkS", 0.7)
+    fp.texto("COMPONENTES E BORNE", c, -11.4, "F.SilkS", 0.7)
+    fp.texto("PARA DENTRO", c, -12.5, "F.SilkS", 0.7)
     for i, nome in enumerate(SN65_ORDEM_PINOS):
         x = i * P
         fp.pad(_SN_NUM[nome], x, 0.0, PAD_SOQUETE[0], PAD_SOQUETE[1], FURO_SOQUETE)
@@ -662,16 +677,17 @@ class Sch:
         pinos = pinos_do_simbolo(bloco)
         ref_at = ref_at or (x, y - 6.35)
         val_at = val_at or (x, y + 6.35)
+        ang_txt = 90 if rot in (90, 270) else 0     # texto na horizontal mesmo com o simbolo girado
         linhas = ['\t(symbol (lib_id "%s") (at %s %s %d) (unit 1) (body_style 1) (exclude_from_sim no) '
                   '(in_bom %s) (on_board %s) (in_pos_files yes) (dnp no) (fields_autoplaced yes)'
                   % (lib_id, f(x), f(y), rot,
                      "no" if (ref.startswith("H") or info.get("no_bom")) else "yes",
                      "no" if info.get("no_board") else "yes"),
                   '\t\t(uuid "%s")' % uid("comp/" + ref),
-                  '\t\t(property "Reference" "%s" (at %s %s 0) (effects (font (size 1.27 1.27))))'
-                  % (ref, f(ref_at[0]), f(ref_at[1])),
-                  '\t\t(property "Value" "%s" (at %s %s 0) (effects (font (size 1.27 1.27))))'
-                  % (info["valor"], f(val_at[0]), f(val_at[1])),
+                  '\t\t(property "Reference" "%s" (at %s %s %d) (effects (font (size 1.27 1.27))))'
+                  % (ref, f(ref_at[0]), f(ref_at[1]), ang_txt),
+                  '\t\t(property "Value" "%s" (at %s %s %d) (effects (font (size 1.27 1.27))))'
+                  % (info["valor"], f(val_at[0]), f(val_at[1]), ang_txt),
                   '\t\t(property "Footprint" "%s" (at %s %s 0) (effects (font (size 1.27 1.27)) (hide yes)))'
                   % (info["fp"], f(x), f(y)),
                   '\t\t(property "Datasheet" "" (at %s %s 0) (effects (font (size 1.27 1.27)) (hide yes)))'
@@ -728,6 +744,8 @@ def gera_esquematico(proprios):
                         ("Device:D_Schottky", "Device.kicad_sym"),
                         ("Device:Polyfuse", "Device.kicad_sym"),
                         ("Device:C_Polarized", "Device.kicad_sym"),
+                        ("Device:R", "Device.kicad_sym"),
+                        ("Jumper:Jumper_2_Open", "Jumper.kicad_sym"),
                         ("Mechanical:MountingHole", "Mechanical.kicad_sym")]:
         s.simbolos_lib[lib_id] = qualifica(simbolo_padrao(arq, lib_id.split(":")[1]), lib_id)
     for nome, bloco in proprios.items():
@@ -748,7 +766,7 @@ def gera_esquematico(proprios):
     s.texto("J1 + J2 formam um borne de 5 vias.", 11, 68, 1.3)
 
     # ---- bloco 2: regulacao
-    s.bloco("2. Regulacao 5 V (modulo LM2596)", 176, 12, 290, 78)
+    s.bloco("2. Regulacao 5 V (modulo LM2596)", 176, 12, 286, 78)
     s.componente("U1", 233.68, 43.18, 0, ref_at=(233.68, 33.02), val_at=(233.68, 53.34))
     s.texto("Ajustar a saida para 5,0 V ANTES de encaixar o ESP32.", 179, 72, 1.3)
     s.texto("Modulo encaixado em 4 soquetes femea de 1 pino.", 179, 76, 1.3)
@@ -760,15 +778,19 @@ def gera_esquematico(proprios):
     s.texto("Os demais pinos ficam sem ligacao (marcados com X).", 11, 202, 1.3)
 
     # ---- bloco 4: CAN
-    s.bloco("4. Transceptor CAN (modulo SN65HVD230 Waveshare, em pe)", 156, 84, 290, 140)
+    s.bloco("4. Transceptor CAN (SN65HVD230 Waveshare, em pe)", 156, 84, 286, 144)
     s.componente("U3", 190.5, 111.76, 0, ref_at=(190.5, 102.0), val_at=(190.5, 121.0))
     s.componente("J3", 246.38, 101.6, 0, ref_at=(245.0, 95.0), val_at=(245.0, 108.0))
     s.componente("J4", 246.38, 124.46, 0, ref_at=(245.0, 118.0), val_at=(245.0, 131.0))
+    # terminacao CAN selecionavel: CAN_H -- JP1 -- TERM -- R1 -- CAN_L
+    s.componente("JP1", 266.7, 101.6, 0, ref_at=(266.7, 96.52), val_at=(266.7, 106.68))
+    s.componente("R1", 266.7, 114.3, 90, ref_at=(266.7, 109.22), val_at=(266.7, 119.38))
     s.texto("J3 (macho 1x2) liga ao borne CAN do modulo (J4) por 2 fios trancados, ate 10 cm.", 159, 134, 1.3)
-    s.texto("J4 e so o borne do modulo (nao vai na PCB). O resistor de 120 ohms do modulo: so no simulador.", 159, 138, 1.3)
+    s.texto("J4 e so o borne do modulo (nao vai na PCB). Remover SEMPRE o resistor SMD de 120 ohms do modulo.", 159, 142, 1.3)
+    s.texto("JP1 colocado = terminacao de 120 ohms (bancada). Sem jumper = sem terminacao (carro).", 159, 138, 1.3)
 
     # ---- bloco 5: mecanica
-    s.bloco("5. Mecanica", 156, 146, 290, 172)
+    s.bloco("5. Mecanica", 156, 146, 286, 172)
     s.componente("H1", 185.0, 160.0, 0, ref_at=(185.0, 154.0), val_at=(185.0, 165.0))
     s.componente("H2", 215.0, 160.0, 0, ref_at=(215.0, 154.0), val_at=(215.0, 165.0))
     s.componente("H3", 245.0, 160.0, 0, ref_at=(245.0, 154.0), val_at=(245.0, 165.0))
@@ -905,6 +927,8 @@ def constroi_pcb():
     coloca("U1", D_PRETTY, "LM2596_Modulo_Soquete", "tccelta", LM_TL[0], LM_TL[1])
     coloca("U3", D_PRETTY, "SN65HVD230_Waveshare_EmPe", "tccelta", SN_P1[0], SN_P1[1])
     std("J3", J3_POS[0], J3_POS[1])
+    std("R1", R1_POS[0], R1_POS[1], 270)      # em pe: pino 2 abaixo do pino 1
+    std("JP1", JP1_POS[0], JP1_POS[1])
     std("J1", BORNE_X[0], Y_BORNE)
     std("J2", BORNE_X[2], Y_BORNE)
     std("D1", X_CORREDOR_12V, Y_D1K, 270)
@@ -929,7 +953,8 @@ def constroi_pcb():
 
     # referencias legiveis (nao se sobrepoem entre si)
     for ref, (dx, dy) in {"J1": (2.54, 3.6), "J2": (5.08, 3.6), "C1": (6.6, 0.0),
-                          "D1": (-2.6, 3.9), "J3": (0.0, -2.4), "F1": (-2.6, -2.54)}.items():
+                          "D1": (-2.6, 3.9), "J3": (J3_REF_DX, J3_REF_DY), "F1": (-2.6, -2.54),
+                          "R1": (R1_REF_DX, R1_REF_DY), "JP1": (JP1_REF_DX, JP1_REF_DY)}.items():
         fps[ref].Reference().SetPosition(pcbnew.VECTOR2I(fps[ref].GetPosition().x + FromMM(dx),
                                                           fps[ref].GetPosition().y + FromMM(dy)))
         fps[ref].Reference().SetTextAngleDegrees(0)
@@ -938,6 +963,11 @@ def constroi_pcb():
     for pad in fps["J3"].Pads():
         pad.SetShape(pcbnew.PAD_SHAPE_OVAL)
         pad.SetSize(pcbnew.VECTOR2I(FromMM(2.6), FromMM(1.8)))
+    for ref in ("R1", "JP1"):
+        for pad in fps[ref].Pads():
+            pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
+            pad.SetSize(pcbnew.VECTOR2I(FromMM(PAD_TERM), FromMM(PAD_TERM)))
+            pad.SetDrillSize(pcbnew.VECTOR2I(FromMM(FURO_SOQUETE), FromMM(FURO_SOQUETE)))
     for ref in ("D1", "C1"):
         for pad in fps[ref].Pads():
             if ref == "C1":
@@ -957,6 +987,13 @@ def constroi_pcb():
         pad = fps[ref].FindPadByNumber(str(num))
         p = pad.GetPosition()
         return (round(pcbnew.ToMM(p.x) - ox, 4), round(pcbnew.ToMM(p.y) - oy, 4))
+
+    # posicoes dos pads da terminacao: conferencia por codigo
+    for ref, num, esperado in (("R1", 1, R1_POS), ("R1", 2, (R1_POS[0], R1_POS[1] + 2.54)),
+                               ("JP1", 1, JP1_POS), ("JP1", 2, (JP1_POS[0], JP1_POS[1] + 2.54))):
+        got = pos(ref, num)
+        assert abs(got[0] - esperado[0]) < 0.01 and abs(got[1] - esperado[1]) < 0.01, \
+            "pad %s.%s fora do lugar: %s != %s" % (ref, num, got, esperado)
 
     # limites da placa
     corpos_x = [LM_TL[0], ESP_CORPO_X0]
@@ -1046,12 +1083,12 @@ def constroi_pcb():
         saida.append(pts[-1])
         return saida
 
-    def trilha(rede, larg, pts, cham=1.0):
+    def trilha(rede, larg, pts, cham=1.0, so_45=True):
         pts = chanfro(pts, cham) if cham else pts
         for a, c2 in zip(pts[:-1], pts[1:]):
             dx, dy = c2[0] - a[0], c2[1] - a[1]
             ang = math.degrees(math.atan2(dy, dx)) % 45.0
-            assert min(ang, 45.0 - ang) < 0.05, "segmento fora de 45 graus: %s -> %s" % (a, c2)
+            assert not so_45 or min(ang, 45.0 - ang) < 0.05, "segmento fora de 45 graus: %s -> %s" % (a, c2)
             if math.hypot(dx, dy) < 1e-4:
                 continue
             t = pcbnew.PCB_TRACK(b)
@@ -1101,6 +1138,11 @@ def constroi_pcb():
     j3_1, j3_2 = pos("J3", 1), pos("J3", 2)
     trilha("CAN_H", LARG_SINAL, [j2_2, (j2_2[0], j3_1[1]), j3_1])
     trilha("CAN_L", LARG_SINAL, [j2_3, j3_2])
+    # terminacao: CAN_H -> JP1.2 ; JP1.1 -> R1.1 (TERM) ; J3.2 (CAN_L) -> corredor leste -> R1.2
+    jp1_1, jp1_2, r1_1, r1_2 = pos("JP1", 1), pos("JP1", 2), pos("R1", 1), pos("R1", 2)
+    trilha("TERM", LARG_SINAL, [jp1_1, r1_1], 0)
+    trilha("CAN_H", LARG_SINAL, [jp1_2, j3_1], 0, so_45=False)   # diagonal curta, fora dos 45 graus (validada no DRC)
+    trilha("CAN_L", LARG_SINAL, [j3_2, (X_CAN_L_R1, j3_2[1]), (X_CAN_L_R1, r1_2[1] + 1.2), r1_2], 0, so_45=False)
 
     # --- keepout da antena (regra de area; o do footprint ja vem junto) ------
     # (o footprint ja traz a area proibida; nada a fazer aqui)
@@ -1129,6 +1171,9 @@ def constroi_pcb():
         b.Add(t)
 
     texto_cobre("TCCELTA DONGLE OBD-II v1", (X0 + X1) / 2.0 + 2.0, Y0 + 10.5, 1.8, 0.4)
+    texto_serigrafia("TERM 120R", TXT_TERM[0], TXT_TERM[1], 0.8)
+    texto_serigrafia("jumper: bancada", TXT_TERM2[0], TXT_TERM2[1], 0.8)
+    texto_serigrafia("sem: carro", TXT_TERM3[0], TXT_TERM3[1], 0.8)
     texto_serigrafia("H", J3_POS[0] + 2.0, J3_POS[1], 1.0)
     texto_serigrafia("L", J3_POS[0] + 2.0, J3_POS[1] + 2.54, 1.0)
     rotulos = ["+12V", "GND", "GND", "CANH", "CANL"]

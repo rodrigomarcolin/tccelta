@@ -143,13 +143,13 @@ Use luvas, óculos e roupa velha, em local ventilado. O percloreto mancha roupa,
 
    | Broca | Onde | Quantidade |
    |---|---|---|
-   | 1,0 mm | soquetes do ESP32, do transceptor, do LM2596, J3 e F1 | 41 |
+   | 1,0 mm | soquetes do ESP32, do transceptor, do LM2596, J3, JP1, R1 e F1 | 45 |
    | 1,0 a 1,1 mm | D1 | 2 |
    | 0,8 a 1,0 mm | C1 (alargue se as pernas não entrarem) | 2 |
    | 1,3 mm | bornes J1 e J2 | 5 |
    | 3,2 mm | furos de fixação M3 | 3 |
 
-   A lista completa está em `furacao.txt`.
+   Total: 57 furos. A lista completa está em `furacao.txt`.
 3. Tire as rebarbas passando uma lixa fina de leve nos dois lados.
 
 ### 10. Cortar o contorno
@@ -182,13 +182,26 @@ decidir na hora da montagem, módulo por módulo:
 |---|---|---|
 | **ESP32** | Pode, mas **precisa abrir um furo de 1,0 mm (sem pad) na posição do D23**, ou cortar esse pino, senão ele bate na placa | **Soquete.** Tirar 30 pinos soldados da fenolite quase sempre arranca pads, e o ESP32 é o módulo que você mais vai querer tirar ou trocar |
 | **LM2596** | Sim: pinos macho soldados no módulo e direto na placa | Pode soldar. Ajuste os 5 V **antes** de soldar, com o ESP32 fora da placa |
-| **Transceptor** | Sim: a barra de 90 graus solda direto nos 4 furos | Soquete é melhor. A orientação é crítica, e o resistor de 120 ohms precisa sair para usar no carro real |
-| F1, D1, C1, bornes, J3 | Sempre soldados | - |
+| **Transceptor** | Sim: a barra de 90 graus solda direto nos 4 furos | Soquete é melhor. A orientação é crítica, e o resistor SMD de 120 ohms dele precisa sair sempre (veja abaixo) |
+| F1, D1, C1, R1, bornes, J3, JP1 | Sempre soldados | - |
 
 ### Cuidados com a fenolite
 
 O pad de fenolite descola com calor demais. Fique **2 a 3 segundos** por solda, sem fazer força com a ponta do
 ferro. Se a solda não pegou, espere esfriar e tente de novo.
+
+### Antes de soldar: tirar o resistor SMD de 120 ohms do módulo SN65
+
+O módulo Waveshare traz um resistor SMD de 120 ohms ligado entre CANH e CANL. **Ele deve ser removido sempre**: a
+terminação do dongle passa a ser o R1 + JP1, e dois resistores juntos (módulo + R1) dariam 40 ohms.
+
+1. Localize o resistor: é um componente minúsculo marcado **"121"**, perto do borne de parafuso CAN do módulo.
+2. Com o ferro de ponta fina, aqueça as **duas pontas** do resistor ao mesmo tempo (com o ferro de lado, ou com dois
+   ferros). Se só um ferro estiver à mão, cubra as duas pontas com estanho para formar uma ponte de solda quente e
+   empurre o resistor de lado com a ponta do ferro.
+3. Retire o resistor com a pinça e limpe os pads com malha dessoldadora. Não levante os pads.
+4. Confira com o multímetro, com o módulo solto (sem alimentação): entre CANH e CANL a resistência deve ficar
+   **alta, na casa de kiloohms**. Se medir cerca de 120 ohms, o resistor ainda está ligado.
 
 ### 12. Soldar, do componente mais baixo para o mais alto
 
@@ -196,24 +209,28 @@ Componentes por cima da placa; solda e cobre embaixo.
 
 1. **D1 (1N5819):** dobre as pernas, encaixe com a **faixa (catodo) no pad de cima** e solde.
 2. **J3 (barra macho 1x2).**
-3. **Barras fêmea do ESP32:** 1x15 na fileira de cima e 1x14 na de baixo, alinhada ao D22 (a posição do D23 fica
+3. **R1 (120 ohms)** e **JP1 (barra macho 1x2)**, logo depois do J3, perto dele:
+   - R1 em pé: o corpo fica sobre o pad de cima (o mesmo lado do JP1) e a perna dobrada deita até o pad de baixo.
+     Não tem polaridade. Encaixe as duas pernas, solde e corte as sobras;
+   - JP1: barra macho 1x2 vertical. O jumper de encaixe (shunt) **não** é soldado: fica solto para pôr e tirar.
+4. **Barras fêmea do ESP32:** 1x15 na fileira de cima e 1x14 na de baixo, alinhada ao D22 (a posição do D23 fica
    sem barra). Para elas ficarem retas e com o espaçamento certo:
    - encaixe o próprio ESP32 nas barras antes de soldar;
    - solde só um pino de cada ponta e confira se as barras estão retas e encostadas na placa;
    - só então solde o resto.
 
    O pino D23 do ESP32 fica no ar: a barra fêmea levanta o módulo uns 8 mm, e o pino não chega na placa.
-4. **Soquete 1x4 do transceptor:** mesmo truque, com o módulo encaixado enquanto solda.
-5. **Soquetes do LM2596 e pinos do módulo:**
+5. **Soquete 1x4 do transceptor:** mesmo truque, com o módulo encaixado enquanto solda.
+6. **Soquetes do LM2596 e pinos do módulo:**
    - corte 4 soquetes avulsos de uma barra fêmea (o corte inutiliza uma posição de cada lado);
    - solde os 4 soquetes na placa;
    - espete os 4 pinos macho nesses soquetes e apoie o LM2596 por cima, usando a placa como gabarito;
    - solde os pinos no LM2596.
-6. **C1 (100 uF):** perna longa (+) no pad marcado com +.
-7. **F1 (fusível PTC):** não tem lado certo. Fica no canto de baixo à esquerda, entre o borne e o D1. Solde com o
+7. **C1 (100 uF):** perna longa (+) no pad marcado com +.
+8. **F1 (fusível PTC):** não tem lado certo. Fica no canto de baixo à esquerda, entre o borne e o D1. Solde com o
    disco **uns 3 a 4 mm acima da placa**: as dobras dos terminais já seguram nessa altura. Assim a cabeça do
    parafuso do furo de fixação vizinho passa por baixo da borda dele.
-8. **Bornes J1 e J2:** encaixe um no outro (forma um borne de 5 vias), com a entrada dos fios virada para a borda
+9. **Bornes J1 e J2:** encaixe um no outro (forma um borne de 5 vias), com a entrada dos fios virada para a borda
    da placa, e solde.
 
 ### 13. Conferir antes de ligar
@@ -235,11 +252,17 @@ Componentes por cima da placa; solda e cobre embaixo.
    virados para dentro da placa** (siga a seta do desenho). Ao contrário, ele recebe 3V3 no pino de CAN TX.
 5. Ligue dois jumpers dupont **trançados** entre si de J3 (H = CAN_H, L = CAN_L) aos pinos CANH/CANL do módulo.
 6. Ligue o cabo OBD-II no borne: pino 16 = +12 V, pinos 4 e 5 = GND, pino 6 = CAN_H, pino 14 = CAN_L.
-7. Ligue e teste com o simulador.
+7. **Conferência da terminação com o multímetro** (tudo desligado, resistência entre CAN_H e CAN_L no borne):
+   - só o dongle, com o JP1 e sem nada ligado: cerca de **120 ohms** (o R1);
+   - bancada, com o simulador ligado e o JP1: cerca de **60 ohms** (o R1 em paralelo com os 120 ohms do simulador);
+   - carro, sem o JP1: cerca de **60 ohms** (os dois resistores do próprio carro).
+8. **Jumper no JP1 na bancada; sem jumper no carro.** Ligue e teste com o simulador.
 
 ### Avisos
 
 - **Não ligue o USB do ESP32 ao mesmo tempo que os 12 V**, a menos que a placa do ESP32 tenha diodo no VBUS.
-- No carro real: **remova o resistor de 120 ohms do transceptor** (o barramento já tem terminação). O fusível já
-  está na placa (F1); não é preciso emendar porta-fusível no cabo.
+- **O resistor SMD de 120 ohms do módulo SN65 sai sempre, na montagem.** A terminação do dongle é o JP1: jumper
+  colocado na bancada, **retirado no carro** (o barramento do carro já tem os seus dois 120 ohms; um terceiro baixa
+  a resistência para 40 ohms e prejudica o sinal). O fusível já está na placa (F1); não é preciso emendar
+  porta-fusível no cabo.
 - Mais detalhes sobre a placa, as medidas a conferir e o script estão no [README](README.md).

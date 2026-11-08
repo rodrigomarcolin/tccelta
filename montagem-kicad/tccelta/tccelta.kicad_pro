@@ -131,6 +131,10 @@
       },
       {
         "netclass": "Sinal",
+        "pattern": "TERM"
+      },
+      {
+        "netclass": "Sinal",
         "pattern": "+3V3"
       },
       {

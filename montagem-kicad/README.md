@@ -3,10 +3,14 @@
 Projeto KiCad 10 em `tccelta/`. A placa liga o cabo OBD-II (12 V + CAN) a um ESP32 e a um transceptor CAN
 SN65HVD230 (placa Waveshare "SN65HVD230 CAN Board"), com um buck LM2596 para gerar os 5 V. Os **módulos não são
 soldados**: encaixam em soquetes fêmea (barras de pinos fêmea de 2,54 mm). Só os soquetes, os bornes, o F1, o D1,
-o C1 e a barra macho J3 são soldados.
+o C1, o R1 e as barras macho J3 e JP1 são soldados.
 
 Entrada de 12 V, na ordem: borne -> **F1** (fusível rearmável PTC 0,5 A) -> **D1** (1N5819, inversão de polaridade)
 -> **C1** (100 uF) -> LM2596.
+
+Terminação CAN de 120 ohms **selecionável por jumper**: o resistor **R1** (120 ohms) fica ligado entre CAN_L e o pino
+**JP1**; o outro pino do JP1 vai ao CAN_H. Com o jumper colocado (bancada, simulador) o dongle termina o barramento;
+sem o jumper (carro) não termina, porque o carro já tem os seus dois resistores.
 
 Tamanho da placa: **54,1 x 72,4 mm** (cantos arredondados de 2 mm). Cobre só em B.Cu, **sem vias, sem jumpers**.
 
@@ -30,7 +34,7 @@ ferramentas e materiais em [MATERIAIS.md](MATERIAIS.md). A função e a posiçã
 |---|---|---|
 | 1 | DOIT ESP32 DevKit V1, 30 pinos (2 x 15) | encaixa em 2 soquetes fêmea de 15 pinos |
 | 1 | Módulo buck LM2596 (placa azul, 43 x 21 mm) | você solda 4 pinos macho nos furos do módulo |
-| 1 | Módulo "SN65HVD230 CAN Board" (Waveshare, ~37 x 14 mm) | montado **em pé**; já tem o resistor de 120 ohms |
+| 1 | Módulo "SN65HVD230 CAN Board" (Waveshare, ~37 x 14 mm) | montado **em pé**; **remover sempre** o resistor SMD de 120 ohms dele (marcado "121"): a terminação passa a ser o R1 + JP1 |
 | 1 | Barra de pinos **fêmea** 1x15, 2,54 mm | soquete do ESP32, fileira de cima (EN na ponta da antena) |
 | 1 | Barra de pinos **fêmea** 1x14, 2,54 mm | soquete do ESP32, fileira de baixo: **sem contato na posição do D23** (ponta da antena); alinhe a barra ao pino D22 |
 | 1 | Barra de pinos **fêmea** 1x4, 2,54 mm, vertical comum | soquete do transceptor (recebe a barra de 4 pinos de 90 graus do módulo, como vem de fábrica) |
@@ -38,6 +42,9 @@ ferramentas e materiais em [MATERIAIS.md](MATERIAIS.md). A função e a posiçã
 | 4 | Pino macho 2,54 mm | soldar nos 4 furos do LM2596 |
 | 1 | Barra de pinos **macho** 1x2, 2,54 mm, vertical | J3 "CAN p/ módulo" (H = CAN_H, L = CAN_L) |
 | 2 | Jumper dupont fêmea, até 10 cm, trançados entre si | liga J3 aos pinos CANH/CANL do módulo (ou ao borne dele) |
+| 1 | R1: resistor de filme metálico 120 ohms, 1/4 W, 1 % (axial, montado em pé) | terminação CAN (dissipa ~33 mW) |
+| 1 | Barra de pinos **macho** 1x2, 2,54 mm, vertical | JP1 "TERM 120R" (sai da mesma barra 1x40 do J3) |
+| 1 | Jumper de encaixe (shunt) 2,54 mm | fecha o JP1: colocado na bancada, retirado no carro |
 | 1 | Borne de parafuso 2 vias, passo 5,08 mm (Phoenix MKDS 1,5/2) | J1: 12 V e GND |
 | 1 | Borne de parafuso 3 vias, passo 5,08 mm (MKDS 1,5/3) | J2: GND, CAN_H, CAN_L; encaixa no J1 formando 5 vias |
 | 1 | F1: fusível rearmável PTC radial, 0,5 A de manutenção, **60 V ou mais** (RXEF050, MF-R050 ou similar), terminais a 5,1 mm | abre num curto na placa e volta sozinho depois de esfriar. Não use os de 16 V |
@@ -46,7 +53,8 @@ ferramentas e materiais em [MATERIAIS.md](MATERIAIS.md). A função e a posiçã
 | 3 | Parafuso M3 + porca (ou espaçador) | furos de fixação H1, H2, H3 |
 | - | Fenolite de face simples, ~60 x 76 mm | |
 
-Total de pinos de soquete a soldar: 29 (ESP32) + 4 (transceptor) + 4 (LM2596) + 2 (J3) = 39.
+Total de pinos de soquete e barra a soldar: 29 (ESP32) + 4 (transceptor) + 4 (LM2596) + 2 (J3) + 2 (JP1) = 41,
+mais as 2 pernas do R1.
 
 Sobre o módulo Waveshare: a barra de 4 pinos de 90 graus que ele já traz é justamente o que permite a montagem em
 pé. Os pinos saem paralelos à placa do módulo e, encaixados apontando para baixo num soquete fêmea vertical, o módulo
@@ -119,11 +127,11 @@ sem cobre que o plano de GND deixa em volta.
 1. Corroa em percloreto de ferro morno (cerca de 40 C), agitando. Retire quando todo o cobre exposto sumir.
 2. Lave, remova o toner com acetona e passe palha de aço fina.
 3. Fure da face do cobre:
-   - **1,0 mm**: soquetes do ESP32 (29), do transceptor (4), do LM2596 (4), J3 (2) e F1 (2): 41 furos.
+   - **1,0 mm**: soquetes do ESP32 (29), do transceptor (4), do LM2596 (4), J3 (2), JP1 (2), R1 (2) e F1 (2): 45 furos.
    - **1,0 a 1,1 mm** para os pads do D1 (2) e **0,8 a 1,0 mm** para o C1 (2): alargue se as pernas não entrarem.
    - **1,3 mm**: bornes J1 e J2 (5 furos).
    - **3,2 mm**: furos de fixação M3 (3).
-   Veja `tccelta/fabricacao/furacao.txt` para a lista completa (e `tccelta.drl`, formato Excellon).
+   Total: 57 furos. Veja `tccelta/fabricacao/furacao.txt` para a lista completa (e `tccelta.drl`, formato Excellon).
 
 A serigrafia (referências e rótulos dos pinos) está em `serigrafia_F_Silk.pdf` como guia de montagem, e em
 `serigrafia_F_Silk_espelhada.pdf` para quem quiser transferi-la por toner no lado dos componentes (veja
@@ -132,10 +140,13 @@ A serigrafia (referências e rótulos dos pinos) está em `serigrafia_F_Silk.pdf
 ## Montagem
 
 1. Solde **somente**: as barras fêmea (ESP32 1x15 + 1x14, transceptor), os 4 soquetes do LM2596, os bornes J1 e J2, a barra
-   macho J3, o F1, o D1 e o C1. Componentes por cima; solda e cobre embaixo.
+   macho J3, o R1, a barra macho JP1, o F1, o D1 e o C1. Componentes por cima; solda e cobre embaixo.
    - F1: não tem polaridade. Fica no canto de baixo à esquerda, entre o borne e o D1. Solde com o disco **uns 3 a 4 mm
      acima da placa** (as dobras dos terminais já seguram nessa altura), para a cabeça do parafuso do furo H2 passar
      por baixo da borda dele.
+   - R1 (120 ohms): montado **em pé**, com o corpo sobre o pad de cima (ao lado do JP1) e a perna dobrada para o pad de baixo.
+     Não tem polaridade.
+   - JP1: barra macho 1x2 vertical, ao lado do R1. O jumper de encaixe vai sobre os dois pinos.
    - D1: **faixa (catodo) voltada para cima** na placa (pad de cima), anodo para baixo, ligado ao F1.
    - C1: perna longa (+) no pad da esquerda, marcada no desenho.
    - Encaixe o J2 ao lado do J1 (borne de 5 vias): `+12V, GND, GND, CAN_H, CAN_L`. A entrada dos fios
@@ -149,7 +160,9 @@ A serigrafia (referências e rótulos dos pinos) está em `serigrafia_F_Silk.pdf
    3V3/GND/CAN ficam trocados.
 6. Ligue dois fios dupont **trançados** (até 10 cm) de J3 (H = CAN_H, L = CAN_L) aos pinos CANH/CANL do módulo
    (ou ao borne de parafuso dele).
-7. Cabo OBD-II: pino 16 = +12 V, pinos 4 e 5 = GND, pino 6 = CAN_H, pino 14 = CAN_L, nos 5 vias do borne.
+7. **Remova o resistor SMD de 120 ohms do módulo Waveshare** (marcado "121", perto do borne CAN) antes de usá-lo.
+   Veja o passo a passo.
+8. Cabo OBD-II: pino 16 = +12 V, pinos 4 e 5 = GND, pino 6 = CAN_H, pino 14 = CAN_L, nos 5 vias do borne.
 
 O firmware usa TX = GPIO21 e RX = GPIO22 (pinos D21 e D22 do ESP32 DevKit V1). O VIN do ESP32 recebe os 5 V do buck.
 
@@ -157,8 +170,9 @@ O firmware usa TX = GPIO21 e RX = GPIO22 (pinos D21 e D22 do ESP32 DevKit V1). O
 
 - **Não ligue o USB do ESP32 ao mesmo tempo que os 12 V**, a menos que a placa do ESP32 tenha diodo no VBUS.
   Os 5 V do buck entram pelo pino VIN, que no DOIT V1 é o mesmo nó dos 5 V do USB.
-- O resistor de 120 ohms do módulo SN65 serve para o simulador. **No carro real o barramento já tem terminação:
-  remova o resistor.**
+- **O resistor SMD de 120 ohms do módulo SN65 deve ser removido sempre, na montagem.** A terminação do dongle é o
+  JP1: **com jumper na bancada** (simulador), **sem jumper no carro**, onde o barramento já tem terminação nas duas
+  pontas. Dois resistores no dongle (o do módulo e o R1) dariam 40 ohms no total e sobrecarregariam o barramento.
 - **Só encaixe o transceptor na orientação certa** (lado dos componentes e borne para dentro): o soquete 1x4 não tem chave
   e invertê-lo liga o 3V3 no pino de CAN TX.
 - O transceptor em pé chega a ~37 mm acima da placa; deixe a caixa/uso compatível com essa altura. O borne dele
@@ -182,5 +196,9 @@ O firmware usa TX = GPIO21 e RX = GPIO22 (pinos D21 e D22 do ESP32 DevKit V1). O
 
 ## Validação (resultado atual)
 
-ERC: 0 violações. DRC com paridade esquemático x PCB: 0 violações, 0 itens desconectados, 0 problemas de paridade.
-Netlist conferida contra o modelo. Escala 1:1 dos PDFs conferida.
+ERC: 0 violações. DRC com paridade esquemático x PCB: 0 violações, 0 itens desconectados, 0 problemas de paridade
+(igual à linha de base anterior ao R1/JP1, sem erro nem aviso novo). Netlist conferida contra o modelo (inclui a rede
+`TERM`). Escala 1:1 dos PDFs conferida; tamanho da placa inalterado (54,1 x 72,4 mm).
+
+Medidas esperadas com o multímetro (tudo desligado, resistor do módulo removido): só o dongle com JP1 e sem nada
+ligado = 120 ohms entre CAN_H e CAN_L; dongle + simulador com JP1 = ~60 ohms; no carro, sem JP1 = ~60 ohms (o do carro).

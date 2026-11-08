@@ -114,16 +114,48 @@ precisaria um transceptor de 5 V (MCP2551 ou TJA1050). Ele se alimenta do 3V3 do
 - na borda de baixo, fica perto do borne, então o caminho do CAN é curto;
 - CTX e CRX sobem direto até o D21 e o D22, sem cruzar outras trilhas.
 
-**Resistor de 120 Ω do módulo:** é a terminação do barramento. Serve no simulador, mas no carro o barramento já
-tem terminação nas duas pontas, então ele deve ser removido.
+**Resistor SMD de 120 Ω do módulo:** é uma terminação fixa, que ficaria sempre ligada. Por isso ele é **removido
+sempre, na montagem**. A terminação passa a ser feita pelo R1 + JP1 (próxima seção), que se liga e desliga.
 
 ## J3 e os jumpers trançados
 
 O módulo Waveshare não leva o CAN_H/CAN_L pela barra de 4 pinos, só pelo borne de parafuso dele. Por isso a placa
-leva o CAN do borne principal até o J3, ao lado do módulo, e dois fios curtos completam a ligação.
+leva o CAN do borne principal até o J3, ao lado do módulo, e dois fios curtos completam a ligação. O R1 e o JP1
+ficam logo ao lado do J3, na mesma ligação (veja a próxima seção).
 
 Os fios são trançados porque o CAN é diferencial. Quando os dois fios andam juntos, um ruído externo afeta os dois
 por igual e se cancela.
+
+## Terminação CAN selecionável: R1 e JP1
+
+CAN_H ── JP1 ── R1 (120 Ω) ── CAN_L
+
+**Por que 120 Ω nas pontas:** o barramento CAN é uma linha de transmissão. Precisa de **exatamente dois** resistores
+de 120 Ω, um em cada ponta, para o sinal não refletir. Os dois em paralelo dão **60 Ω** entre CAN_H e CAN_L, que é o
+valor que se mede num barramento correto.
+
+**Por que o dongle não deve terminar no carro:** o carro já tem os dois resistores nas suas próprias pontas. O dongle
+entra no meio do barramento, como um nó qualquer. Um terceiro resistor de 120 Ω em paralelo baixa o total para 40 Ω,
+o que enfraquece o sinal e sobrecarrega os transceptores. Na bancada é o contrário: o simulador tem só um resistor,
+então o dongle precisa fornecer o outro.
+
+**Por que jumper e não um resistor fixo:** o mesmo dongle serve nos dois casos.
+
+- **Bancada (simulador):** jumper colocado no JP1, e o R1 fecha a terminação.
+- **Carro:** jumper retirado, e o dongle não termina o barramento.
+
+Um resistor fixo obrigaria a dessoldar na troca. O jumper dispensa ferro de solda e deixa o estado visível. A
+serigrafia lembra a regra ("TERM 120R, jumper: bancada, sem: carro").
+
+**Por que ao lado do J3:** é ali que o CAN_H e o CAN_L chegam juntos ao módulo. A derivação para o R1 sai de lá e
+fica curta, sem cruzar o CAN_TX e o CAN_RX. O R1 vai em pé para ocupar pouca área, e os pads são de 1,9 mm para a
+corrosão caseira.
+
+**Potência no R1:** a diferença de tensão no barramento chega a cerca de 2 V (dominante). A potência é
+2² / 120 ≈ 33 mW. Um resistor de 1/4 W (250 mW) sobra, com folga de sete vezes.
+
+**Conferência com o multímetro** (tudo desligado, entre CAN_H e CAN_L): só o dongle com o JP1 = ~120 Ω; bancada
+(simulador + JP1) = ~60 Ω; carro (sem JP1) = ~60 Ω, os do próprio carro.
 
 ## Borne J1+J2 (5 vias)
 
