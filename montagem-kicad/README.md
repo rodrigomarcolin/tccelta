@@ -12,6 +12,8 @@ Terminação CAN de 120 ohms **selecionável por jumper**: o resistor **R1** (12
 **JP1**; o outro pino do JP1 vai ao CAN_H. Com o jumper colocado (bancada, simulador) o dongle termina o barramento;
 sem o jumper (carro) não termina, porque o carro já tem os seus dois resistores.
 
+**Versão 2 (transceptor deitado sob o ESP32, placa 54,1 x 63,5 mm, sem J3 nem fios): veja [V2_TRANSCEPTOR_SOB_ESP32.md](V2_TRANSCEPTOR_SOB_ESP32.md) e a pasta [`tccelta_v2/`](tccelta_v2/).**
+
 Tamanho da placa: **54,1 x 72,4 mm** (cantos arredondados de 2 mm). Cobre só em B.Cu, **sem vias, sem jumpers**.
 
 O procedimento completo de fabricação e montagem está em [PASSO_A_PASSO.md](PASSO_A_PASSO.md), e a lista de

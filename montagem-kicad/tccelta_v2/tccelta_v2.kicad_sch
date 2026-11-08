@@ -1,0 +1,1784 @@
+(kicad_sch
+	(version 20260306)
+	(generator "eeschema")
+	(generator_version "10.0")
+	(uuid "97033e6a-a51a-580b-be5f-8185ead3ae86")
+	(paper "A4")
+	(title_block (title "Dongle OBD-II - TCC") (date "2026-11-08") (rev "2") (company "TCC ELTA") (comment 1 "Alimentacao 12 V -> 5 V (LM2596) -> ESP32 + SN65HVD230 (CAN)"))
+	(lib_symbols
+	(symbol "Connector:Screw_Terminal_01x02"
+		(pin_names
+			(offset 1.016)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "J"
+			(at 0 2.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Screw_Terminal_01x02"
+			(at 0 -5.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Generic screw terminal, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "screw terminal"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "TerminalBlock*:*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "Screw_Terminal_01x02_1_1"
+			(rectangle
+				(start -1.27 1.27)
+				(end 1.27 -3.81)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type background)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.5334 0.3302) (xy 0.3302 -0.508)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.5334 -2.2098) (xy 0.3302 -3.048)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.3556 0.508) (xy 0.508 -0.3302)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.3556 -2.032) (xy 0.508 -2.8702)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(circle
+				(center 0 0)
+				(radius 0.635)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(circle
+				(center 0 -2.54)
+				(radius 0.635)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(pin passive line
+				(at -5.08 0 0)
+				(length 3.81)
+				(name "Pin_1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at -5.08 -2.54 0)
+				(length 3.81)
+				(name "Pin_2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "Connector:Screw_Terminal_01x03"
+		(pin_names
+			(offset 1.016)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "J"
+			(at 0 5.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Screw_Terminal_01x03"
+			(at 0 -5.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Generic screw terminal, single row, 01x03, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "screw terminal"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "TerminalBlock*:*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "Screw_Terminal_01x03_1_1"
+			(rectangle
+				(start -1.27 3.81)
+				(end 1.27 -3.81)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type background)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.5334 2.8702) (xy 0.3302 2.032)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.5334 0.3302) (xy 0.3302 -0.508)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.5334 -2.2098) (xy 0.3302 -3.048)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.3556 3.048) (xy 0.508 2.2098)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.3556 0.508) (xy 0.508 -0.3302)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.3556 -2.032) (xy 0.508 -2.8702)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(circle
+				(center 0 2.54)
+				(radius 0.635)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(circle
+				(center 0 0)
+				(radius 0.635)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(circle
+				(center 0 -2.54)
+				(radius 0.635)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(pin passive line
+				(at -5.08 2.54 0)
+				(length 3.81)
+				(name "Pin_1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at -5.08 0 0)
+				(length 3.81)
+				(name "Pin_2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at -5.08 -2.54 0)
+				(length 3.81)
+				(name "Pin_3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "Device:D_Schottky"
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 1.016)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "D"
+			(at 0 2.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "D_Schottky"
+			(at 0 -2.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Schottky diode"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "diode Schottky"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "TO-???* *_Diode_* *SingleDiode* D_*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "D_Schottky_0_1"
+			(polyline
+				(pts
+					(xy -1.905 0.635) (xy -1.905 1.27) (xy -1.27 1.27) (xy -1.27 -1.27) (xy -0.635 -1.27) (xy -0.635 -0.635)
+				)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 1.27) (xy 1.27 -1.27) (xy -1.27 0) (xy 1.27 1.27)
+				)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 0) (xy -1.27 0)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "D_Schottky_1_1"
+			(pin passive line
+				(at -3.81 0 0)
+				(length 2.54)
+				(name "K"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 3.81 0 180)
+				(length 2.54)
+				(name "A"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "Device:Polyfuse"
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 0)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "F"
+			(at -2.54 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Polyfuse"
+			(at 2.54 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 1.27 -5.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resettable fuse, polymeric positive temperature coefficient"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "resettable fuse PTC PPTC polyfuse polyswitch"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "*polyfuse* *PTC*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "Polyfuse_0_1"
+			(polyline
+				(pts
+					(xy -1.524 2.54) (xy -1.524 1.524) (xy 1.524 -1.524) (xy 1.524 -2.54)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(rectangle
+				(start -0.762 2.54)
+				(end 0.762 -2.54)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 0 2.54) (xy 0 -2.54)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "Polyfuse_1_1"
+			(pin passive line
+				(at 0 3.81 270)
+				(length 1.27)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 0 -3.81 90)
+				(length 1.27)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "Device:C_Polarized"
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 0.254)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "C"
+			(at 0.635 2.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "C_Polarized"
+			(at 0.635 -2.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" ""
+			(at 0.9652 -3.81 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Polarized capacitor"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "cap capacitor"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "CP_*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "C_Polarized_0_1"
+			(rectangle
+				(start -2.286 0.508)
+				(end 2.286 1.016)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -1.778 2.286) (xy -0.762 2.286)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -1.27 2.794) (xy -1.27 1.778)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(rectangle
+				(start 2.286 -0.508)
+				(end -2.286 -1.016)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+		)
+		(symbol "C_Polarized_1_1"
+			(pin passive line
+				(at 0 3.81 270)
+				(length 2.794)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 0 -3.81 90)
+				(length 2.794)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "Device:R"
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 0)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "R"
+			(at 2.032 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "R"
+			(at 0 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at -1.778 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "R res resistor"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "R_*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "R_0_1"
+			(rectangle
+				(start -1.016 -2.54)
+				(end 1.016 2.54)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "R_1_1"
+			(pin passive line
+				(at 0 3.81 270)
+				(length 1.27)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 0 -3.81 90)
+				(length 1.27)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "Jumper:Jumper_2_Open"
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 0)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "JP"
+			(at 0 2.794 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Jumper_2_Open"
+			(at 0 -2.286 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Jumper, 2-pole, open"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "Jumper SPST"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "Jumper* TestPoint*2Pads* TestPoint*Bridge*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "Jumper_2_Open_0_0"
+			(circle
+				(center -2.032 0)
+				(radius 0.508)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(circle
+				(center 2.032 0)
+				(radius 0.508)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "Jumper_2_Open_0_1"
+			(arc
+				(start -1.524 1.27)
+				(mid 0 1.778)
+				(end 1.524 1.27)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "Jumper_2_Open_1_1"
+			(pin passive line
+				(at -5.08 0 0)
+				(length 2.54)
+				(name "A"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 0 180)
+				(length 2.54)
+				(name "B"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "Mechanical:MountingHole"
+		(pin_names
+			(offset 1.016)
+		)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "H"
+			(at 0 5.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "MountingHole"
+			(at 0 3.175 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Mounting Hole without connection"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "mounting hole"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "MountingHole*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "MountingHole_0_1"
+			(circle
+				(center 0 0)
+				(radius 1.27)
+				(stroke
+					(width 1.27)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "tccelta:ESP32_DevKitV1_30"
+		(pin_names (offset 1.016))
+		(exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "U" (at 0 21.59 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27))))
+		(property "Value" "ESP32_DevKitV1_30" (at 0 -21.59 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "tccelta:ESP32_DevKitV1_30_Soquete" (at 0 0 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 0 0 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "DOIT ESP32 DevKit V1 de 30 pinos (2x15), vista de cima" (at 0 0 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)) (hide yes)))
+		(symbol "ESP32_DevKitV1_30_1_1"
+			(rectangle (start -10.16 20.32) (end 10.16 -20.32) (stroke (width 0.254) (type default)) (fill (type background)))
+			(pin passive line (at -13.97 17.78 0) (length 3.81) (name "EN" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 15.24 0) (length 3.81) (name "VP(IO36)" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 12.7 0) (length 3.81) (name "VN(IO39)" (effects (font (size 1.27 1.27)))) (number "3" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 10.16 0) (length 3.81) (name "D34" (effects (font (size 1.27 1.27)))) (number "4" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 7.62 0) (length 3.81) (name "D35" (effects (font (size 1.27 1.27)))) (number "5" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 5.08 0) (length 3.81) (name "D32" (effects (font (size 1.27 1.27)))) (number "6" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 2.54 0) (length 3.81) (name "D33" (effects (font (size 1.27 1.27)))) (number "7" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 0 0) (length 3.81) (name "D25" (effects (font (size 1.27 1.27)))) (number "8" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 -2.54 0) (length 3.81) (name "D26" (effects (font (size 1.27 1.27)))) (number "9" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 -5.08 0) (length 3.81) (name "D27" (effects (font (size 1.27 1.27)))) (number "10" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 -7.62 0) (length 3.81) (name "D14" (effects (font (size 1.27 1.27)))) (number "11" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 -10.16 0) (length 3.81) (name "D12" (effects (font (size 1.27 1.27)))) (number "12" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 -12.7 0) (length 3.81) (name "D13" (effects (font (size 1.27 1.27)))) (number "13" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 -15.24 0) (length 3.81) (name "GND" (effects (font (size 1.27 1.27)))) (number "14" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -13.97 -17.78 0) (length 3.81) (name "VIN" (effects (font (size 1.27 1.27)))) (number "15" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 15.24 180) (length 3.81) (name "D22" (effects (font (size 1.27 1.27)))) (number "17" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 12.7 180) (length 3.81) (name "TX0" (effects (font (size 1.27 1.27)))) (number "18" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 10.16 180) (length 3.81) (name "RX0" (effects (font (size 1.27 1.27)))) (number "19" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 7.62 180) (length 3.81) (name "D21" (effects (font (size 1.27 1.27)))) (number "20" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 5.08 180) (length 3.81) (name "D19" (effects (font (size 1.27 1.27)))) (number "21" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 2.54 180) (length 3.81) (name "D18" (effects (font (size 1.27 1.27)))) (number "22" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 0 180) (length 3.81) (name "D5" (effects (font (size 1.27 1.27)))) (number "23" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 -2.54 180) (length 3.81) (name "TX2(IO17)" (effects (font (size 1.27 1.27)))) (number "24" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 -5.08 180) (length 3.81) (name "RX2(IO16)" (effects (font (size 1.27 1.27)))) (number "25" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 -7.62 180) (length 3.81) (name "D4" (effects (font (size 1.27 1.27)))) (number "26" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 -10.16 180) (length 3.81) (name "D2" (effects (font (size 1.27 1.27)))) (number "27" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 -12.7 180) (length 3.81) (name "D15" (effects (font (size 1.27 1.27)))) (number "28" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 -15.24 180) (length 3.81) (name "GND" (effects (font (size 1.27 1.27)))) (number "29" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 13.97 -17.78 180) (length 3.81) (name "3V3" (effects (font (size 1.27 1.27)))) (number "30" (effects (font (size 1.27 1.27)))))
+		)
+	)
+	(symbol "tccelta:LM2596_Modulo"
+		(pin_names (offset 1.016))
+		(exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "U" (at 0 5.08 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27))))
+		(property "Value" "LM2596_Modulo" (at 0 -5.08 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "tccelta:LM2596_Modulo_Soquete" (at 0 0 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 0 0 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Modulo buck LM2596 (placa azul), encaixado em 4 soquetes" (at 0 0 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)) (hide yes)))
+		(symbol "LM2596_Modulo_1_1"
+			(rectangle (start -6.35 3.81) (end 6.35 -3.81) (stroke (width 0.254) (type default)) (fill (type background)))
+			(pin passive line (at -10.16 1.27 0) (length 3.81) (name "IN+" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -10.16 -1.27 0) (length 3.81) (name "IN-" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 10.16 1.27 180) (length 3.81) (name "OUT+" (effects (font (size 1.27 1.27)))) (number "3" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 10.16 -1.27 180) (length 3.81) (name "OUT-" (effects (font (size 1.27 1.27)))) (number "4" (effects (font (size 1.27 1.27)))))
+		)
+	)
+	(symbol "tccelta:SN65HVD230_Waveshare"
+		(pin_names (offset 1.016))
+		(exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "U" (at 0 7.62 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27))))
+		(property "Value" "SN65HVD230_Waveshare" (at 0 -7.62 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "tccelta:SN65HVD230_Waveshare_Deitado" (at 0 0 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 0 0 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "SN65HVD230 CAN Board (Waveshare), deitado sob o ESP32, componentes para baixo" (at 0 0 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)) (hide yes)))
+		(symbol "SN65HVD230_Waveshare_1_1"
+			(rectangle (start -6.35 6.35) (end 6.35 -6.35) (stroke (width 0.254) (type default)) (fill (type background)))
+			(pin passive line (at -10.16 3.81 0) (length 3.81) (name "3V3" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -10.16 1.27 0) (length 3.81) (name "GND" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -10.16 -1.27 0) (length 3.81) (name "CRX" (effects (font (size 1.27 1.27)))) (number "3" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at -10.16 -3.81 0) (length 3.81) (name "CTX" (effects (font (size 1.27 1.27)))) (number "4" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 10.16 3.81 180) (length 3.81) (name "CANH" (effects (font (size 1.27 1.27)))) (number "5" (effects (font (size 1.27 1.27)))))
+			(pin passive line (at 10.16 1.27 180) (length 3.81) (name "CANL" (effects (font (size 1.27 1.27)))) (number "6" (effects (font (size 1.27 1.27)))))
+		)
+	)
+	)
+	(rectangle (start 8 12) (end 170 78) (stroke (width 0.3) (type dash)) (fill (type none)) (uuid "177c158e-e075-5bd0-9f4b-2bfaae240304"))
+	(text "1. Entrada e protecao (cabo OBD-II)" (exclude_from_sim no) (at 11 20 0) (effects (font (size 3 3) (bold yes)) (justify left bottom)) (uuid "7a0b5907-34c1-52d5-acfc-cea812dc7732"))
+	(symbol (lib_id "Connector:Screw_Terminal_01x02") (at 40.64 38.1 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "b680eec6-268f-5332-ae9b-12f7f4e88fbe")
+		(property "Reference" "J1" (at 40.64 31.75 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "Borne_2_vias_5.08" (at 40.64 45.72 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal" (at 40.64 38.1 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 40.64 38.1 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 40.64 38.1 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "05f30dbb-7ce2-5034-8ebe-0b763b762300"))
+		(pin "2" (uuid "43985a7d-3fc9-5cab-b2e5-6433bd666ef3"))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "J1") (unit 1))))
+	)
+	(wire (pts (xy 35.56 38.1) (xy 33.02 38.1)) (stroke (width 0) (type default)) (uuid "fed753fe-29d3-5453-b8b4-6cde689d17a1"))
+	(global_label "+12V_IN" (shape bidirectional) (at 33.02 38.1 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "7447be90-8a35-5cd6-8ac3-16af9f261aba")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 33.02 38.1 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 35.56 40.64) (xy 33.02 40.64)) (stroke (width 0) (type default)) (uuid "139cd9a8-9c8e-5be3-a365-96378cb1219c"))
+	(global_label "GND" (shape bidirectional) (at 33.02 40.64 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "aeb4f169-205d-5955-8b2a-533fac789ee2")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 33.02 40.64 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(symbol (lib_id "Connector:Screw_Terminal_01x03") (at 40.64 58.42 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "dfcbb030-d444-53e9-a9f1-f5c43399cd6a")
+		(property "Reference" "J2" (at 40.64 52.07 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "Borne_3_vias_5.08" (at 40.64 66.04 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-3-5.08_1x03_P5.08mm_Horizontal" (at 40.64 58.42 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 40.64 58.42 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 40.64 58.42 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "637cbb84-344b-549e-aeec-8efd3783b90a"))
+		(pin "2" (uuid "4e1cce37-e327-543e-9353-cf82c8112556"))
+		(pin "3" (uuid "f2f64c96-5054-5a06-b1c5-cf6802080375"))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "J2") (unit 1))))
+	)
+	(wire (pts (xy 35.56 55.88) (xy 33.02 55.88)) (stroke (width 0) (type default)) (uuid "70733712-219c-53f1-871f-8e7bb83a2f12"))
+	(global_label "GND" (shape bidirectional) (at 33.02 55.88 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "55c72d99-62f4-5725-8246-e1cddaea9809")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 33.02 55.88 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 35.56 58.42) (xy 33.02 58.42)) (stroke (width 0) (type default)) (uuid "f79ac963-e77d-5bb0-81a1-91c539c0f5b7"))
+	(global_label "CAN_H" (shape bidirectional) (at 33.02 58.42 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "07e7f61d-6073-5642-ab64-8cba7f1b4116")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 33.02 58.42 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 35.56 60.96) (xy 33.02 60.96)) (stroke (width 0) (type default)) (uuid "461bc586-e317-5f55-a91d-6a8bdf4a6256"))
+	(global_label "CAN_L" (shape bidirectional) (at 33.02 60.96 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "c50e5767-e54a-55d7-b2d9-f6425c67af3e")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 33.02 60.96 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(symbol (lib_id "Device:Polyfuse") (at 71.12 55.88 90) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "fe65c9c2-6587-518c-b65b-cdd418e03050")
+		(property "Reference" "F1" (at 71.12 51.82 90) (effects (font (size 1.27 1.27))))
+		(property "Value" "PTC_0.5A_60V" (at 71.12 60.2 90) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "tccelta:PTC_Radial_P5.08_Vertical" (at 71.12 55.88 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 71.12 55.88 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 71.12 55.88 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "caab709b-deba-51d6-9a89-91d6d2089337"))
+		(pin "2" (uuid "f3999097-de65-56a8-a085-3bd7751af183"))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "F1") (unit 1))))
+	)
+	(wire (pts (xy 67.31 55.88) (xy 64.77 55.88)) (stroke (width 0) (type default)) (uuid "0b37cbce-48db-552e-87c1-301d4949afc5"))
+	(global_label "+12V_IN" (shape bidirectional) (at 64.77 55.88 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "5c31a77a-0e4c-5c57-8dc6-176f399a054c")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 64.77 55.88 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 74.93 55.88) (xy 77.47 55.88)) (stroke (width 0) (type default)) (uuid "f9fcfefd-d678-5516-9047-42a847a690a0"))
+	(global_label "+12V_FUS" (shape bidirectional) (at 77.47 55.88 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "c5764145-7b07-5975-9da8-7579d694a1ca")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 77.47 55.88 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(symbol (lib_id "Device:D_Schottky") (at 101.6 38.1 180) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "7a97965c-1951-5999-9fed-725ccfeb55ad")
+		(property "Reference" "D1" (at 101.6 33.02 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "1N5819" (at 101.6 43.18 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "Diode_THT:D_DO-41_SOD81_P7.62mm_Horizontal" (at 101.6 38.1 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 101.6 38.1 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 101.6 38.1 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "bf727dbf-145d-5203-9f8d-ad8bd8ba431f"))
+		(pin "2" (uuid "ad345b35-5a0c-5e63-8dde-1ecf1f786ebb"))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "D1") (unit 1))))
+	)
+	(wire (pts (xy 105.41 38.1) (xy 107.95 38.1)) (stroke (width 0) (type default)) (uuid "41945cb1-fa94-5f47-af66-0baf6c1baa9e"))
+	(global_label "+12V_PROT" (shape bidirectional) (at 107.95 38.1 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "afd78b54-f4e6-5d4e-b651-f37e59c1002b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 107.95 38.1 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(wire (pts (xy 97.79 38.1) (xy 95.25 38.1)) (stroke (width 0) (type default)) (uuid "1c6e955a-4c04-593b-ad67-494d51111051"))
+	(global_label "+12V_FUS" (shape bidirectional) (at 95.25 38.1 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "96461e04-92b6-5dd8-b2e9-38f5b54b22f5")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 95.25 38.1 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(symbol (lib_id "Device:C_Polarized") (at 144.78 50.8 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "b5af6b25-bdeb-5998-861c-0134e9538d3f")
+		(property "Reference" "C1" (at 152.4 48.26 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "100uF/25V" (at 152.4 53.34 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "Capacitor_THT:CP_Radial_D6.3mm_P2.50mm" (at 144.78 50.8 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 144.78 50.8 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 144.78 50.8 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "15c8c13e-ab1c-5ba4-a348-64deaa5fc2cb"))
+		(pin "2" (uuid "a58de976-af11-5ba6-ab8e-b4e81d393a45"))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "C1") (unit 1))))
+	)
+	(wire (pts (xy 144.78 46.99) (xy 144.78 44.45)) (stroke (width 0) (type default)) (uuid "b1c308a4-ecb6-56f3-9bdf-22c447ebf5f7"))
+	(global_label "+12V_PROT" (shape bidirectional) (at 144.78 44.45 90) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "87513d52-910c-52a9-b43d-732a26bc3874")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 144.78 44.45 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(wire (pts (xy 144.78 54.61) (xy 144.78 57.15)) (stroke (width 0) (type default)) (uuid "f4d03a50-65e7-586a-891f-070d67596fb5"))
+	(global_label "GND" (shape bidirectional) (at 144.78 57.15 270) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "6c622f18-9b1f-5f0b-86cc-426089a86708")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 144.78 57.15 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(text "Cabo OBD-II: pino 16 = +12V, pinos 4 e 5 = GND, pino 6 = CAN_H, pino 14 = CAN_L" (exclude_from_sim no) (at 11 72 0) (effects (font (size 1.3 1.3)) (justify left bottom)) (uuid "16c41ceb-aedb-56ae-a988-c63d3fc26a5f"))
+	(text "F1 (PTC rearmavel 0,5 A / 60 V): abre num curto na placa. D1 (1N5819): inversao de polaridade." (exclude_from_sim no) (at 11 76 0) (effects (font (size 1.3 1.3)) (justify left bottom)) (uuid "0594939f-2cd2-52a2-9707-5b2307d0704c"))
+	(text "J1 + J2 formam um borne de 5 vias." (exclude_from_sim no) (at 11 68 0) (effects (font (size 1.3 1.3)) (justify left bottom)) (uuid "7dd17261-387f-5f04-b1a0-420ceeab1f99"))
+	(rectangle (start 176 12) (end 286 78) (stroke (width 0.3) (type dash)) (fill (type none)) (uuid "19523ab2-7027-52bb-bfdf-53076a077847"))
+	(text "2. Regulacao 5 V (modulo LM2596)" (exclude_from_sim no) (at 179 20 0) (effects (font (size 3 3) (bold yes)) (justify left bottom)) (uuid "48faa594-02cc-5d39-9d2a-f231bdfd07e9"))
+	(symbol (lib_id "tccelta:LM2596_Modulo") (at 233.68 43.18 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "c93fad7a-39fa-5762-bb51-807a1407f360")
+		(property "Reference" "U1" (at 233.68 33.02 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "LM2596_5V" (at 233.68 53.34 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "tccelta:LM2596_Modulo_Soquete" (at 233.68 43.18 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 233.68 43.18 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 233.68 43.18 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "a1e50169-d994-5439-aaed-5cc214a5974a"))
+		(pin "2" (uuid "37bcc9ef-a719-5418-8935-714f53341240"))
+		(pin "3" (uuid "592f15e1-c73e-5757-acbd-66070e5d0a00"))
+		(pin "4" (uuid "ddeac3cb-ecc0-5173-a1a5-74d59a7eb0e0"))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "U1") (unit 1))))
+	)
+	(wire (pts (xy 223.52 41.91) (xy 220.98 41.91)) (stroke (width 0) (type default)) (uuid "27895af2-a7d5-50c2-a9b4-c05e0967c485"))
+	(global_label "+12V_PROT" (shape bidirectional) (at 220.98 41.91 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "74c41635-a2ea-580a-bbd3-1d1aa718b5f2")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 220.98 41.91 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 223.52 44.45) (xy 220.98 44.45)) (stroke (width 0) (type default)) (uuid "a5e71824-aab3-5615-a67f-4849e0b16fa1"))
+	(global_label "GND" (shape bidirectional) (at 220.98 44.45 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "951c08ee-e4b6-5b06-9d9d-bfbddca82d12")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 220.98 44.45 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 243.84 41.91) (xy 246.38 41.91)) (stroke (width 0) (type default)) (uuid "a5488ff5-6df1-550a-9c2c-af09a227508f"))
+	(global_label "+5V" (shape bidirectional) (at 246.38 41.91 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "6bf6c599-fac7-5cc3-b515-398415179fbb")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 246.38 41.91 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(wire (pts (xy 243.84 44.45) (xy 246.38 44.45)) (stroke (width 0) (type default)) (uuid "442d8dcf-c93f-5268-a5c9-dd32b69bcf4c"))
+	(global_label "GND" (shape bidirectional) (at 246.38 44.45 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "c3c7ab71-d238-565e-81a5-6eaf98f58c5f")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 246.38 44.45 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(text "Ajustar a saida para 5,0 V ANTES de encaixar o ESP32." (exclude_from_sim no) (at 179 72 0) (effects (font (size 1.3 1.3)) (justify left bottom)) (uuid "eb9beea1-5871-5b10-a2a4-cd03f898714f"))
+	(text "Modulo encaixado em 4 soquetes femea de 1 pino." (exclude_from_sim no) (at 179 76 0) (effects (font (size 1.3 1.3)) (justify left bottom)) (uuid "68a0582f-e2ef-5b27-9c0d-4cc208112c23"))
+	(rectangle (start 8 84) (end 150 206) (stroke (width 0.3) (type dash)) (fill (type none)) (uuid "71c605ee-3475-5022-812b-d8d8c9b4ea74"))
+	(text "3. Microcontrolador (DOIT ESP32 DevKit V1, 30 pinos)" (exclude_from_sim no) (at 11 92 0) (effects (font (size 3 3) (bold yes)) (justify left bottom)) (uuid "76eb1d56-0f29-5ca3-924f-93a3a637d370"))
+	(symbol (lib_id "tccelta:ESP32_DevKitV1_30") (at 80.01 146.05 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "82dd4ec1-bec0-5a31-9e2b-af6fc99ee669")
+		(property "Reference" "U2" (at 80.01 124.46 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "ESP32-DevKit-V1" (at 80.01 168 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "tccelta:ESP32_DevKitV1_30_Soquete" (at 80.01 146.05 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 80.01 146.05 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 80.01 146.05 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "a17c3f4b-c3fe-57fd-ab17-30f42279c462"))
+		(pin "2" (uuid "80f36677-51e1-50c0-ab8e-7880109fd467"))
+		(pin "3" (uuid "82671ad8-d3b4-507c-9518-050a0f4d5847"))
+		(pin "4" (uuid "788076b1-f96c-537e-b459-ea2e4fdaeaa5"))
+		(pin "5" (uuid "3c711846-c061-5150-ad7f-3e3469f65f5c"))
+		(pin "6" (uuid "0a3ff678-d199-5534-a898-3f989429f66d"))
+		(pin "7" (uuid "4c92e49b-bdad-5386-89c2-12388fbd8279"))
+		(pin "8" (uuid "527ad25b-e23c-5046-91a7-d632069a6e9c"))
+		(pin "9" (uuid "129d4b04-28ef-5a6d-9847-d1dbcdeafe71"))
+		(pin "10" (uuid "acd20e74-a736-57e7-9873-9d1df00f1420"))
+		(pin "11" (uuid "f8054584-3dbb-584f-9923-cebc2ea2e916"))
+		(pin "12" (uuid "6c288931-d961-5915-9e7a-c0f27ce1b826"))
+		(pin "13" (uuid "95bf5b74-f703-543c-8162-8b722c9cfb5b"))
+		(pin "14" (uuid "9c7e5a46-47d4-5eac-9d31-e8cee802cb79"))
+		(pin "15" (uuid "d24bc35e-7822-5f04-8e5d-44ee4635283e"))
+		(pin "17" (uuid "8a480468-73b3-5d5a-bcc1-ad42db919913"))
+		(pin "18" (uuid "27b40865-a3ca-59e0-a02a-60fadc9df541"))
+		(pin "19" (uuid "3cd6e8e5-e695-5947-996d-1886b769fe77"))
+		(pin "20" (uuid "17b8ce76-c93b-5f1e-b657-9d4a13beaeab"))
+		(pin "21" (uuid "fcc1dd71-be41-5692-bab4-7517efbdc5bd"))
+		(pin "22" (uuid "cbcb2a96-2599-5cab-b98a-1ce58a0550df"))
+		(pin "23" (uuid "f4161ef7-9039-519f-97b1-c49e6ede6bfd"))
+		(pin "24" (uuid "eb0e1c43-9e48-5521-ba68-6023d32b7150"))
+		(pin "25" (uuid "c177549d-c2c1-5664-b5c4-e4369af2f2d8"))
+		(pin "26" (uuid "28973c4b-78cd-5ae9-8a5f-52819178120b"))
+		(pin "27" (uuid "11c761f3-f81c-520a-afe4-01c247ad899c"))
+		(pin "28" (uuid "516ef5d7-e4e7-5e7b-992c-b881ec525120"))
+		(pin "29" (uuid "25d52e2d-a12e-5e22-914c-a97cecf81f0e"))
+		(pin "30" (uuid "a596d4eb-cbf2-5c95-9459-5b9f844c2435"))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "U2") (unit 1))))
+	)
+	(no_connect (at 66.04 128.27) (uuid "09164544-73a0-5da6-9182-f1c895943805"))
+	(no_connect (at 66.04 130.81) (uuid "9e1f9e20-4dda-591c-a2d4-838646d27f6f"))
+	(no_connect (at 66.04 133.35) (uuid "91bfc05d-3ebd-5c5c-ad3c-3fe735fa7cad"))
+	(no_connect (at 66.04 135.89) (uuid "364f989a-36a2-5627-ae69-e77a79414650"))
+	(no_connect (at 66.04 138.43) (uuid "445f4481-6184-536b-897a-9374a7630a5b"))
+	(no_connect (at 66.04 140.97) (uuid "b9459c5f-3396-5d51-abde-b130f87efc24"))
+	(no_connect (at 66.04 143.51) (uuid "cd111e1e-92bc-5659-89d9-16c23ac70787"))
+	(no_connect (at 66.04 146.05) (uuid "66713c58-8fda-57b9-b4ec-efbf0c58de38"))
+	(no_connect (at 66.04 148.59) (uuid "db20c7d1-74c0-5f56-81cc-46a181ad5806"))
+	(no_connect (at 66.04 151.13) (uuid "f93fa53b-7cbe-50d2-af3f-fc70ff033275"))
+	(no_connect (at 66.04 153.67) (uuid "0c9f1cb7-bcb4-5ec2-a50d-68452b95015c"))
+	(no_connect (at 66.04 156.21) (uuid "30034e96-5a59-5d1e-9044-2348b941107f"))
+	(no_connect (at 66.04 158.75) (uuid "cbb1da61-c7c5-5362-9ad0-cdce4f089156"))
+	(wire (pts (xy 66.04 161.29) (xy 63.5 161.29)) (stroke (width 0) (type default)) (uuid "feb62ea7-dc53-5300-9aba-298353e9c9de"))
+	(global_label "GND" (shape bidirectional) (at 63.5 161.29 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "ab97a412-8216-5aeb-a104-f24c76cbce13")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 63.5 161.29 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 66.04 163.83) (xy 63.5 163.83)) (stroke (width 0) (type default)) (uuid "6fe4eb2a-cc52-53ba-b6bf-5b6eba7bc57f"))
+	(global_label "+5V" (shape bidirectional) (at 63.5 163.83 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "11fbddaf-fcb7-5c62-af1b-80b98b9ca473")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 63.5 163.83 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 93.98 130.81) (xy 96.52 130.81)) (stroke (width 0) (type default)) (uuid "30f90920-ac56-51e4-ab6f-ce83a9c9d41e"))
+	(global_label "CAN_RX" (shape bidirectional) (at 96.52 130.81 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "491c1e87-f51d-54d2-99fd-2505216e62f7")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 96.52 130.81 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(no_connect (at 93.98 133.35) (uuid "118831d0-f75e-5cb7-baa6-1eba685df369"))
+	(no_connect (at 93.98 135.89) (uuid "6f50a549-797d-516e-9bc8-a7f5614f09b4"))
+	(wire (pts (xy 93.98 138.43) (xy 96.52 138.43)) (stroke (width 0) (type default)) (uuid "a1e8bd38-81d1-5527-a935-44aabc28c6cc"))
+	(global_label "CAN_TX" (shape bidirectional) (at 96.52 138.43 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "09bb692d-4bc1-5ad2-853e-a0b9db6bb2fd")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 96.52 138.43 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(no_connect (at 93.98 140.97) (uuid "a0fceed5-edb5-55e4-a4bb-a8a1d7a8e95c"))
+	(no_connect (at 93.98 143.51) (uuid "30f1fa26-4850-511e-a07c-6bcf6d532bac"))
+	(no_connect (at 93.98 146.05) (uuid "f5081aa6-df0f-5114-ba22-eb8888b604ac"))
+	(no_connect (at 93.98 148.59) (uuid "0d7e1dfd-5486-5f72-9612-3c25eec2912e"))
+	(no_connect (at 93.98 151.13) (uuid "19948d7d-9718-506e-ad20-1ab4611d8015"))
+	(no_connect (at 93.98 153.67) (uuid "22ff2931-ed4d-59ff-b199-7b9aa2ec9fd5"))
+	(no_connect (at 93.98 156.21) (uuid "0f4722bd-1995-5047-b890-440ca03cac67"))
+	(no_connect (at 93.98 158.75) (uuid "626dfea1-db90-5c05-ae4a-5a0ef0d1a6e6"))
+	(wire (pts (xy 93.98 161.29) (xy 96.52 161.29)) (stroke (width 0) (type default)) (uuid "b87fedb6-2097-5cda-9d8d-e589e558db72"))
+	(global_label "GND" (shape bidirectional) (at 96.52 161.29 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "a3545067-9da3-5e8e-b9cf-a98b4909c432")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 96.52 161.29 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(wire (pts (xy 93.98 163.83) (xy 96.52 163.83)) (stroke (width 0) (type default)) (uuid "0cd340ad-0982-54ac-9d9f-85968ae354e6"))
+	(global_label "+3V3" (shape bidirectional) (at 96.52 163.83 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "4ba00afe-830a-55b1-a556-f149c951ed0c")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 96.52 163.83 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(text "Alimentado pelo pino VIN (5 V). CAN: TX = GPIO21 (D21), RX = GPIO22 (D22)." (exclude_from_sim no) (at 11 198 0) (effects (font (size 1.3 1.3)) (justify left bottom)) (uuid "3a19a90b-6dfe-52c1-90af-f5812fb79b84"))
+	(text "Os demais pinos ficam sem ligacao (marcados com X)." (exclude_from_sim no) (at 11 202 0) (effects (font (size 1.3 1.3)) (justify left bottom)) (uuid "a6a12ceb-e2e9-5bfe-83ea-2cb8df15ba85"))
+	(rectangle (start 156 84) (end 286 144) (stroke (width 0.3) (type dash)) (fill (type none)) (uuid "24727381-f4bf-5c94-ae10-1532ad75367e"))
+	(text "4. Transceptor CAN (SN65HVD230 Waveshare, deitado sob o ESP32)" (exclude_from_sim no) (at 159 92 0) (effects (font (size 3 3) (bold yes)) (justify left bottom)) (uuid "cbec4d44-239d-57db-bc13-9f2f39118097"))
+	(symbol (lib_id "tccelta:SN65HVD230_Waveshare") (at 190.5 111.76 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "b78a19f1-220f-5c85-91d8-2c0596d81460")
+		(property "Reference" "U3" (at 190.5 99 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "SN65HVD230_CAN_Board" (at 190.5 124 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "tccelta:SN65HVD230_Waveshare_Deitado" (at 190.5 111.76 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 190.5 111.76 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 190.5 111.76 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "9a7b8d84-95a5-570e-90e8-aa4d02e68d8c"))
+		(pin "2" (uuid "81707805-2b87-5ec1-8354-0905d9ee3edf"))
+		(pin "3" (uuid "aa7f8a55-6f59-5de9-8c41-b0e7de02f0d5"))
+		(pin "4" (uuid "d5a0aacf-8cfb-52a9-8a52-365edb938be9"))
+		(pin "5" (uuid "35b5092d-d877-5ba1-a772-98c773ba6933"))
+		(pin "6" (uuid "94cc9fdf-34b1-5b06-bbff-9995c7f94e72"))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "U3") (unit 1))))
+	)
+	(wire (pts (xy 180.34 107.95) (xy 177.8 107.95)) (stroke (width 0) (type default)) (uuid "f81e1656-0412-52f2-8d66-1f8368fb9a61"))
+	(global_label "+3V3" (shape bidirectional) (at 177.8 107.95 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "0c7da653-f4a8-527c-a823-a1bfb36c0086")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 177.8 107.95 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 180.34 110.49) (xy 177.8 110.49)) (stroke (width 0) (type default)) (uuid "125e2fb9-ccf5-572c-91f9-e26d6e293288"))
+	(global_label "GND" (shape bidirectional) (at 177.8 110.49 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "afacbcd7-df30-5edd-8b0f-f1a180242d33")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 177.8 110.49 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 180.34 113.03) (xy 177.8 113.03)) (stroke (width 0) (type default)) (uuid "cc786dd3-94a3-59e0-b19f-ef97bf632216"))
+	(global_label "CAN_RX" (shape bidirectional) (at 177.8 113.03 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "6ba67699-6256-5761-8e20-a65cfab0b642")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 177.8 113.03 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 180.34 115.57) (xy 177.8 115.57)) (stroke (width 0) (type default)) (uuid "7330c8a2-f7fe-5528-b66e-c66ecbf79794"))
+	(global_label "CAN_TX" (shape bidirectional) (at 177.8 115.57 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "90a20007-e742-5fbf-a3d4-fd46b00a269b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 177.8 115.57 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 200.66 107.95) (xy 203.2 107.95)) (stroke (width 0) (type default)) (uuid "d5bd40c7-57dc-553f-83bb-3d05e76b999e"))
+	(global_label "CAN_H" (shape bidirectional) (at 203.2 107.95 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "1cffc8cf-21d7-5485-94ea-a6817155396d")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 203.2 107.95 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(wire (pts (xy 200.66 110.49) (xy 203.2 110.49)) (stroke (width 0) (type default)) (uuid "fb6d9169-462f-5718-9005-e34b88a396af"))
+	(global_label "CAN_L" (shape bidirectional) (at 203.2 110.49 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "a5b79680-5529-5d25-90a7-a818637ff5c3")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 203.2 110.49 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(symbol (lib_id "Jumper:Jumper_2_Open") (at 254 101.6 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "0aebf18c-7049-57b4-bfb6-8a980ceeaa33")
+		(property "Reference" "JP1" (at 254 96.52 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "TERM_120R" (at 254 106.68 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical" (at 254 101.6 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 254 101.6 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 254 101.6 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "46e34035-d23e-57aa-b2c3-4e8fd27af81e"))
+		(pin "2" (uuid "60b7dcee-2652-5219-9498-f6dec87c6052"))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "JP1") (unit 1))))
+	)
+	(wire (pts (xy 248.92 101.6) (xy 246.38 101.6)) (stroke (width 0) (type default)) (uuid "d6c5c5e2-1589-5db0-a1b0-63255f59b9fb"))
+	(global_label "TERM" (shape bidirectional) (at 246.38 101.6 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "86005ecd-5dd7-5081-a8d8-8e227ee4076a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 246.38 101.6 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 259.08 101.6) (xy 261.62 101.6)) (stroke (width 0) (type default)) (uuid "586f364a-53b3-5a66-95f6-ef372af95e0c"))
+	(global_label "CAN_H" (shape bidirectional) (at 261.62 101.6 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "8adda117-f5ed-5299-b232-af1bfe0ceb40")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 261.62 101.6 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(symbol (lib_id "Device:R") (at 254 114.3 90) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "4fde740c-aae9-51e0-913c-9d343582eef8")
+		(property "Reference" "R1" (at 254 109.22 90) (effects (font (size 1.27 1.27))))
+		(property "Value" "120R_1/4W" (at 254 119.38 90) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical" (at 254 114.3 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 254 114.3 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 254 114.3 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(pin "1" (uuid "349c9f22-1d0d-542e-a7fe-6d75b31cb6bb"))
+		(pin "2" (uuid "034383a5-c71c-55cd-a704-a2371ed9495c"))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "R1") (unit 1))))
+	)
+	(wire (pts (xy 250.19 114.3) (xy 247.65 114.3)) (stroke (width 0) (type default)) (uuid "3d44b653-59fd-5b32-b626-9e478bc96fc4"))
+	(global_label "TERM" (shape bidirectional) (at 247.65 114.3 180) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify right)) (uuid "637c6702-8550-596b-bf79-5b2e13b8a2de")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 247.65 114.3 0) (effects (font (size 1.27 1.27)) (justify right) (hide yes))))
+	(wire (pts (xy 257.81 114.3) (xy 260.35 114.3)) (stroke (width 0) (type default)) (uuid "76e3a260-97a7-5d3f-98c7-913dc0e799a3"))
+	(global_label "CAN_L" (shape bidirectional) (at 260.35 114.3 0) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify left)) (uuid "980d5b75-54a6-5f9f-99b8-7ce922a4aa82")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}" (at 260.35 114.3 0) (effects (font (size 1.27 1.27)) (justify left) (hide yes))))
+	(text "U3 fica sob o ESP32 (componentes para baixo); CANH/CANL vao por cobre ate o borne da placa." (exclude_from_sim no) (at 159 130 0) (effects (font (size 1.3 1.3)) (justify left bottom)) (uuid "814e6e0f-f431-5372-8077-64ecf5820aaa"))
+	(text "JP1 colocado = terminacao de 120 ohms (bancada). Sem jumper = sem terminacao (carro)." (exclude_from_sim no) (at 159 134 0) (effects (font (size 1.3 1.3)) (justify left bottom)) (uuid "37f1f139-d54c-5622-b81c-3d4abb3b294d"))
+	(text "Remover SEMPRE o resistor SMD de 120 ohms do modulo (marcado 121); o borne e a barra de 90 graus saem." (exclude_from_sim no) (at 159 138 0) (effects (font (size 1.3 1.3)) (justify left bottom)) (uuid "ab75b286-39fb-5149-8873-73f318bd12ec"))
+	(rectangle (start 156 146) (end 286 172) (stroke (width 0.3) (type dash)) (fill (type none)) (uuid "c92b1831-adfe-52ea-a5b7-1aef1b6e3752"))
+	(text "5. Mecanica" (exclude_from_sim no) (at 159 154 0) (effects (font (size 3 3) (bold yes)) (justify left bottom)) (uuid "d3a15c0e-7bcd-5d63-aa3c-5ace454adf81"))
+	(symbol (lib_id "Mechanical:MountingHole") (at 185 160 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom no) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "d9f65ee8-d1ab-5002-927a-f8923448ae58")
+		(property "Reference" "H1" (at 185 154 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "M3" (at 185 165 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3" (at 185 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 185 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 185 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "H1") (unit 1))))
+	)
+	(symbol (lib_id "Mechanical:MountingHole") (at 215 160 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom no) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "33e92ad1-7bf3-5905-97ce-581f74858670")
+		(property "Reference" "H2" (at 215 154 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "M3" (at 215 165 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3" (at 215 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 215 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 215 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "H2") (unit 1))))
+	)
+	(symbol (lib_id "Mechanical:MountingHole") (at 245 160 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom no) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "c87693d5-592d-5568-8d20-1ff849a06283")
+		(property "Reference" "H3" (at 245 154 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "M3" (at 245 165 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3" (at 245 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 245 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 245 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "H3") (unit 1))))
+	)
+	(symbol (lib_id "Mechanical:MountingHole") (at 275 160 0) (unit 1) (body_style 1) (exclude_from_sim no) (in_bom no) (on_board yes) (in_pos_files yes) (dnp no) (fields_autoplaced yes)
+		(uuid "43d3fdd5-47a1-57b8-8abc-09fd95345746")
+		(property "Reference" "H4" (at 275 154 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "M3" (at 275 165 0) (effects (font (size 1.27 1.27))))
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3" (at 275 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "" (at 275 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "" (at 275 160 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(instances (project "tccelta_v2" (path "/97033e6a-a51a-580b-be5f-8185ead3ae86" (reference "H4") (unit 1))))
+	)
+	(sheet_instances (path "/" (page "1")))
+	(embedded_fonts no)
+)

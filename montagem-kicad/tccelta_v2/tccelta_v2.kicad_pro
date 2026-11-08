@@ -1,0 +1,170 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "copper_line_width": 0.2,
+        "copper_text_size_h": 1.5,
+        "copper_text_size_v": 1.5,
+        "copper_text_thickness": 0.3,
+        "other_line_width": 0.1,
+        "silk_line_width": 0.12,
+        "silk_text_size_h": 1.0,
+        "silk_text_size_v": 1.0,
+        "silk_text_thickness": 0.15
+      },
+      "rules": {
+        "min_clearance": 0.6,
+        "min_connection": 0.0,
+        "min_copper_edge_clearance": 1.0,
+        "min_hole_clearance": 0.25,
+        "min_hole_to_hole": 0.25,
+        "min_resolved_spokes": 2,
+        "min_silk_clearance": 0.0,
+        "min_text_height": 0.8,
+        "min_text_thickness": 0.12,
+        "min_through_hole_diameter": 0.8,
+        "min_track_width": 0.8,
+        "min_via_annular_width": 0.1,
+        "min_via_diameter": 0.5,
+        "solder_mask_to_copper_clearance": 0.0,
+        "use_height_for_length_calcs": true
+      },
+      "rule_severities": {
+        "silk_over_copper": "ignore",
+        "silk_overlap": "ignore",
+        "silk_edge_clearance": "ignore",
+        "text_height": "ignore",
+        "text_thickness": "ignore",
+        "lib_footprint_issues": "ignore",
+        "lib_footprint_mismatch": "ignore"
+      },
+      "track_widths": [
+        0.0,
+        1.0,
+        1.5
+      ],
+      "via_dimensions": [],
+      "zones_allow_external_fillets": false
+    }
+  },
+  "meta": {
+    "filename": "tccelta_v2.kicad_pro",
+    "version": 3
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6,
+        "name": "Default",
+        "clearance": 0.6,
+        "track_width": 1.0,
+        "priority": 2147483647
+      },
+      {
+        "bus_width": 12,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6,
+        "name": "Sinal",
+        "clearance": 0.6,
+        "track_width": 1.0,
+        "priority": 1
+      },
+      {
+        "bus_width": 12,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6,
+        "name": "Potencia",
+        "clearance": 0.6,
+        "track_width": 1.5,
+        "priority": 0
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "netclass_assignments": null,
+    "netclass_patterns": [
+      {
+        "netclass": "Sinal",
+        "pattern": "CAN_TX"
+      },
+      {
+        "netclass": "Sinal",
+        "pattern": "CAN_RX"
+      },
+      {
+        "netclass": "Sinal",
+        "pattern": "CAN_H"
+      },
+      {
+        "netclass": "Sinal",
+        "pattern": "CAN_L"
+      },
+      {
+        "netclass": "Sinal",
+        "pattern": "TERM"
+      },
+      {
+        "netclass": "Sinal",
+        "pattern": "+3V3"
+      },
+      {
+        "netclass": "Potencia",
+        "pattern": "+12V_IN"
+      },
+      {
+        "netclass": "Potencia",
+        "pattern": "+12V_FUS"
+      },
+      {
+        "netclass": "Potencia",
+        "pattern": "+12V_PROT"
+      },
+      {
+        "netclass": "Potencia",
+        "pattern": "+5V"
+      }
+    ]
+  },
+  "schematic": {
+    "drawing": {
+      "default_line_thickness": 6.0
+    }
+  },
+  "sheets": [
+    [
+      "97033e6a-a51a-580b-be5f-8185ead3ae86",
+      "Raiz"
+    ]
+  ],
+  "text_variables": {}
+}

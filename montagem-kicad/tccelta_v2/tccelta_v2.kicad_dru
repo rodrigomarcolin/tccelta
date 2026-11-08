@@ -1,0 +1,10 @@
+(version 1)
+
+# Placa de face simples: nenhuma via permitida.
+(rule "sem_vias"
+	(constraint disallow via))
+
+# Cobre so em B.Cu.
+(rule "sem_trilhas_em_F_Cu"
+	(layer "F.Cu")
+	(constraint disallow track))
