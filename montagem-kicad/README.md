@@ -5,7 +5,7 @@ SN65HVD230 (placa Waveshare "SN65HVD230 CAN Board"), com um buck LM2596 para ger
 soldados**: encaixam em soquetes fêmea (barras de pinos fêmea de 2,54 mm). Só os soquetes, os bornes, o F1, o D1,
 o C1, o R1 e as barras macho J3 e JP1 são soldados.
 
-Entrada de 12 V, na ordem: borne -> **F1** (fusível rearmável PTC 0,5 A) -> **D1** (1N5819, inversão de polaridade)
+Entrada de 12 V, na ordem: borne -> **F1** (fusível rearmável PTC 0,4 A) -> **D1** (1N5819, inversão de polaridade)
 -> **C1** (100 uF) -> LM2596.
 
 Terminação CAN de 120 ohms **selecionável por jumper**: o resistor **R1** (120 ohms) fica ligado entre CAN_L e o pino
@@ -49,7 +49,7 @@ ferramentas e materiais em [MATERIAIS.md](MATERIAIS.md). A função e a posiçã
 | 1 | Jumper de encaixe (shunt) 2,54 mm | fecha o JP1: colocado na bancada, retirado no carro |
 | 1 | Borne de parafuso 2 vias, passo 5,08 mm (Phoenix MKDS 1,5/2) | J1: 12 V e GND |
 | 1 | Borne de parafuso 3 vias, passo 5,08 mm (MKDS 1,5/3) | J2: GND, CAN_H, CAN_L; encaixa no J1 formando 5 vias |
-| 1 | F1: fusível rearmável PTC radial, 0,5 A de manutenção, **60 V ou mais** (RXEF050, MF-R050 ou similar), terminais a 5,1 mm | abre num curto na placa e volta sozinho depois de esfriar. Não use os de 16 V |
+| 1 | F1: fusível rearmável PTC radial, **0,4 A** de manutenção (desarma a 0,8 A), **60 V ou mais** (RXEF040, MF-R040 ou similar), terminais a 5,1 mm | abre num curto na placa e volta sozinho depois de esfriar. Não use os de 16 V. Se desarmar à toa no calor, troque pelo RXEF050 (0,5 A), no mesmo lugar |
 | 1 | D1: diodo Schottky 1N5819 (DO-41) | proteção contra inversão de polaridade |
 | 1 | C1: capacitor eletrolítico 100 uF / 25 V (radial, D 6,3 mm, passo 2,5 mm) | |
 | 3 | Parafuso M3 + porca (ou espaçador) | furos de fixação H1, H2, H3 |
@@ -191,8 +191,9 @@ O firmware usa TX = GPIO21 e RX = GPIO22 (pinos D21 e D22 do ESP32 DevKit V1). O
   pino + está a ~7,5 mm de trilha do IN+. A trilha de +12 V_PROT sobe do D1 até o + do C1 e dali vai ao IN+ (ordem
   D1 -> C1 -> IN+). A placa não cresceu.
 - **F1 (PTC)** é o primeiro componente depois do borne, então protege tudo o que vem depois (D1, C1, buck, ESP32,
-  transceptor) contra curto. O consumo normal é de ~0,15 A em 12 V; o PTC só abre perto de 1 A e, num carro quente
-  (~70 °C), ainda segura uns 0,35 A. Quando abre, esquenta (é assim que ele corta) e volta sozinho alguns minutos
+  transceptor) contra curto. O consumo normal é de ~0,15 A em 12 V; o PTC de 0,4 A garante abrir a 0,8 A (abaixo do
+  1 A do D1) e, num carro quente (~60 °C), ainda segura uns 0,28 A. O risco é desarmar à toa em calor forte; veja
+  [ESCOLHAS_DO_PROJETO.md](ESCOLHAS_DO_PROJETO.md#riscos-do-fusível-de-04-a). Quando abre, esquenta (é assim que ele corta) e volta sozinho alguns minutos
   depois de desligar. Ele não protege o cabo entre o conector OBD-II e a placa: esse trecho continua só com o
   fusível do próprio carro.
 - O furo de fixação H2 fica colado ao F1: a cabeça de um parafuso M3 comum (5,5 mm) avança ~0,5 mm sob a borda do

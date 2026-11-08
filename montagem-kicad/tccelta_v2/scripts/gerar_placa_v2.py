@@ -201,7 +201,7 @@ FP_F1 = "tccelta:PTC_Radial_P5.08_Vertical"
 COMPONENTES = {
     "J1": dict(lib_id="Connector:Screw_Terminal_01x02", valor="Borne_2_vias_5.08", fp=FP_BORNE2),
     "J2": dict(lib_id="Connector:Screw_Terminal_01x03", valor="Borne_3_vias_5.08", fp=FP_BORNE3),
-    "F1": dict(lib_id="Device:Polyfuse", valor="PTC_0.5A_60V", fp=FP_F1),
+    "F1": dict(lib_id="Device:Polyfuse", valor="PTC_0.4A_60V", fp=FP_F1),
     "D1": dict(lib_id="Device:D_Schottky", valor="1N5819", fp=FP_D1),
     "C1": dict(lib_id="Device:C_Polarized", valor="100uF/25V", fp=FP_C1),
     "U1": dict(lib_id="tccelta:LM2596_Modulo", valor="LM2596_5V", fp=FP_LM),
@@ -627,7 +627,7 @@ def gera_fp_sn65():
 
 
 def gera_fp_ptc():
-    """Fusivel rearmavel PTC radial (RXEF050 / MF-R050 e similares), terminais a 5,08 mm."""
+    """Fusivel rearmavel PTC radial (RXEF040 / MF-R040 e similares), terminais a 5,08 mm."""
     fp = FP("PTC_Radial_P5.08_Vertical",
             "Fusivel rearmavel PTC radial em pe (disco ~7,5 x 3 mm), terminais a 5,08 mm. "
             "Origem = pino 1; pino 2 em -Y.")
@@ -802,7 +802,7 @@ def gera_esquematico(proprios):
     s.componente("C1", 144.78, 50.8, 0, ref_at=(152.4, 48.26), val_at=(152.4, 53.34))
     s.texto("Cabo OBD-II: pino 16 = +12V, pinos 4 e 5 = GND, pino 6 = CAN_H, pino 14 = CAN_L",
             11, 72, 1.3)
-    s.texto("F1 (PTC rearmavel 0,5 A / 60 V): abre num curto na placa. D1 (1N5819): inversao de polaridade.",
+    s.texto("F1 (PTC rearmavel 0,4 A / 60 V): abre num curto na placa. D1 (1N5819): inversao de polaridade.",
             11, 76, 1.3)
     s.texto("J1 + J2 formam um borne de 5 vias.", 11, 68, 1.3)
 

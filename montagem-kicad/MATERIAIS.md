@@ -13,7 +13,7 @@ está em [PASSO_A_PASSO.md](PASSO_A_PASSO.md).
 | 1 | Barra de pinos **macho** 1x40, passo 2,54 mm | J3 (1x2), JP1 (1x2) e os 4 pinos do LM2596 |
 | 1 | Borne de parafuso KRE/KF301, 2 vias, passo 5,08 mm | J1: +12 V e GND |
 | 1 | Borne de parafuso KRE/KF301, 3 vias, passo 5,08 mm | J2: GND, CAN_H e CAN_L |
-| 1 | Fusível rearmável PTC radial 0,5 A, **60 V ou mais** (RXEF050, MF-R050 ou "PTC 72V 0,5A"), terminais a 5,1 mm | F1: abre num curto na placa e volta sozinho. Não use os de 16 V |
+| 1 | Fusível rearmável PTC radial **0,4 A**, **60 V ou mais** (RXEF040, MF-R040 ou "PTC 72V 0,4A"), terminais a 5,1 mm | F1: abre num curto na placa e volta sozinho. Não use os de 16 V. Riscos e quando trocar pelo de 0,5 A (RXEF050): [ESCOLHAS_DO_PROJETO.md](ESCOLHAS_DO_PROJETO.md#riscos-do-fusível-de-04-a) |
 | 1 | Diodo Schottky 1N5819 | D1: proteção contra inversão de polaridade |
 | 1 | Capacitor eletrolítico 100 uF / 25 V (radial, 6,3 mm de diâmetro) | C1: filtro da entrada |
 | 1 | Resistor de filme metálico 120 ohms, 1/4 W, 1 % | R1: terminação CAN, montado em pé |

@@ -34,9 +34,50 @@ reposição, e ocupa o espaço de um capacitor de disco.
 
 **Por que esses valores:**
 
-- **0,5 A:** o dongle consome uns 60 a 150 mA em 12 V, então ele nunca desarma no uso normal e desarma num curto.
+- **0,4 A (RXEF040 / MF-R040):** segura 0,4 A sem desarmar e garante desarmar a partir de 0,8 A. O dongle consome
+  uns 60 a 150 mA em 12 V, com picos de ~0,15 a 0,2 A quando o rádio transmite.
+- **Desarme abaixo de 1 A:** o 0,8 A fica abaixo do limite de 1 A do D1 (1N5819). Assim, nenhuma corrente que passe
+  sem desarmar o fusível consegue queimar o diodo.
 - **60 V:** a tensão do carro passa bastante dos 14 V em picos, por exemplo na partida ou quando uma carga grande
   desliga.
+
+### Comparação com outros valores
+
+Todos têm o mesmo encaixe (terminais a 5,1 mm); trocar não muda a placa.
+
+| PTC | Segura | Garante desarmar | Com o D1 1N5819 (1 A) |
+|---|---|---|---|
+| 0,3 A (RXEF030) | 0,3 A | 0,6 A | protege, mas desarma à toa no calor |
+| **0,4 A (RXEF040)** | 0,4 A | 0,8 A | **protege o diodo e o lado de 5 V; folga menor no calor** |
+| 0,5 A (RXEF050) | 0,5 A | 1,0 A | protege; mais folga no calor |
+| 0,75 A (RXEF075) | 0,75 A | 1,5 A | **não protege o D1**: até 1,5 A pode passar sem desarmar. Só com um diodo de 3 A (1N5822) |
+
+Entre "segura" e "garante desarmar" existe uma faixa em que o PTC pode deixar a corrente passar indefinidamente. Um
+defeito que puxe corrente nessa faixa (um "meio curto", como um componente danificado ou uma ponte de solda com
+alguma resistência) dissipa calor no ponto do defeito sem desarmar nada. Com o 0,4 A, essa faixa vai até ~10 W
+(12 V x 0,8 A), contra ~12 W do 0,5 A e ~18 W do 0,75 A. No lado de 5 V, o 0,4 A desarma quando o consumo passa de
+~1,6 a 1,8 A; um curto franco no 5 V é contido pelo limite de corrente do próprio LM2596.
+
+### Riscos do fusível de 0,4 A
+
+O risco do 0,4 A é **desarmar à toa**: o PTC segura menos corrente quando está quente, e a folga sobre o consumo do
+dongle fica menor.
+
+| Temperatura em volta do F1 | Segura sem desarmar (aprox.) | Folga sobre o pico de ~0,2 A |
+|---|---|---|
+| 25 °C (bancada) | 0,40 A | 2x |
+| 60 °C (embaixo do painel num dia quente) | ~0,28 a 0,30 A | ~1,5x |
+| 85 °C (carro parado no sol forte) | ~0,24 A | ~1,2x (apertado) |
+
+- **Sintoma:** o dongle desliga e volta sozinho depois de alguns minutos, quando o PTC esfria. A conexão com o
+  celular cai. Não queima nada.
+- **Não preocupam:** a partida (a tensão cai para ~8 V e o consumo sobe para ~0,19 A, ainda abaixo do limite, e
+  dura pouco) e o pico ao ligar, quando os capacitores carregam: dura milissegundos e o PTC leva segundos para
+  reagir.
+- **Como conferir:** meça o consumo real em 12 V com o multímetro em série no +12 V, com o Bluetooth conectado e
+  transmitindo. Pico abaixo de ~0,15 A: o 0,4 A tem folga. Pico perto de 0,2 A, ou desarmes no uso: troque pelo
+  RXEF050 (0,5 A), que encaixa nos mesmos furos.
+- **Não suba além de 0,5 A** sem trocar o D1 (veja a tabela acima).
 
 **Por que é o primeiro da fila:** tudo o que vem depois dele fica protegido, inclusive o D1. Ele está colado no
 borne para que o trecho de cobre sem proteção, entre o borne e o F1, seja o menor possível.
