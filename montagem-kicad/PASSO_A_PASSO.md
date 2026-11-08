@@ -226,7 +226,8 @@ Componentes por cima da placa; solda e cobre embaixo.
    - solde os 4 soquetes na placa;
    - espete os 4 pinos macho nesses soquetes e apoie o LM2596 por cima, usando a placa como gabarito;
    - solde os pinos no LM2596.
-7. **C1 (100 uF):** perna longa (+) no pad marcado com +.
+7. **C1 (100 uF):** perna longa (+) no pad marcado com +. Ele fica em cima, à esquerda, ao lado do ESP32 (logo abaixo
+   do IN+ do LM2596), e não perto do D1.
 8. **F1 (fusível PTC):** não tem lado certo. Fica no canto de baixo à esquerda, entre o borne e o D1. Solde com o
    disco **uns 3 a 4 mm acima da placa**: as dobras dos terminais já seguram nessa altura. Assim a cabeça do
    parafuso do furo de fixação vizinho passa por baixo da borda dele.

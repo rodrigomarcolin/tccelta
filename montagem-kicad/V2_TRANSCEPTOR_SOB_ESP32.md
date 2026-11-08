@@ -18,7 +18,7 @@ e é gerada por `tccelta_v2/scripts/gerar_placa_v2.py`.
 | CAN_TX / CAN_RX | subiam da borda de baixo até o D21 e o D22 | **9,6 mm e 12,5 mm**, do módulo direto ao D21 e ao D22 |
 | Altura da montagem | dominada pelo módulo em pé (~37 mm) | dominada pelo LM2596 no soquete (~20 a 25 mm, conforme o módulo) |
 | Furos de fixação | 3 | **4** (o 4º fica embaixo à direita, perto do borne) |
-| F1, D1, C1 | embaixo, ao lado do borne | **coluna da esquerda**, ao lado do ESP32 (veja abaixo) |
+| F1, D1, C1 | F1 e D1 embaixo, ao lado do borne; C1 em cima, ao lado do ESP32, colado no IN+ | **coluna da esquerda**, ao lado do ESP32 (veja abaixo) |
 
 Por que vale a pena:
 
@@ -28,8 +28,8 @@ Por que vale a pena:
 - **Mais baixo e mais rígido.** O mais alto passa a ser o LM2596 no soquete; depois vêm o ESP32, o F1 (~12 mm), o C1 (~11 mm) e o borne (~10 mm). O
   módulo, de ~4 mm, fica preso por 6 pinos soldados na placa, e não mais plugado num soquete.
 - **Placa menor.** Sem o soquete do módulo e sem o J3, a faixa de baixo só precisa do borne, do R1 e do JP1.
-- **C1 mais perto do LM2596.** Na v1 o C1 ficava embaixo, longe do IN+ do buck. Agora a coluna da esquerda sobe em
-  ordem: **F1 (embaixo, a 8,2 mm da via +12V do borne, o mínimo de cobre sem proteção) -> D1 -> C1 (em cima, a ~8 mm
+- **Coluna de proteção na esquerda.** Como na v1, o C1 fica colado no IN+ do buck (~8 mm de trilha). Aqui a coluna
+  da esquerda sobe em ordem: **F1 (embaixo, a 8,2 mm da via +12V do borne, o mínimo de cobre sem proteção) -> D1 -> C1 (em cima, a ~8 mm
   do IN+ do LM2596)**. O capacitor de entrada fica colado no módulo que ele alimenta.
 - A energia (coluna da esquerda, trilhas de 1,5 mm) não cruza nem anda rente ao par CAN.
 

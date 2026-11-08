@@ -120,7 +120,8 @@ X_CORREDOR_12V = -45.5        # trilha +12V_PROT sobe pela esquerda ate o IN+ do
 Y_5V = -6.0                   # linha de furos de baixo do LM2596 (IN+/OUT+)
 Y_BORNE = 40.0                # linha dos pads do borne
 X_BORNE_PIN5 = -20.5          # x do pino 5 (CAN_L) do borne; os outros vem a cada 5,08
-C1_POS = (-41.6, 29.88)       # pino + do C1 (a leste do D1, ligado ao catodo por uma diagonal)
+C1_POS = (-49.0, 0.0)          # pino + do C1, colado no IN+ do buck (o pino - fica 2,5 mm a leste, GND)
+Y_C1_DESCE = 4.5                # onde a trilha do corredor vira para oeste e chega ao + do C1 por baixo
 Y_D1K = 25.98                 # catodo do D1 (anodo 7,62 mm abaixo)
 F1_POS = (-45.5, 42.3)        # pino 1 do F1 (+12V_IN, vem do borne); pino 2 fica 5,08 mm acima
 FURO_M3 = 3.2
@@ -952,7 +953,7 @@ def constroi_pcb():
         fp.Add(r)
 
     # referencias legiveis (nao se sobrepoem entre si)
-    for ref, (dx, dy) in {"J1": (2.54, 3.6), "J2": (5.08, 3.6), "C1": (6.6, 0.0),
+    for ref, (dx, dy) in {"J1": (2.54, 3.6), "J2": (5.08, 3.6), "C1": (1.25, 4.7),
                           "D1": (-2.6, 3.9), "J3": (J3_REF_DX, J3_REF_DY), "F1": (-2.6, -2.54),
                           "R1": (R1_REF_DX, R1_REF_DY), "JP1": (JP1_REF_DX, JP1_REF_DY)}.items():
         fps[ref].Reference().SetPosition(pcbnew.VECTOR2I(fps[ref].GetPosition().x + FromMM(dx),
@@ -1107,12 +1108,15 @@ def constroi_pcb():
     trilha("+12V_IN", LARG_POTENCIA, [j1_1, (f1_1[0] + (f1_1[1] - j1_1[1]), j1_1[1]), f1_1], 0)
     # +12V_FUS: pino 2 do F1 -> anodo do D1 (mesma coluna)
     trilha("+12V_FUS", LARG_POTENCIA, [f1_2, d1_a], 0)
-    # +12V_PROT: catodo do D1 -> sobe o corredor ate o IN+ do buck; derivacao em diagonal para o C1
+    # +12V_PROT: catodo do D1 -> sobe o corredor -> diagonal para oeste -> pino + do C1 (por baixo)
+    # -> do + do C1 direto ao IN+ do buck (D1 -> C1 -> IN+: o C1 nunca ve tensao reversa)
     c1_p = pos("C1", 1)
     u1_inp = pos("U1", 1)
-    trilha("+12V_PROT", LARG_POTENCIA, [d1_k, u1_inp], 0)
-    dd = c1_p[0] - d1_k[0]
-    trilha("+12V_PROT", LARG_POTENCIA, [d1_k, (c1_p[0], d1_k[1] + dd), c1_p], 0)
+    dd = d1_k[0] - c1_p[0]
+    y_d = c1_p[1] + Y_C1_DESCE
+    trilha("+12V_PROT", LARG_POTENCIA, [d1_k, (d1_k[0], y_d + dd), (c1_p[0], y_d), c1_p], 0)
+    dn = u1_inp[0] - c1_p[0]
+    trilha("+12V_PROT", LARG_POTENCIA, [c1_p, (c1_p[0], u1_inp[1] + dn), u1_inp], 0)
     # +5V: OUT+ -> pino VIN do ESP32 (por cima da fileira de cima)
     u1_outp = pos("U1", 3)
     p5v = pos("U2", 15)

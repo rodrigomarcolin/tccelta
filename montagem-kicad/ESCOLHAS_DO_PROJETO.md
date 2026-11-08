@@ -74,9 +74,17 @@ energia desses picos. Ele também amortece pequenos ruídos e oscilações da re
 - **100 µF** é uma reserva confortável para esse consumo;
 - **25 V** dá folga sobre os cerca de 14,4 V do carro ligado (alternador carregando a bateria).
 
-**Por que fica junto do D1 e não junto do LM2596:** o ideal seria colado na entrada IN+ do LM2596. Mas o módulo
-LM2596 já traz o próprio capacitor de entrada, e levar o C1 até lá aumentaria a placa uns 8 mm. Junto do D1 ele
-cumpre bem o papel de reservatório da entrada. É uma concessão consciente.
+**Por que fica colado no IN+ do LM2596:** o capacitor de entrada de um regulador chaveado tem de ficar o mais perto
+possível da entrada dele. Os pulsos de corrente saem do C1 por uma trilha curta; com uma trilha longa, a resistência e
+a indutância dela atrapalham e o capacitor serve de pouco. Por isso o C1 fica logo abaixo do IN+, na lateral do ESP32:
+o pino + dele está a cerca de 7,5 mm de trilha do IN+, e o pino - encosta no plano de GND (conexão sólida, sem
+alívio térmico). O corpo do C1 (o componente mais alto da placa, uns 11 mm) fica fora do contorno do ESP32 e do
+LM2596, no espaço que sobrava na lateral esquerda. A placa não cresceu.
+
+**O que protege o C1 contra polaridade invertida é a ordem, não a distância:** o caminho é D1 -> C1 -> IN+. Como o
+pino + do C1 fica depois do D1 na trilha, o diodo já bloqueou qualquer tensão invertida antes de ela chegar ao
+capacitor. Não importa se o C1 está a 5 mm ou a 30 mm do D1 (hoje são ~27 mm de trilha); importa só que o D1 venha
+primeiro.
 
 ## LM2596 (U1): de 12 V para 5 V
 
@@ -169,6 +177,6 @@ corrosão caseira.
   ajuda a blindar contra ruído. De quebra, sobra menos cobre para o percloreto dissolver.
 - **Antena do ESP32 para fora da placa, sem cobre embaixo:** cobre perto da antena atrapalha o Bluetooth e o
   Wi-Fi. Por isso ela fica além da borda, e há uma área proibida de cobre a partir de 1 mm do pino 1.
-- **Proteções agrupadas no canto do borne:** F1, D1 e C1 ficam todos no canto de baixo à esquerda. O 12 V "sujo",
-  ainda sem proteção, fica restrito a poucos milímetros, e o resto da placa só recebe energia já filtrada e
-  protegida.
+- **Proteções agrupadas no canto do borne:** F1 e D1 ficam no canto de baixo à esquerda, junto do borne. O 12 V
+  "sujo", ainda sem proteção, fica restrito a poucos milímetros, e o resto da placa só recebe energia já protegida.
+  O C1 não está nesse canto: fica lá em cima, colado no IN+ do LM2596, porque é lá que o filtro de entrada faz efeito.

@@ -150,7 +150,8 @@ A serigrafia (referências e rótulos dos pinos) está em `serigrafia_F_Silk.pdf
      Não tem polaridade.
    - JP1: barra macho 1x2 vertical, ao lado do R1. O jumper de encaixe vai sobre os dois pinos.
    - D1: **faixa (catodo) voltada para cima** na placa (pad de cima), anodo para baixo, ligado ao F1.
-   - C1: perna longa (+) no pad da esquerda, marcada no desenho.
+   - C1: fica em cima, à esquerda, ao lado do ESP32 e logo abaixo do IN+ do LM2596. Perna longa (+) no pad da
+     esquerda, marcada com "+" no desenho.
    - Encaixe o J2 ao lado do J1 (borne de 5 vias): `+12V, GND, GND, CAN_H, CAN_L`. A entrada dos fios
      fica voltada para a borda de baixo da placa.
 2. Solde os 4 pinos macho nos furos do LM2596.
@@ -186,8 +187,9 @@ O firmware usa TX = GPIO21 e RX = GPIO22 (pinos D21 e D22 do ESP32 DevKit V1). O
   ESP32 fica sem contato (use a barra 1x14 na fileira de baixo).
 - Dois pads de GND (GND do transceptor e C1 -) usam conexão sólida ao plano em vez de alívio térmico: só há espaço
   para um raio no primeiro e o C1 é o capacitor de entrada. Os demais mantêm alívio térmico de 0,8 mm.
-- C1 ficou logo à direita do D1 (parte de baixo-esquerda), ligado ao catodo por uma diagonal curta de +12 V_PROT.
-  Colocá-lo junto ao IN+ do buck custaria cerca de 8 mm a mais de largura.
+- C1 fica colado no IN+ do buck (canto de cima à esquerda, ao lado do ESP32, fora do contorno dele e do módulo): o
+  pino + está a ~7,5 mm de trilha do IN+. A trilha de +12 V_PROT sobe do D1 até o + do C1 e dali vai ao IN+ (ordem
+  D1 -> C1 -> IN+). A placa não cresceu.
 - **F1 (PTC)** é o primeiro componente depois do borne, então protege tudo o que vem depois (D1, C1, buck, ESP32,
   transceptor) contra curto. O consumo normal é de ~0,15 A em 12 V; o PTC só abre perto de 1 A e, num carro quente
   (~70 °C), ainda segura uns 0,35 A. Quando abre, esquenta (é assim que ele corta) e volta sozinho alguns minutos
