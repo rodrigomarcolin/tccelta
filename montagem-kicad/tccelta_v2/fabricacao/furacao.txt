@@ -3,7 +3,7 @@ FURACAO - dongle OBD-II v2 (tccelta_v2)
 Diametro  Tipo       Qtd  Onde
 ------------------------------------------------------------
  0.80 mm  com cobre   2  C1(2)
- 1.00 mm  com cobre  47  F1(2), JP1(2), R1(2), SW1(2), U1(4), U2(29), U3(6)
+ 1.00 mm  com cobre  47  F1(2), J5(2), JP1(2), R1(2), U1(4), U2(29), U3(6)
  1.10 mm  com cobre   2  D1(2)
  1.30 mm  com cobre   5  J1(2), J2(3)
  3.20 mm  sem cobre   4  H1(1), H2(1), H3(1), H4(1)

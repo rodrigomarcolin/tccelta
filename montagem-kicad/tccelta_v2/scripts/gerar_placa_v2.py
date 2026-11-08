@@ -209,7 +209,7 @@ COMPONENTES = {
     "U3": dict(lib_id="tccelta:SN65HVD230_Waveshare", valor="SN65HVD230_CAN_Board", fp=FP_SN),
     "R1": dict(lib_id="Device:R", valor="120R_1/4W", fp=FP_R1),
     "JP1": dict(lib_id="Jumper:Jumper_2_Open", valor="TERM_120R", fp=FP_PINH2),
-    "SW1": dict(lib_id="Connector_Generic:Conn_01x02", valor="BTN_PAREAMENTO", fp=FP_PINH2),
+    "J5": dict(lib_id="Connector_Generic:Conn_01x02", valor="BTN_PAREAMENTO", fp=FP_PINH2),
     "H1": dict(lib_id="Mechanical:MountingHole", valor="M3", fp=FP_FURO),
     "H2": dict(lib_id="Mechanical:MountingHole", valor="M3", fp=FP_FURO),
     "H3": dict(lib_id="Mechanical:MountingHole", valor="M3", fp=FP_FURO),
@@ -235,8 +235,8 @@ LIGACOES = {
     ("U3", "1"): "+3V3", ("U3", "2"): "GND", ("U3", "3"): "CAN_RX", ("U3", "4"): "CAN_TX",
     ("U3", "5"): "CAN_H", ("U3", "6"): "CAN_L",         # furos do borne do modulo (CANH, CANL)
     ("R1", "1"): "TERM", ("R1", "2"): REDE_VIA5, ("JP1", "1"): "TERM", ("JP1", "2"): REDE_VIA4,
-    # botao de pareamento externo: GPIO19 (D19, pad 21) -> SW1.1 ; SW1.2 -> GND (ativo em nivel baixo)
-    ("U2", "21"): "PAIR_BTN", ("SW1", "1"): "PAIR_BTN", ("SW1", "2"): "GND",
+    # botao de pareamento externo: GPIO19 (D19, pad 21) -> J5.1 ; J5.2 -> GND (ativo em nivel baixo)
+    ("U2", "21"): "PAIR_BTN", ("J5", "1"): "PAIR_BTN", ("J5", "2"): "GND",
 }
 REDES = ["+12V_IN", "+12V_FUS", "+12V_PROT", "+5V", "+3V3", "GND", "CAN_TX", "CAN_RX", "CAN_H", "CAN_L", "TERM",
          "PAIR_BTN"]
@@ -301,9 +301,9 @@ R1_REF_DX, R1_REF_DY = 2.6, 0.0
 JP1_REF_DX, JP1_REF_DY = 3.0, 0.0
 PAD_TERM = 1.9                                  # pads redondos do R1/JP1, furo 1,0
 # Botao de pareamento (header 1x2 em pe, na ponta leste da tira de baixo): pino 1 (GPIO19) ao norte
-SW1_POS = (-3.5, 27.6)
+J5_POS = (-3.5, 27.6)
 Y_PAIR = 26.4                                   # faixa do PAIR_BTN, entre os pads do ESP32 e o JP1
-SW1_REF_DX, SW1_REF_DY = 3.6, 1.27
+J5_REF_DX, J5_REF_DY = 3.6, 1.27
 TXT_TERM = (-11.5, Y_BORNE + 2.4)
 TXT_TERM2 = (-11.5, Y_BORNE + 3.5)
 TXT_TERM3 = (-11.5, Y_BORNE + 4.6)
@@ -827,8 +827,8 @@ def gera_esquematico(proprios):
     s.texto("Alimentado pelo pino VIN (5 V). CAN: TX = GPIO21 (D21), RX = GPIO22 (D22).", 11, 198, 1.3)
     s.texto("Os demais pinos ficam sem ligacao (marcados com X).", 11, 202, 1.3)
     # botao de pareamento externo (substitui o BOOT/GPIO0, que nao sai no header de 30 pinos)
-    s.componente("SW1", 130.0, 180.0, 0, ref_at=(130.0, 174.0), val_at=(130.0, 187.0))
-    s.texto("SW1: botao de pareamento (GPIO19 -> GND), externo. Segurar 5 s com o dongle ligado.", 11, 194, 1.3)
+    s.componente("J5", 129.54, 179.07, 0, ref_at=(129.54, 173.99), val_at=(129.54, 186.69))
+    s.texto("J5: botao de pareamento (GPIO19 -> GND), externo. Segurar 5 s com o dongle ligado.", 11, 194, 1.3)
 
     # ---- bloco 4: CAN
     s.bloco("4. Transceptor CAN (SN65HVD230 Waveshare, deitado sob o ESP32)", 156, 84, 286, 144)
@@ -980,7 +980,7 @@ def constroi_pcb():
     coloca("U3", D_PRETTY, "SN65HVD230_Waveshare_Deitado", "tccelta", SN_POS[0], SN_POS[1])
     std("R1", R1_POS[0], R1_POS[1], 270)      # em pe: pino 2 abaixo do pino 1
     std("JP1", JP1_POS[0], JP1_POS[1])
-    std("SW1", SW1_POS[0], SW1_POS[1])        # em pe: pino 2 ao sul do pino 1
+    std("J5", J5_POS[0], J5_POS[1])        # em pe: pino 2 ao sul do pino 1
     std("J1", BORNE_X[0], Y_BORNE)
     std("J2", BORNE_X[2], Y_BORNE)
     std("D1", X_COLUNA, Y_D1A - 7.62, 270)    # catodo (pino 1) ao norte, anodo (pino 2) ao sul
@@ -1007,13 +1007,13 @@ def constroi_pcb():
     for ref, (dx, dy) in {"J1": (2.54, 3.6), "J2": (5.08, 3.6), "C1": (1.25, 4.7),
                           "D1": (2.8, 3.8), "F1": (3.0, -2.54),
                           "R1": (R1_REF_DX, R1_REF_DY), "JP1": (JP1_REF_DX, JP1_REF_DY),
-                          "SW1": (SW1_REF_DX, SW1_REF_DY)}.items():
+                          "J5": (J5_REF_DX, J5_REF_DY)}.items():
         fps[ref].Reference().SetPosition(pcbnew.VECTOR2I(fps[ref].GetPosition().x + FromMM(dx),
                                                           fps[ref].GetPosition().y + FromMM(dy)))
         fps[ref].Reference().SetTextAngleDegrees(0)
 
     # alarga pads de D1/C1 conforme as regras
-    for ref in ("R1", "JP1", "SW1"):
+    for ref in ("R1", "JP1", "J5"):
         for pad in fps[ref].Pads():
             pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
             pad.SetSize(pcbnew.VECTOR2I(FromMM(PAD_TERM), FromMM(PAD_TERM)))
@@ -1031,7 +1031,7 @@ def constroi_pcb():
     # da barra e estreita), o C1- (capacitor de entrada, retorno de corrente alto) e o GND (pad 29)
     # da fileira de baixo do ESP32 (a faixa do par CAN passa rente ao lado sul do pad e tira um dos
     # raios do alivio termico).
-    for ref, num in (("U3", "2"), ("C1", "2"), ("U2", "29"), ("SW1", "2")):
+    for ref, num in (("U3", "2"), ("C1", "2"), ("U2", "29"), ("J5", "2")):
         fps[ref].FindPadByNumber(num).SetLocalZoneConnection(pcbnew.ZONE_CONNECTION_FULL)
 
     def pos(ref, num):
@@ -1226,8 +1226,8 @@ def constroi_pcb():
     trilha(REDE_VIA5, LARG_SINAL, [v5, r1_2], 0)
     trilha(REDE_VIA4, LARG_SINAL, [v4, (v4[0], Y_TERM_H), (jp1_2[0], Y_TERM_H), jp1_2], 1.0)
 
-    # botao de pareamento: GPIO19 (pad 21) desce, vai a leste ao sul dos pads e entra no SW1.1 (SW1.2 = GND pelo plano)
-    p21, sw1_1 = pos("U2", 21), pos("SW1", 1)
+    # botao de pareamento: GPIO19 (pad 21) desce, vai a leste ao sul dos pads e entra no J5.1 (J5.2 = GND pelo plano)
+    p21, sw1_1 = pos("U2", 21), pos("J5", 1)
     trilha("PAIR_BTN", LARG_SINAL, [p21, (p21[0], Y_PAIR), (sw1_1[0] - (sw1_1[1] - Y_PAIR), Y_PAIR), sw1_1])
 
     # --- keepout da antena (regra de area; o do footprint ja vem junto) ------
@@ -1260,7 +1260,7 @@ def constroi_pcb():
     texto_serigrafia("TERM 120R", TXT_TERM[0], TXT_TERM[1], 0.8)
     texto_serigrafia("jumper: bancada", TXT_TERM2[0], TXT_TERM2[1], 0.8)
     texto_serigrafia("sem: carro", TXT_TERM3[0], TXT_TERM3[1], 0.8)
-    texto_serigrafia("PAIR", SW1_POS[0], SW1_POS[1] + 4.7, 0.8)
+    texto_serigrafia("PAIR", J5_POS[0], J5_POS[1] + 4.7, 0.8)
     rotulos = ["+12V", "GND", "GND", REDE_VIA4.replace("_", ""), REDE_VIA5.replace("_", "")]
     for k, nome in enumerate(rotulos):
         texto_serigrafia(nome, BORNE_X[k], Y_BORNE - 3.0, 1.0)

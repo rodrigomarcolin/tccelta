@@ -139,7 +139,7 @@ Além disso, confirme:
 O resto é igual: ESP32 e sua barra fêmea 1x15 + 1x14, LM2596 com 4 soquetes e 4 pinos, R1, JP1 com jumper de encaixe,
 F1, D1, C1 e o borne de 5 vias.
 
-Pinos a soldar na placa: 29 (ESP32) + 4 (LM2596) + 6 (módulo) + 2 (JP1) + 2 (SW1) + 2 (R1) + 2 (F1) + 2 (D1) + 2 (C1) +
+Pinos a soldar na placa: 29 (ESP32) + 4 (LM2596) + 6 (módulo) + 2 (JP1) + 2 (J5) + 2 (R1) + 2 (F1) + 2 (D1) + 2 (C1) +
 5 (borne) = 56, mais os 4 furos M3 sem solda. Total de furos: 60 (veja `tccelta_v2/fabricacao/furacao.txt`).
 
 ## Diferenças na montagem
