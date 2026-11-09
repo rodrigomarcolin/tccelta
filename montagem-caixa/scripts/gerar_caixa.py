@@ -58,7 +58,7 @@ BOTAO_CAPA_H = 1.5         # ASSUMIDO (falta medir); capinha 1 mm recuada
 BOTAO_RECUO = 1.0
 BOTAO_FURO = BOTAO_CAPA_D + 0.6
 
-CABO_D = 6.0               # ASSUMIDO (falta medir o cabo OBD)
+CABO_D = 8.0               # medido (2026-11-09)
 CABO_X, CABO_Z = 29.0, 11.0
 JANELA_USB = True
 USB_Y, USB_Z, USB_W, USB_H = 51.4, Z_PCB_TOPO + 14.0, 12.4, 9.4
@@ -234,9 +234,9 @@ def fazer_inserto():
     corpo = box(CABO_X - 6.8, CABO_X + 6.8, y0, y0 + PAREDE, FUNDO, Z_DIVISAO)
     flange = box(CABO_X - 8.8, CABO_X + 8.8, y0 + 0.6, y0 + 1.4, FUNDO, Z_DIVISAO)
     tampa = box(CABO_X - 8.8, CABO_X + 8.8, y0, y0 + 1.0, Z_DIVISAO, Z_DIVISAO + LIP_H)
-    orelha = box(CABO_X - 7.0, CABO_X + 7.0, y0 - 8.0, y0, 5.0, 6.6)
-    for sx in (-4.8, 4.8):
-        orelha = orelha.cut(box(CABO_X + sx - 0.8, CABO_X + sx + 0.8, y0 - 6.0, y0 - 3.0, 4, 8))
+    orelha = box(CABO_X - 7.0, CABO_X + 7.0, y0 - 8.0, y0, 3.4, 5.0)
+    for sx in (-5.6, 5.6):
+        orelha = orelha.cut(box(CABO_X + sx - 0.8, CABO_X + sx + 0.8, y0 - 6.0, y0 - 3.0, 2.5, 8))
     s = uniao([corpo, flange, tampa, orelha])
     s = s.cut(cil_y(CABO_X, CABO_Z, y0 - 1, y0 + PAREDE + 1, CABO_D + 0.4))
     return s.removeSplitter()
