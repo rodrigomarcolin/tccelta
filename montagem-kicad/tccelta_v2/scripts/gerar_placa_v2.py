@@ -294,19 +294,25 @@ SN_BORNE_DY = {"CAN_H": -SN65_BORNE_PASSO / 2.0 if SN65_CANH_NORTE else SN65_BOR
                "CAN_L": SN65_BORNE_PASSO / 2.0 if SN65_CANH_NORTE else -SN65_BORNE_PASSO / 2.0}
 # Terminacao CAN selecionavel: CAN_H -- JP1 -- TERM -- R1 (120 ohms, em pe) -- CAN_L.
 # Fica na tira de baixo, a leste do borne (fora da sombra do ESP32, y > 25,83).
-R1_POS = (-15.5, Y_BORNE - 2.54)                # pino 1 do R1 (TERM); pino 2 (via 5) 2,54 mm abaixo
-JP1_POS = (-9.5, Y_BORNE - 2.54)                # pino 1 do JP1 (TERM); pino 2 (via 4) 2,54 mm abaixo
+R1_POS = (-9.5, Y_BORNE - 2.54)                # pino 1 do R1 (TERM); pino 2 (via 5) 2,54 mm abaixo
+JP1_POS = (-6.0, Y_BORNE - 2.54)                # pino 1 do JP1 (TERM); pino 2 (via 4) 2,54 mm abaixo
 Y_TERM_H = Y_BORNE + 2.6                        # trilha que passa ao sul da via 5 ate o JP1
-R1_REF_DX, R1_REF_DY = 2.6, 0.0
+R1_REF_DX, R1_REF_DY = 0.0, -2.0
 JP1_REF_DX, JP1_REF_DY = 3.0, 0.0
 PAD_TERM = 1.9                                  # pads redondos do R1/JP1, furo 1,0
-# Botao de pareamento (header 1x2 em pe, na ponta leste da tira de baixo): pino 1 (GPIO19) ao norte
-J5_POS = (-3.5, 27.6)
-Y_PAIR = 26.4                                   # faixa do PAIR_BTN, entre os pads do ESP32 e o JP1
-J5_REF_DX, J5_REF_DY = 3.6, 1.27
-TXT_TERM = (-11.5, Y_BORNE + 2.4)
-TXT_TERM2 = (-11.5, Y_BORNE + 3.5)
-TXT_TERM3 = (-11.5, Y_BORNE + 4.6)
+# Botao de pareamento (header 1x2 deitado, na ponta oeste da tira de baixo, perto do D19): pino 1
+# (GPIO19) a leste, pino 2 (GND) a oeste. Ordem de oeste para leste: J5, R1, JP1. O J5 leva fio
+# externo, entao fica longe da antena; o JP1 (sem fio) fica do lado dela. O JP1 nao pode chegar
+# perto do furo H4 (porca M3 do lado do cobre): distancia minima do cobre ao centro = 4,4 mm.
+# Posicao: corpo do header (2,54 x 5,08) a ~0,5 mm do corpo do borne J2 (oeste) e fora do contorno do ESP32
+# (norte); o y deixa 2,4 mm entre o J5.1 e a trilha via5 -> R1.2 para o GND do J5.2 sair por baixo do J5.1.
+J5_POS = (-13.6, 27.2)
+Y_PAIR = 26.3                                   # fim da descida do PAIR_BTN; dai segue em 45 graus ate o J5.1
+J5_REF_DX, J5_REF_DY = -1.27, 2.1
+J5_ROT = 270
+TXT_TERM = (-12.0, Y_BORNE + 2.4)
+TXT_TERM2 = (-12.0, Y_BORNE + 3.5)
+TXT_TERM3 = (-12.0, Y_BORNE + 4.6)
 # Par CAN: faixa (lane) logo ao sul dos pads da fileira de baixo do ESP32 (pads vao ate y = 24,16).
 # O fio mais ao norte do par e o mais interno (vira a esquerda por dentro).
 Y_FAIXA_L = 25.8                                # faixa do fio que vem do furo do SUL do modulo (via 5)
@@ -980,7 +986,7 @@ def constroi_pcb():
     coloca("U3", D_PRETTY, "SN65HVD230_Waveshare_Deitado", "tccelta", SN_POS[0], SN_POS[1])
     std("R1", R1_POS[0], R1_POS[1], 270)      # em pe: pino 2 abaixo do pino 1
     std("JP1", JP1_POS[0], JP1_POS[1])
-    std("J5", J5_POS[0], J5_POS[1])        # em pe: pino 2 ao sul do pino 1
+    std("J5", J5_POS[0], J5_POS[1], J5_ROT)   # deitado: pino 2 (GND) ao oeste do pino 1
     std("J1", BORNE_X[0], Y_BORNE)
     std("J2", BORNE_X[2], Y_BORNE)
     std("D1", X_COLUNA, Y_D1A - 7.62, 270)    # catodo (pino 1) ao norte, anodo (pino 2) ao sul
@@ -1012,6 +1018,20 @@ def constroi_pcb():
                                                           fps[ref].GetPosition().y + FromMM(dy)))
         fps[ref].Reference().SetTextAngleDegrees(0)
 
+    # J5 deitado: courtyard = corpo do header (2,54 x 5,08) + 0,05 mm; o padrao (+0,25 mm) encosta no do ESP32
+    fj = fps["J5"]
+    for g in list(fj.GraphicalItems()):
+        if g.GetLayer() == pcbnew.F_CrtYd:
+            fj.Remove(g)
+    r = pcbnew.PCB_SHAPE(fj)
+    r.SetShape(pcbnew.SHAPE_T_RECT)
+    r.SetFilled(False)
+    r.SetLayer(pcbnew.F_CrtYd)
+    r.SetWidth(FromMM(0.05))
+    r.SetStart(V(J5_POS[0] - 2.54 - 1.27 - 0.05, J5_POS[1] - 1.27 - 0.05))
+    r.SetEnd(V(J5_POS[0] + 1.27 + 0.05, J5_POS[1] + 1.27 + 0.05))
+    fj.Add(r)
+
     # alarga pads de D1/C1 conforme as regras
     for ref in ("R1", "JP1", "J5"):
         for pad in fps[ref].Pads():
@@ -1041,7 +1061,8 @@ def constroi_pcb():
 
     # posicoes dos pads da terminacao: conferencia por codigo
     for ref, num, esperado in (("R1", 1, R1_POS), ("R1", 2, (R1_POS[0], R1_POS[1] + 2.54)),
-                               ("JP1", 1, JP1_POS), ("JP1", 2, (JP1_POS[0], JP1_POS[1] + 2.54))):
+                               ("JP1", 1, JP1_POS), ("JP1", 2, (JP1_POS[0], JP1_POS[1] + 2.54)),
+                               ("J5", 1, J5_POS), ("J5", 2, (J5_POS[0] - 2.54, J5_POS[1]))):
         got = pos(ref, num)
         assert abs(got[0] - esperado[0]) < 0.01 and abs(got[1] - esperado[1]) < 0.01, \
             "pad %s.%s fora do lugar: %s != %s" % (ref, num, got, esperado)
@@ -1228,7 +1249,8 @@ def constroi_pcb():
 
     # botao de pareamento: GPIO19 (pad 21) desce, vai a leste ao sul dos pads e entra no J5.1 (J5.2 = GND pelo plano)
     p21, sw1_1 = pos("U2", 21), pos("J5", 1)
-    trilha("PAIR_BTN", LARG_SINAL, [p21, (p21[0], Y_PAIR), (sw1_1[0] - (sw1_1[1] - Y_PAIR), Y_PAIR), sw1_1])
+    assert abs((p21[0] - sw1_1[0]) - (sw1_1[1] - Y_PAIR)) < 1e-6, "PAIR_BTN: o ultimo trecho deve ser de 45 graus"
+    trilha("PAIR_BTN", LARG_SINAL, [p21, (p21[0], Y_PAIR), sw1_1], 0)
 
     # --- keepout da antena (regra de area; o do footprint ja vem junto) ------
     # (o footprint ja traz a area proibida; nada a fazer aqui)
@@ -1260,7 +1282,7 @@ def constroi_pcb():
     texto_serigrafia("TERM 120R", TXT_TERM[0], TXT_TERM[1], 0.8)
     texto_serigrafia("jumper: bancada", TXT_TERM2[0], TXT_TERM2[1], 0.8)
     texto_serigrafia("sem: carro", TXT_TERM3[0], TXT_TERM3[1], 0.8)
-    texto_serigrafia("PAIR", J5_POS[0], J5_POS[1] + 4.7, 0.8)
+    texto_serigrafia("PAIR", J5_POS[0] - 1.27, J5_POS[1] + 3.4, 0.8)
     rotulos = ["+12V", "GND", "GND", REDE_VIA4.replace("_", ""), REDE_VIA5.replace("_", "")]
     for k, nome in enumerate(rotulos):
         texto_serigrafia(nome, BORNE_X[k], Y_BORNE - 3.0, 1.0)

@@ -42,9 +42,11 @@ Por que vale a pena:
 | 2 furos do borne do módulo | x = -36,0; CANH em y 8,89 (norte), CANL em y 13,97 (sul) |
 | Borne de 5 vias | linha dos pads em y = 31,1; x = -40,82 / -35,74 / -30,66 / -25,58 / -20,5 (+12V, GND, GND, CANH, CANL) |
 | F1 / D1 / C1 | coluna x = -49,0: F1 pino 1 em y 31,1; D1 anodo em y 22,0 e catodo em 14,38; C1 (+) em y 0,0 e (-) em x = -46,5 |
-| R1 / JP1 | R1 pino 1 em (-15,5; 28,56) e pino 2 em (-15,5; 31,1); JP1 pino 1 em (-9,5; 28,56) e pino 2 em (-9,5; 31,1) |
+| J5 / R1 / JP1 (oeste para leste) | J5 deitado: pino 1 (PAIR_BTN) em (-13,6; 27,2) e pino 2 (GND) em (-16,14; 27,2); R1 pino 1 em (-9,5; 28,56) e pino 2 em (-9,5; 31,1); JP1 pino 1 em (-6,0; 28,56) e pino 2 em (-6,0; 31,1) |
 | Furos M3 | (-1,0; -22,0), (-1,0; -9,0), (-49,5; 34,9) e (-1,0; 34,9) |
 | Placa | x -52,1 a 2,0; y -26,0 a 37,5 |
+
+O J5 (botão de pareamento) fica a oeste do R1 e do JP1, e não na ponta leste, porque leva um fio externo: assim o fio e a trilha PAIR_BTN (4,7 mm) ficam longe da antena, e o JP1, que não leva fio, fica desse lado. O JP1 também não chega mais perto do furo M3 de (-1,0; 34,9), onde entra a porca.
 
 A antena e o corte de cobre depois de x = 1,0 continuam como na v1. O contorno do módulo, o corpo do ESP32 e a
 ordem dos pinos estão desenhados na serigrafia.
@@ -160,6 +162,8 @@ Ordem de soldagem (passo 12 do PASSO_A_PASSO):
    de baixo à esquerda passa por baixo da borda do disco) e o borne de 5 vias.
 
 Para inspecionar ou mexer no módulo depois de pronto, **é preciso tirar o ESP32**.
+
+Ao ligar o botão de pareamento no J5, leve o fio para o oeste e para o sul, longe da ponta do ESP32 onde fica a antena.
 
 ### Energização
 
