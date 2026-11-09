@@ -14,6 +14,7 @@ gera `bench.csv` e `bench.md` (média, p50, p95, máx. e n de cada métrica B1 a
 que depende só do log). Dependências: `pyserial` (captura); o relatório usa só a
 biblioteca padrão. Os cenários (regime, estresse, handshake, vazão) estão no
 protocolo da spec; registrar o modelo do celular e o MTU (`SYNC_MTU`).
+Roteiro passo a passo: `docs/roteiro-benchmark-seguranca.md`.
 
 ## Contagem de blocos no log da flash
 
