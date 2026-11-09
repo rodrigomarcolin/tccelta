@@ -8,8 +8,11 @@ import 'package:tccelta_mobile/src/domain/location/gps_fix.dart';
 import 'package:tccelta_mobile/src/domain/location/gps_source.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_settings.dart';
 import 'package:tccelta_mobile/src/domain/sync/sync_status.dart';
+import 'package:tccelta_mobile/src/infra/sync/inject/telemetry_profile.dart';
 import 'package:tccelta_mobile/src/ui/core/widgets/widgets.dart';
 import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
+import 'package:tccelta_mobile/src/ui/sync/inject/telemetry_injection_controller.dart';
+import 'package:tccelta_mobile/src/ui/sync/sync_providers.dart';
 import 'package:tccelta_mobile/src/ui/sync/view_model/sync_status_view_model.dart';
 import 'package:tccelta_mobile/src/ui/sync/widgets/sync_status_card.dart';
 
@@ -128,10 +131,55 @@ class SyncSettingsScreen extends ConsumerWidget {
                     .forgetBenchDongles(),
                 child: const Text('Esquecer estado no servidor de bancada'),
               ),
+              if (kSyncInject) ...[
+                const SizedBox(height: AppSpacing.s5),
+                const _SectionTitle('Injeção de telemetria (perfil none)'),
+                const _TelemetryInjection(),
+              ],
             ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Controles de depuração da injeção de telemetria forjada: liga/desliga a
+/// substituição dos PIDs e escolhe o perfil de motorista do CSV.
+class _TelemetryInjection extends ConsumerWidget {
+  const _TelemetryInjection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(telemetryInjectionControllerProvider);
+    final ctrl = ref.read(telemetryInjectionControllerProvider.notifier);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Callout(
+          text:
+              'Troca os PIDs dos blocos reais pelos dados do CSV, mantém o GPS '
+              'e envia com tag vazia (none).',
+        ),
+        const SizedBox(height: AppSpacing.s3),
+        SegmentedToggle<TelemetryProfile>(
+          options: TelemetryProfile.values,
+          value: state.profile,
+          labelOf: (p) => p.label,
+          onChanged: ctrl.setProfile,
+        ),
+        const SizedBox(height: AppSpacing.s2),
+        SegmentedToggle<bool>(
+          options: const [true, false],
+          value: state.enabled,
+          labelOf: (on) => on ? 'Injetando' : 'Desligada',
+          onChanged: (on) => ctrl.setEnabled(enabled: on),
+        ),
+        if (state.enabled && !state.ready) ...[
+          const SizedBox(height: AppSpacing.s3),
+          const StatusBadge(label: 'Carregando CSV…', tone: StatusTone.neutral),
+        ],
+      ],
     );
   }
 }

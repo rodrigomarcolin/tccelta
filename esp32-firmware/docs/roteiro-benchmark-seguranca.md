@@ -280,3 +280,61 @@ Passa se, ao fim de cada perfil:
 
 Ao terminar, volte o cadastro para `asym` (o perfil com que foi provisionado) e desligue o
 `PERMITIR_PERFIL_NONE`.
+
+## 7. Demonstração de adulteração sob perfil `none`
+
+As seções anteriores medem *custo*. Esta mostra a *consequência* de aceitar o perfil `none`:
+telemetria falsificada é aceita como legítima. É a justificativa de por que o perfil
+autenticado (`hmac`/`asym`) é obrigatório. **Só em build de depuração** — a injeção não
+existe em release.
+
+O app, em modo debug, age como um man-in-the-middle entre o dongle real pareado e a API: o
+**handshake continua sendo do dongle** (assina com o `K_auth` que fica dentro do hardware — o
+app não guarda segredo nenhum), e o app só **troca os registros de PID** de cada bloco pelos
+valores de um CSV, **mantendo o GPS intacto** e enviando com **tag vazia** (perfil `none`). Como
+o `none` não verifica a tag do bloco (`receive_batch.go`, `len(tag)==0`), a API aceita os dados
+forjados. Sob `hmac`/`asym`, o mesmo bloco falha na verificação e é rejeitado.
+
+Os dois perfis de motorista ficam em `mobile-app/assets/benchmark/`
+(`motorista_economico.csv`, `motorista_agressivo.csv`): colunas em unidade de engenharia
+(`rpm,speed,engineLoad,maf,acceleratorPedalD,engineFuelRate,coolantTemp,fuelTankLevel`), uma
+linha por bloco, com os valores coerentes entre si (velocidade↔rotação↔carga↔MAF↔consumo).
+
+### 7.1 Preparo
+
+1. Provisione o dongle com chaves reais (`tools/provision/provision.py --security asym --flash`)
+   e cadastre-o na API (mesmo caminho da seção 6.2).
+2. No banco, deixe o cadastro em `none`:
+   ```sql
+   UPDATE dongle SET security_profile = 'none' WHERE dev_id_hex = '<DEVID>';
+   ```
+   Espere o TTL do cache (>60 s) ou reinicie a API.
+3. Suba a API com `PERMITIR_PERFIL_NONE=true` (proibido em produção; `docs/ambientes.md`).
+4. Rode o app apontando para a API real, com a injeção habilitada:
+   ```bash
+   cd mobile-app
+   fvm flutter run --dart-define=SYNC_SERVER=https --dart-define=SYNC_INJECT=true
+   ```
+5. Pareie o celular com o dongle (o bond sobrevive ao upload do firmware).
+
+### 7.2 Execução
+
+Na tela **Sincronização → Depuração → "Injeção de telemetria (perfil none)"** (só aparece com
+`SYNC_INJECT=true`): escolha o perfil (econômico/agressivo) e ligue a injeção. A partir do
+próximo bloco de dados, o app substitui os PIDs pelos do CSV (ciclando o arquivo), preserva o
+GPS e envia com tag vazia.
+
+Passa (ataque aceito) se:
+
+- `tccelta_blocks_total` cresce e não há `rejected_block` novos;
+- a telemetria persistida reflete os valores do CSV (não os reais do dongle);
+- o app não mostra POSTs com falha.
+
+### 7.3 Contraprova (a segurança funciona)
+
+Com a injeção ainda ligada, troque o perfil do cadastro para `hmac` (ou `asym`) e espere o TTL
+do cache (>60 s) ou reinicie a API. Agora os mesmos blocos forjados — tag vazia — caem em
+`rejected_block` / `invalid_tag`, e o app passa a mostrar POST com falha. A integridade do bloco
+depende da chave (`K_rec`/`K_sig`) que o perfil `none` omite.
+
+Ao terminar, desligue a injeção, volte o cadastro para `asym` e desligue o `PERMITIR_PERFIL_NONE`.

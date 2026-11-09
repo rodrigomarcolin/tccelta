@@ -759,6 +759,32 @@ enum Obd2Pid {
     }
   }
 
+  /// Codifica a grandeza física [value] de volta nos bytes crus (`[A]` ou
+  /// `[A, B]`) — o inverso de [decode] para os PIDs de telemetria contínua
+  /// usados na bancada. Satura cada byte em 0…255 (e o par A·B em 0…65535),
+  /// então valores fora da faixa física do PID são truncados ao representável.
+  /// Lança [UnsupportedError] para PIDs fora desse conjunto.
+  List<int> encode(double value) {
+    List<int> ab(int raw) {
+      final r = raw.clamp(0, 0xFFFF);
+      return [(r >> 8) & 0xFF, r & 0xFF];
+    }
+
+    int byte(num raw) => raw.round().clamp(0, 255);
+
+    return switch (this) {
+      Obd2Pid.rpm => ab((value * 4).round()),
+      Obd2Pid.speed => [byte(value)],
+      Obd2Pid.engineLoad => [byte(value * 2.55)],
+      Obd2Pid.maf => ab((value * 100).round()),
+      Obd2Pid.acceleratorPedalD => [byte(value * 255 / 100)],
+      Obd2Pid.engineFuelRate => ab((value * 20).round()),
+      Obd2Pid.coolantTemp => [byte(value + 40)],
+      Obd2Pid.fuelTankLevel => [byte(value * 255 / 100)],
+      _ => throw UnsupportedError('encode não implementado para $command'),
+    };
+  }
+
   int _a(List<int> data) {
     if (data.isEmpty) {
       throw AppException('PID $command sem byte A na resposta');

@@ -14,11 +14,13 @@ import 'package:tccelta_mobile/src/infra/sync/bench/bench_state_store.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_sync_server.dart';
 import 'package:tccelta_mobile/src/infra/sync/bench/bench_sync_server_gateway.dart';
 import 'package:tccelta_mobile/src/infra/sync/https_sync_server_gateway.dart';
+import 'package:tccelta_mobile/src/infra/sync/inject/injecting_dongle_sync_repository.dart';
 import 'package:tccelta_mobile/src/infra/sync/sync_api_client.dart';
 import 'package:tccelta_mobile/src/infra/sync/unavailable_sync_server_gateway.dart';
 import 'package:tccelta_mobile/src/services/sync/sync_server_gateway.dart';
 import 'package:tccelta_mobile/src/ui/connection/connection_providers.dart';
 import 'package:tccelta_mobile/src/ui/settings/settings_providers.dart';
+import 'package:tccelta_mobile/src/ui/sync/inject/telemetry_injection_controller.dart';
 
 /// Servidor escolhido no build: `--dart-define=SYNC_SERVER=bench` usa o
 /// servidor de bancada embutido e `stub` o gateway indisponível (ambos só em
@@ -66,14 +68,29 @@ final Provider<SyncServerRepository> syncServerRepositoryProvider =
       (ref) => SyncServerRepositoryImpl(ref.read(syncServerDatasourceProvider)),
     );
 
+/// Injeção de telemetria forjada para a demonstração de segurança do perfil
+/// `none`: substitui os PIDs dos blocos reais pelos dados de um CSV. Só é
+/// montada com `--dart-define=SYNC_INJECT=true` **e** em build de depuração —
+/// nunca em release.
+const bool kSyncInject = bool.fromEnvironment('SYNC_INJECT');
+
 /// Canal SYNC com o dongle, sobre o [dongleRepositoryProvider]. Não é
 /// autoDispose: acompanha a sessão BLE inteira.
-final Provider<DongleSyncRepository> dongleSyncRepositoryProvider =
-    Provider<DongleSyncRepository>((ref) {
-      final repo = DongleSyncRepositoryImpl(ref.read(dongleRepositoryProvider));
-      ref.onDispose(repo.dispose);
-      return repo;
-    });
+final Provider<DongleSyncRepository>
+dongleSyncRepositoryProvider = Provider<DongleSyncRepository>((ref) {
+  final inner = DongleSyncRepositoryImpl(ref.read(dongleRepositoryProvider));
+  ref.onDispose(inner.dispose);
+  if (kDebugMode && kSyncInject) {
+    final injecting = InjectingDongleSyncRepository(
+      inner,
+      () =>
+          ref.read(telemetryInjectionControllerProvider.notifier).takeSample(),
+    );
+    ref.onDispose(injecting.dispose);
+    return injecting;
+  }
+  return inner;
+});
 
 /// Executor do handshake app ↔ dongle ↔ servidor.
 final Provider<HandshakeRunner> handshakeRunnerProvider =
