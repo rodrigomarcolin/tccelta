@@ -58,6 +58,15 @@ def ler_pcb(caminho):
             for pm in re.finditer(r"\((?:start|end) ([-\d.]+) ([-\d.]+)\)", pb):
                 px, py = float(pm.group(1)), float(pm.group(2))
                 pts.append((fx + px * c + py * s, fy - px * s + py * c))
+        for pi, pj in _blocos(b, r"\t\t\(fp_circle\n"):   # corpo redondo (ex.: C1 eletrolítico)
+            pb = b[pi:pj]
+            if '"F.CrtYd"' not in pb:
+                continue
+            cx, cy = map(float, re.search(r"\(center ([-\d.]+) ([-\d.]+)\)", pb).groups())
+            ex, ey = map(float, re.search(r"\(end ([-\d.]+) ([-\d.]+)\)", pb).groups())
+            r = math.hypot(ex - cx, ey - cy)
+            ax, ay = fx + cx * c + cy * s, fy - cx * s + cy * c
+            pts += [(ax - r, ay - r), (ax + r, ay + r)]
         if pts:
             comps[ref] = (min(p[0] for p in pts), min(p[1] for p in pts),
                           max(p[0] for p in pts), max(p[1] for p in pts))

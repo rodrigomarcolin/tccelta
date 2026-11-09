@@ -47,9 +47,17 @@ FOLGA_TOPO = 3.0
 LIP_L, LIP_H = 1.0, 2.0
 ALT_COMP = {"universal": 37.5, "v1": 37.5, "v2": 25.0}[VARIANTE]
 
-BOSS_D, BOSS_H, FURO_M3, CABECA_D, CABECA_H = 7.0, 2.0, 3.4, 6.4, 2.0
+BOSS_D, BOSS_H, FURO_M3 = 8.0, 2.0, 3.4
+# porca M3 presa por baixo (entra sob pressão num alojamento sextavado); parafuso M3 x 10 desce por cima
+PORCA_SF, PORCA_H = 5.5, 2.4               # sextavado: medida entre faces, altura
+ALOJ_SF, ALOJ_H = PORCA_SF + 0.15, PORCA_H + 0.1
+PARAFUSO_L = 10.0
 ESPACADOR_D = 6.0
-ESPACADOR_H = Z_PCB_BAIXO - (FUNDO + BOSS_H)
+CENTRO_D, CENTRO_H = ESPACADOR_D + 0.4, 0.4  # rebaixo no topo do boss que centra o espaçador
+Z_ESPACADOR0 = FUNDO + BOSS_H - CENTRO_H     # o espaçador apoia no fundo do rebaixo
+ESPACADOR_H = Z_PCB_BAIXO - Z_ESPACADOR0
+assert Z_ESPACADOR0 - ALOJ_H >= 1.0          # plástico entre a porca e o espaçador (só compressão)
+assert Z_PCB_TOPO - PARAFUSO_L <= ALOJ_H - PORCA_H  # a ponta do parafuso atravessa a porca inteira
 
 BOTAO_X, BOTAO_Z = 56.0, 11.0   # README dizia ~54; 56 afasta o berço do dupont do J5 (v2)
 BOTAO_CORPO = (12.0, 12.0, 7.3)   # largura, altura, profundidade
@@ -79,6 +87,9 @@ Y_NORTE = min(c1[1], c2[1])
 Y_SUL = max(PLACAS[v][0][3] for v in VERS)
 X_ANTENA = 68.3            # ponta da antena do ESP32 (README: x 16,3 a 68,3)
 ESP_BBOX = (16.3, 37.0, 68.3, 65.8)
+Z_ESP_BAIXO = Z_PCB_TOPO + 11.0   # soquete 8,5 + plástico 2,5
+DEDO_Y0, DEDO_Y1 = 44.0, 58.0     # faixa das pontas do ESP32 onde os dedos pegam (troca na feira)
+assert Z_DIVISAO < Z_ESP_BAIXO
 
 IX0, IX1 = X_OESTE - FOLGA_PCB, X_ANTENA + FOLGA_ANTENA
 IY0, IY1 = Y_NORTE - FOLGA_PCB, Y_SUL + ZONA_SUL
@@ -106,6 +117,14 @@ def cil_z(x, y, z0, z1, d):
 def cil_y(x, z, y0, y1, d):
     """cilindro ao longo de y (de y0 a y1 do KiCad)."""
     return Part.makeCylinder(d / 2, y1 - y0, V(x, -y1, z), V(0, 1, 0))
+
+
+def sextavado_z(x, y, z0, z1, sf):
+    """prisma sextavado vertical, sf = medida entre faces."""
+    r = sf / 2 / math.cos(math.radians(30))
+    p = [V(x + r * math.cos(math.radians(60 * i)), -y + r * math.sin(math.radians(60 * i)), z0) for i in range(6)]
+    p.append(p[0])
+    return Part.Face(Part.makePolygon(p)).extrude(V(0, 0, z1 - z0))
 
 
 def prisma_xz(pts, y0, y1):
@@ -169,13 +188,13 @@ def fazer_base():
     cortes_lip.append(box(CABO_X - 8.9, CABO_X + 8.9, IY1 - 1, IY1 + 3, 0, 99))
     if JANELA_USB:
         cortes_lip.append(box(IX0 - 3, IX0 + 1, USB_Y - USB_W / 2 - 0.5, USB_Y + USB_W / 2 + 0.5, 0, 99))
+    # sem rebordo na frente da ponta da antena: a borda da base (Z_DIVISAO) fica abaixo do fundo do ESP32 e os dedos
+    # alcançam a ponta dele para trocá-lo na feira
+    cortes_lip.append(box(IX1 - 1, IX1 + 3, DEDO_Y0, DEDO_Y1, 0, 99))
     s = s.fuse(corte(lip, cortes_lip))
-    # bosses + furo + rebaixo da cabeça do parafuso
+    # bosses (o furo, o alojamento da porca e o centrador são cortados no fim, depois das pontes de baixo)
     for x, y, _ in FUROS:
         s = s.fuse(cil_z(x, y, FUNDO, FUNDO + BOSS_H, BOSS_D))
-    for x, y, _ in FUROS:
-        s = s.cut(cil_z(x, y, -1, FUNDO + BOSS_H + 1, FURO_M3))
-        s = s.cut(cil_z(x, y, -1, CABECA_H, CABECA_D))
     # travas: rebaixo externo + reforço interno + ressalto em rampa
     for y in TRAVAS_Y:
         for lado in ("O", "L"):
@@ -195,12 +214,22 @@ def fazer_base():
     # furo do botão
     s = s.cut(cil_y(BOTAO_X, BOTAO_Z, IY1 - 0.5, IY1 + PAREDE + 0.5, BOTAO_FURO))
     s = s.fuse(berco_botao())
-    # abraçadeiras por baixo
-    for yc in (Y_NORTE + 12.0, Y_SUL + 4.0):
+    # abraçadeiras por baixo: longe dos furos, para o alojamento da porca ficar aberto por baixo
+    for yc in Y_PONTES:
         ponte = box(OX0 + 6, OX1 - 6, yc - 5, yc + 5, -4.0, 0.0)
         ponte = ponte.cut(box(OX0, OX1, yc - 2.7, yc + 2.7, -3.0, -1.0))
         s = s.fuse(ponte)
-    return s.removeSplitter()
+    # furo passante, alojamento sextavado da porca (aberto por baixo) e centrador do espaçador.
+    # Sem removeSplitter na base: com as pontes novas ele a deixava inválida ("Unorientable shape").
+    for x, y, _ in FUROS:
+        s = s.cut(cil_z(x, y, -5, FUNDO + BOSS_H + 1, FURO_M3))
+        s = s.cut(sextavado_z(x, y, -5, ALOJ_H, ALOJ_SF))
+        s = s.cut(cil_z(x, y, FUNDO + BOSS_H - CENTRO_H, FUNDO + BOSS_H + 1, CENTRO_D))
+    return s
+
+
+Y_PONTES = (50.0, Y_SUL + 9.0)   # sob o meio do ESP32 e na zona da frente
+assert all(abs(yc - y) > 5 + ALOJ_SF for yc in Y_PONTES for _, y, _ in FUROS)
 
 
 def pos_botao():
@@ -246,7 +275,7 @@ def fazer_inserto():
 def fazer_espacadores():
     out = []
     for x, y, n in FUROS:
-        t = cil_z(x, y, FUNDO + BOSS_H, Z_PCB_BAIXO, ESPACADOR_D)
+        t = cil_z(x, y, Z_ESPACADOR0, Z_PCB_BAIXO, ESPACADOR_D)
         t = t.cut(cil_z(x, y, 0, 20, FURO_M3))
         out.append((n, t))
     return out
@@ -344,6 +373,14 @@ def fantasmas(v):
     return out
 
 
+def fantasmas_dedos():
+    """Espaço para os dedos pegarem o ESP32 pelas pontas (USB a oeste, antena a leste), com a tampa fora."""
+    return {
+        "dedo_oeste": box(IX0 + 0.5, ESP_BBOX[0] - 0.1, DEDO_Y0, DEDO_Y1, Z_ESP_BAIXO - 6.0, Z_ESP_BAIXO + 20.0),
+        "dedo_leste": box(ESP_BBOX[2] + 0.1, OX1 + 10.0, DEDO_Y0, DEDO_Y1, Z_DIVISAO + 0.05, Z_ESP_BAIXO + 20.0),
+    }
+
+
 def fantasmas_externos():
     yf, yt = pos_botao()
     bw, bh, bd = BOTAO_CORPO
@@ -377,10 +414,12 @@ def main():
     print(f"=== caixa TCCelta, variante {VARIANTE} ===")
     print(f"externo: {OX1 - OX0:.1f} x {OY1 - OY0:.1f} x {Z_TOPO:.1f} mm  (Y_SUL={Y_SUL}, ALT_COMP={ALT_COMP})")
     print(f"furos: {[(n, x, y) for x, y, n in FUROS]}")
-    for nome, s in pecas.items():
-        print(f"{nome:22s} vol {s.Volume / 1000:8.2f} cm3  válido={s.isValid()}  sólidos={len(s.Solids)}")
-
     falhas = 0
+    for nome, s in pecas.items():
+        ok = s.isValid() and len(s.Solids) == 1
+        print(f"{nome:22s} vol {s.Volume / 1000:8.2f} cm3  valido={s.isValid()}  solidos={len(s.Solids)}")
+        falhas += 0 if ok else 1
+
     for v in VERS:
         fan = fantasmas(v)
         fan.update(fantasmas_externos())
@@ -405,11 +444,20 @@ def main():
                 if vc > 0.5:
                     print(f"  INTERFERE espacador {n} x {fn}: {vc:.1f} mm3")
                     falhas += 1
+        # troca do ESP32 na feira: dedos nas duas pontas, sem a tampa
+        for dn, d in fantasmas_dedos().items():
+            alvos = {"base": base, "inserto": inserto}
+            alvos.update({fn: f for fn, f in fan.items() if not fn.startswith(("U2_", "placa"))})
+            ruins = [(an, vol_comum(d, a)) for an, a in alvos.items()]
+            ruins = [(an, vc) for an, vc in ruins if vc > 0.5 or vc != vc]
+            print(f"  {dn}: {'livre' if not ruins else 'BLOQUEADO por ' + str(ruins)}")
+            falhas += len(ruins)
         # antena: distância mínima das peças à zona da antena
         ant = box(62.0, ESP_BBOX[2], ESP_BBOX[1], ESP_BBOX[3], Z_PCB_TOPO, Z_PCB_TOPO + 16)
         dmin = min(pecas[p].distToShape(ant)[0] for p in ("base", "tampa"))
         ok = dmin >= FOLGA_ANTENA - 0.01
-        print(f"  antena: distância mínima às paredes {dmin:.2f} mm  {'OK' if ok else 'FALHA'}")
+        # (só ASCII nos prints: o console do freecadcmd descarta linhas com acento)
+        print(f"  antena: distancia minima as paredes {dmin:.2f} mm  {'OK' if ok else 'FALHA'}")
         falhas += 0 if ok else 1
         # furos alinhados com os bosses
         for nome, (x, y) in PLACAS[v][1].items():
@@ -441,7 +489,7 @@ def main():
         for fn, f in fan.items():
             o = doc.addObject("Part::Feature", "fantasma_" + fn)
             o.Shape = f
-    for fn, f in fantasmas_externos().items():
+    for fn, f in list(fantasmas_externos().items()) + list(fantasmas_dedos().items()):
         o = doc.addObject("Part::Feature", "fantasma_" + fn)
         o.Shape = f
     doc.recompute()

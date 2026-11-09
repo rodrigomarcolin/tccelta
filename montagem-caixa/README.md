@@ -1,7 +1,8 @@
 # Caixa da PCB do TCCelta
 
 Gerada por `scripts/gerar_caixa.py` (FreeCAD 1.1, `freecadcmd`), que lê o contorno e os furos direto dos `.kicad_pcb`.
-Plano e decisões: [`.spec/caixa-pcb/README.md`](../.spec/caixa-pcb/README.md).
+Plano e decisões: [`.spec/caixa-pcb/README.md`](../.spec/caixa-pcb/README.md). O que comprar, imprimir e como montar:
+[`MATERIAIS_MONTAGEM.md`](MATERIAIS_MONTAGEM.md).
 
 ## Gerar
 
@@ -15,8 +16,8 @@ orientação de impressão** (base de pé; tampa de teto para baixo, com o "TCCE
 externa na mesa; espaçadores de pé).
 
 O script imprime o relatório de verificação: validade dos sólidos, interferência de cada peça com os fantasmas da v1 e da v2
-(placa, componentes, botão, cabo), distância mínima da antena (≥ 1,5 mm) e alinhamento dos furos. Estado atual: **0 falhas
-nas três variantes**.
+(placa, componentes, botão, cabo), sólidos válidos, espaço dos dedos nas pontas do ESP32, distância mínima da antena
+(≥ 1,5 mm) e alinhamento dos furos. Estado atual: **0 falhas nas três variantes**.
 
 | Variante | Externo (L x C x A) | Peças |
 |---|---|---|
@@ -26,12 +27,19 @@ nas três variantes**.
 
 ## Montagem
 
-1. Parafuso M3 sobe pelo fundo da base (cabeça no rebaixo), passa pelo espaçador (só nos furos da placa usada) e pela PCB;
-   porca por cima.
+1. Porca M3 por baixo, apertada no alojamento sextavado de cada furo usado pela placa (fica presa). Espaçador sobre o
+   boss (o rebaixo o centra), PCB por cima e **parafuso M3 x 10 descendo por cima**, até a porca. A placa sai e entra só com
+   a chave de fenda, sem virar a caixa.
 2. Cabo OBD pelo furo do inserto; abraçadeira nas duas fendas da orelha, por baixo do cabo. O inserto desce pelos trilhos
    da porta, na parede da frente da base.
 3. Botão no berço (entra por cima, pelas guias), capinha pelo furo da frente.
 4. Tampa: empurre até estalar; abre puxando as quatro travas laterais com a mão. Entalhe na parede oeste para o USB.
+
+## Na feira: trocar o ESP32
+
+Com a tampa fora, o ESP32 fica inteiro acima da borda da base. Desligue os 12 V e o USB, segure o ESP32 pelas duas pontas
+(USB e antena; o lado do LM2596 não dá para pegar) e puxe balançando de leve. Encaixe o novo com a antena para leste e
+pareie de novo (botão da frente, 5 s): cada ESP32 tem chaves e bond próprios. O script confere esse espaço dos dedos.
 
 ## Valores assumidos (conferir e ajustar no topo do script)
 

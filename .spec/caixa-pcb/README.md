@@ -3,6 +3,7 @@
 > **Status (2026-11-08): entregas 2 a 6 implementadas** em `montagem-caixa/` (script, STEP, STL, README). Faltam as medidas
 > (cabo, capinha), o corpo de prova, a impressão e os renders. Este documento define as peças, a geometria de referência
 > (tirada das PCBs), os parâmetros, as medidas que faltam e a ordem das entregas. `BOTAO_X` virou 56 (ver o README da caixa).
+> 2026-11-09: porca presa no fundo e parafuso por cima; espaço para trocar o ESP32 na feira (seção "Uso na feira").
 
 ## Requisitos
 
@@ -93,12 +94,19 @@ Consequência para o projeto da caixa:
 ### Base
 
 - Fundo de 2,0 mm e paredes de 2,0 mm. Folga de 1,0 mm entre a placa e a parede; a leste, 1,5 mm além da ponta da antena.
-- **Bosses baixos (2 mm) em todos os furos da variante**, com rebaixo por baixo para a cabeça do parafuso M3. O parafuso
-  sobe pelo fundo, passa pelo espaçador e pela PCB, e a porca fica por cima da placa (o README da PCB já conta com
-  cabeça/porca de 5,5 mm em H2).
-  - `universal`: H1, H3, H2v1, H2v2 e H4 (5 bosses). Monta-se espaçador só nos furos da placa usada.
+- **Bosses baixos (2 mm, Ø 8) em todos os furos da variante**, cada um com um **alojamento sextavado aberto por baixo**
+  onde uma porca M3 entra sob pressão e fica presa. O **parafuso M3 x 10 desce por cima**: PCB -> espaçador -> boss ->
+  porca. A placa sai e entra só com uma chave de fenda, sem virar a caixa e sem porca solta dentro dela (o README da PCB já
+  conta com uma cabeça de 5,5 mm em H2, ao lado do F1).
+  - Fundo + boss = 4 mm: alojamento de 5,65 mm entre faces e 2,5 mm de fundo para a porca (5,5 x 2,4), ~1,1 mm de
+    plástico acima dela e furo passante de 3,4 mm. Com 10 mm, a ponta do parafuso atravessa a porca inteira.
+  - O topo do boss tem um rebaixo raso (Ø 6,4, 0,4 mm) que centra o espaçador.
+  - As pontes das abraçadeiras por baixo ficam longe dos furos (sob o meio do ESP32 e na zona da frente), para os
+    alojamentos ficarem abertos.
+  - `universal`: H1, H3, H2v1, H2v2 e H4 (5 bosses). Monta-se espaçador (e porca) só nos furos da placa usada.
   - Como o boss tem só 2 mm e o espaçador é solto, um boss sem uso fica 4 mm abaixo da PCB e não encosta em nada
     (no v1, o H2v2 cairia colado ao pad do D1 se fosse um pilar fixo; por isso os espaçadores são soltos).
+- **Espaçadores:** tubos impressos Ø 6 x 4,4 mm (furo 3,4), ou espaçadores de nylon M3 comprados com a mesma altura.
 - PCB: fundo em z = 8,0, topo em z = 9,6 (do lado de fora do fundo). Sobram ~6 mm para as pontas de solda.
 - **Zona da frente** (`ZONA_SUL`, ~15 mm entre a borda sul da placa e a parede da frente): espaço para os fios do borne
   fazerem a curva, a abraçadeira do cabo, o conector dupont do J5 e o corpo do botão. Na `universal` com a v2 essa zona fica
@@ -106,6 +114,8 @@ Consequência para o projeto da caixa:
 - **Linha de divisão** base/tampa em `Z_DIVISAO` (~19 mm). Ela fica acima do furo do botão e abaixo do recorte do USB, para
   os dois caberem inteiros, cada um numa peça. Encaixe por rebordo (*lip*) de 1,0 x 2,0 mm com folga de 0,2 mm. O rebordo
   alinha a tampa; as travas a seguram.
+- **Sem rebordo na parede leste em frente à ponta do ESP32** (y 44 a 58): ali a borda da base fica em 19 mm, abaixo do
+  fundo do ESP32 (~20,6), e os dedos alcançam a ponta da antena para trocar o ESP32 (seção "Uso na feira").
 - **Ressaltos das travas:** 4 ressaltos em rampa na face externa do rebordo, nas paredes leste e oeste, perto das pontas
   norte e sul. Ficam fora da faixa da antena (y 37 a 66) e longe do recorte do USB.
 - Por baixo: dois passadores de abraçadeira e uma área plana para velcro/fita dupla face, para prender a caixa no carro.
@@ -164,7 +174,25 @@ Consequência para o projeto da caixa:
   1,5 mm além da ponta dela. A parede ali é igual às outras (2 mm, mesmo acabamento); a única regra é não pôr nada
   nesse trecho: nenhuma nervura, trava, texto, inserto metálico ou tinta metálica na faixa da antena (y 37 a 66). 2 mm de PETG/PLA quase não atenuam o sinal de 2,4 GHz;
   o que atrapalha o BLE é metal perto da antena, como o lugar onde a caixa for presa no carro.
-- **Opaca, no mesmo material das outras peças** (decidido). A PCB é mostrada abrindo a tampa.
+- **Opaca, no mesmo material das outras peças** (decidido). A PCB é mostrada abrindo a tampa. Os componentes ficam
+  voltados para cima (para o teto com o "TCCELTA"); a posição e a direção do texto não dependem do ESP32.
+
+### Uso na feira
+
+Na feira a tampa é tirada para mostrar os componentes, e o ESP32 é trocado entre as demonstrações.
+
+- **Abrir:** puxar a tampa (travas sem ferramenta). Tudo o que fica acima de ~19 mm aparece: ESP32 inteiro (fundo em
+  ~20,6), LM2596, borne, JP1 e, na v1, o transceptor em pé.
+- **Trocar o ESP32 sem tirar a placa da caixa:** pegar pelas duas pontas, a do USB (oeste) e a da antena (leste), e puxar
+  balançando de leve no sentido do comprimento. A lateral norte não serve para pegar: o LM2596 fica a ~0,7 mm.
+  - Desligar antes: 12 V e USB. Tirar o cabo USB do ESP32 antes de puxar.
+  - Ao encaixar o novo, conferir a posição (antena para leste, USB para oeste) e que nenhum pino ficou fora do soquete.
+  - Cada ESP32 é um dongle diferente (chaves e bond próprios): depois da troca, parear de novo segurando o botão da frente
+    por 5 s.
+- O script confere o espaço dos dedos: um fantasma de ~14 mm de largura em cada ponta do ESP32 (oeste: da parede até o
+  ESP32, desde 6 mm abaixo do fundo dele; leste: da ponta da antena para fora, acima da borda da base) não pode tocar a
+  base, o inserto nem nenhum componente das placas. Resultado atual: livre nas três variantes.
+- Vale levar uma tampa reserva impressa.
 
 ### Material
 
@@ -212,6 +240,8 @@ Para reduzir para a v2: `VARIANTE = "v2"` e rodar o script de novo. A base e a t
   - interferência zero entre cada peça e os fantasmas (v1 e v2 na `universal`; v2 na `v2`);
   - furos da PCB alinhados com os bosses;
   - antena sem parede a menos de 1,5 mm;
+  - espaço livre para os dedos nas duas pontas do ESP32, sem a tampa (troca na feira);
+  - cada peça é um sólido único e válido;
   - espessura mínima de parede e ausência de balanço sem suporte na orientação de impressão.
 - Saídas em `montagem-caixa/<variante>/`: `caixa_tccelta.FCStd`, STEP da montagem, STL/3MF de cada peça já na
   orientação de impressão, renders PNG.
@@ -228,7 +258,7 @@ Para reduzir para a v2: `VARIANTE = "v2"` e rodar o script de novo. A base e a t
 | Altura da capinha (do topo do corpo ao topo da capinha) | falta | recuo da capinha no furo |
 | Altura do LM2596 no soquete: confirmar se há o plástico de 2,5 mm nos pinos | falta | `ALT_COMP` da v2 |
 | Pontas de solda sob a PCB | falta (assumido ≤ 4 mm) | altura do espaçador |
-| Comprimento dos parafusos M3 disponíveis | falta | espaçador + boss + PCB + porca |
+| Parafusos M3 disponíveis | falta (o modelo assume M3 x 10) | PCB 1,6 + espaçador 4,4 + plástico ~1,1 + porca 2,4 ≤ 10 |
 | Corpo plástico do plugue micro-USB do cabo usado | falta (assumido ~12 x 9) | tamanho do recorte do USB |
 | Impressora: bico e se imprime PETG (ou ASA) | falta | folgas e travas |
 
