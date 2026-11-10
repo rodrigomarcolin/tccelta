@@ -118,8 +118,11 @@ LARG_SINAL = 1.0              # CAN_TX, CAN_RX, CAN_H, CAN_L, TERM, +3V3
 LARG_POTENCIA = 1.5           # +12V_IN, +12V_FUS, +12V_PROT, +5V
 ISOLAMENTO = 0.6              # clearance minimo
 FOLGA_BORDA = 1.0             # cobre-borda
-ZONA_FOLGA = 0.8
-ZONA_LARG_MIN = 0.8
+ZONA_FOLGA = 1.6              # plano de GND -> trilhas/pads de outras redes (folga para soldar sem ponte)
+ZONA_LARG_MIN = 0.8           # largura minima de trilha
+# Pescoco mais fino que o plano pode ter: 0,6 mm deixa a faixa sul inteira (de H2 a H4) passar sob a trilha
+# CAN_H que contorna a via 5 e o R1 (sobram 0,69 mm entre a folga dessa trilha e a folga da borda).
+ZONA_ESP_MIN = 0.6
 ZONA_ALIVIO = 0.8             # folga e largura do alivio termico
 PAD_SOQUETE = (1.8, 2.6)      # oval (perpendicular a fileira), furo 1,0
 FURO_SOQUETE = 1.0
@@ -297,7 +300,7 @@ SN_BORNE_DY = {"CAN_H": -SN65_BORNE_PASSO / 2.0 if SN65_CANH_NORTE else SN65_BOR
 # Terminacao CAN selecionavel: CAN_H -- JP1 -- TERM -- R1 (120 ohms, em pe) -- CAN_L.
 # Fica na tira de baixo, a leste do borne (fora da sombra do ESP32, y > 25,83).
 R1_POS = (-9.5, Y_BORNE - 2.54)                # pino 1 do R1 (TERM); pino 2 (via 5) 2,54 mm abaixo
-JP1_POS = (-6.0, Y_BORNE - 2.54)                # pino 1 do JP1 (TERM); pino 2 (via 4) 2,54 mm abaixo
+JP1_POS = (-6.0, Y_BORNE - 2.54)               # pino 1 do JP1 (TERM); pino 2 (via 4) 2,54 mm abaixo
 Y_TERM_H = Y_BORNE + 2.6                        # trilha que passa ao sul da via 5 ate o JP1
 R1_REF_DX, R1_REF_DY = 0.0, -2.0
 JP1_REF_DX, JP1_REF_DY = 3.0, 0.0
@@ -308,8 +311,11 @@ PAD_TERM = 1.9                                  # pads redondos do R1/JP1, furo 
 # perto do furo H4 (porca M3 do lado do cobre): distancia minima do cobre ao centro = 4,4 mm.
 # Posicao: corpo do header (2,54 x 5,08) a ~0,5 mm do corpo do borne J2 (oeste) e fora do contorno do ESP32
 # (norte); o y deixa 2,4 mm entre o J5.1 e a trilha via5 -> R1.2 para o GND do J5.2 sair por baixo do J5.1.
-J5_POS = (-13.6, 27.2 + DY_SUL)
-Y_PAIR = 26.3 + DY_SUL                                  # fim da descida do PAIR_BTN; dai segue em 45 graus ate o J5.1
+# O corpo do ESP32 so desce metade do DY_SUL: o J5 sobe 1,2 mm (fica 0,07 mm fora do contorno do ESP32) para
+# abrir o vao entre o J5.1 e a trilha via 5 -> R1.2, por onde o GND do J5.2 chega ao plano.
+J5_SOBE = 1.2 if DY_SUL > 1.2 else 0.0
+J5_POS = (-13.6, 27.2 + DY_SUL - J5_SOBE)
+Y_PAIR = 26.3 + DY_SUL - J5_SOBE                                  # fim da descida do PAIR_BTN; dai segue em 45 graus ate o J5.1
 J5_REF_DX, J5_REF_DY = -1.27, 2.1
 J5_ROT = 270
 TXT_TERM = (-12.0, Y_BORNE + 2.4)
@@ -317,8 +323,10 @@ TXT_TERM2 = (-12.0, Y_BORNE + 3.5)
 TXT_TERM3 = (-12.0, Y_BORNE + 4.6)
 # Par CAN: faixa (lane) logo ao sul dos pads da fileira de baixo do ESP32 (pads vao ate y = 24,16).
 # O fio mais ao norte do par e o mais interno (vira a esquerda por dentro).
-Y_FAIXA_L = 25.8 + DY_SUL                       # faixa do fio que vem do furo do SUL do modulo (via 5)
-Y_FAIXA_H = 27.4 + DY_SUL                               # faixa do fio que vem do furo do NORTE (via 4)
+# As faixas ficam o mais perto possivel da fileira de baixo: sobra espaco entre a faixa do norte e os pads do borne
+# para a trilha de GND que sai do borne (o plano, com ZONA_FOLGA grande, nao passa ali).
+Y_FAIXA_L = ESP32_ESPACAMENTO_FILEIRAS + PAD_SOQUETE[1] / 2.0 + ISOLAMENTO + LARG_SINAL / 2.0   # via 5 (furo do SUL)
+Y_FAIXA_H = Y_FAIXA_L + 1.6                             # faixa do fio que vem do furo do NORTE (via 4)
 X_PERNA_N = -42.6                               # perna (descida a oeste do ESP32) do fio do norte
 X_PERNA_S = X_PERNA_N + 1.6                     # perna do fio do sul (par com 1,6 mm entre centros)
 X_FURO_BL = -49.5                               # furo M3 inferior esquerdo
@@ -1057,6 +1065,10 @@ def constroi_pcb():
     # raios do alivio termico).
     for ref, num in (("U3", "2"), ("C1", "2"), ("U2", "29"), ("J5", "2")):
         fps[ref].FindPadByNumber(num).SetLocalZoneConnection(pcbnew.ZONE_CONNECTION_FULL)
+    # GND dos bornes (J1.2, J2.1): raios de alivio a 90 graus (em pad redondo o padrao e 45, e os raios ficavam em
+    # diagonal). Os raios mantem a faixa de plano ao sul do borne ligada ao GND: menos cobre para corroer.
+    for ref, num in (("J1", "2"), ("J2", "1")):
+        fps[ref].FindPadByNumber(num).SetThermalSpokeAngleDegrees(90)
 
     def pos(ref, num):
         pad = fps[ref].FindPadByNumber(str(num))
@@ -1085,6 +1097,9 @@ def constroi_pcb():
     # furos de fixacao (lado direito, cantos)
     furos = {"H1": (x_max - 3.0, y_min + 4.0), "H2": (X_FURO_BL, y_max - 2.6),
              "H3": (x_max - 3.0, -9.0), "H4": (x_max - 3.0, y_max - 2.6)}
+    for num in (1, 2):   # porca M3 do H4 do lado do cobre: nenhum cobre do JP1 a menos de 4,4 mm do centro
+        px, py = pos("JP1", num)
+        assert math.hypot(px - furos["H4"][0], py - furos["H4"][1]) - PAD_TERM / 2.0 >= 4.4, "JP1 perto do H4"
     for ref, (mx, my) in furos.items():
         fh = std(ref, mx, my)
         fh.Reference().SetVisible(False)
@@ -1192,6 +1207,11 @@ def constroi_pcb():
     u1_inp = pos("U1", 1)
     assert abs(j1_1[1] - f1_1[1]) < 1e-3, "F1 deve ficar na linha do borne (trilha curta e reta)"
     trilha("+12V_IN", LARG_POTENCIA, [j1_1, f1_1], 0)
+    # GND do borne CAN (J2.1) ligado ao GND do borne de alimentacao (J1.2) por cobre: o J2.1 fica cercado pelo
+    # par CAN e pela trilha da terminacao, e com ZONA_FOLGA grande o plano nao chega ate ele
+    j1_2, j2_1 = pos("J1", 2), pos("J2", 1)
+    assert abs(j1_2[1] - j2_1[1]) < 1e-3
+    trilha("GND", LARG_POTENCIA, [j1_2, j2_1], 0)
     # +12V_FUS: pino 2 do F1 -> anodo do D1 (mesma coluna)
     trilha("+12V_FUS", LARG_POTENCIA, [f1_2, d1_a], 0)
     # +12V_PROT: catodo do D1 -> pino + do C1 (coluna) -> IN+ do buck (norte e depois diagonal)
@@ -1267,6 +1287,41 @@ def constroi_pcb():
     p21, sw1_1 = pos("U2", 21), pos("J5", 1)
     assert abs((p21[0] - sw1_1[0]) - (sw1_1[1] - Y_PAIR)) < 1e-6, "PAIR_BTN: o ultimo trecho deve ser de 45 graus"
     trilha("PAIR_BTN", LARG_SINAL, [p21, (p21[0], Y_PAIR), sw1_1], 0)
+    # ---- espinha de GND (trilhas) ----
+    # Com ZONA_FOLGA grande o plano nao passa entre pads proximos; todos os pads de GND ficam ligados por trilha e o
+    # plano so completa onde cabe. Largura LARG_GND; as folgas sao conferidas pelo DRC.
+    LARG_GND = ZONA_LARG_MIN
+    u3g, u2g14, u2g29 = pos("U3", 2), pos("U2", 14), pos("U2", 29)
+    c1g, j1g, sw1_2 = pos("C1", 2), pos("J1", 2), pos("J5", 2)
+    X_ESP = ESP_X1                                   # descida a leste, na coluna do pad 16 (omitido), antes do keepout
+    Y_ESP = ESP_Y_CIMA + PAD_SOQUETE[1] / 2.0 + 3.2  # corredor sob a fileira de cima
+    assert X_ESP + LARG_GND / 2.0 <= ESP_X1 + ESP32_KEEPOUT_INICIO - 0.3
+    assert Y_ESP + LARG_GND / 2.0 + ISOLAMENTO <= s3v[1] - LARG_SINAL / 2.0
+    X_COL_GND = -45.7                                # subida entre a coluna do +12V (x = -49) e a perna do par CAN
+    # transceptor -> leste -> norte -> corredor sob a fileira de cima -> GND do ESP32 (pad 14) -> C1-
+    trilha("GND", LARG_GND, [u3g, (X_ESP, u3g[1]), (X_ESP, Y_ESP), (u2g14[0], Y_ESP), u2g14])
+    trilha("GND", LARG_GND, [(u2g14[0], Y_ESP), (X_COL_GND, Y_ESP)], 0)
+    trilha("GND", LARG_GND, [(X_COL_GND, Y_ESP), (c1g[0], Y_ESP), c1g])
+    # borne (J1.2) -> norte, entre a faixa do par CAN e os pads do borne -> oeste -> sobe ate o corredor
+    y_t = round(((Y_FAIXA_H + LARG_SINAL / 2.0) + (j1g[1] - 1.3)) / 2.0, 3)
+    assert (j1g[1] - 1.3) - (Y_FAIXA_H + LARG_SINAL / 2.0) >= LARG_GND + 2 * ISOLAMENTO - 1e-6, "GND do borne nao passa"
+    trilha("GND", LARG_GND, [j1g, (j1g[0], y_t), (X_COL_GND, y_t), (X_COL_GND, Y_ESP)])
+    # transceptor -> oeste sob o modulo -> desce a leste da coluna do +3V3 -> passa ao sul do +3V3 -> GND do ESP32
+    # (pad 29), em diagonal paralela a diagonal do +3V3
+    X_DESCE = x_v + 3.0
+    y_g6 = round(p3v[1] - PAD_SOQUETE[1] / 2.0 - 4.1, 3)
+    y_b = round(u2g29[1] - PAD_SOQUETE[1] / 2.0 - 0.1, 3)     # diagonal o mais longe possivel da do +3V3
+    x_a = u2g29[0] + (y_b - y_g6)
+    trilha("GND", LARG_GND, [u3g, (X_DESCE, u3g[1]), (X_DESCE, y_g6), (x_a, y_g6), (u2g29[0], y_b), u2g29])
+    # J5.2 -> ao sul do J5.1 -> diagonal a nordeste (entre o J5.1 e o R1.1) -> leste sob a fileira de baixo ->
+    # sobe na coluna X_ESP ate o transceptor
+    y_g = round(((sw1_1[1] + PAD_TERM / 2.0) + (r1_2[1] - LARG_SINAL / 2.0)) / 2.0, 3)
+    y_h = round(((ESP_Y_BAIXO + PAD_SOQUETE[1] / 2.0) + (r1_1[1] - PAD_TERM / 2.0)) / 2.0, 3)
+    # diagonal (x + y = constante) no meio do caminho entre o J5.1 e o R1.1
+    soma = ((sw1_1[0] + sw1_1[1]) + (r1_1[0] + r1_1[1])) / 2.0
+    x_g = round(soma - y_g, 3)
+    x_h = x_g + (y_g - y_h)
+    trilha("GND", LARG_GND, [sw1_2, (sw1_2[0], y_g), (x_g, y_g), (x_h, y_h), (X_ESP, y_h), (X_ESP, u3g[1])])
 
     # --- keepout da antena (regra de area; o do footprint ja vem junto) ------
     # (o footprint ja traz a area proibida; nada a fazer aqui)
@@ -1308,7 +1363,7 @@ def constroi_pcb():
     z.SetLayer(pcbnew.B_Cu)
     z.SetNet(nets["GND"])
     z.SetLocalClearance(FromMM(ZONA_FOLGA))
-    z.SetMinThickness(FromMM(ZONA_LARG_MIN))
+    z.SetMinThickness(FromMM(ZONA_ESP_MIN))
     z.SetPadConnection(pcbnew.ZONE_CONNECTION_THERMAL)
     z.SetThermalReliefGap(FromMM(ZONA_ALIVIO))
     z.SetThermalReliefSpokeWidth(FromMM(ZONA_ALIVIO))
