@@ -475,7 +475,7 @@ def main():
     sh = doc.addObject("Spreadsheet::Sheet", "Parametros")
     linhas = [("VARIANTE", VARIANTE), ("Y_SUL", Y_SUL), ("ALT_COMP", ALT_COMP), ("ZONA_SUL", ZONA_SUL),
               ("PAREDE", PAREDE), ("FUNDO", FUNDO), ("TETO", TETO), ("FOLGA_ENCAIXE", FOLGA_ENCAIXE),
-              ("Z_DIVISAO", Z_DIVISAO), ("CABO_D (assumido)", CABO_D), ("BOTAO_X", BOTAO_X), ("BOTAO_Z", BOTAO_Z),
+              ("Z_DIVISAO", Z_DIVISAO), ("CABO_D (medido)", CABO_D), ("BOTAO_X", BOTAO_X), ("BOTAO_Z", BOTAO_Z),
               ("ANG_SAIDA_TRAVA", ANG_SAIDA), ("DEFLEXAO_TRAVA", DEFLEXAO_TRAVA)]
     for i, (k, val) in enumerate(linhas, 1):
         sh.set(f"A{i}", k)

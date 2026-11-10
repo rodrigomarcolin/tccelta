@@ -216,7 +216,7 @@ o filamento na camada 5.
 | `BOTAO_CORPO` | 12 x 12 x 7,3 | | | medido |
 | `BOTAO_CAPA_D` | 11 | | | medido |
 | `BOTAO_X`, `BOTAO_Z` | ~54, ~11 | | | |
-| `CABO_D` | ? | | | **medir** |
+| `CABO_D` | 8 | 8 | 8 | medido |
 | `JANELA_USB` | sim | sim | sim | decidido |
 | `ANG_SAIDA_TRAVA` | 50° | | | calibrar na prova |
 | `DEFLEXAO_TRAVA` | 0,8 | | | calibrar na prova |

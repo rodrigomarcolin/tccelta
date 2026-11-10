@@ -43,7 +43,7 @@ pareie de novo (botão da frente, 5 s): cada ESP32 tem chaves e bond próprios. 
 
 ## Valores assumidos (conferir e ajustar no topo do script)
 
-- `CABO_D = 6,0` mm: **falta medir o cabo OBD**.
+- `CABO_D = 8,0` mm: **medido** (cabo OBD, 2026-11-09). O furo do inserto tem `CABO_D + 0,4` mm.
 - `BOTAO_CAPA_H = 1,5` mm: falta medir a altura da capinha.
 - `BOTAO_X = 56` (o plano dizia ~54): 54 colocava a guia do berço a 0,1 mm do conector dupont do J5 da v2.
 - Alturas dos componentes sem medida (C1, F1, D1, J-x): estimativas nos fantasmas; as medidas dadas (ESP32, LM2596, SN65) estão
