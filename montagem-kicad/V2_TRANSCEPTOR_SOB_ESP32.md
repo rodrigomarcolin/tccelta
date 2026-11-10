@@ -96,13 +96,20 @@ já retrabalhado (ou no original, olhando os furos):
 
 | Constante | Valor atual | O que medir |
 |---|---|---|
-| `SN65_COMPRIMENTO` | 37,0 mm | comprimento do módulo |
-| `SN65_LARGURA` | 14,0 mm | largura do módulo |
+| `SN65_BARRA_BORNE` | 24,0 mm (medido) | da coluna da barra de 4 pinos à coluna dos furos do borne |
+| `SN65_BORNE_DIST_BORDA` | 3,0 mm (medido) | do centro dos furos do borne à borda curta do lado do borne |
+| `SN65_BORNE_PASSO` | 5,0 mm (medido) | distância centro a centro dos 2 furos do borne |
 | `SN65_BARRA_DIST_BORDA` | 2,0 mm | do centro dos furos da barra à borda curta do lado da barra |
-| `SN65_BORNE_DIST_BORDA` | 4,5 mm | do centro dos furos do borne à borda curta do lado do borne |
-| `SN65_BORNE_PASSO` | 5,08 mm | distância centro a centro dos 2 furos do borne (pode ser 5,0 mm) |
+| `SN65_COMPRIMENTO` | 29,0 mm (calculado) | soma das três medidas acima |
+| `SN65_LARGURA` | 14,0 mm | largura do módulo |
 | `SN65_CANH_NORTE` | `True` | com o lado dos componentes para baixo e a barra a leste, o furo CANH é o do **norte** (veja abaixo) |
 | `SN65_ORDEM_PINOS` | CAN_TX, CAN_RX, GND, 3V3 (sul -> norte) | ordem dos 4 pinos na montagem |
+
+Visto pelo **lado dos componentes**, com a barra à direita, o módulo tem de cima para baixo CAN_TX, CAN_RX, GND, 3V3
+na barra e CANL, CANH no borne (medido). Como ele é montado com os componentes para baixo, o footprint (vista de cima
+da PCB) mostra o espelho: 3V3, GND, CRX, CTX e CANH em cima. Isso não é inversão: é o módulo virado.
+
+Medidas do ESP32 e do LM2596 (já aplicadas): fileiras do ESP32 a 25,4 mm; furos do LM2596 a 18 x 40 mm.
 
 Além disso, confirme:
 

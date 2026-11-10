@@ -36,9 +36,9 @@ import subprocess
 # --- DOIT ESP32 DevKit V1 de 30 pinos (2 x 15) ----------------------------
 # CONFERIR COM PAQUIMETRO: pinos por fileira (a placa do usuario tem 15).
 ESP32_PINOS_POR_FILEIRA = 15
-# CONFERIR COM PAQUIMETRO: distancia centro a centro entre as duas fileiras de pinos
-# (0,9" = 22,86 mm e o tipico do DOIT V1; ainda nao medido).
-ESP32_ESPACAMENTO_FILEIRAS = 22.86
+# Distancia centro a centro entre as duas fileiras de pinos: medida ~26 mm na placa do usuario,
+# arredondada para a grade de 2,54 (1,0" = 25,4 mm).
+ESP32_ESPACAMENTO_FILEIRAS = 25.4
 # CONFERIR COM PAQUIMETRO: comprimento total da placa do ESP32 (USB ate a ponta da antena).
 ESP32_COMPRIMENTO = 51.5
 # CONFERIR COM PAQUIMETRO: largura da placa do ESP32 (usada so no contorno/keepout).
@@ -62,10 +62,10 @@ LM2596_COMPRIMENTO = 43.0
 LM2596_LARGURA = 21.0
 # CONFERIR COM PAQUIMETRO: distancia dos furos ate a borda MENOR do modulo.
 LM2596_FURO_BORDA_CURTA = 2.0
-# CONFERIR COM PAQUIMETRO: separacao entre os dois furos de uma mesma ponta (na largura).
-LM2596_FUROS_LARGURA = 17.0
-# CONFERIR COM PAQUIMETRO: separacao entre os furos de entrada e os de saida (no comprimento).
-LM2596_FUROS_COMPRIMENTO = 39.0
+# Separacao entre os dois furos de uma mesma ponta (na largura) - medida.
+LM2596_FUROS_LARGURA = 18.0
+# Separacao entre os furos de entrada e os de saida (no comprimento) - medida.
+LM2596_FUROS_COMPRIMENTO = 40.0
 # Posicao (x, y) de cada furo medida a partir do canto superior esquerdo do modulo visto de
 # cima (x ao longo do comprimento, y ao longo da largura) e a rede de cada um.
 # IN+ e OUT+ ficam na mesma lateral (a de baixo, mais perto do ESP32); IN- e OUT- na outra.
@@ -86,26 +86,26 @@ LM2596_FUROS = {
 # e soldado com pinos machos retos (com o espacador plastico de 2,5 mm) nos 4 furos da barra e nos
 # 2 furos do borne. Fica com os COMPONENTES PARA BAIXO, a ~2,5 mm da PCB, entre as duas fileiras
 # de soquetes do ESP32.
-# CONFERIR COM PAQUIMETRO: comprimento do modulo (ao longo do eixo X da placa).
-SN65_COMPRIMENTO = 37.0
-# CONFERIR COM PAQUIMETRO: largura do modulo (lado da barra de 4 pinos).
-SN65_LARGURA = 14.0
+# Medidas do usuario: barra de 4 pinos a 24 mm da coluna dos furos do borne (CANH/CANL), furos do
+# borne a 5 mm entre si e a 3 mm da borda curta da placa do modulo.
+SN65_BARRA_BORNE = 24.0
+SN65_BORNE_DIST_BORDA = 3.0
+SN65_BORNE_PASSO = 5.0
 # CONFERIR COM PAQUIMETRO: centro dos furos da barra, medido da borda curta do lado da barra.
 SN65_BARRA_DIST_BORDA = 2.0
-# CONFERIR COM PAQUIMETRO: centro dos furos do borne, medido da borda curta do lado do borne.
-SN65_BORNE_DIST_BORDA = 4.5
-# CONFERIR COM PAQUIMETRO: passo entre os 2 furos do borne (5,0 ou 5,08).
-SN65_BORNE_PASSO = 5.08
-# CONFERIR no modulo: com o lado dos componentes para BAIXO, barra a LESTE, qual furo do borne e o
-# CANH: True = o furo do NORTE (menor y). O script ajusta as vias 4/5 do borne da placa sozinho.
+# Comprimento do modulo (ao longo do eixo X da placa): sai das medidas acima.
+SN65_COMPRIMENTO = SN65_BARRA_DIST_BORDA + SN65_BARRA_BORNE + SN65_BORNE_DIST_BORDA
+# CONFERIR COM PAQUIMETRO: largura do modulo (lado da barra de 4 pinos).
+SN65_LARGURA = 14.0
+# Visto pelo LADO DOS COMPONENTES, barra a leste (direita), o usuario le de cima para baixo:
+#   barra: CAN_TX, CAN_RX, GND, 3V3      borne: CANL, CANH
+# Montado com os componentes para BAIXO, o modulo e espelhado (norte <-> sul) na vista de cima da
+# PCB. Por isso, no footprint (vista de cima), de norte para sul fica 3V3, GND, CAN_RX, CAN_TX e o
+# CANH fica ao norte. O footprint parece "invertido" em relacao ao modulo na mao: e o espelho.
+# True = o furo do borne do NORTE (menor y) e o CANH. O script ajusta as vias 4/5 do borne sozinho.
 SN65_CANH_NORTE = True
-# CONFERIR no modulo: ordem dos pinos da barra de SUL para NORTE com o modulo montado (componentes
-# para baixo, barra a leste). Pela documentacao do modulo (lado dos componentes para voce, barra
-# embaixo, esquerda -> direita: 3V3, GND, CAN_RX, CAN_TX), virado de cabeca para baixo e com a
-# barra a leste, de sul para norte fica CAN_TX, CAN_RX, GND, 3V3. Outra ordem exige rever o
-# roteamento do CAN_TX/CAN_RX/3V3 (o script avisa).
 SN65_FACE_COMPONENTES = "baixo"
-SN65_ORDEM_PINOS = ("CAN_TX", "CAN_RX", "GND", "3V3")       # sul -> norte
+SN65_ORDEM_PINOS = ("CAN_TX", "CAN_RX", "GND", "3V3")       # sul -> norte (vista de cima, ja espelhado)
 # Posicao do centro do modulo: centrado entre as fileiras; a borda leste fica em x = -3,5 para
 # a barra de pinos cair em x = -5,5 (longe da antena, x > 1,0, e dos pads do D21/D22).
 SN65_BORDA_LESTE = -3.5
@@ -134,7 +134,9 @@ ORIGEM_PCB = (60.0, 40.0)
 BORDA_DIREITA = 2.0           # borda direita depois do pino 1 (antena para fora)
 X_CORREDOR_12V = -45.5        # x do furo IN+ do buck (o +12V_PROT chega ali vindo da coluna da esquerda)
 Y_5V = -6.0                   # linha de furos de baixo do LM2596 (IN+/OUT+)
-Y_BORNE = 31.1                # linha dos pads do borne (corpo do borne ao sul do corpo do ESP32)
+# Tudo o que fica ao sul da fileira de baixo do ESP32 acompanha essa fileira (layout feito com 22,86).
+DY_SUL = ESP32_ESPACAMENTO_FILEIRAS - 22.86
+Y_BORNE = 31.1 + DY_SUL       # linha dos pads do borne (corpo do borne ao sul do corpo do ESP32)
 X_BORNE_PIN5 = -20.5          # x do pino 5 do borne; os outros vem a cada 5,08
 # Coluna da esquerda (fora das sombras do ESP32 e do LM2596), de baixo para cima:
 # F1 (perto da via +12V do borne) -> D1 -> C1 (perto do IN+ do buck).
@@ -306,8 +308,8 @@ PAD_TERM = 1.9                                  # pads redondos do R1/JP1, furo 
 # perto do furo H4 (porca M3 do lado do cobre): distancia minima do cobre ao centro = 4,4 mm.
 # Posicao: corpo do header (2,54 x 5,08) a ~0,5 mm do corpo do borne J2 (oeste) e fora do contorno do ESP32
 # (norte); o y deixa 2,4 mm entre o J5.1 e a trilha via5 -> R1.2 para o GND do J5.2 sair por baixo do J5.1.
-J5_POS = (-13.6, 27.2)
-Y_PAIR = 26.3                                   # fim da descida do PAIR_BTN; dai segue em 45 graus ate o J5.1
+J5_POS = (-13.6, 27.2 + DY_SUL)
+Y_PAIR = 26.3 + DY_SUL                                  # fim da descida do PAIR_BTN; dai segue em 45 graus ate o J5.1
 J5_REF_DX, J5_REF_DY = -1.27, 2.1
 J5_ROT = 270
 TXT_TERM = (-12.0, Y_BORNE + 2.4)
@@ -315,8 +317,8 @@ TXT_TERM2 = (-12.0, Y_BORNE + 3.5)
 TXT_TERM3 = (-12.0, Y_BORNE + 4.6)
 # Par CAN: faixa (lane) logo ao sul dos pads da fileira de baixo do ESP32 (pads vao ate y = 24,16).
 # O fio mais ao norte do par e o mais interno (vira a esquerda por dentro).
-Y_FAIXA_L = 25.8                                # faixa do fio que vem do furo do SUL do modulo (via 5)
-Y_FAIXA_H = 27.4                                # faixa do fio que vem do furo do NORTE (via 4)
+Y_FAIXA_L = 25.8 + DY_SUL                       # faixa do fio que vem do furo do SUL do modulo (via 5)
+Y_FAIXA_H = 27.4 + DY_SUL                               # faixa do fio que vem do furo do NORTE (via 4)
 X_PERNA_N = -42.6                               # perna (descida a oeste do ESP32) do fio do norte
 X_PERNA_S = X_PERNA_N + 1.6                     # perna do fio do sul (par com 1,6 mm entre centros)
 X_FURO_BL = -49.5                               # furo M3 inferior esquerdo
@@ -627,8 +629,10 @@ def gera_fp_sn65():
     # contorno do modulo (fica sob o ESP32) e marcas de apoio no papel 1:1
     fp.ret(-L / 2, -W / 2, L / 2, W / 2, "F.SilkS", 0.15)
     fp.ret(-L / 2, -W / 2, L / 2, W / 2, "F.Fab", 0.1)
-    fp.texto("U3 SN65HVD230 sob o ESP32", 0.0, -0.83, "F.SilkS", 0.9)
-    fp.texto("componentes para BAIXO", 0.0, 0.97, "F.SilkS", 0.9)
+    xm = (xt + xb) / 2.0               # entre os rotulos do borne e os da barra
+    fp.texto("SN65HVD230", xm, -1.6, "F.SilkS", 0.8)
+    fp.texto("componentes", xm, 0.0, "F.SilkS", 0.8)
+    fp.texto("para BAIXO", xm, 1.6, "F.SilkS", 0.8)
     # pads da barra (oval em pe: a coluna e vertical) e dos furos do borne
     for nome, dy in SN_BARRA_DY.items():
         fp.pad(_SN_NUM[nome], xb, dy, PAD_SOQUETE[1], PAD_SOQUETE[0], FURO_SOQUETE)
@@ -1219,11 +1223,23 @@ def constroi_pcb():
     trilha("CAN_TX", LARG_SINAL, [ctx, (ctx[0], y1), (d21[0], y_fim_diag), d21], 0)
     # CAN_RX: sai da barra para leste (fora da coluna de pads) e desce reto ate o D22
     trilha("CAN_RX", LARG_SINAL, [crx, (d22[0], crx[1]), d22])
-    # +3V3: do pino 3V3 do modulo para oeste (sob o modulo), desce a leste dos furos do borne do modulo
-    # e entra no pad 30 (3V3) do ESP32 pelo nordeste
-    x_v = round(SN_X_BORNE + PAD_BORNE_MOD / 2.0 + ISOLAMENTO + LARG_SINAL / 2.0 + 0.2, 2)
-    y_a = p3v[1] - 1.3 - abs(x_v - p3v[0])
-    trilha("+3V3", LARG_SINAL, [s3v, (x_v, s3v[1]), (x_v, y_a), (p3v[0], p3v[1] - 1.3), p3v])
+    # +3V3: do pino 3V3 do modulo para oeste (sob o modulo), desce a leste dos furos do borne do modulo,
+    # passa ao sul do furo do sul, e entra no pad 30 (3V3) do ESP32 pelo nordeste (45 graus)
+    folga_furo = PAD_BORNE_MOD / 2.0 + ISOLAMENTO + LARG_SINAL / 2.0 + 0.2
+    x_v = round(SN_X_BORNE + folga_furo, 2)
+    furo_sul_y = SN_YC + SN65_BORNE_PASSO / 2.0
+    y_fim = p3v[1] - 1.3
+    if x_v - p3v[0] <= y_fim - (furo_sul_y + folga_furo):
+        # o pad 30 fica perto da coluna: desce e faz a diagonal direto
+        y_a = y_fim - abs(x_v - p3v[0])
+        trilha("+3V3", LARG_SINAL, [s3v, (x_v, s3v[1]), (x_v, y_a), (p3v[0], y_fim), p3v])
+    else:
+        # o pad 30 fica bem a oeste da coluna do borne: desce, segue a oeste ao sul do furo e faz a diagonal
+        y_h = round(furo_sul_y + folga_furo, 2)
+        x_d = p3v[0] + (y_fim - y_h)
+        assert x_d < x_v - 2.0, "+3V3: sem espaco para o trecho horizontal ao sul do furo do borne"
+        assert y_h + LARG_SINAL / 2.0 + ISOLAMENTO <= p3v[1] - PAD_SOQUETE[1] / 2.0, "+3V3 encosta nos pads"
+        trilha("+3V3", LARG_SINAL, [s3v, (x_v, s3v[1]), (x_v, y_h), (x_d, y_h), (p3v[0], y_fim), p3v])
 
     # CAN_H / CAN_L: furos do borne do modulo -> oeste -> perna ao sul (a oeste do ESP32) -> faixa
     # logo abaixo da fileira de baixo -> vias 4 e 5 do borne. Par de 1,6 mm entre centros, aninhado.
