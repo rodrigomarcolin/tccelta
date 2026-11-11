@@ -1,0 +1,223 @@
+# Escolhas do projeto: função e posição de cada elemento
+
+Por que cada peça da placa existe e por que está onde está. O procedimento de fabricação está em
+[PASSO_A_PASSO.md](PASSO_A_PASSO.md), a lista de materiais em [MATERIAIS.md](MATERIAIS.md) e os detalhes do
+projeto KiCad no [README](README.md).
+
+## O caminho da energia
+
+Toda a energia vem do pino 16 do OBD (12 V da bateria) e passa por uma corrente de proteções antes de chegar ao
+ESP32. Cada peça protege a seguinte, e essa sequência explica tanto a função de cada uma quanto a posição dela na
+placa.
+
+```
+OBD pino 16 (+12 V) → borne J1 → F1 fusível → D1 diodo → C1 capacitor → U1 LM2596 (12→5 V) → VIN do ESP32
+                                                                                    ↓ regulador interno do ESP32
+                                                                                  3V3 → transceptor U3
+```
+
+## Fusível F1: contra curto-circuito
+
+**Função:** limitar a corrente se algo der errado na placa, por exemplo:
+
+- uma ponte de solda;
+- o C1 ou o LM2596 queimarem em curto;
+- dois fios do borne se encostarem.
+
+Sem ele, só restaria o fusível do carro, de 10 a 20 A. Essa corrente queima as trilhas de fenolite muito antes de
+abrir aquele fusível. O pino 16 fica ligado direto na bateria, mesmo com o carro desligado, então um curto parcial
+poderia esquentar a placa ou descarregar a bateria sem ninguém ver.
+
+**Por que PTC (rearmável):** num curto, o PTC esquenta e a resistência dele sobe muito, cortando a corrente.
+Quando o curto é desfeito e ele esfria, volta a conduzir sozinho. Não precisa de porta-fusível nem de fusível de
+reposição, e ocupa o espaço de um capacitor de disco.
+
+**Por que esses valores:**
+
+- **0,4 A (RXEF040 / MF-R040):** segura 0,4 A sem desarmar e garante desarmar a partir de 0,8 A. O dongle consome
+  uns 60 a 150 mA em 12 V, com picos de ~0,15 a 0,2 A quando o rádio transmite.
+- **Desarme abaixo de 1 A:** o 0,8 A fica abaixo do limite de 1 A do D1 (1N5819). Assim, nenhuma corrente que passe
+  sem desarmar o fusível consegue queimar o diodo.
+- **60 V:** a tensão do carro passa bastante dos 14 V em picos, por exemplo na partida ou quando uma carga grande
+  desliga.
+
+### Comparação com outros valores
+
+Todos têm o mesmo encaixe (terminais a 5,1 mm); trocar não muda a placa.
+
+| PTC | Segura | Garante desarmar | Com o D1 1N5819 (1 A) |
+|---|---|---|---|
+| 0,3 A (RXEF030) | 0,3 A | 0,6 A | protege, mas desarma à toa no calor |
+| **0,4 A (RXEF040)** | 0,4 A | 0,8 A | **protege o diodo e o lado de 5 V; folga menor no calor** |
+| 0,5 A (RXEF050) | 0,5 A | 1,0 A | protege; mais folga no calor |
+| 0,75 A (RXEF075) | 0,75 A | 1,5 A | **não protege o D1**: até 1,5 A pode passar sem desarmar. Só com um diodo de 3 A (1N5822) |
+
+Entre "segura" e "garante desarmar" existe uma faixa em que o PTC pode deixar a corrente passar indefinidamente. Um
+defeito que puxe corrente nessa faixa (um "meio curto", como um componente danificado ou uma ponte de solda com
+alguma resistência) dissipa calor no ponto do defeito sem desarmar nada. Com o 0,4 A, essa faixa vai até ~10 W
+(12 V x 0,8 A), contra ~12 W do 0,5 A e ~18 W do 0,75 A. No lado de 5 V, o 0,4 A desarma quando o consumo passa de
+~1,6 a 1,8 A; um curto franco no 5 V é contido pelo limite de corrente do próprio LM2596.
+
+### Riscos do fusível de 0,4 A
+
+O risco do 0,4 A é **desarmar à toa**: o PTC segura menos corrente quando está quente, e a folga sobre o consumo do
+dongle fica menor.
+
+| Temperatura em volta do F1 | Segura sem desarmar (aprox.) | Folga sobre o pico de ~0,2 A |
+|---|---|---|
+| 25 °C (bancada) | 0,40 A | 2x |
+| 60 °C (embaixo do painel num dia quente) | ~0,28 a 0,30 A | ~1,5x |
+| 85 °C (carro parado no sol forte) | ~0,24 A | ~1,2x (apertado) |
+
+- **Sintoma:** o dongle desliga e volta sozinho depois de alguns minutos, quando o PTC esfria. A conexão com o
+  celular cai. Não queima nada.
+- **Não preocupam:** a partida (a tensão cai para ~8 V e o consumo sobe para ~0,19 A, ainda abaixo do limite, e
+  dura pouco) e o pico ao ligar, quando os capacitores carregam: dura milissegundos e o PTC leva segundos para
+  reagir.
+- **Como conferir:** meça o consumo real em 12 V com o multímetro em série no +12 V, com o Bluetooth conectado e
+  transmitindo. Pico abaixo de ~0,15 A: o 0,4 A tem folga. Pico perto de 0,2 A, ou desarmes no uso: troque pelo
+  RXEF050 (0,5 A), que encaixa nos mesmos furos.
+- **Não suba além de 0,5 A** sem trocar o D1 (veja a tabela acima).
+
+**Por que é o primeiro da fila:** tudo o que vem depois dele fica protegido, inclusive o D1. Ele está colado no
+borne para que o trecho de cobre sem proteção, entre o borne e o F1, seja o menor possível.
+
+**Limite:** o F1 protege a placa, mas não o cabo entre o conector OBD e a placa. Esse trecho fica só com o fusível
+do carro. A alternativa seria um porta-fusível de linha emendado no cabo, perto do conector, mas os fios do cabo
+são finos e ficam dentro de um envoltório de borracha, o que torna a emenda trabalhosa.
+
+## Diodo D1: contra polaridade invertida
+
+**Função:** deixar a corrente passar só no sentido certo. Se o +12 V e o GND forem trocados, o diodo bloqueia e
+nada recebe tensão invertida. Sem ele, uma inversão queimaria o LM2596 e o C1 na hora.
+
+O conector OBD tem encaixe único e não inverte. O risco real está na bancada: ligar a fonte do simulador no borne
+ao contrário é um erro fácil.
+
+**Por que Schottky (1N5819) e não um diodo comum (1N4007):**
+
+- a queda de tensão do Schottky é de cerca de 0,3 a 0,4 V, contra 0,7 a 1 V do comum;
+- isso significa menos calor e mais tensão sobrando para o LM2596, que precisa de alguns volts acima dos 5 V de
+  saída para funcionar.
+
+**Por que depois do fusível e antes do capacitor:** o C1 é eletrolítico, e com tensão invertida ele estufa ou
+estoura. Com o diodo na frente, ele nunca recebe tensão invertida.
+
+## Capacitor C1: reservatório de energia na entrada
+
+**Função:** o LM2596 é uma fonte chaveada e puxa corrente em pulsos, dezenas de milhares de vezes por segundo. O
+ESP32 também tem picos de consumo quando transmite por Bluetooth ou Wi-Fi. O cabo OBD é fino e comprido e não
+consegue entregar esses picos instantaneamente, então a tensão oscilaria na entrada. O C1 fica ao lado e entrega a
+energia desses picos. Ele também amortece pequenos ruídos e oscilações da rede elétrica do carro.
+
+**Por que 100 µF / 25 V:**
+
+- **100 µF** é uma reserva confortável para esse consumo;
+- **25 V** dá folga sobre os cerca de 14,4 V do carro ligado (alternador carregando a bateria).
+
+**Por que fica colado no IN+ do LM2596:** o capacitor de entrada de um regulador chaveado tem de ficar o mais perto
+possível da entrada dele. Os pulsos de corrente saem do C1 por uma trilha curta; com uma trilha longa, a resistência e
+a indutância dela atrapalham e o capacitor serve de pouco. Por isso o C1 fica logo abaixo do IN+, na lateral do ESP32:
+o pino + dele está a cerca de 7,5 mm de trilha do IN+, e o pino - encosta no plano de GND (conexão sólida, sem
+alívio térmico). O corpo do C1 (o componente mais alto da placa, uns 11 mm) fica fora do contorno do ESP32 e do
+LM2596, no espaço que sobrava na lateral esquerda. A placa não cresceu.
+
+**O que protege o C1 contra polaridade invertida é a ordem, não a distância:** o caminho é D1 -> C1 -> IN+. Como o
+pino + do C1 fica depois do D1 na trilha, o diodo já bloqueou qualquer tensão invertida antes de ela chegar ao
+capacitor. Não importa se o C1 está a 5 mm ou a 30 mm do D1 (hoje são ~27 mm de trilha); importa só que o D1 venha
+primeiro.
+
+## LM2596 (U1): de 12 V para 5 V
+
+**Função:** abaixar a tensão de 12 a 14 V para 5 V.
+
+**Por que um regulador chaveado, e não um linear como o 7805:**
+
+- o linear transforma a diferença de tensão em calor: (12 − 5) V × corrente;
+- o chaveado tem eficiência de cerca de 80 a 90 % e quase não esquenta.
+
+**Por que 5 V no VIN, e não 3,3 V direto no ESP32:**
+
+- a placa DOIT tem o próprio regulador de 3,3 V, feito para receber 5 V no VIN;
+- se o LM2596 alimentasse o pino 3V3 direto, um erro no ajuste do trimpot queimaria o ESP32 na hora;
+- pelo VIN, existe uma segunda regulação no meio.
+
+**Por que no alto da placa:** a energia percorre um caminho só, sem cruzar os sinais:
+
+- os 12 V sobem pela lateral esquerda até a entrada do LM2596;
+- a saída de 5 V vai até o VIN do ESP32.
+
+O CAN fica embaixo, do lado direito. Assim a parte de potência, que é ruidosa, fica separada dos sinais.
+
+## Transceptor SN65HVD230 (U3)
+
+**Função:** o ESP32 tem o controlador CAN (TWAI), mas trabalha com níveis lógicos de 0 e 3,3 V. O barramento CAN
+do carro usa sinal diferencial em dois fios, CAN_H e CAN_L. O transceptor faz a tradução entre os dois.
+
+**Por que o SN65HVD230:** ele funciona em 3,3 V, a mesma tensão do ESP32. Não precisa de conversor de nível, como
+precisaria um transceptor de 5 V (MCP2551 ou TJA1050). Ele se alimenta do 3V3 do próprio ESP32.
+
+**Por que em pé, na borda de baixo:**
+
+- em pé, ocupa só a faixa do soquete 1x4;
+- na borda de baixo, fica perto do borne, então o caminho do CAN é curto;
+- CTX e CRX sobem direto até o D21 e o D22, sem cruzar outras trilhas.
+
+**Resistor SMD de 120 Ω do módulo:** é uma terminação fixa, que ficaria sempre ligada. Por isso ele é **removido
+sempre, na montagem**. A terminação passa a ser feita pelo R1 + JP1 (próxima seção), que se liga e desliga.
+
+## J3 e os jumpers trançados
+
+O módulo Waveshare não leva o CAN_H/CAN_L pela barra de 4 pinos, só pelo borne de parafuso dele. Por isso a placa
+leva o CAN do borne principal até o J3, ao lado do módulo, e dois fios curtos completam a ligação. O R1 e o JP1
+ficam logo ao lado do J3, na mesma ligação (veja a próxima seção).
+
+Os fios são trançados porque o CAN é diferencial. Quando os dois fios andam juntos, um ruído externo afeta os dois
+por igual e se cancela.
+
+## Terminação CAN selecionável: R1 e JP1
+
+CAN_H ── JP1 ── R1 (120 Ω) ── CAN_L
+
+**Por que 120 Ω nas pontas:** o barramento CAN é uma linha de transmissão. Precisa de **exatamente dois** resistores
+de 120 Ω, um em cada ponta, para o sinal não refletir. Os dois em paralelo dão **60 Ω** entre CAN_H e CAN_L, que é o
+valor que se mede num barramento correto.
+
+**Por que o dongle não deve terminar no carro:** o carro já tem os dois resistores nas suas próprias pontas. O dongle
+entra no meio do barramento, como um nó qualquer. Um terceiro resistor de 120 Ω em paralelo baixa o total para 40 Ω,
+o que enfraquece o sinal e sobrecarrega os transceptores. Na bancada é o contrário: o simulador tem só um resistor,
+então o dongle precisa fornecer o outro.
+
+**Por que jumper e não um resistor fixo:** o mesmo dongle serve nos dois casos.
+
+- **Bancada (simulador):** jumper colocado no JP1, e o R1 fecha a terminação.
+- **Carro:** jumper retirado, e o dongle não termina o barramento.
+
+Um resistor fixo obrigaria a dessoldar na troca. O jumper dispensa ferro de solda e deixa o estado visível. A
+serigrafia lembra a regra ("TERM 120R, jumper: bancada, sem: carro").
+
+**Por que ao lado do J3:** é ali que o CAN_H e o CAN_L chegam juntos ao módulo. A derivação para o R1 sai de lá e
+fica curta, sem cruzar o CAN_TX e o CAN_RX. O R1 vai em pé para ocupar pouca área, e os pads são de 1,9 mm para a
+corrosão caseira.
+
+**Potência no R1:** a diferença de tensão no barramento chega a cerca de 2 V (dominante). A potência é
+2² / 120 ≈ 33 mW. Um resistor de 1/4 W (250 mW) sobra, com folga de sete vezes.
+
+**Conferência com o multímetro** (tudo desligado, entre CAN_H e CAN_L): só o dongle com o JP1 = ~120 Ω; bancada
+(simulador + JP1) = ~60 Ω; carro (sem JP1) = ~60 Ω, os do próprio carro.
+
+## Borne J1+J2 (5 vias)
+
+- Um borne de parafuso aceita os fios finos do cabo OBD sem solda e permite trocar o cabo.
+- São dois GND porque o OBD tem dois terras: pino 4 (chassi) e pino 5 (sinal). Os dois chegam juntos ao plano de
+  GND da placa.
+
+## Decisões gerais de posicionamento
+
+- **Plano de GND cobrindo a placa:** dá um caminho de retorno de baixa resistência para todas as correntes e
+  ajuda a blindar contra ruído. De quebra, sobra menos cobre para o percloreto dissolver.
+- **Antena do ESP32 para fora da placa, sem cobre embaixo:** cobre perto da antena atrapalha o Bluetooth e o
+  Wi-Fi. Por isso ela fica além da borda, e há uma área proibida de cobre a partir de 1 mm do pino 1.
+- **Proteções agrupadas no canto do borne:** F1 e D1 ficam no canto de baixo à esquerda, junto do borne. O 12 V
+  "sujo", ainda sem proteção, fica restrito a poucos milímetros, e o resto da placa só recebe energia já protegida.
+  O C1 não está nesse canto: fica lá em cima, colado no IN+ do LM2596, porque é lá que o filtro de entrada faz efeito.
