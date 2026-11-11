@@ -69,7 +69,7 @@ BOTAO_FURO = BOTAO_CAPA_D + 0.6
 CABO_D = 8.0               # medido (2026-11-09)
 CABO_X, CABO_Z = 29.0, 11.0
 JANELA_USB = True
-USB_Y, USB_Z, USB_W, USB_H = 51.4, Z_PCB_TOPO + 14.0, 12.4, 9.4
+USB_Y, USB_Z, USB_W, USB_H = 52.1, Z_PCB_TOPO + 14.0, 12.4, 9.4   # USB no meio do ESP: v1 y 51,4; v2 y 52,7
 
 ANG_ENTRADA, ANG_SAIDA = 30.0, 50.0
 DEFLEXAO_TRAVA = 0.6       # = altura do ressalto (0,8) - ponta do dente (0,2)
@@ -86,7 +86,8 @@ X_OESTE, X_LESTE_PCB = min(c1[0], c2[0]), max(c1[2], c2[2])
 Y_NORTE = min(c1[1], c2[1])
 Y_SUL = max(PLACAS[v][0][3] for v in VERS)
 X_ANTENA = 68.3            # ponta da antena do ESP32 (README: x 16,3 a 68,3)
-ESP_BBOX = (16.3, 37.0, 68.3, 65.8)
+# corpo do ESP32 (união v1/v2): v1 fileiras a 22,86 (y 37,3 a 65,6); v2 fileiras a 25,4 (y 38,6 a 66,9)
+ESP_BBOX = (16.3, 37.0, 68.3, 67.1)
 Z_ESP_BAIXO = Z_PCB_TOPO + 11.0   # soquete 8,5 + plástico 2,5
 DEDO_Y0, DEDO_Y1 = 44.0, 58.0     # faixa das pontas do ESP32 onde os dedos pegam (troca na feira)
 assert Z_DIVISAO < Z_ESP_BAIXO
@@ -369,7 +370,8 @@ def fantasmas(v):
             h = ALT_FANT.get(ref, 8.0)
         out[f"{ref}_{v}"] = box(x0, x1, y0, y1, Z_PCB_TOPO, Z_PCB_TOPO + h)
     if v == "v2":   # barra de 90° do J5 + conector dupont apontando para a frente
-        out["J5dupont_v2"] = box(42.6, 47.7, 69.0, c[3] + 8.0, 10.8, 13.4)
+        jx0, _, jx1, jy1 = comps["J5"]
+        out["J5dupont_v2"] = box(jx0, jx1, jy1 + 0.5, c[3] + 8.0, 10.8, 13.4)
     return out
 
 
