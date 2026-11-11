@@ -42,9 +42,11 @@ Por que vale a pena:
 | 2 furos do borne do módulo | x = -36,0; CANH em y 8,89 (norte), CANL em y 13,97 (sul) |
 | Borne de 5 vias | linha dos pads em y = 31,1; x = -40,82 / -35,74 / -30,66 / -25,58 / -20,5 (+12V, GND, GND, CANH, CANL) |
 | F1 / D1 / C1 | coluna x = -49,0: F1 pino 1 em y 31,1; D1 anodo em y 22,0 e catodo em 14,38; C1 (+) em y 0,0 e (-) em x = -46,5 |
-| R1 / JP1 | R1 pino 1 em (-15,5; 28,56) e pino 2 em (-15,5; 31,1); JP1 pino 1 em (-9,5; 28,56) e pino 2 em (-9,5; 31,1) |
+| J5 / R1 / JP1 (oeste para leste) | J5 deitado: pino 1 (PAIR_BTN) em (-13,6; 27,2) e pino 2 (GND) em (-16,14; 27,2); R1 pino 1 em (-9,5; 28,56) e pino 2 em (-9,5; 31,1); JP1 pino 1 em (-6,0; 28,56) e pino 2 em (-6,0; 31,1) |
 | Furos M3 | (-1,0; -22,0), (-1,0; -9,0), (-49,5; 34,9) e (-1,0; 34,9) |
 | Placa | x -52,1 a 2,0; y -26,0 a 37,5 |
+
+O J5 (botão de pareamento) fica a oeste do R1 e do JP1, e não na ponta leste, porque leva um fio externo: assim o fio e a trilha PAIR_BTN (4,7 mm) ficam longe da antena, e o JP1, que não leva fio, fica desse lado. O JP1 também não chega mais perto do furo M3 de (-1,0; 34,9), onde entra a porca.
 
 A antena e o corte de cobre depois de x = 1,0 continuam como na v1. O contorno do módulo, o corpo do ESP32 e a
 ordem dos pinos estão desenhados na serigrafia.
@@ -94,13 +96,20 @@ já retrabalhado (ou no original, olhando os furos):
 
 | Constante | Valor atual | O que medir |
 |---|---|---|
-| `SN65_COMPRIMENTO` | 37,0 mm | comprimento do módulo |
-| `SN65_LARGURA` | 14,0 mm | largura do módulo |
+| `SN65_BARRA_BORNE` | 24,0 mm (medido) | da coluna da barra de 4 pinos à coluna dos furos do borne |
+| `SN65_BORNE_DIST_BORDA` | 3,0 mm (medido) | do centro dos furos do borne à borda curta do lado do borne |
+| `SN65_BORNE_PASSO` | 5,0 mm (medido) | distância centro a centro dos 2 furos do borne |
 | `SN65_BARRA_DIST_BORDA` | 2,0 mm | do centro dos furos da barra à borda curta do lado da barra |
-| `SN65_BORNE_DIST_BORDA` | 4,5 mm | do centro dos furos do borne à borda curta do lado do borne |
-| `SN65_BORNE_PASSO` | 5,08 mm | distância centro a centro dos 2 furos do borne (pode ser 5,0 mm) |
+| `SN65_COMPRIMENTO` | 29,0 mm (calculado) | soma das três medidas acima |
+| `SN65_LARGURA` | 14,0 mm | largura do módulo |
 | `SN65_CANH_NORTE` | `True` | com o lado dos componentes para baixo e a barra a leste, o furo CANH é o do **norte** (veja abaixo) |
 | `SN65_ORDEM_PINOS` | CAN_TX, CAN_RX, GND, 3V3 (sul -> norte) | ordem dos 4 pinos na montagem |
+
+Visto pelo **lado dos componentes**, com a barra à direita, o módulo tem de cima para baixo CAN_TX, CAN_RX, GND, 3V3
+na barra e CANL, CANH no borne (medido). Como ele é montado com os componentes para baixo, o footprint (vista de cima
+da PCB) mostra o espelho: 3V3, GND, CRX, CTX e CANH em cima. Isso não é inversão: é o módulo virado.
+
+Medidas do ESP32 e do LM2596 (já aplicadas): fileiras do ESP32 a 25,4 mm; furos do LM2596 a 18 x 40 mm.
 
 Além disso, confirme:
 
@@ -139,8 +148,8 @@ Além disso, confirme:
 O resto é igual: ESP32 e sua barra fêmea 1x15 + 1x14, LM2596 com 4 soquetes e 4 pinos, R1, JP1 com jumper de encaixe,
 F1, D1, C1 e o borne de 5 vias.
 
-Pinos a soldar na placa: 29 (ESP32) + 4 (LM2596) + 6 (módulo) + 2 (JP1) + 2 (R1) + 2 (F1) + 2 (D1) + 2 (C1) +
-5 (borne) = 54, mais os 4 furos M3 sem solda. Total de furos: 58 (veja `tccelta_v2/fabricacao/furacao.txt`).
+Pinos a soldar na placa: 29 (ESP32) + 4 (LM2596) + 6 (módulo) + 2 (JP1) + 2 (J5) + 2 (R1) + 2 (F1) + 2 (D1) + 2 (C1) +
+5 (borne) = 56, mais os 4 furos M3 sem solda. Total de furos: 60 (veja `tccelta_v2/fabricacao/furacao.txt`).
 
 ## Diferenças na montagem
 
@@ -160,6 +169,8 @@ Ordem de soldagem (passo 12 do PASSO_A_PASSO):
    de baixo à esquerda passa por baixo da borda do disco) e o borne de 5 vias.
 
 Para inspecionar ou mexer no módulo depois de pronto, **é preciso tirar o ESP32**.
+
+Ao ligar o botão de pareamento no J5, leve o fio para o oeste e para o sul, longe da ponta do ESP32 onde fica a antena.
 
 ### Energização
 

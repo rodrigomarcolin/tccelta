@@ -191,6 +191,7 @@ COMPONENTES = {
     "J3": dict(lib_id="Connector_Generic:Conn_01x02", valor="CAN_p/_modulo", fp=FP_PINH2),
     "R1": dict(lib_id="Device:R", valor="120R_1/4W", fp=FP_R1),
     "JP1": dict(lib_id="Jumper:Jumper_2_Open", valor="TERM_120R", fp=FP_PINH2),
+    "J5": dict(lib_id="Connector_Generic:Conn_01x02", valor="BTN_PAREAMENTO", fp=FP_PINH2),
     "J4": dict(lib_id="Connector:Screw_Terminal_01x02", valor="Borne_CAN_do_modulo_SN65", fp="",
                no_bom=True, no_board=True),
     "H1": dict(lib_id="Mechanical:MountingHole", valor="M3", fp=FP_FURO),
@@ -211,9 +212,12 @@ LIGACOES = {
     ("U3", "1"): "+3V3", ("U3", "2"): "GND", ("U3", "3"): "CAN_RX", ("U3", "4"): "CAN_TX",
     ("J3", "1"): "CAN_H", ("J3", "2"): "CAN_L", ("J4", "1"): "CAN_H", ("J4", "2"): "CAN_L",
     ("R1", "1"): "TERM", ("R1", "2"): "CAN_L", ("JP1", "1"): "TERM", ("JP1", "2"): "CAN_H",
+    # botao de pareamento externo: GPIO19 (D19, pad 21) -> J5.1 ; J5.2 -> GND (ativo em nivel baixo)
+    ("U2", "21"): "PAIR_BTN", ("J5", "1"): "PAIR_BTN", ("J5", "2"): "GND",
 }
-REDES = ["+12V_IN", "+12V_FUS", "+12V_PROT", "+5V", "+3V3", "GND", "CAN_TX", "CAN_RX", "CAN_H", "CAN_L", "TERM"]
-REDES_SINAL = ["CAN_TX", "CAN_RX", "CAN_H", "CAN_L", "TERM", "+3V3"]
+REDES = ["+12V_IN", "+12V_FUS", "+12V_PROT", "+5V", "+3V3", "GND", "CAN_TX", "CAN_RX", "CAN_H", "CAN_L", "TERM",
+         "PAIR_BTN"]
+REDES_SINAL = ["CAN_TX", "CAN_RX", "CAN_H", "CAN_L", "TERM", "+3V3", "PAIR_BTN"]
 REDES_POTENCIA = ["+12V_IN", "+12V_FUS", "+12V_PROT", "+5V"]
 
 # Pinos do DOIT ESP32 DevKit V1 (vista de cima, antena para cima, numeracao de cima para baixo)
@@ -265,10 +269,15 @@ X_CAN_L_R1 = -11.9                              # corredor do CAN_L ate o R1 (a 
 PAD_TERM = 1.9                                  # pads redondos do R1/JP1, furo 1,0
 J3_REF_DX, J3_REF_DY = 0.0, 4.8
 R1_REF_DX, R1_REF_DY = 2.6, 1.3
-JP1_REF_DX, JP1_REF_DY = -2.6, -2.4
-TXT_TERM = (-25.5, 29.2)
-TXT_TERM2 = (-25.5, 30.4)
-TXT_TERM3 = (-25.5, 31.6)
+JP1_REF_DX, JP1_REF_DY = 0.0, -2.6
+# Botao de pareamento (header 1x2 deitado: pino 1 a leste, ligado ao GPIO19; pino 2 a oeste, GND)
+J5_POS = (-28.0, 28.7)
+Y_PAIR = 25.6                                   # faixa do PAIR_BTN, logo ao sul dos pads da fileira de baixo
+J5_REF_DX, J5_REF_DY = -5.0, 0.0
+# Texto da terminacao (0,8 mm): abaixo do J5 e a esquerda do JP1, acima do corpo do borne
+TXT_TERM = (-23.0, 30.9)
+TXT_TERM2 = (-23.0, 32.3)
+TXT_TERM3 = (-23.0, 33.7)
 Y_FAIXA_3V3 = 43.0                              # faixa abaixo do soquete por onde o +3V3 vai a oeste
 Y_DIAG = 32.0                                   # fim das diagonais CAN_TX/CAN_RX (abaixo dos pads)
 X_FURO_BL = -49.5                               # furo M3 inferior esquerdo
@@ -777,6 +786,9 @@ def gera_esquematico(proprios):
     s.componente("U2", 80.01, 146.05, 0, ref_at=(80.01, 124.46), val_at=(80.01, 168.0))
     s.texto("Alimentado pelo pino VIN (5 V). CAN: TX = GPIO21 (D21), RX = GPIO22 (D22).", 11, 198, 1.3)
     s.texto("Os demais pinos ficam sem ligacao (marcados com X).", 11, 202, 1.3)
+    # botao de pareamento externo (substitui o BOOT/GPIO0, que nao sai no header de 30 pinos)
+    s.componente("J5", 129.54, 179.07, 0, ref_at=(129.54, 173.99), val_at=(129.54, 186.69))
+    s.texto("J5: botao de pareamento (GPIO19 -> GND), externo. Segurar 5 s com o dongle ligado.", 11, 194, 1.3)
 
     # ---- bloco 4: CAN
     s.bloco("4. Transceptor CAN (SN65HVD230 Waveshare, em pe)", 156, 84, 286, 144)
@@ -930,6 +942,7 @@ def constroi_pcb():
     std("J3", J3_POS[0], J3_POS[1])
     std("R1", R1_POS[0], R1_POS[1], 270)      # em pe: pino 2 abaixo do pino 1
     std("JP1", JP1_POS[0], JP1_POS[1])
+    std("J5", J5_POS[0], J5_POS[1], 270)   # deitado: pino 2 a oeste do pino 1
     std("J1", BORNE_X[0], Y_BORNE)
     std("J2", BORNE_X[2], Y_BORNE)
     std("D1", X_CORREDOR_12V, Y_D1K, 270)
@@ -955,7 +968,8 @@ def constroi_pcb():
     # referencias legiveis (nao se sobrepoem entre si)
     for ref, (dx, dy) in {"J1": (2.54, 3.6), "J2": (5.08, 3.6), "C1": (1.25, 4.7),
                           "D1": (-2.6, 3.9), "J3": (J3_REF_DX, J3_REF_DY), "F1": (-2.6, -2.54),
-                          "R1": (R1_REF_DX, R1_REF_DY), "JP1": (JP1_REF_DX, JP1_REF_DY)}.items():
+                          "R1": (R1_REF_DX, R1_REF_DY), "JP1": (JP1_REF_DX, JP1_REF_DY),
+                          "J5": (J5_REF_DX, J5_REF_DY)}.items():
         fps[ref].Reference().SetPosition(pcbnew.VECTOR2I(fps[ref].GetPosition().x + FromMM(dx),
                                                           fps[ref].GetPosition().y + FromMM(dy)))
         fps[ref].Reference().SetTextAngleDegrees(0)
@@ -964,7 +978,7 @@ def constroi_pcb():
     for pad in fps["J3"].Pads():
         pad.SetShape(pcbnew.PAD_SHAPE_OVAL)
         pad.SetSize(pcbnew.VECTOR2I(FromMM(2.6), FromMM(1.8)))
-    for ref in ("R1", "JP1"):
+    for ref in ("R1", "JP1", "J5"):
         for pad in fps[ref].Pads():
             pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
             pad.SetSize(pcbnew.VECTOR2I(FromMM(PAD_TERM), FromMM(PAD_TERM)))
@@ -981,7 +995,7 @@ def constroi_pcb():
     # Conexao solida ao plano (sem alivio termico) em 2 pads de GND: o GND do transceptor so tem
     # espaco para um raio (o outro lado e a faixa do +3V3 e a borda) e o C1 e o capacitor de
     # entrada (retorno de corrente alto, melhor solido).
-    for ref, num in (("U3", "2"), ("C1", "2")):
+    for ref, num in (("U3", "2"), ("C1", "2"), ("J5", "2")):
         fps[ref].FindPadByNumber(num).SetLocalZoneConnection(pcbnew.ZONE_CONNECTION_FULL)
 
     def pos(ref, num):
@@ -1148,6 +1162,10 @@ def constroi_pcb():
     trilha("CAN_H", LARG_SINAL, [jp1_2, j3_1], 0, so_45=False)   # diagonal curta, fora dos 45 graus (validada no DRC)
     trilha("CAN_L", LARG_SINAL, [j3_2, (X_CAN_L_R1, j3_2[1]), (X_CAN_L_R1, r1_2[1] + 1.2), r1_2], 0, so_45=False)
 
+    # botao de pareamento: GPIO19 (pad 21) desce e vai a oeste ate o J5.1 (J5.2 = GND pelo plano)
+    p21, sw1_1 = pos("U2", 21), pos("J5", 1)
+    trilha("PAIR_BTN", LARG_SINAL, [p21, (p21[0], Y_PAIR), (sw1_1[0], Y_PAIR), sw1_1])
+
     # --- keepout da antena (regra de area; o do footprint ja vem junto) ------
     # (o footprint ja traz a area proibida; nada a fazer aqui)
 
@@ -1178,6 +1196,7 @@ def constroi_pcb():
     texto_serigrafia("TERM 120R", TXT_TERM[0], TXT_TERM[1], 0.8)
     texto_serigrafia("jumper: bancada", TXT_TERM2[0], TXT_TERM2[1], 0.8)
     texto_serigrafia("sem: carro", TXT_TERM3[0], TXT_TERM3[1], 0.8)
+    texto_serigrafia("PAIR", J5_POS[0] - 1.27, J5_POS[1] - 2.3, 0.8)
     texto_serigrafia("H", J3_POS[0] + 2.0, J3_POS[1], 1.0)
     texto_serigrafia("L", J3_POS[0] + 2.0, J3_POS[1] + 2.54, 1.0)
     rotulos = ["+12V", "GND", "GND", "CANH", "CANL"]

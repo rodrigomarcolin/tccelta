@@ -365,6 +365,10 @@
         "pattern": "+3V3"
       },
       {
+        "netclass": "Sinal",
+        "pattern": "PAIR_BTN"
+      },
+      {
         "netclass": "Potencia",
         "pattern": "+12V_IN"
       },

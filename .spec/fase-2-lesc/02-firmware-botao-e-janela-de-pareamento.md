@@ -1,7 +1,7 @@
 # 02 — Firmware: botão, janela de pareamento e política de enlace
 
-Estado implementado do controle físico de pareamento: segurar o botão BOOT
-(GPIO0) por 5 s derruba todas as conexões, apaga todos os bonds e abre uma
+Estado implementado do controle físico de pareamento: segurar o botão de
+pareamento (GPIO19 → GND, header `J5` das PCBs; no DevKit solto, o BOOT/GPIO0) por 5 s derruba todas as conexões, apaga todos os bonds e abre uma
 janela de 45 s em que o dongle aceita **um** novo bond; fora da janela só o
 celular já pareado é aceito. Código em `esp32-firmware/src/connectivity/pairing/`
 e `src/tasks/PairingTask.*`.
@@ -63,7 +63,7 @@ classDiagram
 
 | Flag | Padrão | Faixa | Uso |
 |---|---|---|---|
-| `PAIR_BUTTON_PIN` | 0 | 0–39 | GPIO do botão (BOOT) |
+| `PAIR_BUTTON_PIN` | 0 (código); 19 em `[pairing]` | 0–39 | GPIO do botão (19 = header `J5` das PCBs; 0 = BOOT do DevKit solto e `collector_mcp2515`, onde o 19 é o MISO) |
 | `PAIR_BUTTON_ACTIVE_LOW` | 1 | 0/1 | Nível ativo |
 | `PAIR_BUTTON_HOLD_MS` | 5000 | 1000–30000 | Tempo para abrir a janela |
 | `PAIR_DEBOUNCE_MS` | 50 | 10–200 | Debounce |
@@ -82,7 +82,9 @@ amostragem do botão 20 ms; reenvio da recusa `rejectRetryMs` = 2000 ms.
 
 ## Botão (`PairButton`)
 
-GPIO0 é pino de *strapping*: o botão deve ser apertado com o dongle já ligado.
+Nas PCBs o botão fica no GPIO19 (não é pino de *strapping*) e liga ao GND pelo
+header `J5`. Se for usado o BOOT (GPIO0, pino de *strapping*), o botão deve ser
+apertado com o dongle já ligado.
 `pinMode(pin, INPUT_PULLUP)`.
 
 ```mermaid

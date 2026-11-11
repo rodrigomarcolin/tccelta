@@ -6,7 +6,7 @@
 #include "connectivity/pairing/PairingController.h"
 
 /**
- * Amostra o botão de pareamento (GPIO0/BOOT) a cada 20 ms, aciona a janela
+ * Amostra o botão de pareamento (GPIO19 nas PCBs; GPIO0/BOOT no DevKit solto) a cada 20 ms, aciona a janela
  * pelo PairingController e anima o LED opcional (spec fase-2/02 §4.5). Núcleo
  * 0, prioridade 2: fica abaixo do protocolo com o app e longe da coleta.
  */
